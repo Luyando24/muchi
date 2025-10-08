@@ -573,7 +573,7 @@ export default function Index() {
               <div className="mt-4 text-center">
                 <h3 className="text-xl font-semibold">Basic</h3>
                 <div className="mt-4 flex items-baseline justify-center">
-                  <span className="text-4xl font-bold">$99</span>
+                  <span className="text-4xl font-bold">K2,475</span>
                   <span className="ml-1 text-muted-foreground">/month</span>
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">For small schools just getting started</p>
@@ -617,7 +617,7 @@ export default function Index() {
               <div className="mt-4 text-center">
                 <h3 className="text-xl font-semibold">Standard</h3>
                 <div className="mt-4 flex items-baseline justify-center">
-                  <span className="text-4xl font-bold">$249</span>
+                  <span className="text-4xl font-bold">K6,225</span>
                   <span className="ml-1 text-muted-foreground">/month</span>
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">For growing schools with additional needs</p>
@@ -661,7 +661,7 @@ export default function Index() {
               <div className="mt-4 text-center">
                 <h3 className="text-xl font-semibold">Premium</h3>
                 <div className="mt-4 flex items-baseline justify-center">
-                  <span className="text-4xl font-bold">$499</span>
+                  <span className="text-4xl font-bold">K12,475</span>
                   <span className="ml-1 text-muted-foreground">/month</span>
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">For large schools with comprehensive needs</p>
