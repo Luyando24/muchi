@@ -336,11 +336,11 @@ export default function Index() {
             <div className="bg-card p-6 rounded-2xl border shadow-sm hover:shadow-md transition-all duration-300">
               <div className="flex items-center mb-4">
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xl">
-                  JD
+                  CM
                 </div>
                 <div className="ml-4">
-                  <h4 className="font-semibold">Jane Doe</h4>
-                  <p className="text-sm text-muted-foreground">Principal, Westside High School</p>
+                  <h4 className="font-semibold">Chanda Mulenga</h4>
+                  <p className="text-sm text-muted-foreground">Headteacher, Lusaka Secondary School</p>
                 </div>
               </div>
               <div className="mb-4">
@@ -352,18 +352,18 @@ export default function Index() {
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path></svg>
                 </div>
               </div>
-              <p className="text-sm italic">"MUCHI has revolutionized how we manage student data. What used to take our staff hours now takes minutes. The parent portal has also dramatically improved our communication with families."</p>
+              <p className="text-sm italic">"MUCHI has revolutionized how we manage student data at our school in Lusaka. What used to take our staff hours now takes minutes. The parent portal has also dramatically improved our communication with families across Zambia."</p>
             </div>
             
             {/* Testimonial 2 */}
             <div className="bg-card p-6 rounded-2xl border shadow-sm hover:shadow-md transition-all duration-300">
               <div className="flex items-center mb-4">
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xl">
-                  RS
+                  BN
                 </div>
                 <div className="ml-4">
-                  <h4 className="font-semibold">Robert Smith</h4>
-                  <p className="text-sm text-muted-foreground">IT Director, Eastview Academy</p>
+                  <h4 className="font-semibold">Bwalya Nkonde</h4>
+                  <p className="text-sm text-muted-foreground">IT Manager, Kitwe Academy</p>
                 </div>
               </div>
               <div className="mb-4">
@@ -375,18 +375,18 @@ export default function Index() {
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path></svg>
                 </div>
               </div>
-              <p className="text-sm italic">"The EMIS integration saved us countless hours of manual data entry. Implementation was smooth, and the support team was there every step of the way. I highly recommend MUCHI to any school looking to modernize."</p>
+              <p className="text-sm italic">"The Ministry of Education integration saved us countless hours of manual data entry. Implementation was smooth, and the support team was there every step of the way. I highly recommend MUCHI to any school in the Copperbelt Province."</p>
             </div>
             
             {/* Testimonial 3 */}
             <div className="bg-card p-6 rounded-2xl border shadow-sm hover:shadow-md transition-all duration-300">
               <div className="flex items-center mb-4">
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xl">
-                  ML
+                  TM
                 </div>
                 <div className="ml-4">
-                  <h4 className="font-semibold">Maria Lopez</h4>
-                  <p className="text-sm text-muted-foreground">Administrator, Northside Elementary</p>
+                  <h4 className="font-semibold">Thandiwe Mumba</h4>
+                  <p className="text-sm text-muted-foreground">Administrator, Chipata Primary School</p>
                 </div>
               </div>
               <div className="mb-4">
@@ -398,7 +398,7 @@ export default function Index() {
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 opacity-40"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path></svg>
                 </div>
               </div>
-              <p className="text-sm italic">"As a small elementary school, we were worried about the cost and complexity of a new system. MUCHI's pricing was fair, and the platform is intuitive enough that our entire staff was comfortable using it within days."</p>
+              <p className="text-sm italic">"As a small primary school in Eastern Province, we were worried about the cost and complexity of a new system. MUCHI's pricing in Kwacha was affordable, and the platform is intuitive enough that our entire staff was comfortable using it within days."</p>
             </div>
           </div>
         </div>
