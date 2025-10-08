@@ -1,0 +1,26 @@
+[build]
+  command = "npm run build:client"
+  functions = "netlify/functions"
+  publish = "dist/spa"
+
+[build.environment]
+  # Add environment variables needed for build here
+  # Do NOT add actual secret values here
+
+# Configure secrets scanning
+[secrets_scan]
+  # Disable scanning for specific paths if needed
+  omit_paths = [".env.example"]
+  # Disable scanning for specific keys if needed
+  omit_keys = ["DATABASE_URL", "NRC_SALT", "PING_MESSAGE"]
+
+
+[functions]
+  external_node_modules = ["express"]
+  node_bundler = "esbuild"
+  
+[[redirects]]
+  force = true
+  from = "/api/*"
+  status = 200
+  to = "/.netlify/functions/api/:splat"

@@ -1,0 +1,280 @@
+/* Modern Digital Card Animations */
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%) skewX(-15deg);
+  }
+  100% {
+    transform: translateX(200%) skewX(-15deg);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(59, 130, 246, 0.6), 0 0 40px rgba(147, 51, 234, 0.3);
+  }
+}
+
+@keyframes galaxy-pulse {
+  0%, 100% {
+    box-shadow: 0 0 15px #ffffff, 0 0 30px #add8e6;
+  }
+  33% {
+    box-shadow: 0 0 20px #ffb6c1, 0 0 40px #e6e6fa;
+  }
+  66% {
+    box-shadow: 0 0 25px #87cefa, 0 0 35px #fffacd;
+  }
+}
+
+@keyframes planet-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px #ff9d00;
+  }
+  25% {
+    box-shadow: 0 0 25px #ff5e62;
+  }
+  50% {
+    box-shadow: 0 0 30px #8a2be2;
+  }
+  75% {
+    box-shadow: 0 0 25px #00bfff;
+  }
+}
+
+@keyframes card-entrance {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes sparkle {
+  0%, 100% {
+    opacity: 0;
+    transform: scale(0.8) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2) rotate(180deg);
+  }
+}
+
+@keyframes cosmic-rays {
+  0% {
+    background-position: -100% 0;
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    background-position: 200% 0;
+    opacity: 0;
+  }
+}
+
+@keyframes border-glow {
+  0%, 100% {
+    border-color: #add8e6;
+    box-shadow: 0 0 15px #add8e6, inset 0 0 10px #add8e6;
+  }
+  33% {
+    border-color: #ffb6c1;
+    box-shadow: 0 0 15px #ffb6c1, inset 0 0 10px #ffb6c1;
+  }
+  66% {
+    border-color: #8a2be2;
+    box-shadow: 0 0 15px #8a2be2, inset 0 0 10px #8a2be2;
+  }
+}
+
+/* Card hover effects */
+.digital-card {
+  animation: card-entrance 0.6s ease-out;
+  transition: all 0.3s ease;
+}
+
+.digital-card:hover {
+  transform: translateY(-5px);
+}
+
+.digital-card:hover .shimmer-effect {
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+.digital-card:hover .float-element {
+  animation: float 3s ease-in-out infinite;
+}
+
+.digital-card .glow-effect {
+  animation: glow-pulse 4s ease-in-out infinite;
+}
+
+.digital-card .sparkle-icon {
+  animation: sparkle 3s ease-in-out infinite;
+}
+
+/* Futuristic card effects */
+.futuristic-card {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.4s ease;
+  border: 1px solid transparent;
+  /* No animation on the card itself */
+}
+
+.futuristic-card:hover {
+  transform: translateY(-8px) scale(1.02);
+  /* Removed galaxy-pulse animation */
+}
+
+.futuristic-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.6s;
+  pointer-events: none;
+}
+
+.futuristic-card:hover::before {
+  transform: translateX(100%);
+}
+
+.futuristic-card .cosmic-rays {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(135, 206, 250, 0.3), transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Removed cosmic-rays animation on hover */
+
+/* Glassmorphism effects */
+.glass-effect {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Bright border effects */
+.bright-border {
+  position: relative;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+
+.bright-border:hover {
+  border-image: linear-gradient(
+    to right,
+    #ffffff,
+    #a5d8ff,
+    #ffc0cb,
+    #e6e6fa,
+    #87ceeb,
+    #fffdd0
+  ) 1;
+  animation: border-glow 3s infinite alternate;
+}
+
+.bright-border-pulse {
+  position: relative;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  border-image: linear-gradient(
+    to right,
+    #ffffff,
+    #a5d8ff,
+    #ffc0cb,
+    #e6e6fa,
+    #87ceeb,
+    #fffdd0
+  ) 1;
+  animation: border-glow 3s infinite alternate;
+}
+
+/* Gradient text effect */
+.gradient-text {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Button hover effects */
+.modern-button {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.modern-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.modern-button:hover::before {
+  left: 100%;
+}
+
+/* Responsive animations */
+@media (prefers-reduced-motion: reduce) {
+  .digital-card,
+  .shimmer-effect,
+  .float-element,
+  .glow-effect,
+  .sparkle-icon {
+    animation: none;
+  }
+}
+
+/* Custom scrollbar for card content */
+.card-content::-webkit-scrollbar {
+  width: 4px;
+}
+
+.card-content::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+.card-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+}
+
+.card-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
