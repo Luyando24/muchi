@@ -26,14 +26,56 @@ import {
 } from 'lucide-react';
 import { Api } from '../../shared/api';
 
+interface Student {
+  id: string;
+  name: string;
+  // Add other student properties as needed
+}
+
+interface Teacher {
+  id: string;
+  name: string;
+  // Add other teacher properties as needed
+}
+
+interface Class {
+  id: string;
+  name: string;
+  // Add other class properties as needed
+}
+
+interface Subject {
+  id: string;
+  name: string;
+  // Add other subject properties as needed
+}
+
+interface Attendance {
+  id: string;
+  status: string;
+  // Add other attendance properties as needed
+}
+
+interface Grade {
+  id: string;
+  score: number;
+  // Add other grade properties as needed
+}
+
+interface SchoolInfo {
+  name: string;
+  address: string;
+  // Add other school info properties as needed
+}
+
 interface EMISExportData {
-  students: any[];
-  teachers: any[];
-  classes: any[];
-  subjects: any[];
-  attendance: any[];
-  grades: any[];
-  school_info: any;
+  students: Student[];
+  teachers: Teacher[];
+  classes: Class[];
+  subjects: Subject[];
+  attendance: Attendance[];
+  grades: Grade[];
+  school_info: SchoolInfo;
 }
 
 interface ExportStatus {
@@ -222,7 +264,7 @@ export default function EMISExport() {
     }
   };
 
-  const generateAttendanceSummary = (attendance: any[]) => {
+  const generateAttendanceSummary = (attendance: Attendance[]) => {
     // Generate attendance statistics for EMIS
     const summary = attendance.reduce((acc, record) => {
       const key = `${record.studentId}_${record.date}`;
@@ -238,7 +280,7 @@ export default function EMISExport() {
     return Object.values(summary);
   };
 
-  const generateGradeSummary = (grades: any[]) => {
+  const generateGradeSummary = (grades: Grade[]) => {
     // Generate grade statistics for EMIS
     return grades.map(grade => ({
       student_id: grade.studentId,

@@ -1,21 +1,21 @@
 import { useState, useEffect } from 'react';
-import { GraduationCap, Users, FileText, AlertTriangle, BarChart3, Clock, MapPin, Search, Camera, Building, Briefcase, UserCheck } from 'lucide-react';
+import { GraduationCap, Search, Building, UserCheck } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Progress } from '@/components/ui/progress';
-import { Link } from 'react-router-dom';
-import { useAuth } from '@/lib/auth';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth, clearSession } from '@/lib/auth';
 import { Api } from '../../shared/api';
-import type { Assignment, Student, Class } from '../../shared/api';
-import SchoolSidebar from '@/components/dashboard/SchoolSidebar';
-import { QuickStats } from '@/components/dashboard/QuickStats';
+import type { Assignment } from '../../shared/api';
+import DashboardLayout from '@/components/dashboard/DashboardLayout';
+
 import { RecentTasks } from '@/components/dashboard/RecentTasks';
 import { TaskPriorityDistribution } from '@/components/dashboard/TaskPriorityDistribution';
 import { TaskCompletionRate } from '@/components/dashboard/TaskCompletionRate';
 import { PerformanceMetrics } from '@/components/dashboard/PerformanceMetrics';
 import { SchoolOverview } from '@/components/dashboard/SchoolOverview';
+import SupportTab from '@/components/dashboard/SupportTab';
+import StudentsTab from '@/components/dashboard/StudentsTab';
 
 interface DashboardStats {
   totalAssignments: number;
@@ -33,9 +33,15 @@ interface DashboardStats {
 
 export default function SchoolDashboard() {
   const { session } = useAuth();
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentAssignments, setRecentAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const handleLogout = () => {
+    clearSession();
+    navigate('/login');
+  };
 
   useEffect(() => {
     loadDashboardData();
@@ -45,19 +51,42 @@ export default function SchoolDashboard() {
     try {
       setLoading(true);
       
-      // Load assignment statistics
-      const statsResponse = await Api.getAssignmentStats({
-        schoolId: session?.schoolId,
-        teacherId: session?.userId
-      });
-      setStats(statsResponse);
-      
-      // Load recent assignments
-      const assignmentsResponse = await Api.listAssignments({
-        schoolId: session?.schoolId,
-        limit: 10
-      });
-      setRecentAssignments(assignmentsResponse.items);
+      // Only attempt to load data if schoolId is available
+      if (session?.schoolId) {
+        try {
+          // Load assignment statistics
+          const statsResponse = await Api.getAssignmentStats({
+            schoolId: session.schoolId,
+            teacherId: session?.userId
+          });
+          setStats(statsResponse);
+          
+          // Load recent assignments
+          const assignmentsResponse = await Api.listAssignments({
+            schoolId: session.schoolId,
+            limit: 10
+          });
+          setRecentAssignments(assignmentsResponse.items);
+        } catch (error) {
+          console.error('Failed to load school data:', error);
+        }
+      } else {
+        // Set default empty stats for users without a schoolId
+        setStats({
+          totalAssignments: 0,
+          openAssignments: 0,
+          inProgressAssignments: 0,
+          completedAssignments: 0,
+          highPriorityAssignments: 0,
+          mediumPriorityAssignments: 0,
+          lowPriorityAssignments: 0,
+          totalStudents: 0,
+          totalTeachers: 0,
+          totalClasses: 0,
+          attendanceRate: 0
+        });
+        setRecentAssignments([]);
+      }
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
@@ -101,11 +130,111 @@ export default function SchoolDashboard() {
     );
   }
 
+  // Show welcome screen for users without a school ID
+  if (!session?.schoolId) {
+    return (
+      <div className="min-h-screen bg-background">
+        {/* Header */}
+        <div className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-4">
+              <GraduationCap className="h-8 w-8 text-primary" />
+              <div>
+                <h1 className="text-xl font-semibold">MUCHI Dashboard</h1>
+                <p className="text-sm text-muted-foreground">Welcome, {session?.userId}</p>
+              </div>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                  <User className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{session?.userId}</p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {session?.role}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Log out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        {/* Welcome Content */}
+        <div className="p-6">
+          <div className="max-w-4xl mx-auto">
+            <div className="text-center space-y-6">
+              <div className="space-y-2">
+                <h2 className="text-3xl font-bold tracking-tight">Welcome to MUCHI</h2>
+                <p className="text-lg text-muted-foreground">
+                  You're successfully logged in! To access school-specific features, you'll need to be associated with a school.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Building className="h-5 w-5" />
+                      Register New School
+                    </CardTitle>
+                    <CardDescription>
+                      Set up a new school in the MUCHI system
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button className="w-full" asChild>
+                      <Link to="/register">Register School</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <UserCheck className="h-5 w-5" />
+                      Contact Administrator
+                    </CardTitle>
+                    <CardDescription>
+                      Get help from your system administrator
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button variant="outline" className="w-full">
+                      Contact Support
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="mt-8 p-4 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  <strong>Demo User:</strong> You're currently logged in as a demo user. 
+                  In a production environment, users would be associated with specific schools 
+                  to access the full dashboard functionality.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-background">
-      {/* Sticky Header */}
-      <div className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-        <div className="flex items-center justify-between p-4">
+    <DashboardLayout>
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <GraduationCap className="h-8 w-8 text-primary" />
             <div>
@@ -116,43 +245,45 @@ export default function SchoolDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant="outline">{session?.role}</Badge>
-            <Badge variant="secondary">{session?.userId?.slice(0, 8) || 'SCH-001'}</Badge>
             <Button variant="outline" size="sm">
               <Search className="h-4 w-4" />
             </Button>
           </div>
         </div>
+
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="students">Students</TabsTrigger>
+            <TabsTrigger value="assignments">Assignments</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="support">Support</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="space-y-6">
+            <SchoolOverview />
+          </TabsContent>
+
+          <TabsContent value="students" className="space-y-6">
+            <StudentsTab />
+          </TabsContent>
+
+          <TabsContent value="assignments" className="space-y-6">
+            <RecentTasks assignments={recentAssignments} getPriorityColor={getPriorityColor} getStatusColor={getStatusColor} />
+          </TabsContent>
+
+          <TabsContent value="analytics" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <TaskCompletionRate stats={stats} />
+              <PerformanceMetrics stats={stats} />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="support" className="space-y-6">
+            <SupportTab />
+          </TabsContent>
+        </Tabs>
       </div>
-
-      <Tabs defaultValue="overview" className="flex h-[calc(100vh-73px)]">
-        <SchoolSidebar />
-
-        {/* Main Content Area */}
-        <div className="flex-1 overflow-auto">
-          <div className="p-6 space-y-6">
-            {/* Quick Stats */}
-            <QuickStats stats={stats} />
-
-            <TabsContent value="overview" className="space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <SchoolOverview />
-              </div>
-            </TabsContent>
-
-            <TabsContent value="assignments" className="space-y-6">
-              <RecentTasks assignments={recentAssignments} getPriorityColor={getPriorityColor} getStatusColor={getStatusColor} />
-            </TabsContent>
-
-            <TabsContent value="analytics" className="space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <TaskCompletionRate stats={stats} />
-                <PerformanceMetrics stats={stats} />
-              </div>
-            </TabsContent>
-          </div>
-        </div>
-      </Tabs>
-    </div>
+    </DashboardLayout>
   );
 }

@@ -2,20 +2,37 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { handleDemo } from "./routes/demo";
-import { handleLogin, handlePatientLogin, handlePatientAlternativeLogin, handleRegisterStaff } from "./routes/auth";
+import {
+  handleLogin,
+  handleStudentLogin,
+  handleStudentAlternativeLogin,
+  handleRegisterStaff,
+  handleRegisterSchool,
+  handleRegisterSuperAdmin,
+  handleListSuperAdmins,
+  handleDeleteSuperAdmin
+} from "./routes/auth";
 import {
   handleSearchResident,
   handleRegisterResident,
   handleUpsertResident,
-  handleListResidents,
+  handleListResidents
 } from "./routes/residents";
+import {
+  handleListStudents,
+  handleGetStudent,
+  handleCreateStudent,
+  handleUpdateStudent,
+  handleDeleteStudent,
+  handleSearchStudents
+} from "./routes/students";
 import {
   handleCreateCase,
   handleListCases,
   handleUpdateCase,
   handleGetCase,
   handleDeleteCase,
-  handleGetCaseStats,
+  handleGetCaseStats
 } from "./routes/cases";
 import {
   handleCreatePermit,
@@ -24,22 +41,63 @@ import {
   handleGetPermit,
   handleDeletePermit,
   handleGetPermitStats,
-  handleCreateVisa,
-  handleListVisas,
   handleCheckPermitValidity,
+  handleCreateVisa,
+  handleListVisas
 } from "./routes/permits";
-import { 
-  handleCreateWebsite, 
-  handleGetWebsite, 
-  handleUpdateWebsite, 
+import {
+  handleCreateWebsite,
+  handleGetWebsite,
+  handleUpdateWebsite,
   handlePublishWebsite,
   handleListThemes,
   handleListPages,
   handleGetPage,
   handleUpdatePage
 } from "./routes/websites";
+import {
+  handleListSchools,
+  handleGetSchool,
+  handleCreateSchool,
+  handleUpdateSchool,
+  handleDeleteSchool
+} from "./routes/schools";
+import {
+  handleGetDashboardStats,
+  handleGetSchoolsWithSubscriptions,
+  handleGetSubscriptions
+} from "./routes/dashboard";
+import {
+  handleGetSubscriptions as handleGetAllSubscriptions,
+  handleGetPlans,
+  handleGetPaymentMethods,
+  handleGetBillingHistory,
+  handleCreateSubscription,
+  handleUpdateSubscription,
+  handleCancelSubscription,
+  handleAddPaymentMethod,
+  handleSetDefaultPaymentMethod,
+  handleDeletePaymentMethod
+} from "./routes/subscriptions";
+import {
+  handleGetSystemSettings,
+  handleUpdateSystemSetting,
+  handleGetEmailSettings,
+  handleUpdateEmailSettings,
+  handleTestEmail,
+  handleGetSecuritySettings,
+  handleUpdateSecuritySettings,
+  handleGetBackupSettings,
+  handleUpdateBackupSettings,
+  handleTriggerBackup,
+  handleGetSettingsAudit
+} from "./routes/system-settings";
+import notificationsRouter from "./routes/notifications";
+import supportRouter from "./routes/support";
+import databaseRouter from "./routes/database";
 
 export function createServer() {
+  console.log("Creating Express server...");
   const app = express();
 
   // Middleware
@@ -57,23 +115,31 @@ export function createServer() {
 
   // Authentication routes
   app.post("/api/auth/login", handleLogin);
-  app.post("/api/auth/patient-login", handlePatientLogin);
-  app.post("/api/auth/patient-alternative-login", handlePatientAlternativeLogin);
+  app.post("/api/auth/student-login", handleStudentLogin);
+  app.post("/api/auth/student-alternative-login", handleStudentAlternativeLogin);
   app.post("/api/auth/register-staff", handleRegisterStaff);
+  app.post("/api/auth/register-school", handleRegisterSchool);
+  app.post("/api/auth/register-superadmin", handleRegisterSuperAdmin);
+  
+  // Super Admin Management routes
+  app.get("/api/auth/list-superadmins", handleListSuperAdmins);
+  app.delete("/api/auth/delete-superadmin/:userId", handleDeleteSuperAdmin);
 
-  // Resident routes
-  app.post("/api/residents/search", handleSearchResident);
-  app.post("/api/residents/register", handleRegisterResident);
-  app.post("/api/residents", handleUpsertResident);
-  app.get("/api/residents", handleListResidents);
+  // Student Management routes
+  app.get("/api/students", handleListStudents);
+  app.get("/api/students/:studentId", handleGetStudent);
+  app.post("/api/students", handleCreateStudent);
+  app.put("/api/students/:studentId", handleUpdateStudent);
+  app.delete("/api/students/:studentId", handleDeleteStudent);
+  app.post("/api/students/search", handleSearchStudents);
 
-  // Military Case routes
-  app.post("/api/cases", handleCreateCase);
-  app.get("/api/cases", handleListCases);
-  app.put("/api/cases/:caseId", handleUpdateCase);
-  app.get("/api/cases/:caseId", handleGetCase);
-  app.delete("/api/cases/:caseId", handleDeleteCase);
-  app.get("/api/cases/stats", handleGetCaseStats);
+  // Academic Case routes (repurposed from military cases)
+  app.post("/api/academic-cases", handleCreateCase);
+  app.get("/api/academic-cases", handleListCases);
+  app.put("/api/academic-cases/:caseId", handleUpdateCase);
+  app.get("/api/academic-cases/:caseId", handleGetCase);
+  app.delete("/api/academic-cases/:caseId", handleDeleteCase);
+  app.get("/api/academic-cases/stats", handleGetCaseStats);
 
   // Immigration Permit routes
   app.post("/api/permits", handleCreatePermit);
@@ -101,6 +167,75 @@ export function createServer() {
   app.get("/api/pages", handleListPages);
   app.get("/api/pages/:pageId", handleGetPage);
   app.put("/api/pages/:pageId", handleUpdatePage);
+  
+  // School routes
+  app.get("/api/schools", handleListSchools);
+  app.get("/api/schools/:id", handleGetSchool);
+  app.post("/api/schools", handleCreateSchool);
+  app.put("/api/schools/:id", handleUpdateSchool);
+  app.delete("/api/schools/:id", handleDeleteSchool);
+
+  // Dashboard routes
+  app.get("/api/dashboard/stats", (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    handleGetDashboardStats(req, res);
+  });
+  app.get("/api/dashboard/schools", (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    handleGetSchoolsWithSubscriptions(req, res);
+  });
+  app.get("/api/dashboard/subscriptions", (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    handleGetSubscriptions(req, res);
+  });
+
+  // Subscription Management routes
+  app.get("/api/subscriptions", handleGetAllSubscriptions);
+  app.post("/api/subscriptions", handleCreateSubscription);
+  app.put("/api/subscriptions/:id", handleUpdateSubscription);
+  app.delete("/api/subscriptions/:id", handleCancelSubscription);
+  
+  // Plan routes
+  app.get("/api/plans", handleGetPlans);
+  
+  // Payment Method routes
+  app.get("/api/payment-methods", handleGetPaymentMethods);
+  app.post("/api/payment-methods", handleAddPaymentMethod);
+  app.put("/api/payment-methods/:id/default", handleSetDefaultPaymentMethod);
+  app.delete("/api/payment-methods/:id", handleDeletePaymentMethod);
+  
+  // Billing History routes
+  app.get("/api/billing-history", handleGetBillingHistory);
+
+  // System Settings routes
+  app.get("/api/system-settings", handleGetSystemSettings);
+  app.put("/api/system-settings", handleUpdateSystemSetting);
+  
+  // Email Settings routes
+  app.get("/api/email-settings", handleGetEmailSettings);
+  app.put("/api/email-settings", handleUpdateEmailSettings);
+  app.post("/api/email-settings/test", handleTestEmail);
+  
+  // Security Settings routes
+  app.get("/api/security-settings", handleGetSecuritySettings);
+  app.put("/api/security-settings", handleUpdateSecuritySettings);
+  
+  // Backup Settings routes
+  app.get("/api/backup-settings", handleGetBackupSettings);
+  app.put("/api/backup-settings", handleUpdateBackupSettings);
+  app.post("/api/backup-settings/trigger", handleTriggerBackup);
+  
+  // Settings Audit routes
+  app.get("/api/settings-audit", handleGetSettingsAudit);
+  
+  // Notifications routes
+  app.use("/api/notifications", notificationsRouter);
+  
+  // Support routes
+  app.use("/api/support", supportRouter);
+  
+  // Database management routes
+  app.use("/api/database", databaseRouter);
 
   return app;
 }

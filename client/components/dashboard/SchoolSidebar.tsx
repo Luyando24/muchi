@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { 
   GraduationCap, 
   Users, 
@@ -16,7 +17,8 @@ import {
   UserCheck,
   Clock,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  HelpCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -25,10 +27,14 @@ import { cn } from '@/lib/utils';
 
 interface SchoolSidebarProps {
   className?: string;
+  activeTab?: string;
+  onAddStudent?: () => void;
 }
 
-export default function SchoolSidebar({ className }: SchoolSidebarProps) {
-  const [activeTab, setActiveTab] = useState('overview');
+export default function SchoolSidebar({ className, activeTab: propActiveTab, onAddStudent }: SchoolSidebarProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState(propActiveTab || 'overview');
   const [expandedGroups, setExpandedGroups] = useState({
     academics: true,
     people: true,
@@ -42,6 +48,42 @@ export default function SchoolSidebar({ className }: SchoolSidebarProps) {
     });
   };
 
+  const handleItemClick = (itemId: string) => {
+    if (itemId === 'support') {
+      navigate('/support');
+    } else if (itemId === 'assignments') {
+      navigate('/dashboard/assignments');
+    } else if (itemId === 'classes') {
+      navigate('/dashboard/classes');
+    } else if (itemId === 'subjects') {
+      navigate('/dashboard/subjects');
+    } else if (itemId === 'attendance') {
+      navigate('/dashboard/attendance');
+    } else if (itemId === 'grades') {
+      navigate('/dashboard/grades');
+    } else if (itemId === 'timetable') {
+      navigate('/dashboard/timetable');
+    } else if (itemId === 'finance') {
+      navigate('/dashboard/finance');
+    } else {
+      setActiveTab(itemId);
+      // Ensure the parent Tabs component updates its value
+      setTimeout(() => {
+        const tabsElement = document.querySelector('[data-orientation="horizontal"][role="tablist"]');
+        if (tabsElement) {
+          const tabButton = tabsElement.querySelector(`[data-value="${itemId}"]`);
+          if (tabButton && tabButton instanceof HTMLElement) {
+            tabButton.click();
+          } else {
+            console.log(`Tab button for ${itemId} not found`);
+          }
+        } else {
+          console.log('Tabs element not found');
+        }
+      }, 0);
+    }
+  };
+
   // Group menu items by category
   const menuGroups = {
     main: [
@@ -50,6 +92,7 @@ export default function SchoolSidebar({ className }: SchoolSidebarProps) {
         label: 'Overview',
         icon: Home,
         badge: null,
+        href: '/dashboard'
       }
     ],
     people: [
@@ -58,12 +101,14 @@ export default function SchoolSidebar({ className }: SchoolSidebarProps) {
         label: 'Students',
         icon: Users,
         badge: '1,247',
+        href: '/dashboard/students'
       },
       {
         id: 'teachers',
         label: 'Teachers',
         icon: UserCheck,
         badge: '45',
+        href: '/dashboard/teachers'
       }
     ],
     academics: [
@@ -72,36 +117,42 @@ export default function SchoolSidebar({ className }: SchoolSidebarProps) {
         label: 'Classes',
         icon: School,
         badge: '32',
+        href: '/dashboard/classes'
       },
       {
         id: 'subjects',
         label: 'Subjects',
         icon: BookOpen,
         badge: null,
+        href: '/dashboard/subjects'
       },
       {
         id: 'assignments',
         label: 'Assignments',
         icon: FileText,
         badge: '23',
+        href: '/dashboard/assignments'
       },
       {
         id: 'attendance',
         label: 'Attendance',
         icon: ClipboardCheck,
         badge: null,
+        href: '/dashboard/attendance'
       },
       {
         id: 'grades',
         label: 'Grades',
         icon: BarChart3,
         badge: null,
+        href: '/dashboard/grades'
       },
       {
         id: 'timetable',
         label: 'Timetable',
         icon: Calendar,
         badge: null,
+        href: '/dashboard/timetable'
       }
     ],
     administration: [
@@ -110,17 +161,26 @@ export default function SchoolSidebar({ className }: SchoolSidebarProps) {
         label: 'Finance',
         icon: DollarSign,
         badge: '12',
+        href: '/dashboard/finance',
       },
       {
         id: 'communications',
         label: 'Communications',
         icon: MessageSquare,
         badge: '5',
+        href: '/dashboard/communications',
       },
       {
         id: 'reports',
         label: 'Reports',
         icon: FileText,
+        badge: null,
+        href: '/dashboard/reports',
+      },
+      {
+        id: 'support',
+        label: 'Support',
+        icon: HelpCircle,
         badge: null,
       },
       {
@@ -128,6 +188,7 @@ export default function SchoolSidebar({ className }: SchoolSidebarProps) {
         label: 'Settings',
         icon: Settings,
         badge: null,
+        href: '/dashboard/settings',
       }
     ]
   };
@@ -139,17 +200,18 @@ export default function SchoolSidebar({ className }: SchoolSidebarProps) {
           {/* Main items (always visible) */}
           {menuGroups.main.map((item) => {
             const Icon = item.icon;
-            const isActive = activeTab === item.id;
+            const isActive = location.pathname === item.href || 
+                            (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
             
             return (
-              <Button
+              <Link
                 key={item.id}
-                variant={isActive ? "secondary" : "ghost"}
+                to={item.href}
                 className={cn(
-                  "w-full justify-start gap-3 h-10",
-                  isActive && "bg-secondary/80"
+                  "flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm font-medium transition-colors h-10",
+                  "hover:bg-accent hover:text-accent-foreground",
+                  isActive && "bg-primary text-primary-foreground hover:bg-primary/90"
                 )}
-                onClick={() => setActiveTab(item.id)}
               >
                 <Icon className="h-4 w-4" />
                 <span className="flex-1 text-left">{item.label}</span>
@@ -158,7 +220,7 @@ export default function SchoolSidebar({ className }: SchoolSidebarProps) {
                     {item.badge}
                   </Badge>
                 )}
-              </Button>
+              </Link>
             );
           })}
 
@@ -175,17 +237,18 @@ export default function SchoolSidebar({ className }: SchoolSidebarProps) {
             
             {expandedGroups.people && menuGroups.people.map((item) => {
               const Icon = item.icon;
-              const isActive = activeTab === item.id;
+              const isActive = location.pathname === item.href || 
+                              (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
               
               return (
-                <Button
+                <Link
                   key={item.id}
-                  variant={isActive ? "secondary" : "ghost"}
+                  to={item.href}
                   className={cn(
-                    "w-full justify-start gap-3 h-10 pl-6",
-                    isActive && "bg-secondary/80"
+                    "flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm font-medium transition-colors h-10 pl-6",
+                    "hover:bg-accent hover:text-accent-foreground",
+                    isActive && "bg-primary text-primary-foreground hover:bg-primary/90"
                   )}
-                  onClick={() => setActiveTab(item.id)}
                 >
                   <Icon className="h-4 w-4" />
                   <span className="flex-1 text-left">{item.label}</span>
@@ -194,7 +257,7 @@ export default function SchoolSidebar({ className }: SchoolSidebarProps) {
                       {item.badge}
                     </Badge>
                   )}
-                </Button>
+                </Link>
               );
             })}
           </div>
@@ -212,17 +275,18 @@ export default function SchoolSidebar({ className }: SchoolSidebarProps) {
             
             {expandedGroups.academics && menuGroups.academics.map((item) => {
               const Icon = item.icon;
-              const isActive = activeTab === item.id;
+              const isActive = location.pathname === item.href || 
+                              (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
               
               return (
-                <Button
+                <Link
                   key={item.id}
-                  variant={isActive ? "secondary" : "ghost"}
+                  to={item.href}
                   className={cn(
-                    "w-full justify-start gap-3 h-10 pl-6",
-                    isActive && "bg-secondary/80"
+                    "flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm font-medium transition-colors h-10 pl-6",
+                    "hover:bg-accent hover:text-accent-foreground",
+                    isActive && "bg-primary text-primary-foreground hover:bg-primary/90"
                   )}
-                  onClick={() => setActiveTab(item.id)}
                 >
                   <Icon className="h-4 w-4" />
                   <span className="flex-1 text-left">{item.label}</span>
@@ -231,7 +295,7 @@ export default function SchoolSidebar({ className }: SchoolSidebarProps) {
                       {item.badge}
                     </Badge>
                   )}
-                </Button>
+                </Link>
               );
             })}
           </div>
@@ -249,17 +313,41 @@ export default function SchoolSidebar({ className }: SchoolSidebarProps) {
             
             {expandedGroups.administration && menuGroups.administration.map((item) => {
               const Icon = item.icon;
-              const isActive = activeTab === item.id;
+              const isActive = location.pathname === item.href || 
+                              (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
+              
+              // If item has href, use Link component, otherwise use Button
+              if (item.href) {
+                return (
+                  <Link
+                    key={item.id}
+                    to={item.href}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm font-medium transition-colors h-10 pl-6",
+                      "hover:bg-accent hover:text-accent-foreground",
+                      isActive && "bg-primary text-primary-foreground hover:bg-primary/90"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="flex-1 text-left">{item.label}</span>
+                    {item.badge && (
+                      <Badge variant="secondary" className="text-xs px-2 py-0">
+                        {item.badge}
+                      </Badge>
+                    )}
+                  </Link>
+                );
+              }
               
               return (
                 <Button
                   key={item.id}
-                  variant={isActive ? "secondary" : "ghost"}
+                  variant={isActive ? "default" : "ghost"}
                   className={cn(
                     "w-full justify-start gap-3 h-10 pl-6",
-                    isActive && "bg-secondary/80"
+                    isActive && "bg-primary text-primary-foreground hover:bg-primary/90"
                   )}
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => handleItemClick(item.id)}
                 >
                   <Icon className="h-4 w-4" />
                   <span className="flex-1 text-left">{item.label}</span>
@@ -278,7 +366,7 @@ export default function SchoolSidebar({ className }: SchoolSidebarProps) {
       {/* Quick Actions */}
       <div className="p-4 border-t mt-auto">
         <div className="space-y-2">
-          <Button size="sm" className="w-full justify-start gap-2">
+          <Button size="sm" className="w-full justify-start gap-2" onClick={onAddStudent}>
             <UserPlus className="h-4 w-4" />
             Add Student
           </Button>

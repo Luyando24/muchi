@@ -1,31 +1,31 @@
 import Dexie, { Table } from "dexie";
 import type {
   Task,
-  MilitaryUnit,
-  MilitaryBase,
-  Personnel,
+  Student,
+  School,
+  StaffUser,
   SyncQueueItem,
 } from "@shared/api";
 
-export class ZAMSADb extends Dexie {
-  militaryUnits!: Table<MilitaryUnit, string>;
-  militaryBases!: Table<MilitaryBase, string>;
-  personnel!: Table<Personnel, string>;
+export class SchoolManagementDb extends Dexie {
+  schools!: Table<School, string>;
+  students!: Table<Student, string>;
+  staffUsers!: Table<StaffUser, string>;
   tasks!: Table<Task, string>;
   syncQueue!: Table<SyncQueueItem, string>;
 
   constructor() {
-    super("zamsa_db_v1");
+    super("school_management_db_v1");
     this.version(1).stores({
-      tasks: "id,taskNumber,unitId,assigneeId,status,updatedAt",
+      tasks: "id,taskNumber,schoolId,assigneeId,status,updatedAt",
       syncQueue: "id,createdAt",
     });
     this.version(2).stores({
-      militaryUnits: "id,code,name,district,province",
-      militaryBases: "id,code,name,district,province,isHeadquarters",
-      personnel: "id,email,unitId,baseId,role,isActive,serviceNumber",
+      schools: "id,code,name,district,province,schoolType",
+      students: "id,nrc,schoolId,firstName,lastName,grade,isActive",
+      staffUsers: "id,email,schoolId,role,isActive,firstName,lastName",
     });
   }
 }
 
-export const db = new ZAMSADb();
+export const db = new SchoolManagementDb();

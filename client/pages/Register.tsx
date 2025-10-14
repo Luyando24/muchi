@@ -5,18 +5,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Api } from "@/lib/api";
 import { saveSession } from "@/lib/auth";
 import { useNavigate, Link } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { School } from "lucide-react";
 import { handleError, validateStaffData } from "@/lib/errors";
 
 export default function Register() {
-  const [departmentName, setDepartmentName] = useState("");
-  const [departmentType, setDepartmentType] = useState<"military" | "immigration">("military");
+  const [schoolName, setSchoolName] = useState("");
+  const [schoolType, setSchoolType] = useState<"primary" | "secondary" | "college">("secondary");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [badgeNumber, setBadgeNumber] = useState("");
-  const [rank, setRank] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -27,167 +27,164 @@ export default function Register() {
     setLoading(true);
     
     try {
+      if (password !== confirmPassword) {
+        throw new Error("Passwords do not match");
+      }
+      
       validateStaffData({ email, password, firstName, lastName });
       
-      const res = await Api.registerOfficer({
-        stationName: departmentType === "military" ? departmentName : undefined,
-        immigrationOfficeName: departmentType === "immigration" ? departmentName : undefined,
+      const res = await Api.registerSchool({
+        schoolName,
+        schoolType,
         email,
         password,
         firstName,
         lastName,
-        badgeNumber,
-        rank,
+        phoneNumber,
         role: "admin",
       });
+      
       saveSession({
         userId: res.userId,
         role: "admin",
-        stationId: res.stationId,
-        immigrationOfficeId: res.immigrationOfficeId,
+        schoolId: res.schoolId,
         tokens: { accessToken: res.userId, expiresInSec: 3600 },
       });
       
-      // Navigate based on department type
-      if (departmentType === "military") {
-        navigate("/military");
-      } else {
-        navigate("/immigration");
-      }
+      navigate("/dashboard");
     } catch (e: any) {
       const errorMessage = String(e?.message || e);
       setError(errorMessage);
-      handleError(e, "Staff Registration");
+      handleError(e, "School Registration");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <Card className="w-full max-w-lg">
-        <CardHeader className="text-center">
-          <div className="mb-4">
-            <div className="mx-auto w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-3">
-              <span className="text-2xl font-bold text-white">I</span>
-            </div>
-            <h1 className="text-2xl font-bold text-primary mb-1">ZAMSA</h1>
-            <p className="text-sm text-muted-foreground">Zambia Military & Security Application</p>
-          </div>
-          <CardTitle>Register Department/Office</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="grid gap-4" onSubmit={submit}>
-            <div className="space-y-1">
-              <label htmlFor="department-type" className="text-sm">
-                Department Type
-              </label>
-              <select
-                id="department-type"
-                value={departmentType}
-                onChange={(e) => setDepartmentType(e.target.value as "military" | "immigration")}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                required
-              >
-                <option value="military">Military Unit</option>
-                <option value="immigration">Immigration Office</option>
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label htmlFor="department" className="text-sm">
-                {departmentType === "military" ? "Military Unit Name" : "Immigration Office Name"}
-              </label>
-              <Input
-                id="department"
-                value={departmentName}
-                onChange={(e) => setDepartmentName(e.target.value)}
-                required
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-sm" htmlFor="first">
-                  First Name
-                </label>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-4">
+      <div className="w-full max-w-md">
+        <div className="mb-4 flex items-center justify-center">
+          <School className="h-10 w-10 text-primary" />
+          <h1 className="ml-2 text-2xl font-bold text-primary">School Management System</h1>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-center">Register Your School</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={submit} className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex w-full space-x-2">
+                  <Button
+                    type="button"
+                    variant={schoolType === "primary" ? "default" : "outline"}
+                    className="flex-1"
+                    onClick={() => setSchoolType("primary")}
+                  >
+                    Primary School
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={schoolType === "secondary" ? "default" : "outline"}
+                    className="flex-1"
+                    onClick={() => setSchoolType("secondary")}
+                  >
+                    Secondary School
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={schoolType === "college" ? "default" : "outline"}
+                    className="flex-1"
+                    onClick={() => setSchoolType("college")}
+                  >
+                    College
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
                 <Input
-                  id="first"
+                  placeholder="School Name"
+                  value={schoolName}
+                  onChange={(e) => setSchoolName(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  placeholder="First Name"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   required
                 />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm" htmlFor="last">
-                  Last Name
-                </label>
                 <Input
-                  id="last"
+                  placeholder="Last Name"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   required
                 />
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-sm" htmlFor="badge">
-                  Service Number
-                </label>
+
+              <div className="space-y-2">
                 <Input
-                  id="badge"
-                  value={badgeNumber}
-                  onChange={(e) => setBadgeNumber(e.target.value)}
+                  placeholder="Phone Number"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
                   required
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-sm" htmlFor="rank">
-                  Rank (Optional)
-                </label>
+
+              <div className="space-y-2">
                 <Input
-                  id="rank"
-                  value={rank}
-                  onChange={(e) => setRank(e.target.value)}
+                  type="email"
+                  placeholder="Email Address"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
                 />
               </div>
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm" htmlFor="email">
-                Official Email
-              </label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm" htmlFor="pass">
-                Password
-              </label>
-              <Input
-                id="pass"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            {error && <div className="text-sm text-red-600">{error}</div>}
-            <Button type="submit" disabled={loading} className="w-full">
-              {loading ? "Registering..." : "Register Department"}
-            </Button>
-            <div className="text-sm text-center text-muted-foreground">
-              Already have an account?{" "}
-              <Link className="underline" to="/login">
-                Sign in
-              </Link>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+
+              <div className="space-y-2">
+                <Input
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Input
+                  type="password"
+                  placeholder="Confirm Password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              {error && <div className="text-sm text-red-500">{error}</div>}
+
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? "Registering..." : "Register School"}
+              </Button>
+
+              <div className="text-center text-sm">
+                Already have an account?{" "}
+                <Link to="/login" className="text-primary hover:underline">
+                  Login
+                </Link>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+        <div className="mt-4 text-center text-xs text-gray-500">
+          Zambia Education Portal &copy; {new Date().getFullYear()}
+        </div>
+      </div>
     </div>
   );
 }

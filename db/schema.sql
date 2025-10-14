@@ -1,9 +1,10 @@
--- PostgreSQL schema for EHR SaaS (Zambia)
--- Requires: pgcrypto for encryption utilities
+-- PostgreSQL schema for School Management System (Zambia)
+-- Requires: pgcrypto for encryption utilities and citext for case-insensitive text
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS citext;
 
--- Hospitals / Clinics
-CREATE TABLE IF NOT EXISTS hospitals (
+-- Schools
+CREATE TABLE IF NOT EXISTS schools (
   id UUID PRIMARY KEY,
   name TEXT NOT NULL,
   code TEXT NOT NULL UNIQUE,
@@ -16,10 +17,11 @@ CREATE TABLE IF NOT EXISTS hospitals (
 );
 
 -- Staff Users (RBAC)
-CREATE TYPE user_role AS ENUM ('admin', 'doctor', 'nurse', 'lab_technician');
+DROP TYPE IF EXISTS user_role CASCADE;
+CREATE TYPE user_role AS ENUM ('superadmin', 'admin', 'teacher', 'staff');
 CREATE TABLE IF NOT EXISTS staff_users (
   id UUID PRIMARY KEY,
-  hospital_id UUID REFERENCES hospitals(id) ON DELETE SET NULL,
+  school_id UUID REFERENCES schools(id) ON DELETE SET NULL,
   email CITEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   role user_role NOT NULL,
@@ -31,11 +33,11 @@ CREATE TABLE IF NOT EXISTS staff_users (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Patients: PII columns stored encrypted-at-rest (ciphertext)
-CREATE TABLE IF NOT EXISTS patients (
+-- Students: PII columns stored encrypted-at-rest (ciphertext)
+CREATE TABLE IF NOT EXISTS students (
   id UUID PRIMARY KEY,
-  -- Hospital ID card (6 unique characters) for secure authentication
-  hospital_card_id TEXT NOT NULL UNIQUE CHECK (LENGTH(hospital_card_id) = 6),
+  -- Student ID card (6 unique characters) for secure authentication
+  student_card_id TEXT NOT NULL UNIQUE CHECK (LENGTH(student_card_id) = 6),
   
   -- NRC stored as salted hash for lookups without exposing raw NRC
   nrc_hash TEXT NOT NULL UNIQUE,
@@ -53,17 +55,16 @@ CREATE TABLE IF NOT EXISTS patients (
   dob_cipher BYTEA,
   phone_cipher BYTEA,
   address_cipher BYTEA,
-  emergency_contact_name_cipher BYTEA,
-  emergency_contact_phone_cipher BYTEA,
+  guardian_contact_name_cipher BYTEA,
+  guardian_contact_phone_cipher BYTEA,
   
-  -- Additional patient details
-  occupation_cipher BYTEA,
-  marital_status TEXT CHECK (marital_status IN ('single', 'married', 'divorced', 'widowed')),
-  blood_type TEXT CHECK (blood_type IN ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-')),
-  allergies_cipher BYTEA,
-  medical_history_cipher BYTEA,
-  family_history_cipher BYTEA,
-  insurance_info_cipher BYTEA,
+  -- Additional student details
+  grade_level TEXT,
+  enrollment_date DATE,
+  guardian_info_cipher BYTEA,
+  health_info_cipher BYTEA,
+  academic_history_cipher BYTEA,
+  emergency_contact_cipher BYTEA,
 
   -- Digital card
   card_id TEXT NOT NULL UNIQUE,
@@ -72,42 +73,40 @@ CREATE TABLE IF NOT EXISTS patients (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_patients_card_id ON patients(card_id);
+CREATE INDEX IF NOT EXISTS idx_students_card_id ON students(card_id);
 
--- Appointments
-CREATE TABLE IF NOT EXISTS appointments (
+-- Academic Records
+CREATE TABLE IF NOT EXISTS academic_records (
   id UUID PRIMARY KEY,
-  patient_id UUID NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
-  hospital_id UUID NOT NULL REFERENCES hospitals(id) ON DELETE CASCADE,
-  scheduled_for TIMESTAMPTZ NOT NULL,
-  reason TEXT,
-  status TEXT NOT NULL CHECK (status IN ('scheduled','completed','cancelled','no_show')),
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  subject TEXT NOT NULL,
+  grade TEXT,
+  term TEXT,
+  year INTEGER,
+  teacher_notes TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_appointments_patient ON appointments(patient_id, scheduled_for);
+CREATE INDEX IF NOT EXISTS idx_academic_records_student ON academic_records(student_id, year DESC);
 
--- Lab Tests / Results (JSONB for flexible result formats)
-CREATE TABLE IF NOT EXISTS lab_tests (
+-- Attendance Records
+CREATE TABLE IF NOT EXISTS attendance (
   id UUID PRIMARY KEY,
-  patient_id UUID NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
-  hospital_id UUID NOT NULL REFERENCES hospitals(id) ON DELETE CASCADE,
-  ordered_by_id UUID REFERENCES staff_users(id) ON DELETE SET NULL,
-  type TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('ordered','in_progress','completed','cancelled')),
-  result JSONB,
-  result_summary TEXT,
-  collected_at TIMESTAMPTZ,
-  resulted_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  date DATE NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('present', 'absent', 'late', 'excused')),
+  notes TEXT,
+  recorded_by UUID REFERENCES staff_users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_lab_tests_patient ON lab_tests(patient_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_attendance_student_date ON attendance(student_id, date DESC);
 
 -- Offline sync queue (server side ingestion auditing)
 CREATE TABLE IF NOT EXISTS sync_ingest (
   id UUID PRIMARY KEY,
-  source_hospital_id UUID REFERENCES hospitals(id) ON DELETE SET NULL,
+  source_school_id UUID REFERENCES schools(id) ON DELETE SET NULL,
   source_device_id TEXT,
   op_type TEXT NOT NULL CHECK (op_type IN ('create','update','delete')),
   entity TEXT NOT NULL,
@@ -119,14 +118,14 @@ CREATE TABLE IF NOT EXISTS sync_ingest (
 );
 CREATE INDEX IF NOT EXISTS idx_sync_ingest_processed ON sync_ingest(processed_at);
 
--- Hospital Website Builder Tables
+-- School Website Builder Tables
 
--- Website configurations for each hospital
-CREATE TABLE IF NOT EXISTS hospital_websites (
+-- Website configurations for each school
+CREATE TABLE IF NOT EXISTS school_websites (
   id UUID PRIMARY KEY,
-  hospital_id UUID NOT NULL REFERENCES hospitals(id) ON DELETE CASCADE,
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   domain_name TEXT UNIQUE, -- custom domain or subdomain
-  subdomain TEXT NOT NULL UNIQUE, -- flova subdomain like "hospital-name.flova.com"
+  subdomain TEXT NOT NULL UNIQUE, -- flova subdomain like "school-name.flova.com"
   title TEXT NOT NULL,
   description TEXT,
   logo_url TEXT,
@@ -142,10 +141,10 @@ CREATE TABLE IF NOT EXISTS hospital_websites (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_hospital_websites_hospital ON hospital_websites(hospital_id);
-CREATE INDEX IF NOT EXISTS idx_hospital_websites_subdomain ON hospital_websites(subdomain);
+CREATE INDEX IF NOT EXISTS idx_school_websites_school ON school_websites(school_id);
+CREATE INDEX IF NOT EXISTS idx_school_websites_subdomain ON school_websites(subdomain);
 
--- Pre-built themes for hospital websites
+-- Pre-built themes for school websites
 CREATE TABLE IF NOT EXISTS website_themes (
   id UUID PRIMARY KEY,
   name TEXT NOT NULL,
@@ -160,11 +159,11 @@ CREATE TABLE IF NOT EXISTS website_themes (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Website pages (home, about, services, contact, etc.)
+-- Website pages (home, about, programs, contact, etc.)
 CREATE TABLE IF NOT EXISTS website_pages (
   id UUID PRIMARY KEY,
-  website_id UUID NOT NULL REFERENCES hospital_websites(id) ON DELETE CASCADE,
-  slug TEXT NOT NULL, -- URL slug like "about", "services"
+  website_id UUID NOT NULL REFERENCES school_websites(id) ON DELETE CASCADE,
+  slug TEXT NOT NULL, -- URL slug like "about", "programs"
   title TEXT NOT NULL,
   meta_description TEXT,
   content JSONB NOT NULL, -- page content in structured format
@@ -176,11 +175,11 @@ CREATE TABLE IF NOT EXISTS website_pages (
 );
 CREATE INDEX IF NOT EXISTS idx_website_pages_website ON website_pages(website_id, sort_order);
 
--- Website components/sections (hero, services, testimonials, etc.)
+-- Website components/sections (hero, programs, testimonials, etc.)
 CREATE TABLE IF NOT EXISTS website_components (
   id UUID PRIMARY KEY,
   page_id UUID NOT NULL REFERENCES website_pages(id) ON DELETE CASCADE,
-  component_type TEXT NOT NULL, -- "hero", "services", "testimonials", "contact_form"
+  component_type TEXT NOT NULL, -- "hero", "programs", "testimonials", "contact_form"
   component_data JSONB NOT NULL, -- component-specific data
   sort_order INTEGER NOT NULL DEFAULT 0,
   is_visible BOOLEAN NOT NULL DEFAULT TRUE,
@@ -192,7 +191,7 @@ CREATE INDEX IF NOT EXISTS idx_website_components_page ON website_components(pag
 -- Website media/assets
 CREATE TABLE IF NOT EXISTS website_media (
   id UUID PRIMARY KEY,
-  website_id UUID NOT NULL REFERENCES hospital_websites(id) ON DELETE CASCADE,
+  website_id UUID NOT NULL REFERENCES school_websites(id) ON DELETE CASCADE,
   filename TEXT NOT NULL,
   original_filename TEXT NOT NULL,
   file_path TEXT NOT NULL,

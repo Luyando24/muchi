@@ -1,58 +1,58 @@
 import { Link } from 'react-router-dom';
 import { TabsTrigger } from '@/components/ui/tabs';
-import { FileText, Users, Building, Briefcase, UserCheck } from 'lucide-react';
+import { FileText, Users, Building, BookOpen, UserCheck } from 'lucide-react';
 
 export function QuickActions() {
   return (
     <>
       <TabsTrigger
-        value="manage-tasks"
+        value="manage-students"
         className="w-full justify-start gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
         asChild
       >
-        <Link to="/military/tasks">
-          <FileText className="h-4 w-4" />
-          Manage Tasks
-        </Link>
-      </TabsTrigger>
-      <TabsTrigger
-        value="personnel"
-        className="w-full justify-start gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-        asChild
-      >
-        <Link to="/military/personnel">
+        <Link to="/students">
           <Users className="h-4 w-4" />
-          Personnel Directory
+          Student Management
         </Link>
       </TabsTrigger>
       <TabsTrigger
-        value="units"
+        value="academic"
         className="w-full justify-start gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
         asChild
       >
-        <Link to="/military/units">
-          <Building className="h-4 w-4" />
-          Unit Management
+        <Link to="/academic">
+          <BookOpen className="h-4 w-4" />
+          Academic Management
         </Link>
       </TabsTrigger>
       <TabsTrigger
-        value="transfers"
+        value="attendance"
         className="w-full justify-start gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
         asChild
       >
-        <Link to="/military/transfers">
-          <Briefcase className="h-4 w-4" />
-          Transfers & Postings
-        </Link>
-      </TabsTrigger>
-      <TabsTrigger
-        value="promotions"
-        className="w-full justify-start gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-        asChild
-      >
-        <Link to="/military/promotions">
+        <Link to="/attendance">
           <UserCheck className="h-4 w-4" />
-          Ranks & Promotions
+          Attendance Tracking
+        </Link>
+      </TabsTrigger>
+      <TabsTrigger
+        value="finance"
+        className="w-full justify-start gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+        asChild
+      >
+        <Link to="/finance">
+          <FileText className="h-4 w-4" />
+          Finance Management
+        </Link>
+      </TabsTrigger>
+      <TabsTrigger
+        value="parent-portal"
+        className="w-full justify-start gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+        asChild
+      >
+        <Link to="/parent-portal">
+          <Building className="h-4 w-4" />
+          Parent Portal
         </Link>
       </TabsTrigger>
     </>

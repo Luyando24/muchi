@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
     fs: {
       allow: ["./client", "./shared"],
-      deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "server/**"],
+      deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**"],
     },
   },
   build: {
@@ -30,10 +30,12 @@ function expressPlugin(): Plugin {
     name: "express-plugin",
     apply: "serve", // Only apply during development (serve mode)
     configureServer(server) {
+      console.log("Configuring Express server middleware...");
       const app = createServer();
 
       // Add Express app as middleware to Vite dev server
       server.middlewares.use(app);
+      console.log("Express server middleware configured.");
     },
   };
 }

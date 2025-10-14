@@ -24,7 +24,7 @@ I also checked Zambian EMIS / Ministry guidance so the system can interoperate w
 
 1. **Student Information System (SIS)**
 
-   * Admissions, enrollment, demographics, guardians, health records, photo.
+   * Admissions, enrollment, demographics, guardians, educational records, photo.
 
    * Unique student IDs and EMIS mapping/export fields. ([Community Systems Foundation](https://www.communitysystemsfoundation.org/uploads/1/9/9/2/19920247/openemis_zambia.pdf?utm_source=chatgpt.com))
 
@@ -150,7 +150,7 @@ I also checked Zambian EMIS / Ministry guidance so the system can interoperate w
 
   * Identity provider (Keycloak / Auth0 / self-hosted) with SSO and 2FA for admins.
 
-  * Field-level encryption for sensitive data (medical info), TLS everywhere.
+  * Field-level encryption for sensitive data (student info), TLS everywhere.
 
 * **Reporting & BI**
 

@@ -1,7 +1,8 @@
-// Database setup script for Flova
+// Database setup script for MUCHI School Management System
 // Run this after installing PostgreSQL locally
 
-import mysql from 'mysql2/promise';
+import pkg from 'pg';
+const { Client } = pkg;
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -13,61 +14,72 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// MySQL database configuration
+// PostgreSQL database configuration
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 3306,
-  user: process.env.DB_USER || 'root',
+  port: process.env.DB_PORT || 5432,
+  user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || '',
   // Don't specify database initially - we'll create it
 };
 
-const targetDbName = process.env.DB_NAME || 'flova_db';
+const targetDbName = process.env.DB_NAME || 'muchi_db';
 
 async function setupDatabase() {
-  console.log('🚀 Setting up Flova MySQL database...');
+  console.log('🚀 Setting up MUCHI School Management PostgreSQL database...');
   
   try {
-    // Connect to MySQL server (without specifying database)
-    console.log(`🔍 Connecting to MySQL as user: ${dbConfig.user}`);
-    const connection = await mysql.createConnection(dbConfig);
-    console.log(`✅ Successfully connected to MySQL server`);
+    // Connect to PostgreSQL server (without specifying database)
+    console.log(`🔍 Connecting to PostgreSQL as user: ${dbConfig.user}`);
+    const client = new Client(dbConfig);
+    await client.connect();
+    console.log(`✅ Successfully connected to PostgreSQL server`);
     
     // Create database if it doesn't exist
     console.log(`📝 Creating database ${targetDbName} if it doesn't exist...`);
-    await connection.execute(`CREATE DATABASE IF NOT EXISTS \`${targetDbName}\``);
+    await client.query(`CREATE DATABASE "${targetDbName}"`).catch(err => {
+      if (err.code !== '42P04') { // Database already exists error code
+        throw err;
+      }
+      console.log(`ℹ️ Database ${targetDbName} already exists`);
+    });
     console.log(`✅ Database ${targetDbName} is ready`);
     
     // Close the initial connection
-    await connection.end();
+    await client.end();
     
     // Connect to the specific database
-    const dbConnection = await mysql.createConnection({
+    const dbClient = new Client({
       ...dbConfig,
       database: targetDbName
     });
+    await dbClient.connect();
     
     console.log(`✅ Connected to ${targetDbName} database`);
     
-    // Read and execute the MySQL schema
-    const schemaPath = path.join(__dirname, '..', 'db', 'schema-mysql.sql');
+    // Read and execute the PostgreSQL schema
+    const schemaPath = path.join(__dirname, '..', 'db', 'schema.sql');
     const schema = fs.readFileSync(schemaPath, 'utf8');
     
     console.log('📋 Dropping existing tables if they exist...');
     
     // Drop tables in reverse order to handle foreign key constraints
     const dropStatements = [
-      'DROP TABLE IF EXISTS test_results',
-      'DROP TABLE IF EXISTS lab_tests',
-      'DROP TABLE IF EXISTS prescriptions',
-      'DROP TABLE IF EXISTS medical_records',
-      'DROP TABLE IF EXISTS patients',
-      'DROP TABLE IF EXISTS staff_users',
-      'DROP TABLE IF EXISTS hospitals'
+      'DROP TABLE IF EXISTS website_media CASCADE',
+      'DROP TABLE IF EXISTS website_components CASCADE',
+      'DROP TABLE IF EXISTS website_pages CASCADE',
+      'DROP TABLE IF EXISTS website_themes CASCADE',
+      'DROP TABLE IF EXISTS school_websites CASCADE',
+      'DROP TABLE IF EXISTS sync_ingest CASCADE',
+      'DROP TABLE IF EXISTS attendance CASCADE',
+      'DROP TABLE IF EXISTS academic_records CASCADE',
+      'DROP TABLE IF EXISTS students CASCADE',
+      'DROP TABLE IF EXISTS staff_users CASCADE',
+      'DROP TABLE IF EXISTS schools CASCADE'
     ];
     
     for (const dropStmt of dropStatements) {
-      await dbConnection.execute(dropStmt);
+      await dbClient.query(dropStmt);
     }
     
     console.log('📋 Executing database schema...');
@@ -77,46 +89,62 @@ async function setupDatabase() {
     
     for (const statement of statements) {
       if (statement.trim()) {
-        await dbConnection.execute(statement.trim());
+        await dbClient.query(statement.trim());
       }
     }
     
     // Insert sample data
     console.log('🌱 Inserting sample data...');
     
-    // Create a sample hospital
-    const hospitalId = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
-    await dbConnection.execute(`
-      INSERT INTO hospitals (id, name, code, address, district, province, phone)
-      VALUES (?, 'Flova Demo Clinic', 'DEMO01', '123 Health Street', 'Lusaka', 'Lusaka', '+260-123-456789')
-      ON DUPLICATE KEY UPDATE name = name
-    `, [hospitalId]);
+    // Create a sample school
+    const schoolId = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
+    await dbClient.query(`
+      INSERT INTO schools (id, name, code, address, district, province, phone)
+      VALUES ($1, 'MUCHI Demo School', 'DEMO01', '123 Education Street', 'Lusaka', 'Lusaka', '+260-123-456789')
+      ON CONFLICT (id) DO NOTHING
+    `, [schoolId]);
     
     // Create a sample admin user
     const bcrypt = await import('bcrypt');
     const adminPassword = await bcrypt.default.hash('admin123', 12);
     const adminId = 'a47ac10b-58cc-4372-a567-0e02b2c3d480';
     
-    await dbConnection.execute(`
-      INSERT INTO staff_users (id, hospital_id, email, password_hash, role, first_name, last_name, is_active)
-      VALUES (?, ?, 'admin@flova.demo', ?, 'admin', 'Admin', 'User', true)
-      ON DUPLICATE KEY UPDATE email = email
-    `, [adminId, hospitalId, adminPassword]);
+    await dbClient.query(`
+      INSERT INTO staff_users (id, school_id, email, password_hash, role, first_name, last_name, is_active)
+      VALUES ($1, $2, 'admin@muchi.demo', $3, 'admin', 'Admin', 'User', true)
+      ON CONFLICT (id) DO NOTHING
+    `, [adminId, schoolId, adminPassword]);
+
+    // Create a super admin user
+    const superAdminPassword = await bcrypt.default.hash('admin123', 12);
+    const superAdminId = 'b47ac10b-58cc-4372-a567-0e02b2c3d481';
+    
+    await dbClient.query(`
+      INSERT INTO staff_users (id, school_id, email, password_hash, role, first_name, last_name, is_active)
+      VALUES ($1, NULL, 'admin@system.com', $2, 'superadmin', 'Super', 'Admin', true)
+      ON CONFLICT (id) DO NOTHING
+    `, [superAdminId, superAdminPassword]);
     
     console.log('✅ Sample data inserted');
     console.log('✅ Database schema executed successfully!');
-    console.log('🎉 Flova MySQL database setup complete!');
+    console.log('🎉 MUCHI School Management PostgreSQL database setup complete!');
     console.log('');
     console.log('Sample login credentials:');
-    console.log('Email: admin@flova.demo');
-    console.log('Password: admin123');
+    console.log('School Admin:');
+    console.log('  Email: admin@muchi.demo');
+    console.log('  Password: admin123');
+    console.log('');
+    console.log('Super Admin:');
+    console.log('  Email: admin@system.com');
+    console.log('  Password: admin123');
+    console.log('  Login URL: /admin/login');
     
-    await dbConnection.end();
+    await dbClient.end();
     
   } catch (error) {
-    console.error('❌ Error setting up MySQL database:', error.message);
-    console.log('💡 Make sure MySQL is installed and running');
-    console.log('💡 You can download MySQL from: https://dev.mysql.com/downloads/mysql/');
+    console.error('❌ Error setting up PostgreSQL database:', error.message);
+    console.log('💡 Make sure PostgreSQL is installed and running');
+    console.log('💡 You can download PostgreSQL from: https://www.postgresql.org/download/');
     process.exit(1);
   }
 }

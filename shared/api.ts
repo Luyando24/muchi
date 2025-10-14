@@ -15,7 +15,8 @@ export type UserRole =
   | "teacher"
   | "accountant"
   | "parent"
-  | "student";
+  | "student"
+  | "superadmin";
 
 export interface School {
   id: UUID;
@@ -121,12 +122,37 @@ export interface AuthSession {
   role: UserRole;
   schoolId?: UUID; // for school users
   campusId?: UUID; // for users at a specific campus
+  studentId?: UUID; // for student users
   tokens: AuthTokens;
 }
 
 export interface LoginRequest {
   email: string;
   password: string;
+}
+
+export interface StudentLoginRequest {
+  studentId: string;
+}
+
+export interface StudentAlternativeLoginRequest {
+  email?: string;
+  phone?: string;
+  password: string;
+}
+
+export interface RegisterStaffRequest {
+  schoolName: string;
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  role?: Exclude<UserRole, "student" | "parent">; // default admin
+}
+
+export interface RegisterStaffResponse {
+  userId: UUID;
+  schoolId: UUID;
 }
 
 export interface RegisterTeacherRequest {
@@ -272,26 +298,83 @@ export interface SchoolInfo {
   email?: string;
 }
 
+export interface Invoice {
+  // Define invoice properties
+}
+
+export interface Payment {
+  // Define payment properties
+}
+
+export interface Message {
+  // Define message properties
+}
+
+export interface ReportParams {
+  // Define report params properties
+}
+
 // API Class with all methods
 export class Api {
   // Student methods
-  static async listStudents(): Promise<Student[]> {
-    // Implementation would fetch from backend
-    return [];
+  static async listStudents(params?: { schoolId?: UUID; campusId?: UUID; grade?: string; isActive?: boolean }): Promise<Student[]> {
+    const queryParams = new URLSearchParams();
+    if (params?.schoolId) queryParams.append('schoolId', params.schoolId);
+    if (params?.campusId) queryParams.append('campusId', params.campusId);
+    if (params?.grade) queryParams.append('grade', params.grade);
+    if (params?.isActive !== undefined) queryParams.append('isActive', params.isActive.toString());
+    
+    const response = await fetch(`/api/students?${queryParams}`);
+    if (!response.ok) throw new Error('Failed to fetch students');
+    const data = await response.json();
+    return data.students;
+  }
+
+  static async getStudent(id: UUID): Promise<Student> {
+    const response = await fetch(`/api/students/${id}`);
+    if (!response.ok) throw new Error('Failed to fetch student');
+    const data = await response.json();
+    return data.student;
   }
 
   static async createStudent(student: Partial<Student>): Promise<Student> {
-    // Implementation would create student
-    return {} as Student;
+    const response = await fetch('/api/students', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(student),
+    });
+    if (!response.ok) throw new Error('Failed to create student');
+    const data = await response.json();
+    return data.student;
   }
 
   static async updateStudent(id: UUID, student: Partial<Student>): Promise<Student> {
-    // Implementation would update student
-    return {} as Student;
+    const response = await fetch(`/api/students/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(student),
+    });
+    if (!response.ok) throw new Error('Failed to update student');
+    const data = await response.json();
+    return data.student;
   }
 
   static async deleteStudent(id: UUID): Promise<void> {
-    // Implementation would delete student
+    const response = await fetch(`/api/students/${id}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) throw new Error('Failed to delete student');
+  }
+
+  static async searchStudents(params: { query?: string; studentNumber?: string; nrcNumber?: string; schoolId?: UUID }): Promise<Student[]> {
+    const response = await fetch('/api/students/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!response.ok) throw new Error('Failed to search students');
+    const data = await response.json();
+    return data.students;
   }
 
   // Teacher methods
@@ -469,37 +552,149 @@ export class Api {
   // Finance methods
   static async getFinanceStats(): Promise<any> {
     // Implementation would get finance statistics
-    return {};
+    return {
+      totalRevenue: 125000,
+      pendingPayments: 45000,
+      overduePayments: 12000,
+      collectionRate: 87.5,
+      monthlyRevenue: [10000, 12000, 15000, 18000, 20000, 22000],
+      paymentMethods: [
+        { method: 'Mobile Money', amount: 75000, count: 150 },
+        { method: 'Bank Transfer', amount: 35000, count: 45 },
+        { method: 'Cash', amount: 15000, count: 80 }
+      ]
+    };
   }
 
   static async listInvoices(): Promise<any[]> {
     // Implementation would fetch invoices
-    return [];
+    return [
+      {
+        id: '1',
+        invoiceNumber: 'INV-2024-001',
+        studentId: '1',
+        studentName: 'John Mwanza',
+        class: 'Grade 10A',
+        amount: 2500,
+        dueDate: '2024-02-15',
+        status: 'pending',
+        items: [
+          { id: '1', description: 'Tuition Fee', quantity: 1, unitPrice: 2000, total: 2000, category: 'tuition' },
+          { id: '2', description: 'Books', quantity: 1, unitPrice: 500, total: 500, category: 'books' }
+        ],
+        createdDate: '2024-01-15'
+      },
+      {
+        id: '2',
+        invoiceNumber: 'INV-2024-002',
+        studentId: '2',
+        studentName: 'Mary Banda',
+        class: 'Grade 11B',
+        amount: 2800,
+        dueDate: '2024-02-10',
+        status: 'paid',
+        items: [
+          { id: '3', description: 'Tuition Fee', quantity: 1, unitPrice: 2200, total: 2200, category: 'tuition' },
+          { id: '4', description: 'Transport', quantity: 1, unitPrice: 600, total: 600, category: 'transport' }
+        ],
+        createdDate: '2024-01-10',
+        paidDate: '2024-02-08',
+        paymentMethod: 'mobile_money'
+      }
+    ];
   }
 
-  static async createInvoice(invoice: any): Promise<any> {
+  static async listPayments(): Promise<any[]> {
+    // Implementation would fetch payments
+    return [
+      {
+        id: '1',
+        invoiceId: '2',
+        amount: 2800,
+        method: 'mobile_money',
+        reference: 'MM240208001',
+        status: 'completed',
+        date: '2024-02-08',
+        notes: 'Payment via MTN Mobile Money'
+      },
+      {
+        id: '2',
+        invoiceId: '3',
+        amount: 1500,
+        method: 'bank_transfer',
+        reference: 'BT240210001',
+        status: 'pending',
+        date: '2024-02-10',
+        notes: 'Bank transfer pending verification'
+      }
+    ];
+  }
+
+  static async listFeeStructures(): Promise<any[]> {
+    // Implementation would fetch fee structures
+    return [
+      {
+        id: '1',
+        grade: 'Grade 8',
+        term: 'Term 1',
+        tuitionFee: 1800,
+        booksFee: 400,
+        uniformFee: 300,
+        transportFee: 500,
+        mealsFee: 600,
+        activitiesFee: 200,
+        totalFee: 3800
+      },
+      {
+        id: '2',
+        grade: 'Grade 9',
+        term: 'Term 1',
+        tuitionFee: 2000,
+        booksFee: 450,
+        uniformFee: 300,
+        transportFee: 500,
+        mealsFee: 600,
+        activitiesFee: 250,
+        totalFee: 4100
+      },
+      {
+        id: '3',
+        grade: 'Grade 10',
+        term: 'Term 1',
+        tuitionFee: 2200,
+        booksFee: 500,
+        uniformFee: 350,
+        transportFee: 600,
+        mealsFee: 700,
+        activitiesFee: 300,
+        totalFee: 4650
+      }
+    ];
+  }
+
+  static async createInvoice(invoice: Invoice): Promise<Invoice> {
     // Implementation would create invoice
-    return {};
+    return {} as Invoice;
   }
 
-  static async processPayment(payment: any): Promise<any> {
+  static async processPayment(payment: Payment): Promise<Payment> {
     // Implementation would process payment
-    return {};
+    return {} as Payment;
   }
 
   // Communication methods
-  static async sendMessage(message: any): Promise<any> {
+  static async sendMessage(message: Message): Promise<Message> {
     // Implementation would send message
-    return {};
+    return {} as Message;
   }
 
-  static async getMessages(): Promise<any[]> {
+  static async getMessages(): Promise<Message[]> {
     // Implementation would fetch messages
     return [];
   }
 
   // Report methods
-  static async generateReport(type: string, params: any): Promise<any> {
+  static async generateReport(type: string, params: ReportParams): Promise<any> {
     // Implementation would generate report
     return {};
   }

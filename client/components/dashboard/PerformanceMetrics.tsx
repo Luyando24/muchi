@@ -2,10 +2,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 interface PerformanceMetricsProps {
   stats: {
-    openTasks: number;
-    inProgressTasks: number;
-    completedTasks: number;
-    totalTasks: number;
+    openAssignments: number;
+    inProgressAssignments: number;
+    completedAssignments: number;
+    totalAssignments: number;
   } | null;
 }
 
@@ -19,11 +19,11 @@ export function PerformanceMetrics({ stats }: PerformanceMetricsProps) {
       <CardContent className="space-y-4">
         <div className="flex justify-between">
           <span className="text-sm">Active Tasks</span>
-          <span className="font-medium">{(stats?.openTasks || 0) + (stats?.inProgressTasks || 0)}</span>
+          <span className="font-medium">{(stats?.openAssignments || 0) + (stats?.inProgressAssignments || 0)}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-sm">Completed This Month</span>
-          <span className="font-medium">{stats?.completedTasks || 0}</span>
+          <span className="font-medium">{stats?.completedAssignments || 0}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-sm">Average Response Time</span>
@@ -31,7 +31,7 @@ export function PerformanceMetrics({ stats }: PerformanceMetricsProps) {
         </div>
         <div className="flex justify-between">
           <span className="text-sm">Task Load</span>
-          <span className="font-medium">{stats?.totalTasks || 0}</span>
+          <span className="font-medium">{stats?.totalAssignments || 0}</span>
         </div>
       </CardContent>
     </Card>

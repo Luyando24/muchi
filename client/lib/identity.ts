@@ -21,8 +21,8 @@ export interface IdentityAuditLog {
   id: string;
   residentId: string;
   action: 'verification' | 'update' | 'creation' | 'access';
-  department: 'military' | 'immigration' | 'civil_registry';
-  personnelId: string;
+  department: 'academic' | 'administration' | 'student_affairs';
+  staffId: string;
   timestamp: Date;
   details: Record<string, any>;
   ipAddress?: string;
@@ -189,7 +189,7 @@ class IdentityService {
   /**
    * Create or update a resident record
    */
-  async upsertResident(residentData: Partial<Resident>, personnelId: string, department: string): Promise<Resident> {
+  async upsertResident(residentData: Partial<Resident>, staffId: string, department: string): Promise<Resident> {
     const timestamp = new Date().toISOString();
     
     let resident: Resident;
@@ -214,7 +214,7 @@ class IdentityService {
           residentId: resident.nationalId,
           action: 'update',
           department: department as any,
-          personnelId,
+          staffId,
           details: { updatedFields: Object.keys(residentData) }
         });
       } else {
@@ -249,7 +249,7 @@ class IdentityService {
           residentId: resident.nationalId,
           action: 'creation',
           department: department as any,
-          personnelId,
+          staffId,
           details: { newResident: true }
         });
       }
@@ -286,7 +286,14 @@ class IdentityService {
   /**
    * Verify biometric data (placeholder for future implementation)
    */
-  async verifyBiometric(residentId: string, biometricData: any): Promise<IdentityVerificationResult> {
+  interface BiometricData {
+  type: 'fingerprint' | 'face' | 'iris';
+  data: string; // Base64 encoded data
+}
+
+// ... (rest of the file)
+
+  async verifyBiometric(residentId: string, biometricData: BiometricData): Promise<IdentityVerificationResult> {
     // Placeholder for biometric verification
     // In a real implementation, this would integrate with biometric hardware/services
     
@@ -311,11 +318,11 @@ class IdentityService {
   /**
    * Generate a secure access token for cross-department verification
    */
-  async generateAccessToken(residentId: string, department: string, personnelId: string): Promise<string> {
+  async generateAccessToken(residentId: string, department: string, staffId: string): Promise<string> {
     const tokenData = {
       residentId,
       department,
-      personnelId,
+      staffId,
       timestamp: Date.now(),
       expiresAt: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
     };
@@ -327,7 +334,17 @@ class IdentityService {
   /**
    * Verify an access token
    */
-  async verifyAccessToken(token: string): Promise<{ valid: boolean; data?: any }> {
+  interface AccessTokenData {
+  residentId: string;
+  department: string;
+  staffId: string;
+  timestamp: number;
+  expiresAt: number;
+}
+
+// ... (rest of the file)
+
+  async verifyAccessToken(token: string): Promise<{ valid: boolean; data?: AccessTokenData }> {
     try {
       const tokenData = JSON.parse(atob(token));
       

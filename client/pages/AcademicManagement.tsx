@@ -16,7 +16,8 @@ import {
   Edit,
   Trash2,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  GraduationCap
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,8 +30,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
-import { useAuth } from '@/lib/auth';
-import { Api } from '../../shared/api';
+import { useAuth, clearSession } from '@/lib/auth';
+import { Api } from '@/lib/api';
+import { useNavigate } from 'react-router-dom';
+import DashboardLayout from '@/components/dashboard/DashboardLayout';
 import type { Assignment, Grade, Subject, Class, Student } from '../../shared/api';
 
 interface AssignmentFormData {
@@ -54,6 +57,7 @@ interface GradeFormData {
 
 export default function AcademicManagement() {
   const { session } = useAuth();
+  const navigate = useNavigate();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -88,12 +92,23 @@ export default function AcademicManagement() {
   });
 
   useEffect(() => {
-    loadData();
+    if (session) {
+      loadData();
+    } else {
+      setLoading(false);
+    }
   }, [session]);
 
   const loadData = async () => {
+    if (!session?.schoolId) {
+      console.log('No session or schoolId available');
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
+      console.log('Loading academic data for school:', session.schoolId);
       
       // Load assignments
       const assignmentsResponse = await Api.listAssignments({
@@ -198,40 +213,40 @@ export default function AcademicManagement() {
   };
 
   const getSubjectName = (subjectId: string) => {
-    return subjects.find(s => s.id === subjectId)?.name || 'Unknown Subject';
+    return subjects?.find(s => s.id === subjectId)?.name || 'Unknown Subject';
   };
 
   const getClassName = (classId: string) => {
-    return classes.find(c => c.id === classId)?.name || 'Unknown Class';
+    return classes?.find(c => c.id === classId)?.name || 'Unknown Class';
   };
 
   const getStudentName = (studentId: string) => {
-    const student = students.find(s => s.id === studentId);
+    const student = students?.find(s => s.id === studentId);
     return student ? `${student.firstName} ${student.lastName}` : 'Unknown Student';
   };
 
   const getAssignmentStats = () => {
-    const total = assignments.length;
-    const overdue = assignments.filter(a => new Date(a.dueDate) < new Date() && !a.isCompleted).length;
-    const completed = assignments.filter(a => a.isCompleted).length;
+    const total = assignments?.length || 0;
+    const overdue = assignments?.filter(a => new Date(a.dueDate) < new Date() && !a.isCompleted).length || 0;
+    const completed = assignments?.filter(a => a.isCompleted).length || 0;
     const pending = total - completed;
     
     return { total, overdue, completed, pending };
   };
 
   const getGradeStats = () => {
-    const totalGrades = grades.length;
-    const averageGrade = grades.length > 0 
+    const totalGrades = grades?.length || 0;
+    const averageGrade = grades?.length > 0 
       ? grades.reduce((sum, grade) => sum + grade.percentage, 0) / grades.length 
       : 0;
-    const passRate = grades.length > 0 
+    const passRate = grades?.length > 0 
       ? (grades.filter(g => g.percentage >= 50).length / grades.length) * 100 
       : 0;
     
     return { totalGrades, averageGrade, passRate };
   };
 
-  const filteredAssignments = assignments.filter(assignment => {
+  const filteredAssignments = (assignments || []).filter(assignment => {
     const matchesSearch = assignment.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          assignment.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesSubject = selectedSubject === 'all' || assignment.subjectId === selectedSubject;
@@ -280,7 +295,7 @@ export default function AcademicManagement() {
             <SelectValue placeholder="Select subject" />
           </SelectTrigger>
           <SelectContent>
-            {subjects.map(subject => (
+            {(subjects || []).map(subject => (
               <SelectItem key={subject.id} value={subject.id}>{subject.name}</SelectItem>
             ))}
           </SelectContent>
@@ -294,7 +309,7 @@ export default function AcademicManagement() {
             <SelectValue placeholder="Select class" />
           </SelectTrigger>
           <SelectContent>
-            {classes.map(cls => (
+            {(classes || []).map(cls => (
               <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
             ))}
           </SelectContent>
@@ -348,64 +363,78 @@ export default function AcademicManagement() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="animate-pulse space-y-6">
-            <div className="h-8 bg-muted rounded w-1/3"></div>
-            <div className="h-64 bg-muted rounded"></div>
-          </div>
+      <DashboardLayout>
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-muted rounded w-1/3"></div>
+          <div className="h-64 bg-muted rounded"></div>
         </div>
-      </div>
+      </DashboardLayout>
     );
+  }
+
+  if (!session) {
+    navigate('/login');
+    return null;
   }
 
   const assignmentStats = getAssignmentStats();
   const gradeStats = getGradeStats();
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
+    <DashboardLayout>
+      <div className="space-y-6">
+        {/* Page Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <BookOpen className="h-8 w-8 text-primary" />
+            <GraduationCap className="h-8 w-8 text-primary" />
             <div>
-              <h1 className="text-3xl font-bold">Academic Management</h1>
-              <p className="text-muted-foreground">Manage assignments, assessments, and academic performance</p>
+              <h1 className="text-2xl font-bold">Academic Management</h1>
+              <p className="text-sm text-muted-foreground">
+                Manage assignments, assessments, and academic performance
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Badge variant="outline">{session?.role}</Badge>
+            <Badge variant="secondary">{session?.userId?.slice(0, 8) || 'USER-001'}</Badge>
             <Button variant="outline">
               <Download className="h-4 w-4 mr-2" />
               Export Reports
             </Button>
-            <Dialog open={isAssignmentDialogOpen} onOpenChange={setIsAssignmentDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Assignment
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Create New Assignment</DialogTitle>
-                  <DialogDescription>
-                    Create a new assignment for your students.
-                  </DialogDescription>
-                </DialogHeader>
-                <AssignmentForm />
-                <div className="flex justify-end gap-2 pt-4">
-                  <Button variant="outline" onClick={() => setIsAssignmentDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleCreateAssignment}>
-                    Create Assignment
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
           </div>
         </div>
+            {/* Header Actions */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold">Assignments Overview</h2>
+                <p className="text-sm text-muted-foreground">Track and manage academic assignments</p>
+              </div>
+              <Dialog open={isAssignmentDialogOpen} onOpenChange={setIsAssignmentDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Assignment
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Create New Assignment</DialogTitle>
+                    <DialogDescription>
+                      Create a new assignment for your students.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <AssignmentForm />
+                  <div className="flex justify-end gap-2 pt-4">
+                    <Button variant="outline" onClick={() => setIsAssignmentDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleCreateAssignment}>
+                      Create Assignment
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -496,7 +525,7 @@ export default function AcademicManagement() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Subjects</SelectItem>
-                      {subjects.map(subject => (
+                      {(subjects || []).map(subject => (
                         <SelectItem key={subject.id} value={subject.id}>{subject.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -507,7 +536,7 @@ export default function AcademicManagement() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Classes</SelectItem>
-                      {classes.map(cls => (
+                      {(classes || []).map(cls => (
                         <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -626,6 +655,6 @@ export default function AcademicManagement() {
           </TabsContent>
         </Tabs>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

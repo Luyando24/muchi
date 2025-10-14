@@ -3,15 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Clock, MapPin } from 'lucide-react';
-import type { Task } from '@shared/api';
+import type { Assignment } from '../../../shared/api';
 
 interface RecentTasksProps {
-  tasks: Task[];
+  assignments: Assignment[];
   getPriorityColor: (priority: string) => string;
   getStatusColor: (status: string) => string;
 }
 
-export function RecentTasks({ tasks, getPriorityColor, getStatusColor }: RecentTasksProps) {
+export function RecentTasks({ assignments, getPriorityColor, getStatusColor }: RecentTasksProps) {
   return (
     <Card>
       <CardHeader>
@@ -22,36 +22,36 @@ export function RecentTasks({ tasks, getPriorityColor, getStatusColor }: RecentT
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {tasks.length === 0 ? (
+          {assignments.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">
               No recent tasks found
             </p>
           ) : (
-            tasks.map((task) => (
-              <div key={task.id} className="flex items-center justify-between p-4 border rounded-lg">
+            assignments.map((assignment) => (
+              <div key={assignment.id} className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium">{task.taskNumber}</span>
-                    <Badge variant={getPriorityColor(task.priority) as any}>
-                      {task.priority}
+                    <span className="font-medium">{assignment.assignmentNumber}</span>
+                    <Badge variant={getPriorityColor(assignment.priority) as any}>
+                      {assignment.priority}
                     </Badge>
-                    <Badge variant={getStatusColor(task.status) as any}>
-                      {task.status}
+                    <Badge variant={getStatusColor(assignment.status) as any}>
+                      {assignment.status}
                     </Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground">{task.description}</p>
+                  <p className="text-sm text-muted-foreground">{assignment.description}</p>
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <MapPin className="h-3 w-3" />
-                      {task.location || 'No location'}
+                      {assignment.location || 'No location'}
                     </span>
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      {new Date(task.createdAt).toLocaleDateString()}
+                      {new Date(assignment.createdAt).toLocaleDateString()}
                     </span>
                   </div>
                 </div>
-                <Link to={`/military/tasks/${task.id}`}>
+                <Link to={`/academics/assignments/${assignment.id}`}>
                   <Button variant="outline" size="sm">
                     View Details
                   </Button>

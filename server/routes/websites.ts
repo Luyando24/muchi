@@ -1,7 +1,7 @@
 import { RequestHandler } from 'express';
 import { query } from '../lib/db';
 import {
-  HospitalWebsite,
+  SchoolWebsite,
   WebsiteTheme,
   WebsitePage,
   WebsiteComponent,
@@ -15,9 +15,9 @@ import {
 } from '../../shared/api';
 import { v4 as uuidv4 } from 'uuid';
 
-// Helper function to generate subdomain from hospital name
-function generateSubdomain(hospitalName: string): string {
-  return hospitalName
+// Helper function to generate subdomain from school name
+function generateSubdomain(schoolName: string): string {
+  return schoolName
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '-')
     .replace(/-+/g, '-')
@@ -29,25 +29,25 @@ function generateSubdomain(hospitalName: string): string {
 export const handleCreateWebsite: RequestHandler = async (req, res) => {
   try {
     const { title, description, subdomain, themeId, contactEmail, contactPhone }: CreateWebsiteRequest = req.body;
-    const hospitalId = req.session?.hospitalId;
+    const schoolId = req.session?.schoolId;
 
-    if (!hospitalId) {
-      return res.status(401).json({ error: 'Hospital authentication required' });
+    if (!schoolId) {
+      return res.status(401).json({ error: 'School authentication required' });
     }
 
-    // Check if hospital already has a website
+    // Check if school already has a website
     const existingWebsite = await query(
-      'SELECT id FROM hospital_websites WHERE hospital_id = ?',
-      [hospitalId]
+      'SELECT id FROM school_websites WHERE school_id = ?',
+      [schoolId]
     );
 
     if (existingWebsite.rows.length > 0) {
-      return res.status(400).json({ error: 'Hospital already has a website' });
+      return res.status(400).json({ error: 'School already has a website' });
     }
 
     // Check if subdomain is available
     const subdomainCheck = await query(
-      'SELECT id FROM hospital_websites WHERE subdomain = ?',
+      'SELECT id FROM school_websites WHERE subdomain = ?',
       [subdomain]
     );
 
@@ -57,15 +57,15 @@ export const handleCreateWebsite: RequestHandler = async (req, res) => {
 
     const websiteId = uuidv4();
     await query(
-      `INSERT INTO hospital_websites 
-       (id, hospital_id, subdomain, title, description, theme_id, contact_email, contact_phone)
+      `INSERT INTO school_websites 
+       (id, school_id, subdomain, title, description, theme_id, contact_email, contact_phone)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [websiteId, hospitalId, subdomain, title, description, themeId, contactEmail, contactPhone]
+      [websiteId, schoolId, subdomain, title, description, themeId, contactEmail, contactPhone]
     );
 
     // Get the inserted website
     const result = await query(
-      'SELECT * FROM hospital_websites WHERE id = ?',
+      'SELECT * FROM school_websites WHERE id = ?',
       [websiteId]
     );
 
@@ -88,7 +88,7 @@ export const handleCreateWebsite: RequestHandler = async (req, res) => {
     const website = result.rows[0];
     res.json({
       id: website.id,
-      hospitalId: website.hospital_id,
+      schoolId: website.school_id,
       subdomain: website.subdomain,
       title: website.title,
       description: website.description,
@@ -98,7 +98,7 @@ export const handleCreateWebsite: RequestHandler = async (req, res) => {
       contactPhone: website.contact_phone,
       createdAt: website.created_at,
       updatedAt: website.updated_at
-    } as HospitalWebsite);
+    } as SchoolWebsite);
   } catch (error) {
     console.error('Create website error:', error);
     res.status(500).json({ error: 'Failed to create website' });
@@ -107,15 +107,15 @@ export const handleCreateWebsite: RequestHandler = async (req, res) => {
 
 export const handleGetWebsite: RequestHandler = async (req, res) => {
   try {
-    const hospitalId = req.session?.hospitalId;
+    const schoolId = req.session?.schoolId;
 
-    if (!hospitalId) {
-      return res.status(401).json({ error: 'Hospital authentication required' });
+    if (!schoolId) {
+      return res.status(401).json({ error: 'School authentication required' });
     }
 
     const result = await query(
-      'SELECT * FROM hospital_websites WHERE hospital_id = ?',
-      [hospitalId]
+      'SELECT * FROM school_websites WHERE school_id = ?',
+      [schoolId]
     );
 
     if (result.rows.length === 0) {
@@ -125,24 +125,17 @@ export const handleGetWebsite: RequestHandler = async (req, res) => {
     const website = result.rows[0];
     res.json({
       id: website.id,
-      hospitalId: website.hospital_id,
-      domainName: website.domain_name,
+      schoolId: website.school_id,
       subdomain: website.subdomain,
       title: website.title,
       description: website.description,
-      logoUrl: website.logo_url,
-      faviconUrl: website.favicon_url,
       themeId: website.theme_id,
       isPublished: website.is_published,
-      customCss: website.custom_css,
-      analyticsCode: website.analytics_code,
       contactEmail: website.contact_email,
       contactPhone: website.contact_phone,
-      socialLinks: website.social_links,
-      seoSettings: website.seo_settings,
       createdAt: website.created_at,
       updatedAt: website.updated_at
-    } as HospitalWebsite);
+    } as SchoolWebsite);
   } catch (error) {
     console.error('Get website error:', error);
     res.status(500).json({ error: 'Failed to get website' });
@@ -151,41 +144,50 @@ export const handleGetWebsite: RequestHandler = async (req, res) => {
 
 export const handleUpdateWebsite: RequestHandler = async (req, res) => {
   try {
-    const updateData: UpdateWebsiteRequest = req.body;
-    const hospitalId = req.session?.hospitalId;
+    const { title, description, themeId, contactEmail, contactPhone } = req.body as UpdateWebsiteRequest;
+    const schoolId = req.session?.schoolId;
 
-    if (!hospitalId) {
-      return res.status(401).json({ error: 'Hospital authentication required' });
+    if (!schoolId) {
+      return res.status(401).json({ error: 'School authentication required' });
     }
 
+    // Build dynamic update query
     const fields = [];
     const values = [];
-    let paramCount = 1;
 
-    Object.entries(updateData).forEach(([key, value]) => {
-      if (value !== undefined) {
-        const dbKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
-        fields.push(`${dbKey} = ?`);
-        values.push(typeof value === 'object' ? JSON.stringify(value) : value);
-      }
-    });
-
-    if (fields.length === 0) {
-      return res.status(400).json({ error: 'No fields to update' });
+    if (title !== undefined) {
+      fields.push('title = ?');
+      values.push(title);
+    }
+    if (description !== undefined) {
+      fields.push('description = ?');
+      values.push(description);
+    }
+    if (themeId !== undefined) {
+      fields.push('theme_id = ?');
+      values.push(themeId);
+    }
+    if (contactEmail !== undefined) {
+      fields.push('contact_email = ?');
+      values.push(contactEmail);
+    }
+    if (contactPhone !== undefined) {
+      fields.push('contact_phone = ?');
+      values.push(contactPhone);
     }
 
     fields.push('updated_at = NOW()');
-    values.push(hospitalId);
+    values.push(schoolId);
 
     await query(
-      `UPDATE hospital_websites SET ${fields.join(', ')} WHERE hospital_id = ?`,
+      `UPDATE school_websites SET ${fields.join(', ')} WHERE school_id = ?`,
       values
     );
 
-    // Get the updated website
+    // Get updated website
     const result = await query(
-      'SELECT * FROM hospital_websites WHERE hospital_id = ?',
-      [hospitalId]
+      'SELECT * FROM school_websites WHERE school_id = ?',
+      [schoolId]
     );
 
     if (result.rows.length === 0) {
@@ -195,24 +197,17 @@ export const handleUpdateWebsite: RequestHandler = async (req, res) => {
     const website = result.rows[0];
     res.json({
       id: website.id,
-      hospitalId: website.hospital_id,
-      domainName: website.domain_name,
+      schoolId: website.school_id,
       subdomain: website.subdomain,
       title: website.title,
       description: website.description,
-      logoUrl: website.logo_url,
-      faviconUrl: website.favicon_url,
       themeId: website.theme_id,
       isPublished: website.is_published,
-      customCss: website.custom_css,
-      analyticsCode: website.analytics_code,
       contactEmail: website.contact_email,
       contactPhone: website.contact_phone,
-      socialLinks: website.social_links,
-      seoSettings: website.seo_settings,
       createdAt: website.created_at,
       updatedAt: website.updated_at
-    } as HospitalWebsite);
+    } as SchoolWebsite);
   } catch (error) {
     console.error('Update website error:', error);
     res.status(500).json({ error: 'Failed to update website' });
@@ -221,31 +216,44 @@ export const handleUpdateWebsite: RequestHandler = async (req, res) => {
 
 export const handlePublishWebsite: RequestHandler = async (req, res) => {
   try {
-    const hospitalId = req.session?.hospitalId;
+    const schoolId = req.session?.schoolId;
 
-    if (!hospitalId) {
-      return res.status(401).json({ error: 'Hospital authentication required' });
+    if (!schoolId) {
+      return res.status(401).json({ error: 'School authentication required' });
     }
 
     await query(
-      'UPDATE hospital_websites SET is_published = true, updated_at = NOW() WHERE hospital_id = ?',
-      [hospitalId]
+      'UPDATE school_websites SET is_published = true, updated_at = NOW() WHERE school_id = ?',
+      [schoolId]
     );
 
-    // Check if website exists
+    // Get updated website
     const result = await query(
-      'SELECT * FROM hospital_websites WHERE hospital_id = ?',
-      [hospitalId]
+      'SELECT * FROM school_websites WHERE school_id = ?',
+      [schoolId]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Website not found' });
     }
 
-    res.json({ success: true, message: 'Website published successfully' });
+    const website = result.rows[0];
+    res.json({
+      id: website.id,
+      schoolId: website.school_id,
+      subdomain: website.subdomain,
+      title: website.title,
+      description: website.description,
+      themeId: website.theme_id,
+      isPublished: website.is_published,
+      contactEmail: website.contact_email,
+      contactPhone: website.contact_phone,
+      createdAt: website.created_at,
+      updatedAt: website.updated_at
+    } as SchoolWebsite);
   } catch (error) {
-    console.error('Publish website error:', error);
-    res.status(500).json({ error: 'Failed to publish website' });
+    console.error('Update website error:', error);
+    res.status(500).json({ error: 'Failed to update website' });
   }
 };
 
@@ -280,19 +288,18 @@ export const handleListThemes: RequestHandler = async (req, res) => {
 // Page Management
 export const handleListPages: RequestHandler = async (req, res) => {
   try {
-    const hospitalId = req.session?.hospitalId;
+    const schoolId = req.session?.schoolId;
 
-    if (!hospitalId) {
-      return res.status(401).json({ error: 'Hospital authentication required' });
+    if (!schoolId) {
+      return res.status(401).json({ error: 'School authentication required' });
     }
 
-    const result = await query(
-      `SELECT p.* FROM website_pages p
-       JOIN hospital_websites w ON p.website_id = w.id
-       WHERE w.hospital_id = ?
-       ORDER BY p.sort_order`,
-      [hospitalId]
-    );
+    const result = await query(`
+      SELECT p.* FROM website_pages p
+      JOIN school_websites w ON p.website_id = w.id
+      WHERE w.school_id = ?
+      ORDER BY p.created_at DESC
+    `, [schoolId]);
 
     const pages = result.rows.map(page => ({
       id: page.id,
@@ -317,17 +324,17 @@ export const handleListPages: RequestHandler = async (req, res) => {
 export const handleGetPage: RequestHandler = async (req, res) => {
   try {
     const { pageId } = req.params;
-    const hospitalId = req.session?.hospitalId;
+    const schoolId = req.session?.schoolId;
 
-    if (!hospitalId) {
-      return res.status(401).json({ error: 'Hospital authentication required' });
+    if (!schoolId) {
+      return res.status(401).json({ error: 'School authentication required' });
     }
 
-    const result = await query(
-      `SELECT p.* FROM website_pages p
-       JOIN hospital_websites w ON p.website_id = w.id
-       WHERE p.id = ? AND w.hospital_id = ?`,
-      [pageId, hospitalId]
+    const result = await query(`
+      SELECT p.* FROM website_pages p
+      JOIN school_websites w ON p.website_id = w.id
+      WHERE p.id = ? AND w.school_id = ?`,
+      [pageId, schoolId]
     );
 
     if (result.rows.length === 0) {
@@ -356,19 +363,19 @@ export const handleGetPage: RequestHandler = async (req, res) => {
 export const handleUpdatePage: RequestHandler = async (req, res) => {
   try {
     const { pageId } = req.params;
-    const updateData: UpdatePageRequest = req.body;
-    const hospitalId = req.session?.hospitalId;
+    const { title, content, slug, isPublished } = req.body as UpdatePageRequest;
+    const schoolId = req.session?.schoolId;
 
-    if (!hospitalId) {
-      return res.status(401).json({ error: 'Hospital authentication required' });
+    if (!schoolId) {
+      return res.status(401).json({ error: 'School authentication required' });
     }
 
-    // Verify page belongs to hospital
-    const pageCheck = await query(
-      `SELECT p.id FROM website_pages p
-       JOIN hospital_websites w ON p.website_id = w.id
-       WHERE p.id = ? AND w.hospital_id = ?`,
-      [pageId, hospitalId]
+    // Verify page belongs to school
+    const pageCheck = await query(`
+      SELECT p.id FROM website_pages p
+      JOIN school_websites w ON p.website_id = w.id
+      WHERE p.id = ? AND w.school_id = ?`,
+      [pageId, schoolId]
     );
 
     if (pageCheck.rows.length === 0) {

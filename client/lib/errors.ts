@@ -75,41 +75,41 @@ export function validateRequired(value: unknown, fieldName: string): void {
   }
 }
 
-export function validatePatientData(patient: {
+export function validateStudentData(student: {
   nrc: string;
   firstName?: string;
   lastName?: string;
   phone?: string;
 }): void {
-  validateRequired(patient.nrc, "NRC");
+  validateRequired(student.nrc, "NRC");
   
-  if (!validateNRC(patient.nrc)) {
+  if (!validateNRC(student.nrc)) {
     throw new ValidationError("Invalid NRC format. Expected format: XXXXXX/XX/X");
   }
   
-  if (patient.phone && !validatePhone(patient.phone)) {
+  if (student.phone && !validatePhone(student.phone)) {
     throw new ValidationError("Invalid phone number format");
   }
 }
 
-export function validateServiceNumber(serviceNumber: string): boolean {
-  const serviceNumberPattern = /^ZA\d{6}$/;
-  return serviceNumberPattern.test(serviceNumber);
+export function validateStaffNumber(staffNumber: string): boolean {
+  const staffNumberPattern = /^ST\d{6}$/;
+  return staffNumberPattern.test(staffNumber);
 }
 
-export function validatePersonnelData(personnel: {
-  serviceNumber: string;
+export function validateStaffPersonnelData(staff: {
+  staffNumber: string;
   firstName?: string;
   lastName?: string;
   phone?: string;
 }): void {
-  validateRequired(personnel.serviceNumber, "Service Number");
+  validateRequired(staff.staffNumber, "Staff Number");
   
-  if (!validateServiceNumber(personnel.serviceNumber)) {
-    throw new ValidationError("Invalid Service Number format. Expected format: ZA123456");
+  if (!validateStaffNumber(staff.staffNumber)) {
+    throw new ValidationError("Invalid Staff Number format. Expected format: ST123456");
   }
   
-  if (personnel.phone && !validatePhone(personnel.phone)) {
+  if (staff.phone && !validatePhone(staff.phone)) {
     throw new ValidationError("Invalid phone number format");
   }
 }

@@ -38,33 +38,25 @@ export function useAuth() {
   return { session, setSession } as const;
 }
 
-// Role-based helper functions for IPIMS - TESTING MODE: ALL ACCESS GRANTED
-export function isMilitaryPersonnel(session: AuthSession | null): boolean {
-  return true; // Testing: Allow all access
+// Role-based helper functions for School Management System
+export function isSchoolAdmin(session: AuthSession | null): boolean {
+  return session?.role === 'admin' || session?.role === 'super_admin';
 }
 
-export function isImmigrationOfficer(session: AuthSession | null): boolean {
-  return true; // Testing: Allow all access
+export function isTeacher(session: AuthSession | null): boolean {
+  return session?.role === 'teacher' || isSchoolAdmin(session);
 }
 
-export function isSupervisor(session: AuthSession | null): boolean {
-  return true; // Testing: Allow all access
+export function isParent(session: AuthSession | null): boolean {
+  return session?.role === 'parent';
 }
 
-export function isAdmin(session: AuthSession | null): boolean {
-  return true; // Testing: Allow all access
+export function isStudent(session: AuthSession | null): boolean {
+  return session?.role === 'student';
 }
 
-export function isAuditor(session: AuthSession | null): boolean {
-  return true; // Testing: Allow all access
-}
-
-export function isResident(session: AuthSession | null): boolean {
-  return true; // Testing: Allow all access
-}
-
-export function canAccessMilitaryPortal(session: AuthSession | null): boolean {
-  return true; // Testing: Allow all access
+export function canAccessAcademicPortal(session: AuthSession | null): boolean {
+  return isTeacher(session) || isSchoolAdmin(session);
 }
 
 export function canAccessImmigrationPortal(session: AuthSession | null): boolean {

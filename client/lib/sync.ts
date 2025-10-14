@@ -29,10 +29,10 @@ export class SyncService {
         for (const item of items) {
           try {
             const op = item.op as any;
-            if (op.entity === "patient" && op.type === "create")
-              await post("/patients", op.payload);
-            else if (op.entity === "patient" && op.type === "update")
-              await post(`/patients/${op.id}`, op.payload);
+            if (op.entity === "student" && op.type === "create")
+              await post("/students", op.payload);
+            else if (op.entity === "student" && op.type === "update")
+              await post(`/students/${op.id}`, op.payload);
             else if (op.entity === "test" && op.type === "create")
               await post("/tests", op.payload);
             await db.syncQueue.delete(item.id);

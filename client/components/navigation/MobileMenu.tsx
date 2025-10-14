@@ -34,18 +34,18 @@ export default function MobileMenu() {
           
           <nav className="flex flex-col gap-4 py-6 flex-1">
             <Link 
-              to="/pharmacy" 
+              to="/school" 
               className="text-lg font-medium hover:text-primary transition-colors"
               onClick={closeMenu}
             >
-              Pharmacy
+              School Portal
             </Link>
             <Link 
-              to="/portal" 
+              to="/student" 
               className="text-lg font-medium hover:text-primary transition-colors"
               onClick={closeMenu}
             >
-              Patient Portal
+              Student Portal
             </Link>
             <div className="border-t pt-4 mt-4">
               <div className="space-y-3">
@@ -64,7 +64,7 @@ export default function MobileMenu() {
           </nav>
           
           <div className="border-t pt-4 text-sm text-muted-foreground">
-            <p>Healthcare-grade privacy, offline-first</p>
+            <p>Education-grade privacy, offline-first</p>
           </div>
         </div>
       </SheetContent>

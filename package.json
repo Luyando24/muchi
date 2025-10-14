@@ -23,7 +23,6 @@
   },
   "dependencies": {
     "@types/bcrypt": "^6.0.0",
-    "@types/pg": "^8.15.5",
     "bcrypt": "^6.0.0",
     "dexie": "^4.2.0",
     "dotenv": "^17.2.1",
@@ -74,6 +73,7 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
     "@types/node": "^24.2.1",
+    "@types/pg": "^8.15.5",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
     "@types/three": "^0.176.0",

@@ -10,44 +10,44 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Globe, Eye, Settings, Palette, Layout, Save, Upload, Brain, Sparkles, Wand2, MessageCircle, TrendingUp } from 'lucide-react';
 import { Api } from '../lib/api';
-import type { HospitalWebsite, WebsiteTheme, CreateWebsiteRequest, UpdateWebsiteRequest } from '@shared/api';
+import type { SchoolWebsite, WebsiteTheme, CreateWebsiteRequest, UpdateWebsiteRequest } from '@shared/api';
 
 interface WebsiteBuilderProps {
-  hospitalId: string;
+  schoolId: string;
 }
 
 // Helper functions for theme-specific content
 const getThemeDefaultTitle = (themeId: string) => {
   const titles: Record<string, string> = {
-    'modern-hospital': 'Advanced Healthcare for Everyone',
-    'pediatric-care': 'Caring for Your Little Ones',
-    'dental-clinic': 'Your Smile is Our Priority',
-    'specialty-care': 'Excellence in Specialized Medicine',
-    'wellness-center': 'Your Journey to Wellness Starts Here',
-    'emergency-care': '24/7 Emergency Medical Services',
+    'modern-school': 'Excellence in Education for Every Student',
+    'elementary-school': 'Nurturing Young Minds',
+    'high-school': 'Preparing Students for Success',
+    'technical-school': 'Skills for Tomorrow\'s Careers',
+    'arts-school': 'Creativity and Innovation in Learning',
+    'sports-academy': 'Athletic Excellence and Academic Achievement',
   };
-  return titles[themeId] || 'Welcome to Our Healthcare Facility';
+  return titles[themeId] || 'Welcome to Our School';
 };
 
 const getThemeDefaultDescription = (themeId: string) => {
   const descriptions: Record<string, string> = {
-    'modern-hospital': 'State-of-the-art medical care with compassionate service. Our experienced team is dedicated to your health and well-being.',
-    'pediatric-care': 'Creating a fun, safe, and nurturing environment for children. Our pediatric specialists make healthcare a positive experience.',
-    'dental-clinic': 'Comprehensive dental care using the latest technology. From routine cleanings to advanced procedures, we keep your smile healthy.',
-    'specialty-care': 'Leading experts in specialized medical fields. We provide advanced treatments with personalized care for complex conditions.',
-    'wellness-center': 'Holistic approach to health and wellness. Preventive care, nutrition counseling, and wellness programs for a healthier you.',
-    'emergency-care': 'Immediate medical attention when you need it most. Our emergency team is ready 24/7 to provide life-saving care.',
+    'modern-school': 'Innovative education with cutting-edge technology. Our dedicated faculty is committed to student success and lifelong learning.',
+    'elementary-school': 'Creating a safe, fun, and nurturing environment for young learners. Our elementary programs build strong foundations for future success.',
+    'high-school': 'Comprehensive education preparing students for college and careers. Advanced courses, extracurriculars, and personalized support.',
+    'technical-school': 'Hands-on training in technical fields. Industry-standard equipment and expert instructors prepare students for in-demand careers.',
+    'arts-school': 'Fostering creativity and artistic expression. Comprehensive arts education with performance opportunities and expert mentorship.',
+    'sports-academy': 'Combining athletic training with academic excellence. Professional coaching and college preparation for student-athletes.',
   };
-  return descriptions[themeId] || 'Quality healthcare services with compassionate care.';
+  return descriptions[themeId] || 'Quality education with personalized attention.';
 };
 
 const getThemePrimaryAction = (themeId: string) => {
   const actions: Record<string, string> = {
-    'modern-hospital': 'Schedule Appointment',
-    'pediatric-care': 'Book Visit',
-    'dental-clinic': 'Book Consultation',
-    'specialty-care': 'Request Consultation',
-    'wellness-center': 'Start Your Journey',
+    'modern-school': 'Apply Now',
+    'elementary-school': 'Schedule Tour',
+    'high-school': 'Learn More',
+    'technical-school': 'Explore Programs',
+    'arts-school': 'Audition Info',
     'emergency-care': 'Emergency Contact',
   };
   return actions[themeId] || 'Book Appointment';
@@ -55,46 +55,46 @@ const getThemePrimaryAction = (themeId: string) => {
 
 const getThemeServices = (themeId: string) => {
   const services: Record<string, Array<{icon: string, title: string, description: string}>> = {
-    'modern-hospital': [
-      { icon: '🏥', title: 'Emergency Care', description: '24/7 emergency medical services' },
-      { icon: '👨‍⚕️', title: 'Expert Doctors', description: 'Board-certified specialists' },
-      { icon: '🔬', title: 'Advanced Diagnostics', description: 'State-of-the-art equipment' },
+    'modern-school': [
+      { icon: '🏫', title: 'Academic Excellence', description: 'Comprehensive educational programs' },
+      { icon: '👨‍🏫', title: 'Expert Teachers', description: 'Qualified and experienced educators' },
+      { icon: '💻', title: 'Modern Technology', description: 'State-of-the-art learning tools' },
     ],
-    'pediatric-care': [
-      { icon: '👶', title: 'Newborn Care', description: 'Specialized care for newborns' },
-      { icon: '🎈', title: 'Child-Friendly Environment', description: 'Fun and comfortable spaces' },
-      { icon: '💉', title: 'Gentle Procedures', description: 'Minimizing discomfort for kids' },
+    'elementary-school': [
+      { icon: '🎒', title: 'Early Learning', description: 'Foundation building programs' },
+      { icon: '🎨', title: 'Creative Environment', description: 'Fun and engaging classrooms' },
+      { icon: '📚', title: 'Interactive Learning', description: 'Hands-on educational activities' },
     ],
-    'dental-clinic': [
-      { icon: '🦷', title: 'General Dentistry', description: 'Comprehensive oral health care' },
-      { icon: '✨', title: 'Cosmetic Dentistry', description: 'Beautiful, confident smiles' },
-      { icon: '🔧', title: 'Advanced Technology', description: 'Latest dental innovations' },
+    'high-school': [
+      { icon: '🎓', title: 'College Prep', description: 'Advanced placement courses' },
+      { icon: '🔬', title: 'STEM Programs', description: 'Science and technology focus' },
+      { icon: '🏆', title: 'Achievement Excellence', description: 'Academic and extracurricular success' },
     ],
-    'specialty-care': [
-      { icon: '🧠', title: 'Neurology', description: 'Brain and nervous system care' },
-      { icon: '❤️', title: 'Cardiology', description: 'Heart and cardiovascular health' },
-      { icon: '🦴', title: 'Orthopedics', description: 'Bone and joint specialists' },
+    'arts-school': [
+      { icon: '🎭', title: 'Performing Arts', description: 'Theater and drama programs' },
+      { icon: '🎵', title: 'Music Education', description: 'Comprehensive music curriculum' },
+      { icon: '🎨', title: 'Visual Arts', description: 'Creative expression and design' },
     ],
-    'wellness-center': [
-      { icon: '🧘', title: 'Holistic Care', description: 'Mind, body, and spirit wellness' },
-      { icon: '🥗', title: 'Nutrition Counseling', description: 'Personalized dietary guidance' },
-      { icon: '💪', title: 'Fitness Programs', description: 'Customized exercise plans' },
+    'sports-academy': [
+      { icon: '⚽', title: 'Athletic Training', description: 'Professional sports coaching' },
+      { icon: '🏃', title: 'Fitness Programs', description: 'Physical education excellence' },
+      { icon: '🏅', title: 'Competition Teams', description: 'Competitive sports opportunities' },
     ],
-    'emergency-care': [
-      { icon: '🚑', title: 'Ambulance Services', description: 'Rapid emergency transport' },
-      { icon: '⚡', title: 'Trauma Care', description: 'Critical injury treatment' },
-      { icon: '🏃', title: 'Fast Response', description: 'Immediate medical attention' },
+    'international-school': [
+      { icon: '🌍', title: 'Global Curriculum', description: 'International education standards' },
+      { icon: '🗣️', title: 'Language Programs', description: 'Multilingual learning environment' },
+      { icon: '🤝', title: 'Cultural Exchange', description: 'Diverse student community' },
     ],
   };
   return services[themeId] || [
-    { icon: '🏥', title: 'Medical Care', description: 'Quality healthcare services' },
-    { icon: '👨‍⚕️', title: 'Professional Staff', description: 'Experienced medical team' },
-    { icon: '🔬', title: 'Modern Facilities', description: 'Advanced medical equipment' },
+    { icon: '🏫', title: 'Quality Education', description: 'Excellent learning opportunities' },
+    { icon: '👨‍🏫', title: 'Professional Staff', description: 'Experienced teaching team' },
+    { icon: '📚', title: 'Modern Facilities', description: 'Advanced educational resources' },
   ];
 };
 
-export default function WebsiteBuilder({ hospitalId }: WebsiteBuilderProps) {
-  const [website, setWebsite] = useState<HospitalWebsite | null>(null);
+export default function WebsiteBuilder({ schoolId }: WebsiteBuilderProps) {
+  const [website, setWebsite] = useState<SchoolWebsite | null>(null);
   const [themes, setThemes] = useState<WebsiteTheme[]>([]);
   const [selectedTheme, setSelectedTheme] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
@@ -126,7 +126,7 @@ export default function WebsiteBuilder({ hospitalId }: WebsiteBuilderProps) {
   useEffect(() => {
     loadWebsiteData();
     loadThemes();
-  }, [hospitalId]);
+  }, [schoolId]);
 
   const loadWebsiteData = async () => {
     try {
@@ -179,7 +179,7 @@ export default function WebsiteBuilder({ hospitalId }: WebsiteBuilderProps) {
       } else {
         // Create new website
         const createPayload: CreateWebsiteRequest = {
-          hospitalId,
+          schoolId,
           ...formData,
           themeId: selectedTheme,
         };
@@ -324,7 +324,7 @@ export default function WebsiteBuilder({ hospitalId }: WebsiteBuilderProps) {
                         id="name"
                         value={formData.name}
                         onChange={(e) => handleInputChange('name', e.target.value)}
-                        placeholder="My Hospital Website"
+                        placeholder="My School Website"
                       />
                     </div>
                     
@@ -334,7 +334,7 @@ export default function WebsiteBuilder({ hospitalId }: WebsiteBuilderProps) {
                         id="title"
                         value={formData.title}
                         onChange={(e) => handleInputChange('title', e.target.value)}
-                        placeholder="Welcome to Our Hospital"
+                        placeholder="Welcome to Our School"
                       />
                     </div>
                     
@@ -344,7 +344,7 @@ export default function WebsiteBuilder({ hospitalId }: WebsiteBuilderProps) {
                         id="description"
                         value={formData.description}
                         onChange={(e) => handleInputChange('description', e.target.value)}
-                        placeholder="Providing quality healthcare services..."
+                        placeholder="Providing quality education services..."
                         rows={3}
                       />
                     </div>
@@ -358,7 +358,7 @@ export default function WebsiteBuilder({ hospitalId }: WebsiteBuilderProps) {
                           id="subdomain"
                           value={formData.subdomain}
                           onChange={(e) => handleInputChange('subdomain', e.target.value)}
-                          placeholder="myhospital"
+                          placeholder="myschool"
                         />
                         <span className="text-sm text-gray-500">.flova.com</span>
                       </div>
@@ -370,7 +370,7 @@ export default function WebsiteBuilder({ hospitalId }: WebsiteBuilderProps) {
                         id="domain"
                         value={formData.domain}
                         onChange={(e) => handleInputChange('domain', e.target.value)}
-                        placeholder="www.myhospital.com"
+                        placeholder="www.myschool.com"
                       />
                     </div>
                   </TabsContent>
@@ -452,7 +452,7 @@ export default function WebsiteBuilder({ hospitalId }: WebsiteBuilderProps) {
                           <Brain className="h-5 w-5 text-blue-600" />
                           <Label className="text-base font-semibold">AI Content Generation</Label>
                         </div>
-                        <p className="text-sm text-gray-600">Let AI generate compelling content for your hospital website</p>
+                        <p className="text-sm text-gray-600">Let AI generate compelling content for your school website</p>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <Button 
@@ -462,7 +462,7 @@ export default function WebsiteBuilder({ hospitalId }: WebsiteBuilderProps) {
                               setTimeout(() => {
                                 setAiSuggestions(prev => ({
                                   ...prev,
-                                  title: 'Excellence in Healthcare - Your Trusted Medical Partner'
+                                  title: 'Excellence in Education - Your Trusted Learning Partner'
                                 }));
                                 setAiGenerating(false);
                               }, 2000);
@@ -484,7 +484,7 @@ export default function WebsiteBuilder({ hospitalId }: WebsiteBuilderProps) {
                               setTimeout(() => {
                                 setAiSuggestions(prev => ({
                                   ...prev,
-                                  description: 'Providing comprehensive healthcare services with state-of-the-art technology and compassionate care. Our experienced medical team is dedicated to your health and well-being, offering personalized treatment plans and 24/7 emergency services.'
+                                  description: 'Providing comprehensive educational services with state-of-the-art technology and dedicated teaching. Our experienced faculty is committed to your academic success, offering personalized learning plans and comprehensive student support services.'
                                 }));
                                 setAiGenerating(false);
                               }, 2000);
@@ -544,14 +544,14 @@ export default function WebsiteBuilder({ hospitalId }: WebsiteBuilderProps) {
                           <Layout className="h-5 w-5 text-purple-600" />
                           <Label className="text-base font-semibold">Smart Layout Suggestions</Label>
                         </div>
-                        <p className="text-sm text-gray-600">AI-powered layout recommendations based on your hospital type</p>
+                        <p className="text-sm text-gray-600">AI-powered layout recommendations based on your school type</p>
                         
                         <div className="grid grid-cols-1 gap-3">
                           <div className="p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
                             <div className="flex items-center justify-between">
                               <div>
-                                <h4 className="font-medium">Patient-Focused Layout</h4>
-                                <p className="text-sm text-gray-600">Emphasizes appointment booking and patient services</p>
+                                <h4 className="font-medium">Student-Focused Layout</h4>
+                                <p className="text-sm text-gray-600">Emphasizes enrollment and student services</p>
                               </div>
                               <Button size="sm" variant="outline">Apply</Button>
                             </div>
@@ -560,8 +560,8 @@ export default function WebsiteBuilder({ hospitalId }: WebsiteBuilderProps) {
                           <div className="p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
                             <div className="flex items-center justify-between">
                               <div>
-                                <h4 className="font-medium">Service-Centered Layout</h4>
-                                <p className="text-sm text-gray-600">Highlights medical services and specialties</p>
+                                <h4 className="font-medium">Academic-Centered Layout</h4>
+                                <p className="text-sm text-gray-600">Highlights academic programs and achievements</p>
                               </div>
                               <Button size="sm" variant="outline">Apply</Button>
                             </div>
@@ -577,13 +577,13 @@ export default function WebsiteBuilder({ hospitalId }: WebsiteBuilderProps) {
                           <MessageCircle className="h-5 w-5 text-green-600" />
                           <Label className="text-base font-semibold">AI Chat Assistant</Label>
                         </div>
-                        <p className="text-sm text-gray-600">Add an AI-powered chat assistant for patient inquiries</p>
+                        <p className="text-sm text-gray-600">Add an AI-powered chat assistant for student inquiries</p>
                         
                         <div className="p-4 border rounded-lg">
                           <div className="flex items-center justify-between mb-3">
                             <div>
-                              <h4 className="font-medium">Virtual Health Assistant</h4>
-                              <p className="text-sm text-gray-600">24/7 AI chat for appointment booking and health questions</p>
+                              <h4 className="font-medium">Virtual Academic Assistant</h4>
+                              <p className="text-sm text-gray-600">24/7 AI chat for enrollment and academic questions</p>
                             </div>
                             <Button size="sm">Enable Chat</Button>
                           </div>
@@ -612,10 +612,10 @@ export default function WebsiteBuilder({ hospitalId }: WebsiteBuilderProps) {
                               setAiSuggestions(prev => ({
                                 ...prev,
                                 seo: [
-                                  'Add "emergency care near me" to page title',
+                                  'Add "best schools near me" to page title',
                                   'Include local area keywords in description',
-                                  'Add structured data for medical organization',
-                                  'Optimize images with alt text for medical services',
+                                  'Add structured data for educational organization',
+                                  'Optimize images with alt text for academic programs',
                                   'Create location-specific landing pages'
                                 ]
                               }));
@@ -654,7 +654,7 @@ export default function WebsiteBuilder({ hospitalId }: WebsiteBuilderProps) {
                           id="customDomain"
                           value={customDomain}
                           onChange={(e) => setCustomDomain(e.target.value)}
-                          placeholder="www.yourhospital.com"
+                          placeholder="www.yourschool.com"
                         />
                       </div>
                       
@@ -778,7 +778,7 @@ export default function WebsiteBuilder({ hospitalId }: WebsiteBuilderProps) {
                                 <Globe className="h-6 w-6 text-white" />
                               </div>
                               <span className="font-semibold text-lg" style={{ color: cssVars.textColor }}>
-                                {formData.name || selectedThemeData?.name || 'Hospital'}
+                                {formData.name || selectedThemeData?.name || 'School'}
                               </span>
                             </div>
                             <div className="hidden md:flex space-x-6 text-sm">

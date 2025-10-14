@@ -3,10 +3,10 @@ import { Progress } from '@/components/ui/progress';
 
 interface TaskPriorityDistributionProps {
   stats: {
-    totalTasks: number;
-    highPriorityTasks: number;
-    mediumPriorityTasks: number;
-    lowPriorityTasks: number;
+    totalAssignments: number;
+    highPriorityAssignments: number;
+    mediumPriorityAssignments: number;
+    lowPriorityAssignments: number;
   } | null;
 }
 
@@ -21,30 +21,30 @@ export function TaskPriorityDistribution({ stats }: TaskPriorityDistributionProp
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
             <span>High Priority</span>
-            <span>{stats?.highPriorityTasks || 0}</span>
+            <span>{stats?.highPriorityAssignments || 0}</span>
           </div>
           <Progress
-            value={stats?.totalTasks ? (stats.highPriorityTasks / stats.totalTasks) * 100 : 0}
+            value={stats?.totalAssignments ? (stats.highPriorityAssignments / stats.totalAssignments) * 100 : 0}
             className="h-2"
           />
         </div>
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
             <span>Medium Priority</span>
-            <span>{stats?.mediumPriorityTasks || 0}</span>
+            <span>{stats?.mediumPriorityAssignments || 0}</span>
           </div>
           <Progress
-            value={stats?.totalTasks ? (stats.mediumPriorityTasks / stats.totalTasks) * 100 : 0}
+            value={stats?.totalAssignments ? (stats.mediumPriorityAssignments / stats.totalAssignments) * 100 : 0}
             className="h-2"
           />
         </div>
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
             <span>Low Priority</span>
-            <span>{stats?.lowPriorityTasks || 0}</span>
+            <span>{stats?.lowPriorityAssignments || 0}</span>
           </div>
           <Progress
-            value={stats?.totalTasks ? (stats.lowPriorityTasks / stats.totalTasks) * 100 : 0}
+            value={stats?.totalAssignments ? (stats.lowPriorityAssignments / stats.totalAssignments) * 100 : 0}
             className="h-2"
           />
         </div>

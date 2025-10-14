@@ -36,6 +36,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/lib/auth';
 import { Api } from '../../shared/api';
+import DashboardLayout from '@/components/dashboard/DashboardLayout';
 
 interface Invoice {
   id: string;
@@ -249,7 +250,9 @@ export default function FinanceManagement() {
     });
   };
 
-  const updateInvoiceItem = (index: number, field: keyof InvoiceItem, value: any) => {
+  type InvoiceItemValue = string | number;
+
+  const updateInvoiceItem = (index: number, field: keyof InvoiceItem, value: InvoiceItemValue) => {
     const updatedItems = [...newInvoice.items];
     updatedItems[index] = { ...updatedItems[index], [field]: value };
     
@@ -305,51 +308,50 @@ export default function FinanceManagement() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background p-4 md:p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="animate-pulse space-y-6">
-            <div className="h-8 bg-muted rounded w-1/3"></div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-32 bg-muted rounded"></div>
-              ))}
-            </div>
-            <div className="h-96 bg-muted rounded"></div>
+      <DashboardLayout
+        title="Finance Management"
+        subtitle="Manage school fees, invoices, and payments"
+        icon={<DollarSign className="h-8 w-8 text-primary" />}
+        activeTab="finance"
+      >
+        <div className="animate-pulse space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-32 bg-muted rounded"></div>
+            ))}
           </div>
+          <div className="h-96 bg-muted rounded"></div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold">Finance Management</h1>
-            <p className="text-muted-foreground">
-              Manage school fees, invoices, and payments
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Dialog open={isFeeStructureOpen} onOpenChange={setIsFeeStructureOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline">
-                  <Building className="h-4 w-4 mr-2" />
-                  Fee Structure
-                </Button>
-              </DialogTrigger>
-            </Dialog>
-            <Dialog open={isCreateInvoiceOpen} onOpenChange={setIsCreateInvoiceOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Invoice
-                </Button>
-              </DialogTrigger>
-            </Dialog>
-          </div>
+    <DashboardLayout
+      title="Finance Management"
+      subtitle="Manage school fees, invoices, and payments"
+      icon={<DollarSign className="h-8 w-8 text-primary" />}
+      activeTab="finance"
+    >
+      <div className="space-y-6">
+        {/* Action Buttons */}
+        <div className="flex items-center justify-end gap-2">
+          <Dialog open={isFeeStructureOpen} onOpenChange={setIsFeeStructureOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Building className="h-4 w-4 mr-2" />
+                Fee Structure
+              </Button>
+            </DialogTrigger>
+          </Dialog>
+          <Dialog open={isCreateInvoiceOpen} onOpenChange={setIsCreateInvoiceOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Invoice
+              </Button>
+            </DialogTrigger>
+          </Dialog>
         </div>
 
         {/* Stats Cards */}
@@ -414,17 +416,35 @@ export default function FinanceManagement() {
 
         {/* Main Content */}
         <Tabs defaultValue="invoices" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="invoices">Invoices</TabsTrigger>
-            <TabsTrigger value="payments">Payments</TabsTrigger>
-            <TabsTrigger value="fee-structures">Fee Structures</TabsTrigger>
-            <TabsTrigger value="reports">Reports</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="invoices" className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Invoices
+            </TabsTrigger>
+            <TabsTrigger value="payments" className="flex items-center gap-2">
+              <CreditCard className="h-4 w-4" />
+              Payments
+            </TabsTrigger>
+            <TabsTrigger value="fee-structures" className="flex items-center gap-2">
+              <Building className="h-4 w-4" />
+              Fee Structures
+            </TabsTrigger>
+            <TabsTrigger value="reports" className="flex items-center gap-2">
+              <Receipt className="h-4 w-4" />
+              Reports
+            </TabsTrigger>
           </TabsList>
           
           <TabsContent value="invoices" className="space-y-6">
-            {/* Filters */}
-            <Card>
-              <CardContent className="pt-6">
+            {/* Enhanced Filters */}
+            <Card className="border-l-4 border-l-primary">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Filter className="h-5 w-5" />
+                  Filter & Search
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
                 <div className="flex flex-col md:flex-row gap-4">
                   <div className="flex-1">
                     <div className="relative">
@@ -433,12 +453,12 @@ export default function FinanceManagement() {
                         placeholder="Search by student name or invoice number..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10"
+                        className="pl-10 h-11"
                       />
                     </div>
                   </div>
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-[180px]">
+                    <SelectTrigger className="w-[200px] h-11">
                       <SelectValue placeholder="Filter by status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -449,53 +469,65 @@ export default function FinanceManagement() {
                       <SelectItem value="cancelled">Cancelled</SelectItem>
                     </SelectContent>
                   </Select>
+                  <Button variant="outline" className="h-11">
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                  </Button>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Invoices Table */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Invoices</CardTitle>
-                <CardDescription>Manage student fee invoices</CardDescription>
+            {/* Enhanced Invoices Table */}
+            <Card className="shadow-sm">
+              <CardHeader className="bg-muted/50">
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Invoices Management
+                </CardTitle>
+                <CardDescription>Manage student fee invoices and track payments</CardDescription>
               </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Invoice #</TableHead>
-                      <TableHead>Student</TableHead>
-                      <TableHead>Class</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Due Date</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredInvoices.map((invoice) => (
-                      <TableRow key={invoice.id}>
-                        <TableCell className="font-medium">
-                          {invoice.invoiceNumber}
-                        </TableCell>
-                        <TableCell>{invoice.studentName}</TableCell>
-                        <TableCell>{invoice.class}</TableCell>
-                        <TableCell>K{invoice.amount.toFixed(2)}</TableCell>
-                        <TableCell>
-                          {new Date(invoice.dueDate).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {getStatusIcon(invoice.status)}
-                            <Badge className={getStatusColor(invoice.status)}>
-                              {invoice.status}
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/30">
+                        <TableHead className="font-semibold">Invoice #</TableHead>
+                        <TableHead className="font-semibold">Student</TableHead>
+                        <TableHead className="font-semibold">Class</TableHead>
+                        <TableHead className="font-semibold">Amount</TableHead>
+                        <TableHead className="font-semibold">Due Date</TableHead>
+                        <TableHead className="font-semibold">Status</TableHead>
+                        <TableHead className="font-semibold text-center">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredInvoices.map((invoice) => (
+                        <TableRow key={invoice.id} className="hover:bg-muted/20 transition-colors">
+                          <TableCell className="font-medium text-primary">
+                            {invoice.invoiceNumber}
+                          </TableCell>
+                          <TableCell className="font-medium">{invoice.studentName}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-medium">
+                              {invoice.class}
                             </Badge>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="ghost"
+                          </TableCell>
+                          <TableCell className="font-semibold">K{invoice.amount.toFixed(2)}</TableCell>
+                          <TableCell>
+                            {new Date(invoice.dueDate).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {getStatusIcon(invoice.status)}
+                              <Badge className={getStatusColor(invoice.status)}>
+                                {invoice.status}
+                              </Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-center gap-1">
+                              <Button
+                                variant="ghost"
                               size="sm"
                               onClick={() => setSelectedInvoice(invoice)}
                             >
@@ -516,12 +548,13 @@ export default function FinanceManagement() {
                             <Button variant="ghost" size="sm">
                               <Download className="h-4 w-4" />
                             </Button>
-                          </div>
+                            </div>
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1039,6 +1072,6 @@ export default function FinanceManagement() {
           </DialogContent>
         </Dialog>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

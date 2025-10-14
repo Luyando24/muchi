@@ -1,22 +1,26 @@
 import { db } from "./db";
-import Dexie from "dexie";
+import { sha256Hex } from "./crypto";
+import { v4 as uuidv4 } from "uuid";
+import { slugify } from "./utils";
 import {
-  NetworkError,
-  AuthError,
-  validatePersonnelData,
-} from "./errors";
-import type {
-  AuthSession,
+  AuthResponse,
+  CreateStudentRequest,
+  CreateStudentResponse,
+  ListStudentsResponse,
   CreateTaskRequest,
   CreateTaskResponse,
   ListTasksResponse,
   LoginRequest,
-  RegisterPersonnelRequest,
-  RegisterPersonnelResponse,
-  MilitaryUnit,
-  MilitaryBase,
-  Personnel,
+  School,
+  SchoolUser,
+  AuthSession,
 } from "@shared/api";
+import Dexie from "dexie";
+import {
+  NetworkError,
+  AuthError,
+  validateStudentData,
+} from "./errors";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 const USE_MOCK =
@@ -48,7 +52,32 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const Api = {
-  async login(payload: LoginRequest): Promise<AuthSession> {
+  // Generic HTTP methods
+  async get<T>(path: string): Promise<T> {
+    return http<T>(path);
+  },
+  
+  async post<T>(path: string, data?: any): Promise<T> {
+    return http<T>(path, {
+      method: "POST",
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  },
+  
+  async put<T>(path: string, data?: any): Promise<T> {
+    return http<T>(path, {
+      method: "PUT",
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  },
+  
+  async delete<T>(path: string): Promise<T> {
+    return http<T>(path, {
+      method: "DELETE",
+    });
+  },
+
+  async login(payload: LoginRequest & { userType?: string }): Promise<AuthSession> {
     if (USE_MOCK) return mock.login(payload);
     return http<AuthSession>("/auth/login", {
       method: "POST",
@@ -68,17 +97,29 @@ export const Api = {
     const url = assigneeId ? `/tasks?assigneeId=${assigneeId}` : '/tasks';
     return http<ListTasksResponse>(url);
   },
+  async getSchoolById(schoolId: string): Promise<School> {
+    return http<School>(`/schools/${schoolId}`);
+  },
+
   async registerPersonnel(
     payload: RegisterPersonnelRequest,
   ): Promise<RegisterPersonnelResponse> {
-    validatePersonnelData({
-      email: payload.email,
-      password: payload.password,
-      firstName: payload.firstName,
-      lastName: payload.lastName,
-    });
-    if (USE_MOCK) return mock.registerPersonnel(payload);
-    return http<RegisterPersonnelResponse>("/auth/register-personnel", {
+    // This function is deprecated - military personnel registration removed
+    throw new Error("Military personnel registration is no longer supported");
+  },
+  
+  async registerSchool(payload: {
+    schoolName: string;
+    schoolType: string;
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    phoneNumber: string;
+    role: string;
+  }): Promise<{ userId: string; schoolId: string }> {
+    if (USE_MOCK) return mock.registerSchool(payload);
+    return http<{ userId: string; schoolId: string }>("/auth/register-school", {
       method: "POST",
       body: JSON.stringify(payload),
     });
@@ -86,15 +127,12 @@ export const Api = {
 };
 
 // Lightweight in-browser mock for development and offline demo
-import { v4 as uuidv4 } from "uuid";
 import QRCode from "qrcode";
 
 async function createCardQr(resident: Resident): Promise<string> {
   // In production, backend signs payload; here we encode opaque data for demo only
   return QRCode.toDataURL(JSON.stringify({ cardId: resident.cardId }));
 }
-
-import { sha256Hex } from "@/lib/crypto";
 
 function slugify(input: string) {
   return input
@@ -114,89 +152,78 @@ function generateNationalCardId(): string {
 }
 
 const mock = {
-  async login({ email, password }: LoginRequest): Promise<AuthSession> {
-    const user = await db.personnel.where({ email }).first();
+  async login({ email, password, userType }: LoginRequest & { userType?: string }): Promise<AuthSession> {
+    const user = await db.staffUsers.where({ email }).first();
     if (!user) throw new Error("Account not found. Please register.");
     const hash = await sha256Hex(password);
     if (user.passwordHash !== hash) throw new Error("Invalid credentials");
+    
+    // Determine role based on userType if provided
+    const role = userType ? userType : user.role;
+    
     return {
       userId: user.id,
-      role: user.role,
-      unitId: user.unitId,
-      baseId: user.baseId,
+      role: role,
+      schoolId: user.schoolId,
       tokens: { accessToken: uuidv4(), expiresInSec: 3600 },
      };
   },
-  async registerPersonnel(
-    payload: RegisterPersonnelRequest,
-  ): Promise<RegisterPersonnelResponse> {
-    const existing = await db.personnel
+  async registerSchool(payload: {
+    schoolName: string;
+    schoolType: string;
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    phoneNumber: string;
+    role: string;
+  }): Promise<{ userId: string; schoolId: string }> {
+    const existing = await db.schoolUsers
       .where({ email: payload.email })
       .first();
     if (existing) throw new Error("Email already registered");
     
     const now = new Date().toISOString();
-    let unitId: string | undefined;
-    let baseId: string | undefined;
     
-    if (payload.unitName) {
-      let unit = await db.militaryUnits
-        .where({ name: payload.unitName })
-        .first();
-      if (!unit) {
-        unit = {
-          id: uuidv4(),
-          name: payload.unitName!,
-          code: slugify(payload.unitName!),
-          address: "",
-          createdAt: now,
-          updatedAt: now,
-        } as MilitaryUnit;
-        await db.militaryUnits.put(unit);
-      }
-      unitId = unit.id;
-    } else if (payload.baseName) {
-      let base = await db.militaryBases
-        .where({ name: payload.baseName })
-        .first();
-      if (!base) {
-        base = {
-          id: uuidv4(),
-          name: payload.baseName!,
-          code: slugify(payload.baseName!),
-          address: "",
-          createdAt: now,
-          updatedAt: now,
-        } as MilitaryBase;
-        await db.militaryBases.put(base);
-      }
-      baseId = base.id;
-    }
+    // Create school
+    const schoolId = uuidv4();
+    const school = {
+      id: schoolId,
+      name: payload.schoolName,
+      type: payload.schoolType,
+      code: slugify(payload.schoolName),
+      address: "",
+      phone: payload.phoneNumber,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await db.schools.put(school);
     
-    const user: Personnel = {
-      id: uuidv4(),
-      unitId,
-      baseId,
+    // Create user
+    const userId = uuidv4();
+    const user = {
+      id: userId,
+      schoolId,
       email: payload.email,
       passwordHash: await sha256Hex(payload.password),
-      role: payload.role || "personnel",
+      role: payload.role || "admin",
       firstName: payload.firstName,
       lastName: payload.lastName,
-      serviceNumber: payload.serviceNumber,
-      rank: payload.rank,
+      phoneNumber: payload.phoneNumber,
       isActive: true,
       createdAt: now,
       updatedAt: now,
     };
-    await db.personnel.put(user);
-    return { userId: user.id, unitId, baseId };
+    await db.staffUsers.put(user);
+    
+    return { userId, schoolId };
   },
   async createTask(req: CreateTaskRequest): Promise<CreateTaskResponse> {
     const now = new Date().toISOString();
     const taskRecord = {
       id: uuidv4(),
       assigneeId: req.assigneeId,
-      unitId: req.unitId,
+      schoolId: req.schoolId,
       taskNumber: `TASK-${Date.now()}`,
       title: req.title,
       description: req.description,

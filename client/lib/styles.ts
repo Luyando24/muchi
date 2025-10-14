@@ -1,4 +1,4 @@
-// Consistent styling utilities for the Digital Health application
+// Consistent styling utilities for the School Management application
 
 export const colors = {
   // Primary brand colors

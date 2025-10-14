@@ -5,7 +5,7 @@ export default function HeroVisual() {
     <div aria-hidden className="relative mx-auto w-full max-w-md">
       <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden">
         <div className="flex items-center justify-between border-b px-4 py-2 text-sm">
-          <div className="font-semibold">Clinic Dashboard</div>
+          <div className="font-semibold">School Dashboard</div>
           <div className="flex gap-1">
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
             <span className="h-2 w-2 rounded-full bg-amber-500" />
@@ -15,7 +15,7 @@ export default function HeroVisual() {
         <div className="grid grid-cols-3 gap-3 p-4">
           <div className="col-span-2 space-y-3">
             <div className="grid grid-cols-3 gap-3">
-              {["Patients", "Tests", "Appointments"].map((t, i) => (
+              {["Students", "Classes", "Attendance"].map((t, i) => (
                 <div key={t} className="rounded-lg border p-3">
                   <div className="text-[10px] uppercase text-muted-foreground">
                     {t}
@@ -28,7 +28,7 @@ export default function HeroVisual() {
             </div>
             <div className="rounded-lg border p-3">
               <div className="text-xs text-muted-foreground mb-2">
-                Tests by day
+                Attendance by day
               </div>
               <div className="flex items-end gap-1 h-24">
                 {[18, 24, 12, 30, 22, 34, 28, 20, 14, 26, 32, 16].map(
@@ -46,7 +46,7 @@ export default function HeroVisual() {
           </div>
           <div className="col-span-1 space-y-3">
             <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">Patient QR</div>
+              <div className="text-xs text-muted-foreground">Student ID</div>
               <div className="mt-2 aspect-square rounded bg-muted grid place-items-center">
                 <div className="h-16 w-16 rounded bg-foreground/80" />
               </div>

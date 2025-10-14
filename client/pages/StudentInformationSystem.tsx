@@ -31,6 +31,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/lib/auth';
 import { Api } from '../../shared/api';
 import type { Student, Class, Enrollment } from '../../shared/api';
+import DashboardLayout from '@/components/dashboard/DashboardLayout';
 
 interface StudentFormData {
   firstName: string;
@@ -185,7 +186,7 @@ export default function StudentInformationSystem() {
     setIsEditDialogOpen(true);
   };
 
-  const filteredStudents = students.filter(student => {
+  const filteredStudents = students ? students.filter(student => {
     const matchesSearch = 
       student.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -195,7 +196,7 @@ export default function StudentInformationSystem() {
     const matchesClass = selectedClass === 'all' || student.currentClass === selectedClass;
     
     return matchesSearch && matchesGrade && matchesClass;
-  });
+  }) : [];
 
   const exportToEMIS = async () => {
     try {
@@ -395,29 +396,28 @@ export default function StudentInformationSystem() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-6">
+    <DashboardLayout 
+      title="Student Information System"
+      subtitle="Manage student records, admissions, and EMIS compliance"
+      icon={<Users className="h-8 w-8 text-primary" />}
+      isAdmin={false}
+      activeTab="students"
+      onAddStudent={() => setIsAddDialogOpen(true)}
+    >
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Users className="h-8 w-8 text-primary" />
-            <div>
-              <h1 className="text-3xl font-bold">Student Information System</h1>
-              <p className="text-muted-foreground">Manage student records, admissions, and EMIS compliance</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={exportToEMIS}>
-              <Download className="h-4 w-4 mr-2" />
-              Export to EMIS
-            </Button>
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Add Student
-                </Button>
-              </DialogTrigger>
+        {/* Action Buttons */}
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="outline" onClick={exportToEMIS}>
+            <Download className="h-4 w-4 mr-2" />
+            Export to EMIS
+          </Button>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Add Student
+              </Button>
+            </DialogTrigger>
               <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Add New Student</DialogTitle>
@@ -437,7 +437,7 @@ export default function StudentInformationSystem() {
               </DialogContent>
             </Dialog>
           </div>
-        </div>
+        
 
         {/* Filters and Search */}
         <Card>
@@ -475,7 +475,7 @@ export default function StudentInformationSystem() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Classes</SelectItem>
-                  {classes.map(cls => (
+                  {classes && classes.map(cls => (
                     <SelectItem key={cls.id} value={cls.name}>{cls.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -489,11 +489,11 @@ export default function StudentInformationSystem() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Students ({filteredStudents.length})</CardTitle>
+                <CardTitle>Students ({filteredStudents ? filteredStudents.length : 0})</CardTitle>
                 <CardDescription>Manage student records and information</CardDescription>
               </div>
               <Badge variant="secondary">
-                Total: {students.length} students
+                Total: {students ? students.length : 0} students
               </Badge>
             </div>
           </CardHeader>
@@ -512,7 +512,7 @@ export default function StudentInformationSystem() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredStudents.map((student) => (
+                {filteredStudents && filteredStudents.map((student) => (
                   <TableRow key={student.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -624,6 +624,6 @@ export default function StudentInformationSystem() {
           </DialogContent>
         </Dialog>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

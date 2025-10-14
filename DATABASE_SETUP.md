@@ -69,7 +69,7 @@ This script will:
 - Create the `flova_db` database
 - Apply the schema from `db/schema.sql`
 - Insert sample data including:
-  - A demo hospital: "Flova Demo Clinic"
+  - A demo school: "Flova Demo School"
   - An admin user with credentials:
     - Email: `admin@flova.demo`
     - Password: `admin123`

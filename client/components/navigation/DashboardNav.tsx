@@ -10,19 +10,19 @@ const DashboardNav = () => {
         <span className="text-2xl font-bold">ZamPortal</span>
       </div>
       <nav className="flex flex-col gap-2">
-        <Link to="/clinic" className="flex items-center gap-2 p-2 rounded-md hover:bg-muted">
+        <Link to="/school" className="flex items-center gap-2 p-2 rounded-md hover:bg-muted">
           <Home className="h-5 w-5" />
           <span>Dashboard</span>
         </Link>
-        <Link to="/clinic/patients" className="flex items-center gap-2 p-2 rounded-md hover:bg-muted">
+        <Link to="/school/students" className="flex items-center gap-2 p-2 rounded-md hover:bg-muted">
           <Users className="h-5 w-5" />
-          <span>Patients</span>
+          <span>Students</span>
         </Link>
-        <Link to="/clinic/tests" className="flex items-center gap-2 p-2 rounded-md hover:bg-muted">
+        <Link to="/school/academics" className="flex items-center gap-2 p-2 rounded-md hover:bg-muted">
           <ClipboardList className="h-5 w-5" />
-          <span>Tests</span>
+          <span>Academics</span>
         </Link>
-        <Link to="/clinic/settings" className="flex items-center gap-2 p-2 rounded-md hover:bg-muted">
+        <Link to="/school/settings" className="flex items-center gap-2 p-2 rounded-md hover:bg-muted">
           <Settings className="h-5 w-5" />
           <span>Settings</span>
         </Link>

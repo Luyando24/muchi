@@ -5,17 +5,17 @@ const { hashPassword } = require('../server/lib/auth');
 async function seed() {
   console.log('Seeding database...');
   try {
-    // Create a hospital
-    const hospital = await db.hospital.create({
+    // Create a school
+    const school = await db.school.create({
       data: {
-        name: 'Demo Hospital',
+        name: 'Demo School',
         code: 'DEMO',
       },
     });
-    console.log(`Created hospital: ${hospital.name}`);
+    console.log(`Created school: ${school.name}`);
 
-    // Create a patient
-    const patient = await db.patient.create({
+    // Create a student
+    const student = await db.student.create({
       data: {
         firstName: 'John',
         lastName: 'Doe',
@@ -23,10 +23,10 @@ async function seed() {
         phone: '0977123456',
         cardId: 'DEMO-123456',
         cardQrData: '...', // Generate a QR code data
-        hospitalId: hospital.id,
+        schoolId: school.id,
       },
     });
-    console.log(`Created patient: ${patient.firstName} ${patient.lastName}`);
+    console.log(`Created student: ${student.firstName} ${student.lastName}`);
 
     console.log('Database seeded successfully!');
   } catch (error) {
