@@ -59,7 +59,7 @@ const App = () => {
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <ThemeProvider attribute="class" defaultTheme="dark">
+        <ThemeProvider attribute="class" defaultTheme="light">
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Index />} />
