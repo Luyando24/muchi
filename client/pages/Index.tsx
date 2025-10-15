@@ -89,6 +89,9 @@ export default function Index() {
                   <Link to="/dashboard" className="flex items-center gap-2">Start Free Trial <GraduationCap className="ml-2" /></Link>
                 </Button>
                 <Button size="lg" variant="outline" className="text-lg px-8 py-6 rounded-full bg-white/10 hover:bg-white/20 text-white border-white/30 shadow-lg hover:shadow-xl transition-all">
+                  <Link to="/school" className="flex items-center gap-2">View Demo <School className="ml-2" /></Link>
+                </Button>
+                <Button size="lg" variant="outline" className="text-lg px-8 py-6 rounded-full bg-white/10 hover:bg-white/20 text-white border-white/30 shadow-lg hover:shadow-xl transition-all">
                   <a href="#pricing" className="flex items-center gap-2">View Pricing <FileText className="ml-2" /></a>
                 </Button>
               </div>
