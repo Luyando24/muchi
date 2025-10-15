@@ -18,7 +18,8 @@ import {
   User,
   BookOpen,
   Award,
-  Clock
+  Clock,
+  AlertCircle
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,56 +33,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/lib/auth';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
-
-interface Teacher {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone?: string;
-  dateOfBirth: string;
-  gender: 'male' | 'female';
-  nrcNumber?: string;
-  address?: string;
-  district?: string;
-  province?: string;
-  qualification?: string;
-  specialization?: string;
-  experience?: number;
-  employmentDate: string;
-  employmentType: 'full-time' | 'part-time' | 'contract';
-  salary?: number;
-  isActive: boolean;
-  subjects?: string[];
-  classes?: string[];
-  teacherNumber: string;
-}
-
-interface TeacherFormData {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone?: string;
-  dateOfBirth: string;
-  gender: 'male' | 'female';
-  nrcNumber?: string;
-  address?: string;
-  district?: string;
-  province?: string;
-  qualification?: string;
-  specialization?: string;
-  experience?: number;
-  employmentDate: string;
-  employmentType: 'full-time' | 'part-time' | 'contract';
-  salary?: number;
-  subjects?: string[];
-  classes?: string[];
-}
+import { Api } from '@shared/api';
+import type { Teacher, TeacherFormData } from '@shared/api';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { toast } from 'sonner';
 
 export default function TeacherManagement() {
   const { session } = useAuth();
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [selectedEmploymentType, setSelectedEmploymentType] = useState<string>('all');
@@ -94,91 +55,90 @@ export default function TeacherManagement() {
     email: '',
     phone: '',
     dateOfBirth: '',
-    gender: 'male',
-    nrcNumber: '',
-    address: '',
-    district: '',
-    province: '',
     qualification: '',
+    subject: '',
     specialization: '',
-    experience: 0,
-    employmentDate: '',
-    employmentType: 'full-time',
+    department: '',
+    experienceYears: 0,
+    hireDate: '',
     salary: 0,
-    subjects: [],
-    classes: []
+    isHeadTeacher: false,
+    bio: '',
+    certifications: [],
+    languagesSpoken: [],
+    password: ''
   });
 
   // Mock data for demonstration
   const mockTeachers: Teacher[] = [
     {
       id: '1',
+      employeeId: 'TCH-001',
       firstName: 'John',
       lastName: 'Smith',
       email: 'john.smith@school.edu',
-      phone: '+95 9 123 456 789',
-      dateOfBirth: '1985-03-15',
-      gender: 'male',
-      nrcNumber: '12/ABCD(N)123456',
-      address: '123 Main Street',
-      district: 'Yangon',
-      province: 'Yangon Region',
+      phone: '+260 97 123 4567',
+      subject: 'Mathematics',
       qualification: 'Master of Education',
-      specialization: 'Mathematics',
-      experience: 8,
-      employmentDate: '2020-01-15',
-      employmentType: 'full-time',
-      salary: 800000,
+      experienceYears: 8,
+      specialization: 'Advanced Mathematics',
+      department: 'Science',
+      dateOfBirth: '1985-03-15',
+      hireDate: '2020-01-15',
+      salary: 15000,
       isActive: true,
-      subjects: ['Mathematics', 'Physics'],
-      classes: ['Grade 10A', 'Grade 11B'],
-      teacherNumber: 'TCH-001'
+      isHeadTeacher: false,
+      bio: 'Experienced mathematics teacher with a passion for helping students excel.',
+      certifications: ['Teaching License', 'Mathematics Certification'],
+      languagesSpoken: ['English', 'Bemba'],
+      createdAt: '2020-01-15T00:00:00Z',
+      updatedAt: '2024-01-15T00:00:00Z'
     },
     {
       id: '2',
+      employeeId: 'TCH-002',
       firstName: 'Mary',
       lastName: 'Johnson',
       email: 'mary.johnson@school.edu',
-      phone: '+95 9 987 654 321',
-      dateOfBirth: '1990-07-22',
-      gender: 'female',
-      nrcNumber: '12/EFGH(N)789012',
-      address: '456 Oak Avenue',
-      district: 'Mandalay',
-      province: 'Mandalay Region',
-      qualification: 'Bachelor of Arts',
+      phone: '+260 97 987 6543',
+      subject: 'English',
+      qualification: 'Bachelor of Arts in English',
+      experienceYears: 5,
       specialization: 'English Literature',
-      experience: 5,
-      employmentDate: '2021-08-01',
-      employmentType: 'full-time',
-      salary: 700000,
+      department: 'Languages',
+      dateOfBirth: '1990-07-22',
+      hireDate: '2021-08-01',
+      salary: 12000,
       isActive: true,
-      subjects: ['English', 'Literature'],
-      classes: ['Grade 9A', 'Grade 10B'],
-      teacherNumber: 'TCH-002'
+      isHeadTeacher: false,
+      bio: 'Dedicated English teacher focused on developing students\' communication skills.',
+      certifications: ['Teaching License', 'TESOL Certification'],
+      languagesSpoken: ['English', 'Nyanja'],
+      createdAt: '2021-08-01T00:00:00Z',
+      updatedAt: '2024-01-15T00:00:00Z'
     },
     {
       id: '3',
+      employeeId: 'TCH-003',
       firstName: 'David',
       lastName: 'Wilson',
       email: 'david.wilson@school.edu',
-      phone: '+95 9 555 123 456',
+      phone: '+260 97 555 1234',
+      subject: 'Chemistry',
+      qualification: 'Master of Science in Chemistry',
+      experienceYears: 6,
+      specialization: 'Organic Chemistry',
+      department: 'Science',
       dateOfBirth: '1988-11-10',
-      gender: 'male',
-      nrcNumber: '14/IJKL(N)345678',
-      address: '789 Pine Street',
-      district: 'Naypyidaw',
-      province: 'Naypyidaw Union Territory',
-      qualification: 'Master of Science',
-      specialization: 'Chemistry',
-      experience: 6,
-      employmentDate: '2019-09-15',
-      employmentType: 'full-time',
-      salary: 750000,
+      hireDate: '2019-09-15',
+      salary: 14000,
       isActive: true,
-      subjects: ['Chemistry', 'Biology'],
-      classes: ['Grade 11A', 'Grade 12A'],
-      teacherNumber: 'TCH-003'
+      isHeadTeacher: true,
+      bio: 'Head of Science Department with expertise in chemistry education.',
+      certifications: ['Teaching License', 'Chemistry Lab Safety'],
+      languagesSpoken: ['English', 'Tonga'],
+      createdAt: '2019-09-15T00:00:00Z',
+      updatedAt: '2024-01-15T00:00:00Z'
     }
   ];
 
@@ -189,10 +149,14 @@ export default function TeacherManagement() {
   const loadData = async () => {
     try {
       setLoading(true);
-      // For now, use mock data. In a real app, this would be an API call
-      setTeachers(mockTeachers);
+      setError(null);
+      const response = await Api.listTeachers();
+      setTeachers(response || []);
     } catch (error) {
       console.error('Failed to load teachers:', error);
+      setError('Failed to load teachers from server. Using sample data.');
+      // Fallback to mock data when API fails
+      setTeachers(mockTeachers);
     } finally {
       setLoading(false);
     }
@@ -200,18 +164,21 @@ export default function TeacherManagement() {
 
   const handleAddTeacher = async () => {
     try {
-      const newTeacher: Teacher = {
+      setError(null);
+      const teacherData = {
         ...formData,
-        id: Date.now().toString(),
-        teacherNumber: `TCH-${String(teachers.length + 1).padStart(3, '0')}`,
-        isActive: true
+        schoolId: session?.schoolId // Include schoolId from session
       };
-      
-      setTeachers([...teachers, newTeacher]);
+      const response = await Api.createTeacher(teacherData);
+      setTeachers([...teachers, response]);
       setIsAddDialogOpen(false);
       resetForm();
+      toast.success('Teacher added successfully');
     } catch (error) {
       console.error('Failed to add teacher:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add teacher. Please try again.';
+      setError(errorMessage);
+      toast.error(errorMessage);
     }
   };
 
@@ -219,21 +186,29 @@ export default function TeacherManagement() {
     if (!selectedTeacher) return;
     
     try {
-      const updatedTeacher = { ...selectedTeacher, ...formData };
-      setTeachers(teachers.map(t => t.id === selectedTeacher.id ? updatedTeacher : t));
+      setError(null);
+      const response = await Api.updateTeacher(selectedTeacher.id, formData);
+      setTeachers(teachers.map(t => t.id === selectedTeacher.id ? response : t));
       setIsEditDialogOpen(false);
       setSelectedTeacher(null);
       resetForm();
+      toast.success('Teacher updated successfully');
     } catch (error) {
       console.error('Failed to update teacher:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update teacher. Please try again.';
+      setError(errorMessage);
+      toast.error(errorMessage);
     }
   };
 
   const handleDeleteTeacher = async (teacherId: string) => {
     try {
+      setError(null);
+      await Api.deleteTeacher(teacherId);
       setTeachers(teachers.filter(t => t.id !== teacherId));
     } catch (error) {
       console.error('Failed to delete teacher:', error);
+      setError('Failed to delete teacher. Please try again.');
     }
   };
 
@@ -244,19 +219,18 @@ export default function TeacherManagement() {
       email: '',
       phone: '',
       dateOfBirth: '',
-      gender: 'male',
-      nrcNumber: '',
-      address: '',
-      district: '',
-      province: '',
       qualification: '',
+      subject: '',
       specialization: '',
-      experience: 0,
-      employmentDate: '',
-      employmentType: 'full-time',
+      department: '',
+      experienceYears: 0,
+      hireDate: '',
       salary: 0,
-      subjects: [],
-      classes: []
+      isHeadTeacher: false,
+      bio: '',
+      certifications: [],
+      languagesSpoken: [],
+      password: ''
     });
   };
 
@@ -267,20 +241,19 @@ export default function TeacherManagement() {
       lastName: teacher.lastName,
       email: teacher.email,
       phone: teacher.phone || '',
-      dateOfBirth: teacher.dateOfBirth,
-      gender: teacher.gender,
-      nrcNumber: teacher.nrcNumber || '',
-      address: teacher.address || '',
-      district: teacher.district || '',
-      province: teacher.province || '',
+      dateOfBirth: teacher.dateOfBirth || '',
       qualification: teacher.qualification || '',
+      subject: teacher.subject || '',
       specialization: teacher.specialization || '',
-      experience: teacher.experience || 0,
-      employmentDate: teacher.employmentDate,
-      employmentType: teacher.employmentType,
+      department: teacher.department || '',
+      experienceYears: teacher.experienceYears || 0,
+      hireDate: teacher.hireDate || '',
       salary: teacher.salary || 0,
-      subjects: teacher.subjects || [],
-      classes: teacher.classes || []
+      isHeadTeacher: teacher.isHeadTeacher || false,
+      bio: teacher.bio || '',
+      certifications: teacher.certifications || [],
+      languagesSpoken: teacher.languagesSpoken || [],
+      password: '' // Don't pre-fill password for security
     });
     setIsEditDialogOpen(true);
   };
@@ -290,13 +263,14 @@ export default function TeacherManagement() {
       teacher.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       teacher.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       teacher.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      teacher.teacherNumber.toLowerCase().includes(searchTerm.toLowerCase());
+      teacher.employeeId?.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesDepartment = selectedDepartment === 'all' || 
-      teacher.specialization?.toLowerCase().includes(selectedDepartment.toLowerCase());
+      teacher.specialization?.toLowerCase().includes(selectedDepartment.toLowerCase()) ||
+      teacher.department?.toLowerCase().includes(selectedDepartment.toLowerCase());
     
     const matchesEmploymentType = selectedEmploymentType === 'all' || 
-      teacher.employmentType === selectedEmploymentType;
+      selectedEmploymentType === 'full-time'; // Simplified since we don't have employment type in new schema
     
     return matchesSearch && matchesDepartment && matchesEmploymentType;
   });
@@ -385,6 +359,19 @@ export default function TeacherManagement() {
                         />
                       </div>
                       <div className="space-y-2">
+                        <Label htmlFor="password">Password</Label>
+                        <Input
+                          id="password"
+                          type="password"
+                          value={formData.password}
+                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                          placeholder="Enter password for teacher login"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
                         <Label htmlFor="phone">Phone</Label>
                         <Input
                           id="phone"
@@ -393,9 +380,6 @@ export default function TeacherManagement() {
                           placeholder="Enter phone number"
                         />
                       </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="dateOfBirth">Date of Birth</Label>
                         <Input
@@ -405,28 +389,16 @@ export default function TeacherManagement() {
                           onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="gender">Gender</Label>
-                        <Select value={formData.gender} onValueChange={(value: 'male' | 'female') => setFormData({ ...formData, gender: value })}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="male">Male</SelectItem>
-                            <SelectItem value="female">Female</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="qualification">Qualification</Label>
+                        <Label htmlFor="subject">Subject</Label>
                         <Input
-                          id="qualification"
-                          value={formData.qualification}
-                          onChange={(e) => setFormData({ ...formData, qualification: e.target.value })}
-                          placeholder="e.g., Master of Education"
+                          id="subject"
+                          value={formData.subject}
+                          onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                          placeholder="e.g., Mathematics"
                         />
                       </div>
                       <div className="space-y-2">
@@ -435,45 +407,41 @@ export default function TeacherManagement() {
                           id="specialization"
                           value={formData.specialization}
                           onChange={(e) => setFormData({ ...formData, specialization: e.target.value })}
-                          placeholder="e.g., Mathematics"
+                          placeholder="e.g., Algebra"
                         />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="experience">Years of Experience</Label>
+                        <Label htmlFor="department">Department</Label>
                         <Input
-                          id="experience"
+                          id="department"
+                          value={formData.department}
+                          onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                          placeholder="e.g., Science Department"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="experienceYears">Years of Experience</Label>
+                        <Input
+                          id="experienceYears"
                           type="number"
-                          value={formData.experience}
-                          onChange={(e) => setFormData({ ...formData, experience: parseInt(e.target.value) || 0 })}
+                          value={formData.experienceYears}
+                          onChange={(e) => setFormData({ ...formData, experienceYears: parseInt(e.target.value) || 0 })}
                           placeholder="Enter years of experience"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="employmentType">Employment Type</Label>
-                        <Select value={formData.employmentType} onValueChange={(value: 'full-time' | 'part-time' | 'contract') => setFormData({ ...formData, employmentType: value })}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="full-time">Full-time</SelectItem>
-                            <SelectItem value="part-time">Part-time</SelectItem>
-                            <SelectItem value="contract">Contract</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="employmentDate">Employment Date</Label>
+                        <Label htmlFor="hireDate">Hire Date</Label>
                         <Input
-                          id="employmentDate"
+                          id="hireDate"
                           type="date"
-                          value={formData.employmentDate}
-                          onChange={(e) => setFormData({ ...formData, employmentDate: e.target.value })}
+                          value={formData.hireDate}
+                          onChange={(e) => setFormData({ ...formData, hireDate: e.target.value })}
                         />
                       </div>
                       <div className="space-y-2">
@@ -489,12 +457,25 @@ export default function TeacherManagement() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="address">Address</Label>
+                      <Label htmlFor="isHeadTeacher">Head Teacher</Label>
+                      <Select value={formData.isHeadTeacher ? 'yes' : 'no'} onValueChange={(value) => setFormData({ ...formData, isHeadTeacher: value === 'yes' })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="no">No</SelectItem>
+                          <SelectItem value="yes">Yes</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="bio">Bio</Label>
                       <Textarea
-                        id="address"
-                        value={formData.address}
-                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                        placeholder="Enter full address"
+                        id="bio"
+                        value={formData.bio}
+                        onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                        placeholder="Brief biography"
                         rows={3}
                       />
                     </div>
@@ -509,6 +490,14 @@ export default function TeacherManagement() {
               </Dialog>
             </div>
           </div>
+
+          {/* Error Alert */}
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
           {/* Stats Cards */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -526,15 +515,15 @@ export default function TeacherManagement() {
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Full-time</CardTitle>
+                <CardTitle className="text-sm font-medium">Active Teachers</CardTitle>
                 <Clock className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {teachers.filter(t => t.employmentType === 'full-time').length}
+                  {teachers.filter(t => t.isActive).length}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Full-time employees
+                  Active teachers
                 </p>
               </CardContent>
             </Card>
@@ -545,10 +534,10 @@ export default function TeacherManagement() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {new Set(teachers.map(t => t.specialization).filter(Boolean)).size}
+                  {new Set(teachers.map(t => t.department).filter(Boolean)).size}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Subject specializations
+                  Unique departments
                 </p>
               </CardContent>
             </Card>
@@ -559,11 +548,10 @@ export default function TeacherManagement() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {Math.round(teachers.reduce((acc, t) => acc + (t.experience || 0), 0) / teachers.length || 0)}
+                  {Math.round(teachers.reduce((acc, t) => acc + (t.experienceYears || 0), 0) / teachers.length || 0)}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Years of experience
-                </p>
+                  Years of experience</p>
               </CardContent>
             </Card>
           </div>
@@ -636,7 +624,7 @@ export default function TeacherManagement() {
                           </div>
                           <div>
                             <div className="font-medium">{teacher.firstName} {teacher.lastName}</div>
-                            <div className="text-sm text-muted-foreground">{teacher.teacherNumber}</div>
+                            <div className="text-sm text-muted-foreground">{teacher.employeeId}</div>
                           </div>
                         </div>
                       </TableCell>
@@ -656,23 +644,23 @@ export default function TeacherManagement() {
                       </TableCell>
                       <TableCell>
                         <div>
-                          <div className="font-medium">{teacher.specialization}</div>
-                          <div className="text-sm text-muted-foreground">{teacher.qualification}</div>
+                          <div className="font-medium">{teacher.subject}</div>
+                          <div className="text-sm text-muted-foreground">{teacher.department}</div>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div>
-                          <Badge variant={teacher.employmentType === 'full-time' ? 'default' : 'secondary'}>
-                            {teacher.employmentType}
+                          <Badge variant={teacher.isHeadTeacher ? 'default' : 'secondary'}>
+                            {teacher.isHeadTeacher ? 'Head Teacher' : 'Teacher'}
                           </Badge>
                           <div className="text-sm text-muted-foreground mt-1">
-                            Since {new Date(teacher.employmentDate).toLocaleDateString()}
+                            Since {new Date(teacher.hireDate).toLocaleDateString()}
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="text-center">
-                          <div className="font-medium">{teacher.experience}</div>
+                          <div className="font-medium">{teacher.experienceYears}</div>
                           <div className="text-sm text-muted-foreground">years</div>
                         </div>
                       </TableCell>
@@ -767,58 +755,54 @@ export default function TeacherManagement() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="edit-qualification">Qualification</Label>
+                    <Label htmlFor="edit-subject">Subject</Label>
                     <Input
-                      id="edit-qualification"
-                      value={formData.qualification}
-                      onChange={(e) => setFormData({ ...formData, qualification: e.target.value })}
-                      placeholder="e.g., Master of Education"
+                      id="edit-subject"
+                      value={formData.subject}
+                      onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                      placeholder="e.g., Mathematics"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-specialization">Specialization</Label>
+                    <Label htmlFor="edit-department">Department</Label>
                     <Input
-                      id="edit-specialization"
-                      value={formData.specialization}
-                      onChange={(e) => setFormData({ ...formData, specialization: e.target.value })}
-                      placeholder="e.g., Mathematics"
+                      id="edit-department"
+                      value={formData.department}
+                      onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                      placeholder="e.g., Science Department"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="edit-experience">Years of Experience</Label>
+                    <Label htmlFor="edit-experienceYears">Years of Experience</Label>
                     <Input
-                      id="edit-experience"
+                      id="edit-experienceYears"
                       type="number"
-                      value={formData.experience}
-                      onChange={(e) => setFormData({ ...formData, experience: parseInt(e.target.value) || 0 })}
+                      value={formData.experienceYears}
+                      onChange={(e) => setFormData({ ...formData, experienceYears: parseInt(e.target.value) || 0 })}
                       placeholder="Enter years of experience"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-employmentType">Employment Type</Label>
-                    <Select value={formData.employmentType} onValueChange={(value: 'full-time' | 'part-time' | 'contract') => setFormData({ ...formData, employmentType: value })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="full-time">Full-time</SelectItem>
-                        <SelectItem value="part-time">Part-time</SelectItem>
-                        <SelectItem value="contract">Contract</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="edit-hireDate">Hire Date</Label>
+                    <Input
+                      id="edit-hireDate"
+                      type="date"
+                      value={formData.hireDate}
+                      onChange={(e) => setFormData({ ...formData, hireDate: e.target.value })}
+                    />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="edit-address">Address</Label>
+                  <Label htmlFor="edit-bio">Bio</Label>
                   <Textarea
-                    id="edit-address"
-                    value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    placeholder="Enter full address"
+                    id="edit-bio"
+                    value={formData.bio}
+                    onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                    placeholder="Enter teacher's bio"
                     rows={3}
                   />
                 </div>

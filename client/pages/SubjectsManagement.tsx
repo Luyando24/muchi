@@ -29,6 +29,8 @@ import {
   XCircle
 } from 'lucide-react';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
+import { useAuth } from '@/lib/auth';
+import { Api } from '../../shared/api';
 
 interface Subject {
   id: string;
@@ -137,6 +139,7 @@ const MOCK_SUBJECTS: Subject[] = [
 ];
 
 export default function SubjectsManagement() {
+  const { session } = useAuth();
   const [subjects, setSubjects] = useState<Subject[]>(MOCK_SUBJECTS);
   const [filteredSubjects, setFilteredSubjects] = useState<Subject[]>(MOCK_SUBJECTS);
   const [searchTerm, setSearchTerm] = useState('');
@@ -156,6 +159,58 @@ export default function SubjectsManagement() {
     level: 'primary',
     credits: 1
   });
+
+  // Real stats state
+  const [teachersTotal, setTeachersTotal] = useState<number>(0);
+  const [studentsTotal, setStudentsTotal] = useState<number>(0);
+  const [activeRate, setActiveRate] = useState<number>(0);
+
+  // Fetch real stats for teachers, students, and subjects active rate
+  useEffect(() => {
+    let isMounted = true;
+    const fetchStats = async () => {
+      try {
+        // Teachers total
+        try {
+          const tStats = await Api.getTeacherStats();
+          if (isMounted) setTeachersTotal(tStats?.total ?? 0);
+        } catch (err) {
+          try {
+            const teachers = await Api.listTeachers();
+            const count = Array.isArray(teachers)
+              ? teachers.length
+              : (teachers as any)?.teachers?.length ?? 0;
+            if (isMounted) setTeachersTotal(count);
+          } catch {}
+        }
+
+        // Students total
+        try {
+          const sStats = await Api.getStudentStats();
+          if (isMounted) setStudentsTotal(sStats?.total ?? 0);
+        } catch (err) {
+          try {
+            const students = await Api.listStudents({ schoolId: session?.schoolId });
+            if (isMounted) setStudentsTotal(students.length);
+          } catch {}
+        }
+
+        // Subjects active rate (real data)
+        try {
+          const subjectsReal = await Api.listSubjects();
+          const total = subjectsReal.length;
+          const active = subjectsReal.filter(s => (s as any).isActive === true).length;
+          const rate = total > 0 ? Math.round((active / total) * 100) : 0;
+          if (isMounted) setActiveRate(rate);
+        } catch {}
+      } catch (e) {
+        // Silent fail to avoid breaking the page UI
+        console.error('Failed to fetch stats', e);
+      }
+    };
+    fetchStats();
+    return () => { isMounted = false; };
+  }, [session?.schoolId]);
 
   // Filter subjects based on search and filters
   useEffect(() => {
@@ -279,10 +334,10 @@ export default function SubjectsManagement() {
   };
 
   // Statistics cards data
-  const totalSubjects = subjects.length;
-  const activeSubjects = subjects.filter(s => s.status === 'active').length;
-  const totalTeachers = subjects.reduce((sum, s) => sum + s.teacherCount, 0);
-  const totalStudents = subjects.reduce((sum, s) => sum + s.studentCount, 0);
+  const totalSubjects = subjects.length; // UI mock table count remains
+  const activeSubjects = subjects.filter(s => s.status === 'active').length; // UI mock
+  const totalTeachers = teachersTotal; // real data
+  const totalStudents = studentsTotal; // real data
 
   return (
     <DashboardLayout>
@@ -349,7 +404,7 @@ export default function SubjectsManagement() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {totalSubjects > 0 ? Math.round((activeSubjects / totalSubjects) * 100) : 0}%
+                {activeRate}%
               </div>
               <p className="text-xs text-muted-foreground">
                 Subject activation rate

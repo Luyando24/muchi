@@ -8,10 +8,17 @@ CREATE TABLE IF NOT EXISTS schools (
   id UUID PRIMARY KEY,
   name TEXT NOT NULL,
   code TEXT NOT NULL UNIQUE,
+  email TEXT,
   address TEXT,
   district TEXT,
   province TEXT,
   phone TEXT,
+  website TEXT,
+  school_type TEXT CHECK (school_type IN ('primary', 'secondary', 'combined')),
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'suspended')),
+  principal_name TEXT,
+  principal_email TEXT,
+  principal_phone TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -74,6 +81,134 @@ CREATE TABLE IF NOT EXISTS students (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_students_card_id ON students(card_id);
+
+-- Teachers (extends staff_users with teacher-specific information)
+CREATE TABLE IF NOT EXISTS teachers (
+  id UUID PRIMARY KEY,
+  staff_user_id UUID NOT NULL REFERENCES staff_users(id) ON DELETE CASCADE,
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  employee_id TEXT NOT NULL UNIQUE,
+  
+  -- Teacher-specific information
+  subject TEXT NOT NULL,
+  qualification TEXT,
+  experience_years INTEGER DEFAULT 0,
+  specialization TEXT,
+  department TEXT,
+  
+  -- Contact and personal details
+  date_of_birth DATE,
+  hire_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  salary DECIMAL(10,2),
+  
+  -- Status and availability
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  is_head_teacher BOOLEAN NOT NULL DEFAULT FALSE,
+  
+  -- Additional information
+  bio TEXT,
+  certifications TEXT[],
+  languages_spoken TEXT[],
+  
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  
+  -- Ensure one teacher record per staff user
+  UNIQUE(staff_user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_teachers_school ON teachers(school_id);
+CREATE INDEX IF NOT EXISTS idx_teachers_staff_user ON teachers(staff_user_id);
+CREATE INDEX IF NOT EXISTS idx_teachers_employee_id ON teachers(employee_id);
+CREATE INDEX IF NOT EXISTS idx_teachers_subject ON teachers(subject);
+
+-- Subjects
+CREATE TABLE IF NOT EXISTS subjects (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  code TEXT NOT NULL,
+  description TEXT,
+  grade TEXT,
+  is_core BOOLEAN NOT NULL DEFAULT TRUE,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(school_id, code)
+);
+CREATE INDEX IF NOT EXISTS idx_subjects_school ON subjects(school_id);
+CREATE INDEX IF NOT EXISTS idx_subjects_code ON subjects(code);
+CREATE INDEX IF NOT EXISTS idx_subjects_active ON subjects(is_active);
+
+-- Classes
+CREATE TABLE IF NOT EXISTS classes (
+  id UUID PRIMARY KEY,
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  class_name TEXT NOT NULL,
+  grade_level TEXT NOT NULL,
+  section TEXT, -- e.g., 'A', 'B', 'C' for multiple sections of same grade
+  subject TEXT,
+  teacher_id UUID REFERENCES teachers(id) ON DELETE SET NULL,
+  room_number TEXT,
+  capacity INTEGER DEFAULT 30,
+  current_enrollment INTEGER DEFAULT 0,
+  academic_year TEXT NOT NULL,
+  term TEXT, -- e.g., 'Term 1', 'Term 2', 'Term 3'
+  schedule JSONB, -- class schedule with days and times
+  description TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  
+  -- Ensure unique class per school, grade, section, subject, and academic year
+  UNIQUE(school_id, grade_level, section, subject, academic_year)
+);
+CREATE INDEX IF NOT EXISTS idx_classes_school ON classes(school_id);
+CREATE INDEX IF NOT EXISTS idx_classes_teacher ON classes(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_classes_grade_level ON classes(grade_level);
+CREATE INDEX IF NOT EXISTS idx_classes_academic_year ON classes(academic_year);
+
+-- Assignments
+CREATE TABLE IF NOT EXISTS assignments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  assignment_number TEXT NOT NULL UNIQUE,
+  teacher_id UUID REFERENCES teachers(id) ON DELETE SET NULL,
+  class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT,
+  instructions TEXT,
+  category TEXT NOT NULL CHECK (category IN ('homework','project','test','exam','quiz','other')),
+  priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low','medium','high','urgent')),
+  status TEXT NOT NULL DEFAULT 'assigned' CHECK (status IN ('assigned','in_progress','submitted','graded','returned')),
+  due_date TIMESTAMPTZ,
+  total_marks INTEGER,
+  related_files TEXT[],
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_assignments_school ON assignments(school_id);
+CREATE INDEX IF NOT EXISTS idx_assignments_teacher ON assignments(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_assignments_class ON assignments(class_id);
+CREATE INDEX IF NOT EXISTS idx_assignments_subject ON assignments(subject_id);
+CREATE INDEX IF NOT EXISTS idx_assignments_due_date ON assignments(due_date);
+
+-- Class Enrollments (Many-to-Many relationship between students and classes)
+CREATE TABLE IF NOT EXISTS class_enrollments (
+  id UUID PRIMARY KEY,
+  class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  enrollment_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'transferred', 'completed')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  
+  -- Ensure a student can only be enrolled once per class
+  UNIQUE(class_id, student_id)
+);
+CREATE INDEX IF NOT EXISTS idx_class_enrollments_class ON class_enrollments(class_id);
+CREATE INDEX IF NOT EXISTS idx_class_enrollments_student ON class_enrollments(student_id);
 
 -- Academic Records
 CREATE TABLE IF NOT EXISTS academic_records (

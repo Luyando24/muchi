@@ -888,7 +888,7 @@ const SystemSettings = () => {
   );
 
   return (
-    <DashboardLayout>
+    <DashboardLayout isAdmin={true}>
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">

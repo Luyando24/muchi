@@ -29,7 +29,7 @@ export const ProtectedRoute = ({
       case "teacher":
         return <Navigate to="/teacher" replace />;
       case "student":
-        return <Navigate to="/student" replace />;
+        return <Navigate to="/student-portal" replace />;
       case "parent":
         return <Navigate to="/parent" replace />;
 

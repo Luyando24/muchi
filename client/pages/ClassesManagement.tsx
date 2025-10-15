@@ -27,36 +27,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/lib/auth';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
-
-interface Class {
-  id: string;
-  name: string;
-  grade: string;
-  section: string;
-  capacity: number;
-  currentEnrollment: number;
-  classTeacher: string;
-  room: string;
-  subjects: string[];
-  schedule: string;
-  academicYear: string;
-  status: 'active' | 'inactive';
-  createdAt: string;
-}
-
-interface Teacher {
-  id: string;
-  name: string;
-  email: string;
-  specialization: string[];
-}
+import { Api, Class, Teacher, ClassFormData } from '../../shared/api';
 
 export default function ClassesManagement() {
-  const { user } = useAuth();
+  const { session } = useAuth();
   const navigate = useNavigate();
   
   const [classes, setClasses] = useState<Class[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterGrade, setFilterGrade] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -64,110 +43,111 @@ export default function ClassesManagement() {
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedClass, setSelectedClass] = useState<Class | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    grade: '',
+  const [formData, setFormData] = useState<ClassFormData>({
+    schoolId: session?.schoolId || '',
+    className: '',
+    gradeLevel: '',
     section: '',
-    capacity: '',
-    classTeacher: '',
-    room: '',
-    subjects: [] as string[],
-    schedule: '',
+    subject: '',
+    teacherId: '',
+    roomNumber: '',
+    capacity: 30,
+    currentEnrollment: 0,
     academicYear: '2024',
-    status: 'active' as 'active' | 'inactive'
+    term: '',
+    description: '',
+    isActive: true
   });
 
-  // Mock data
+  // Load data
   useEffect(() => {
-    const mockClasses: Class[] = [
-      {
-        id: '1',
-        name: 'Grade 1A',
-        grade: '1',
-        section: 'A',
-        capacity: 30,
-        currentEnrollment: 28,
-        classTeacher: 'Mrs. Johnson',
-        room: 'Room 101',
-        subjects: ['Mathematics', 'English', 'Science'],
-        schedule: 'Monday-Friday 8:00-14:00',
-        academicYear: '2024',
-        status: 'active',
-        createdAt: '2024-01-15'
-      },
-      {
-        id: '2',
-        name: 'Grade 2B',
-        grade: '2',
-        section: 'B',
-        capacity: 25,
-        currentEnrollment: 23,
-        classTeacher: 'Mr. Smith',
-        room: 'Room 202',
-        subjects: ['Mathematics', 'English', 'Science', 'Social Studies'],
-        schedule: 'Monday-Friday 8:00-14:30',
-        academicYear: '2024',
-        status: 'active',
-        createdAt: '2024-01-16'
-      }
-    ];
+    loadData();
+  }, [session?.schoolId]);
 
-    const mockTeachers: Teacher[] = [
-      { id: '1', name: 'Mrs. Johnson', email: 'johnson@school.com', specialization: ['Elementary Education'] },
-      { id: '2', name: 'Mr. Smith', email: 'smith@school.com', specialization: ['Mathematics', 'Science'] }
-    ];
-
-    setClasses(mockClasses);
-    setTeachers(mockTeachers);
-  }, []);
+  const loadData = async () => {
+    if (!session?.schoolId) return;
+    
+    try {
+      setLoading(true);
+      const [classesData, teachersData] = await Promise.all([
+        Api.listClasses({ schoolId: session.schoolId }),
+        Api.listTeachers({ schoolId: session.schoolId })
+      ]);
+      
+      setClasses(classesData);
+      setTeachers(teachersData);
+    } catch (error) {
+      console.error('Failed to load data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const stats = {
     totalClasses: classes.length,
-    activeClasses: classes.filter(c => c.status === 'active').length,
+    activeClasses: classes.filter(c => c.isActive).length,
     totalCapacity: classes.reduce((sum, c) => sum + c.capacity, 0),
     totalEnrollment: classes.reduce((sum, c) => sum + c.currentEnrollment, 0),
     utilizationRate: classes.length > 0 ? Math.round((classes.reduce((sum, c) => sum + c.currentEnrollment, 0) / classes.reduce((sum, c) => sum + c.capacity, 0)) * 100) : 0
   };
 
   const filteredClasses = classes.filter(cls => {
-    const matchesSearch = cls.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         cls.classTeacher.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesGrade = filterGrade === 'all' || cls.grade === filterGrade;
-    const matchesStatus = filterStatus === 'all' || cls.status === filterStatus;
+    const matchesSearch = cls.className.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (cls.teacherName && cls.teacherName.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesGrade = filterGrade === 'all' || cls.gradeLevel === filterGrade;
+    const matchesStatus = filterStatus === 'all' || (filterStatus === 'active' ? cls.isActive : !cls.isActive);
     return matchesSearch && matchesGrade && matchesStatus;
   });
 
-  const handleCreateClass = () => {
-    const newClass: Class = {
-      id: Date.now().toString(),
-      name: `Grade ${formData.grade}${formData.section}`,
-      grade: formData.grade,
-      section: formData.section,
-      capacity: parseInt(formData.capacity),
-      currentEnrollment: 0,
-      classTeacher: formData.classTeacher,
-      room: formData.room,
-      subjects: formData.subjects,
-      schedule: formData.schedule,
-      academicYear: formData.academicYear,
-      status: formData.status,
-      createdAt: new Date().toISOString().split('T')[0]
-    };
+  const handleCreateClass = async () => {
+    // Ensure a school is selected before attempting creation
+    if (!formData.schoolId) {
+      alert('Please select a school before creating a class.');
+      return;
+    }
+    try {
+      const newClass = await Api.createClass(formData);
+      setClasses([...classes, newClass]);
+      setIsAddDialogOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error('Failed to create class:', error);
+      
+      // Extract detailed error message if available
+      let errorMessage = 'Unknown error';
+      const anyErr: any = error;
+      if (anyErr?.data) {
+        const { error: serverError, details, message } = anyErr.data;
+        errorMessage = serverError || message || details || errorMessage;
+      } else if (anyErr?.message) {
+        errorMessage = anyErr.message;
+      }
+      
+      // Display detailed error message to user
+      alert(`Failed to create class: ${errorMessage}`);
+    }
+  };
+
+  const handleUpdateClass = async () => {
+    if (!selectedClass) return;
     
-    setClasses([...classes, newClass]);
-    setIsAddDialogOpen(false);
-    setFormData({
-      name: '',
-      grade: '',
-      section: '',
-      capacity: '',
-      classTeacher: '',
-      room: '',
-      subjects: [],
-      schedule: '',
-      academicYear: '2024',
-      status: 'active'
-    });
+    try {
+      const updatedClass = await Api.updateClass(selectedClass.id, formData);
+      setClasses(classes.map(c => c.id === selectedClass.id ? updatedClass : c));
+      setIsEditDialogOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error('Failed to update class:', error);
+    }
+  };
+
+  const handleDeleteClass = async (id: string) => {
+    try {
+      await Api.deleteClass(id);
+      setClasses(classes.filter(c => c.id !== id));
+    } catch (error) {
+      console.error('Failed to delete class:', error);
+    }
   };
 
   const handleViewClass = (cls: Class) => {
@@ -178,22 +158,39 @@ export default function ClassesManagement() {
   const handleEditClass = (cls: Class) => {
     setSelectedClass(cls);
     setFormData({
-      name: cls.name,
-      grade: cls.grade,
-      section: cls.section,
-      capacity: cls.capacity.toString(),
-      classTeacher: cls.classTeacher,
-      room: cls.room,
-      subjects: cls.subjects,
-      schedule: cls.schedule,
+      schoolId: cls.schoolId,
+      className: cls.className,
+      gradeLevel: cls.gradeLevel,
+      section: cls.section || '',
+      subject: cls.subject || '',
+      teacherId: cls.teacherId || '',
+      roomNumber: cls.roomNumber || '',
+      capacity: cls.capacity,
+      currentEnrollment: cls.currentEnrollment,
       academicYear: cls.academicYear,
-      status: cls.status
+      term: cls.term || '',
+      description: cls.description || '',
+      isActive: cls.isActive
     });
     setIsEditDialogOpen(true);
   };
 
-  const handleDeleteClass = (id: string) => {
-    setClasses(classes.filter(c => c.id !== id));
+  const resetForm = () => {
+    setFormData({
+      schoolId: session?.schoolId || '',
+      className: '',
+      gradeLevel: '',
+      section: '',
+      subject: '',
+      teacherId: '',
+      roomNumber: '',
+      capacity: 30,
+      currentEnrollment: 0,
+      academicYear: '2024',
+      term: '',
+      description: '',
+      isActive: true
+    });
   };
 
   return (
@@ -222,18 +219,27 @@ export default function ClassesManagement() {
                   Add Class
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
                 <DialogHeader>
                   <DialogTitle>Add New Class</DialogTitle>
                   <DialogDescription>
                     Create a new class with capacity and teacher assignment
                   </DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-4 py-4">
+                <div className="grid gap-4 py-4 overflow-y-auto flex-1">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="grade">Grade</Label>
-                      <Select value={formData.grade} onValueChange={(value) => setFormData({...formData, grade: value})}>
+                      <Label htmlFor="className">Class Name</Label>
+                      <Input
+                        id="className"
+                        value={formData.className}
+                        onChange={(e) => setFormData({...formData, className: e.target.value})}
+                        placeholder="e.g., Grade 1A, Form 2B"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="gradeLevel">Grade Level</Label>
+                      <Select value={formData.gradeLevel} onValueChange={(value) => setFormData({...formData, gradeLevel: value})}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select grade" />
                         </SelectTrigger>
@@ -244,6 +250,8 @@ export default function ClassesManagement() {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="section">Section</Label>
                       <Select value={formData.section} onValueChange={(value) => setFormData({...formData, section: value})}>
@@ -257,6 +265,15 @@ export default function ClassesManagement() {
                         </SelectContent>
                       </Select>
                     </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="subject">Subject</Label>
+                      <Input
+                        id="subject"
+                        value={formData.subject}
+                        onChange={(e) => setFormData({...formData, subject: e.target.value})}
+                        placeholder="e.g., Mathematics, English"
+                      />
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -265,41 +282,32 @@ export default function ClassesManagement() {
                         id="capacity"
                         type="number"
                         value={formData.capacity}
-                        onChange={(e) => setFormData({...formData, capacity: e.target.value})}
+                        onChange={(e) => setFormData({...formData, capacity: parseInt(e.target.value) || 0})}
                         placeholder="Enter class capacity"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="room">Room</Label>
+                      <Label htmlFor="roomNumber">Room Number</Label>
                       <Input
-                        id="room"
-                        value={formData.room}
-                        onChange={(e) => setFormData({...formData, room: e.target.value})}
+                        id="roomNumber"
+                        value={formData.roomNumber}
+                        onChange={(e) => setFormData({...formData, roomNumber: e.target.value})}
                         placeholder="Enter room number"
                       />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="classTeacher">Class Teacher</Label>
-                    <Select value={formData.classTeacher} onValueChange={(value) => setFormData({...formData, classTeacher: value})}>
+                    <Label htmlFor="teacherId">Class Teacher</Label>
+                    <Select value={formData.teacherId} onValueChange={(value) => setFormData({...formData, teacherId: value})}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select class teacher" />
                       </SelectTrigger>
                       <SelectContent>
                         {teachers.map(teacher => (
-                          <SelectItem key={teacher.id} value={teacher.name}>{teacher.name}</SelectItem>
+                          <SelectItem key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="schedule">Schedule</Label>
-                    <Input
-                      id="schedule"
-                      value={formData.schedule}
-                      onChange={(e) => setFormData({...formData, schedule: e.target.value})}
-                      placeholder="e.g., Monday-Friday 8:00-14:00"
-                    />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -315,25 +323,201 @@ export default function ClassesManagement() {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="status">Status</Label>
-                      <Select value={formData.status} onValueChange={(value: 'active' | 'inactive') => setFormData({...formData, status: value})}>
+                      <Label htmlFor="term">Term</Label>
+                      <Select value={formData.term} onValueChange={(value) => setFormData({...formData, term: value})}>
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder="Select term" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="inactive">Inactive</SelectItem>
+                          <SelectItem value="Term 1">Term 1</SelectItem>
+                          <SelectItem value="Term 2">Term 2</SelectItem>
+                          <SelectItem value="Term 3">Term 3</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea
+                      id="description"
+                      value={formData.description}
+                      onChange={(e) => setFormData({...formData, description: e.target.value})}
+                      placeholder="Optional class description"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="isActive">Status</Label>
+                    <Select value={formData.isActive ? 'active' : 'inactive'} onValueChange={(value) => setFormData({...formData, isActive: value === 'active'})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="flex justify-end gap-2 pt-4">
+                <div className="flex justify-end gap-2 pt-4 border-t bg-white sticky bottom-0">
                   <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                     Cancel
                   </Button>
                   <Button onClick={handleCreateClass}>
                     Create Class
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Edit Class Dialog */}
+            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Edit Class</DialogTitle>
+                  <DialogDescription>
+                    Update class information and settings
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="className">Class Name</Label>
+                      <Input
+                        id="className"
+                        value={formData.className}
+                        onChange={(e) => setFormData({...formData, className: e.target.value})}
+                        placeholder="e.g., Grade 1A, Form 2B"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="gradeLevel">Grade Level</Label>
+                      <Select value={formData.gradeLevel} onValueChange={(value) => setFormData({...formData, gradeLevel: value})}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select grade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[1,2,3,4,5,6,7,8,9,10,11,12].map(grade => (
+                            <SelectItem key={grade} value={grade.toString()}>{grade}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="section">Section</Label>
+                      <Select value={formData.section} onValueChange={(value) => setFormData({...formData, section: value})}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select section" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {['A','B','C','D','E'].map(section => (
+                            <SelectItem key={section} value={section}>{section}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="subject">Subject</Label>
+                      <Input
+                        id="subject"
+                        value={formData.subject}
+                        onChange={(e) => setFormData({...formData, subject: e.target.value})}
+                        placeholder="e.g., Mathematics, English"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="capacity">Capacity</Label>
+                      <Input
+                        id="capacity"
+                        type="number"
+                        value={formData.capacity}
+                        onChange={(e) => setFormData({...formData, capacity: parseInt(e.target.value) || 0})}
+                        placeholder="Enter class capacity"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="roomNumber">Room Number</Label>
+                      <Input
+                        id="roomNumber"
+                        value={formData.roomNumber}
+                        onChange={(e) => setFormData({...formData, roomNumber: e.target.value})}
+                        placeholder="Enter room number"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="teacherId">Class Teacher</Label>
+                    <Select value={formData.teacherId} onValueChange={(value) => setFormData({...formData, teacherId: value})}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select class teacher" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teachers.map(teacher => (
+                          <SelectItem key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="academicYear">Academic Year</Label>
+                      <Select value={formData.academicYear} onValueChange={(value) => setFormData({...formData, academicYear: value})}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="2024">2024</SelectItem>
+                          <SelectItem value="2025">2025</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="term">Term</Label>
+                      <Select value={formData.term} onValueChange={(value) => setFormData({...formData, term: value})}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select term" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Term 1">Term 1</SelectItem>
+                          <SelectItem value="Term 2">Term 2</SelectItem>
+                          <SelectItem value="Term 3">Term 3</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea
+                      id="description"
+                      value={formData.description}
+                      onChange={(e) => setFormData({...formData, description: e.target.value})}
+                      placeholder="Optional class description"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="isActive">Status</Label>
+                    <Select value={formData.isActive ? 'active' : 'inactive'} onValueChange={(value) => setFormData({...formData, isActive: value === 'active'})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-4">
+                  <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleUpdateClass}>
+                    Update Class
                   </Button>
                 </div>
               </DialogContent>
@@ -468,14 +652,14 @@ export default function ClassesManagement() {
                   <TableRow key={cls.id}>
                     <TableCell>
                       <div>
-                        <div className="font-medium">{cls.name}</div>
+                        <div className="font-medium">{cls.className}</div>
                         <div className="text-sm text-muted-foreground">
-                          {cls.subjects.join(', ')}
+                          {cls.subject && `Subject: ${cls.subject}`}
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>{cls.classTeacher}</TableCell>
-                    <TableCell>{cls.room}</TableCell>
+                    <TableCell>{cls.teacherName || 'Not assigned'}</TableCell>
+                    <TableCell>{cls.roomNumber || 'Not assigned'}</TableCell>
                     <TableCell>
                       <div className="text-sm">
                         {cls.currentEnrollment}/{cls.capacity}
@@ -485,8 +669,8 @@ export default function ClassesManagement() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={cls.status === 'active' ? 'default' : 'secondary'}>
-                        {cls.status}
+                      <Badge variant={cls.isActive ? 'default' : 'secondary'}>
+                        {cls.isActive ? 'Active' : 'Inactive'}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -535,21 +719,31 @@ export default function ClassesManagement() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-sm font-medium">Class Name</Label>
-                    <p className="text-sm text-muted-foreground">{selectedClass.name}</p>
+                    <p className="text-sm text-muted-foreground">{selectedClass.className}</p>
                   </div>
                   <div>
-                    <Label className="text-sm font-medium">Grade & Section</Label>
-                    <p className="text-sm text-muted-foreground">Grade {selectedClass.grade}, Section {selectedClass.section}</p>
+                    <Label className="text-sm font-medium">Grade Level</Label>
+                    <p className="text-sm text-muted-foreground">Grade {selectedClass.gradeLevel}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium">Section</Label>
+                    <p className="text-sm text-muted-foreground">{selectedClass.section || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Subject</Label>
+                    <p className="text-sm text-muted-foreground">{selectedClass.subject || 'Not specified'}</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-sm font-medium">Class Teacher</Label>
-                    <p className="text-sm text-muted-foreground">{selectedClass.classTeacher}</p>
+                    <p className="text-sm text-muted-foreground">{selectedClass.teacherName || 'Not assigned'}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium">Room</Label>
-                    <p className="text-sm text-muted-foreground">{selectedClass.room}</p>
+                    <p className="text-sm text-muted-foreground">{selectedClass.roomNumber || 'Not assigned'}</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -562,23 +756,27 @@ export default function ClassesManagement() {
                     <p className="text-sm text-muted-foreground">{selectedClass.currentEnrollment} students</p>
                   </div>
                 </div>
-                <div>
-                  <Label className="text-sm font-medium">Subjects</Label>
-                  <p className="text-sm text-muted-foreground">{selectedClass.subjects.join(', ')}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Schedule</Label>
-                  <p className="text-sm text-muted-foreground">{selectedClass.schedule}</p>
-                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-sm font-medium">Academic Year</Label>
                     <p className="text-sm text-muted-foreground">{selectedClass.academicYear}</p>
                   </div>
                   <div>
-                    <Label className="text-sm font-medium">Status</Label>
-                    <Badge variant={selectedClass.status === 'active' ? 'default' : 'secondary'}>
-                      {selectedClass.status}
+                    <Label className="text-sm font-medium">Term</Label>
+                    <p className="text-sm text-muted-foreground">{selectedClass.term || 'Not specified'}</p>
+                  </div>
+                </div>
+                {selectedClass.description && (
+                  <div>
+                    <Label className="text-sm font-medium">Description</Label>
+                    <p className="text-sm text-muted-foreground">{selectedClass.description}</p>
+                  </div>
+                )}
+                <div>
+                  <Label className="text-sm font-medium">Status</Label>
+                  <div className="mt-1">
+                    <Badge variant={selectedClass.isActive ? 'default' : 'secondary'}>
+                      {selectedClass.isActive ? 'Active' : 'Inactive'}
                     </Badge>
                   </div>
                 </div>

@@ -11,10 +11,17 @@ export const handleListSchools: RequestHandler = async (req, res) => {
         s.id, 
         s.name, 
         s.code, 
+        s.email,
         s.address, 
         s.district, 
         s.province, 
         s.phone,
+        s.website,
+        s.school_type,
+        s.status,
+        s.principal_name,
+        s.principal_email,
+        s.principal_phone,
         s.created_at,
         s.updated_at,
         sub.status as subscription_status,
@@ -61,13 +68,14 @@ export const handleListSchools: RequestHandler = async (req, res) => {
       id: school.id,
       name: school.name,
       code: school.code,
-      email: '', // Add email column to schools table if needed
+      email: school.email || '',
       phone: school.phone || '',
       address: school.address || '',
       district: school.district || '',
       province: school.province || '',
-      schoolType: 'primary', // Default value, update if you have this in your schema
-      status: 'active', // Default value, update if you have this in your schema
+      website: school.website || '',
+      schoolType: school.school_type || 'primary',
+      status: school.status || 'active',
       subscriptionPlan: school.subscription_plan ? school.subscription_plan.toLowerCase() : 'none',
       subscriptionStatus: school.subscription_status || 'none',
       billingCycle: school.billing_cycle || null,
@@ -77,6 +85,9 @@ export const handleListSchools: RequestHandler = async (req, res) => {
       userCount: userCountMap[school.id] || 0,
       studentCount: Math.floor(totalStudentCount / schoolsResult.rows.length) || 0, // Distribute students evenly for demo
       teacherCount: 0, // Add teacher count if you have a way to identify teachers
+      principalName: school.principal_name || '',
+      principalEmail: school.principal_email || '',
+      principalPhone: school.principal_phone || '',
       createdAt: school.created_at,
       lastActivity: school.updated_at,
     }));
@@ -94,11 +105,13 @@ export const handleCreateSchool: RequestHandler = async (req, res) => {
     const { 
       name, 
       code, 
+      email,
       address, 
       district, 
       province, 
       phone,
-      email,
+      website,
+      schoolType,
       password,
       principalName,
       principalEmail,
@@ -127,10 +140,11 @@ export const handleCreateSchool: RequestHandler = async (req, res) => {
     
     // Create school
     await query(`
-      INSERT INTO schools (id, name, code, address, district, province, phone, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+      INSERT INTO schools (id, name, code, email, address, district, province, phone, website, school_type, status, principal_name, principal_email, principal_phone, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
     `, [schoolId, name, code || name.substring(0, 3).toUpperCase() + Math.floor(Math.random() * 1000), 
-        address || '', district || '', province || '', phone || '']);
+        email || '', address || '', district || '', province || '', phone || '', website || '', 
+        schoolType || 'primary', 'active', principalName || '', principalEmail || '', principalPhone || '']);
 
     // Create school admin user
     const userId = uuidv4();
@@ -146,12 +160,13 @@ export const handleCreateSchool: RequestHandler = async (req, res) => {
       id: schoolId,
       name,
       code: code || name.substring(0, 3).toUpperCase() + Math.floor(Math.random() * 1000),
+      email: email || '',
       address: address || '',
       district: district || '',
       province: province || '',
       phone: phone || '',
-      email,
-      schoolType: 'primary',
+      website: website || '',
+      schoolType: schoolType || 'primary',
       status: 'active',
       subscriptionPlan: 'basic',
       userCount: 1, // The admin user we just created
@@ -160,7 +175,6 @@ export const handleCreateSchool: RequestHandler = async (req, res) => {
       principalName: principalName || '',
       principalEmail: principalEmail || '',
       principalPhone: principalPhone || '',
-      website: '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       lastActivity: new Date().toISOString()

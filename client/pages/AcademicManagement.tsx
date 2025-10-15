@@ -55,6 +55,120 @@ interface GradeFormData {
   gradedDate: string;
 }
 
+// Move AssignmentForm outside to prevent re-creation on every render
+interface AssignmentFormProps {
+  formData: AssignmentFormData;
+  setFormData: (data: AssignmentFormData) => void;
+  subjects: Subject[];
+  classes: Class[];
+}
+
+const AssignmentForm = ({ formData, setFormData, subjects, classes }: AssignmentFormProps) => (
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="space-y-2">
+      <Label htmlFor="title">Assignment Title *</Label>
+      <Input
+        id="title"
+        value={formData.title}
+        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+        placeholder="Enter assignment title"
+      />
+    </div>
+    
+    <div className="space-y-2">
+      <Label htmlFor="category">Category *</Label>
+      <Select 
+        value={formData.category} 
+        onValueChange={(value: 'homework' | 'project' | 'test' | 'exam' | 'quiz') => 
+          setFormData({ ...formData, category: value })
+        }
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="homework">Homework</SelectItem>
+          <SelectItem value="project">Project</SelectItem>
+          <SelectItem value="test">Test</SelectItem>
+          <SelectItem value="exam">Exam</SelectItem>
+          <SelectItem value="quiz">Quiz</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+    
+    <div className="space-y-2">
+      <Label htmlFor="subjectId">Subject *</Label>
+      <Select value={formData.subjectId} onValueChange={(value) => setFormData({ ...formData, subjectId: value })}>
+        <SelectTrigger>
+          <SelectValue placeholder="Select subject" />
+        </SelectTrigger>
+        <SelectContent>
+          {(subjects || []).map(subject => (
+            <SelectItem key={subject.id} value={subject.id}>{subject.name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+    
+    <div className="space-y-2">
+      <Label htmlFor="classId">Class *</Label>
+      <Select value={formData.classId} onValueChange={(value) => setFormData({ ...formData, classId: value })}>
+        <SelectTrigger>
+          <SelectValue placeholder="Select class" />
+        </SelectTrigger>
+        <SelectContent>
+          {(classes || []).map(cls => (
+            <SelectItem key={cls.id} value={cls.id}>{cls.className}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+    
+    <div className="space-y-2">
+      <Label htmlFor="dueDate">Due Date *</Label>
+      <Input
+        id="dueDate"
+        type="datetime-local"
+        value={formData.dueDate}
+        onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+      />
+    </div>
+    
+    <div className="space-y-2">
+      <Label htmlFor="totalMarks">Total Marks *</Label>
+      <Input
+        id="totalMarks"
+        type="number"
+        value={formData.totalMarks}
+        onChange={(e) => setFormData({ ...formData, totalMarks: parseInt(e.target.value) })}
+        min="1"
+      />
+    </div>
+    
+    <div className="space-y-2 md:col-span-2">
+      <Label htmlFor="description">Description *</Label>
+      <Textarea
+        id="description"
+        value={formData.description}
+        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+        placeholder="Assignment description"
+        rows={3}
+      />
+    </div>
+    
+    <div className="space-y-2 md:col-span-2">
+      <Label htmlFor="instructions">Instructions</Label>
+      <Textarea
+        id="instructions"
+        value={formData.instructions || ''}
+        onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
+        placeholder="Detailed instructions for students"
+        rows={4}
+      />
+    </div>
+  </div>
+);
+
 export default function AcademicManagement() {
   const { session } = useAuth();
   const navigate = useNavigate();
@@ -227,8 +341,8 @@ export default function AcademicManagement() {
 
   const getAssignmentStats = () => {
     const total = assignments?.length || 0;
-    const overdue = assignments?.filter(a => new Date(a.dueDate) < new Date() && !a.isCompleted).length || 0;
-    const completed = assignments?.filter(a => a.isCompleted).length || 0;
+    const overdue = assignments?.filter(a => new Date(a.dueDate) < new Date() && !a.isCompleted)?.length || 0;
+    const completed = assignments?.filter(a => a.isCompleted)?.length || 0;
     const pending = total - completed;
     
     return { total, overdue, completed, pending };
@@ -237,10 +351,10 @@ export default function AcademicManagement() {
   const getGradeStats = () => {
     const totalGrades = grades?.length || 0;
     const averageGrade = grades?.length > 0 
-      ? grades.reduce((sum, grade) => sum + grade.percentage, 0) / grades.length 
+      ? grades.reduce((sum, grade) => sum + grade.percentage, 0) / (grades?.length || 1)
       : 0;
     const passRate = grades?.length > 0 
-      ? (grades.filter(g => g.percentage >= 50).length / grades.length) * 100 
+      ? (grades?.filter(g => g.percentage >= 50)?.length / (grades?.length || 1)) * 100 
       : 0;
     
     return { totalGrades, averageGrade, passRate };
@@ -255,111 +369,7 @@ export default function AcademicManagement() {
     return matchesSearch && matchesSubject && matchesClass;
   });
 
-  const AssignmentForm = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div className="space-y-2">
-        <Label htmlFor="title">Assignment Title *</Label>
-        <Input
-          id="title"
-          value={assignmentFormData.title}
-          onChange={(e) => setAssignmentFormData({ ...assignmentFormData, title: e.target.value })}
-          placeholder="Enter assignment title"
-        />
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="category">Category *</Label>
-        <Select 
-          value={assignmentFormData.category} 
-          onValueChange={(value: 'homework' | 'project' | 'test' | 'exam' | 'quiz') => 
-            setAssignmentFormData({ ...assignmentFormData, category: value })
-          }
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="homework">Homework</SelectItem>
-            <SelectItem value="project">Project</SelectItem>
-            <SelectItem value="test">Test</SelectItem>
-            <SelectItem value="exam">Exam</SelectItem>
-            <SelectItem value="quiz">Quiz</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="subjectId">Subject *</Label>
-        <Select value={assignmentFormData.subjectId} onValueChange={(value) => setAssignmentFormData({ ...assignmentFormData, subjectId: value })}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select subject" />
-          </SelectTrigger>
-          <SelectContent>
-            {(subjects || []).map(subject => (
-              <SelectItem key={subject.id} value={subject.id}>{subject.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="classId">Class *</Label>
-        <Select value={assignmentFormData.classId} onValueChange={(value) => setAssignmentFormData({ ...assignmentFormData, classId: value })}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select class" />
-          </SelectTrigger>
-          <SelectContent>
-            {(classes || []).map(cls => (
-              <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="dueDate">Due Date *</Label>
-        <Input
-          id="dueDate"
-          type="datetime-local"
-          value={assignmentFormData.dueDate}
-          onChange={(e) => setAssignmentFormData({ ...assignmentFormData, dueDate: e.target.value })}
-        />
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="totalMarks">Total Marks *</Label>
-        <Input
-          id="totalMarks"
-          type="number"
-          value={assignmentFormData.totalMarks}
-          onChange={(e) => setAssignmentFormData({ ...assignmentFormData, totalMarks: parseInt(e.target.value) })}
-          min="1"
-        />
-      </div>
-      
-      <div className="space-y-2 md:col-span-2">
-        <Label htmlFor="description">Description *</Label>
-        <Textarea
-          id="description"
-          value={assignmentFormData.description}
-          onChange={(e) => setAssignmentFormData({ ...assignmentFormData, description: e.target.value })}
-          placeholder="Assignment description"
-          rows={3}
-        />
-      </div>
-      
-      <div className="space-y-2 md:col-span-2">
-        <Label htmlFor="instructions">Instructions</Label>
-        <Textarea
-          id="instructions"
-          value={assignmentFormData.instructions}
-          onChange={(e) => setAssignmentFormData({ ...assignmentFormData, instructions: e.target.value })}
-          placeholder="Detailed instructions for students"
-          rows={4}
-        />
-      </div>
-    </div>
-  );
+
 
   if (loading) {
     return (
@@ -423,7 +433,12 @@ export default function AcademicManagement() {
                       Create a new assignment for your students.
                     </DialogDescription>
                   </DialogHeader>
-                  <AssignmentForm />
+                  <AssignmentForm 
+                    formData={assignmentFormData}
+                    setFormData={setAssignmentFormData}
+                    subjects={subjects || []}
+                    classes={classes || []}
+                  />
                   <div className="flex justify-end gap-2 pt-4">
                     <Button variant="outline" onClick={() => setIsAssignmentDialogOpen(false)}>
                       Cancel

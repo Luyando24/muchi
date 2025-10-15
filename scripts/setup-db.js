@@ -65,6 +65,10 @@ async function setupDatabase() {
     
     // Drop tables in reverse order to handle foreign key constraints
     const dropStatements = [
+      'DROP TABLE IF EXISTS assignments CASCADE',
+      'DROP TABLE IF EXISTS subjects CASCADE',
+      'DROP TABLE IF EXISTS class_enrollments CASCADE',
+      'DROP TABLE IF EXISTS classes CASCADE',
       'DROP TABLE IF EXISTS website_media CASCADE',
       'DROP TABLE IF EXISTS website_components CASCADE',
       'DROP TABLE IF EXISTS website_pages CASCADE',
@@ -73,6 +77,7 @@ async function setupDatabase() {
       'DROP TABLE IF EXISTS sync_ingest CASCADE',
       'DROP TABLE IF EXISTS attendance CASCADE',
       'DROP TABLE IF EXISTS academic_records CASCADE',
+      'DROP TABLE IF EXISTS teachers CASCADE',
       'DROP TABLE IF EXISTS students CASCADE',
       'DROP TABLE IF EXISTS staff_users CASCADE',
       'DROP TABLE IF EXISTS schools CASCADE'

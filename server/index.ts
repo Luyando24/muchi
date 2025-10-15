@@ -24,7 +24,10 @@ import {
   handleCreateStudent,
   handleUpdateStudent,
   handleDeleteStudent,
-  handleSearchStudents
+  handleSearchStudents,
+  handleBulkImportStudents,
+  handleGetStudentsByGrade,
+  handleGetStudentStats
 } from "./routes/students";
 import {
   handleCreateCase,
@@ -92,9 +95,55 @@ import {
   handleTriggerBackup,
   handleGetSettingsAudit
 } from "./routes/system-settings";
+import { 
+  handleListTeachers, 
+  handleGetTeacher, 
+  handleGetCurrentTeacher,
+  handleCreateTeacher, 
+  handleUpdateTeacher, 
+  handleDeleteTeacher, 
+  handleSearchTeachers, 
+  handleGetTeacherStats 
+} from './routes/teachers';
+import {
+  handleListClasses,
+  handleGetClass,
+  handleCreateClass,
+  handleUpdateClass,
+  handleDeleteClass,
+  handleSearchClasses,
+  handleGetClassStats
+} from "./routes/classes";
 import notificationsRouter from "./routes/notifications";
 import supportRouter from "./routes/support";
 import databaseRouter from "./routes/database";
+import setupRouter from "./routes/setup";
+  import {
+    handleListSubjects,
+    handleGetSubject,
+    handleCreateSubject,
+    handleUpdateSubject,
+    handleDeleteSubject,
+    handleSearchSubjects
+  } from "./routes/subjects";
+  import {
+    handleListAssignments,
+    handleGetAssignment,
+    handleCreateAssignment,
+    handleUpdateAssignment,
+    handleDeleteAssignment,
+    handleGetAssignmentStats,
+  } from "./routes/assignments";
+  import {
+    handleListAttendance,
+    handleGetAttendance,
+    handleRecordAttendance,
+    handleUpdateAttendance,
+    handleDeleteAttendance,
+    handleRecordBulkAttendance,
+    handleGetAttendanceStats,
+    handleGetAttendanceForPeriod
+  } from "./routes/attendance";
 
 export function createServer() {
   console.log("Creating Express server...");
@@ -125,13 +174,64 @@ export function createServer() {
   app.get("/api/auth/list-superadmins", handleListSuperAdmins);
   app.delete("/api/auth/delete-superadmin/:userId", handleDeleteSuperAdmin);
 
-  // Student Management routes
+  // Student routes
   app.get("/api/students", handleListStudents);
+  app.get("/api/students/stats", handleGetStudentStats);
+  app.get("/api/students/grade/:grade", handleGetStudentsByGrade);
+  app.post("/api/students/search", handleSearchStudents);
+  app.post("/api/students/bulk-import", handleBulkImportStudents);
   app.get("/api/students/:studentId", handleGetStudent);
   app.post("/api/students", handleCreateStudent);
   app.put("/api/students/:studentId", handleUpdateStudent);
   app.delete("/api/students/:studentId", handleDeleteStudent);
-  app.post("/api/students/search", handleSearchStudents);
+
+  // Teacher routes
+  app.get("/api/teachers", handleListTeachers);
+  app.get("/api/teachers/current", handleGetCurrentTeacher);
+  app.get("/api/teachers/stats", handleGetTeacherStats);
+  app.post("/api/teachers/search", handleSearchTeachers);
+  app.get("/api/teachers/:teacherId", handleGetTeacher);
+  app.post("/api/teachers", handleCreateTeacher);
+  app.put("/api/teachers/:teacherId", handleUpdateTeacher);
+  app.delete("/api/teachers/:teacherId", handleDeleteTeacher);
+
+  // Class routes
+  app.get("/api/classes", handleListClasses);
+  app.get("/api/classes/stats", handleGetClassStats);
+  app.post("/api/classes/search", handleSearchClasses);
+  app.get("/api/classes/:classId", handleGetClass);
+  app.post("/api/classes", handleCreateClass);
+  app.put("/api/classes/:classId", handleUpdateClass);
+  app.delete("/api/classes/:classId", handleDeleteClass);
+
+  // Subject routes
+  app.get("/api/subjects", handleListSubjects);
+  app.post("/api/subjects/search", handleSearchSubjects);
+  app.get("/api/subjects/:subjectId", handleGetSubject);
+  app.post("/api/subjects", handleCreateSubject);
+  app.put("/api/subjects/:subjectId", handleUpdateSubject);
+  app.delete("/api/subjects/:subjectId", handleDeleteSubject);
+
+  // Assignment routes
+  app.get("/api/assignments", handleListAssignments);
+  app.get("/api/assignments/stats", handleGetAssignmentStats);
+  app.get("/api/assignments/:assignmentId", handleGetAssignment);
+  app.post("/api/assignments", handleCreateAssignment);
+  app.put("/api/assignments/:assignmentId", handleUpdateAssignment);
+  app.delete("/api/assignments/:assignmentId", handleDeleteAssignment);
+
+  // Attendance routes
+  app.get("/api/attendance", handleListAttendance);
+  app.get("/api/attendance/stats", handleGetAttendanceStats);
+  app.get("/api/attendance/period", handleGetAttendanceForPeriod);
+  app.post("/api/attendance/bulk", handleRecordBulkAttendance);
+  app.get("/api/attendance/:id", handleGetAttendance);
+  app.post("/api/attendance", handleRecordAttendance);
+  app.put("/api/attendance/:id", handleUpdateAttendance);
+  app.delete("/api/attendance/:id", handleDeleteAttendance);
+
+  // Setup routes for migrations and schema alignment
+  app.use("/api/setup", setupRouter);
 
   // Academic Case routes (repurposed from military cases)
   app.post("/api/academic-cases", handleCreateCase);
@@ -236,6 +336,9 @@ export function createServer() {
   
   // Database management routes
   app.use("/api/database", databaseRouter);
+
+  // Setup routes
+  app.use("/api/setup", setupRouter);
 
   return app;
 }

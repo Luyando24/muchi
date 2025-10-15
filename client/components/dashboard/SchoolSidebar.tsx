@@ -24,16 +24,30 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/auth';
+import { 
+  canAccessStudentManagement,
+  canAccessTeacherManagement,
+  canAccessAcademicManagement,
+  canAccessFinanceManagement,
+  canAccessReports,
+  canAccessSchoolSettings,
+  canAccessCommunications
+} from '@/lib/auth';
 
 interface SchoolSidebarProps {
   className?: string;
   activeTab?: string;
   onAddStudent?: () => void;
+  studentCount?: number;
+  teacherCount?: number;
+  classCount?: number;
 }
 
-export default function SchoolSidebar({ className, activeTab: propActiveTab, onAddStudent }: SchoolSidebarProps) {
+export default function SchoolSidebar({ className, activeTab: propActiveTab, onAddStudent, studentCount, teacherCount, classCount }: SchoolSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { session } = useAuth();
   const [activeTab, setActiveTab] = useState(propActiveTab || 'overview');
   const [expandedGroups, setExpandedGroups] = useState({
     academics: true,
@@ -84,7 +98,7 @@ export default function SchoolSidebar({ className, activeTab: propActiveTab, onA
     }
   };
 
-  // Group menu items by category
+  // Group menu items by category with role-based filtering
   const menuGroups = {
     main: [
       {
@@ -96,27 +110,27 @@ export default function SchoolSidebar({ className, activeTab: propActiveTab, onA
       }
     ],
     people: [
-      {
+      ...(canAccessStudentManagement(session) ? [{
         id: 'students',
         label: 'Students',
         icon: Users,
-        badge: '1,247',
+        badge: studentCount ? studentCount.toLocaleString() : '0',
         href: '/dashboard/students'
-      },
-      {
+      }] : []),
+      ...(canAccessTeacherManagement(session) ? [{
         id: 'teachers',
         label: 'Teachers',
         icon: UserCheck,
-        badge: '45',
+        badge: teacherCount ? teacherCount.toLocaleString() : '0',
         href: '/dashboard/teachers'
-      }
+      }] : [])
     ],
-    academics: [
+    academics: canAccessAcademicManagement(session) ? [
       {
         id: 'classes',
         label: 'Classes',
         icon: School,
-        badge: '32',
+        badge: classCount ? classCount.toLocaleString() : '0',
         href: '/dashboard/classes'
       },
       {
@@ -154,42 +168,42 @@ export default function SchoolSidebar({ className, activeTab: propActiveTab, onA
         badge: null,
         href: '/dashboard/timetable'
       }
-    ],
+    ] : [],
     administration: [
-      {
+      ...(canAccessFinanceManagement(session) ? [{
         id: 'finance',
         label: 'Finance',
         icon: DollarSign,
         badge: '12',
         href: '/dashboard/finance',
-      },
-      {
+      }] : []),
+      ...(canAccessCommunications(session) ? [{
         id: 'communications',
         label: 'Communications',
         icon: MessageSquare,
         badge: '5',
         href: '/dashboard/communications',
-      },
-      {
+      }] : []),
+      ...(canAccessReports(session) ? [{
         id: 'reports',
         label: 'Reports',
         icon: FileText,
         badge: null,
         href: '/dashboard/reports',
-      },
+      }] : []),
       {
         id: 'support',
         label: 'Support',
         icon: HelpCircle,
         badge: null,
       },
-      {
+      ...(canAccessSchoolSettings(session) ? [{
         id: 'settings',
         label: 'Settings',
         icon: Settings,
         badge: null,
         href: '/dashboard/settings',
-      }
+      }] : [])
     ]
   };
 
@@ -225,99 +239,22 @@ export default function SchoolSidebar({ className, activeTab: propActiveTab, onA
           })}
 
           {/* People Group */}
-          <div className="pt-2">
-            <Button 
-              variant="ghost" 
-              className="w-full justify-start gap-3 h-8 font-medium text-xs text-muted-foreground"
-              onClick={() => toggleGroup('people')}
-            >
-              {expandedGroups.people ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              <span className="flex-1 text-left">PEOPLE</span>
-            </Button>
-            
-            {expandedGroups.people && menuGroups.people.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.href || 
-                              (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
+          {menuGroups.people.length > 0 && (
+            <div className="pt-2">
+              <Button 
+                variant="ghost" 
+                className="w-full justify-start gap-3 h-8 font-medium text-xs text-muted-foreground"
+                onClick={() => toggleGroup('people')}
+              >
+                {expandedGroups.people ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                <span className="flex-1 text-left">PEOPLE</span>
+              </Button>
               
-              return (
-                <Link
-                  key={item.id}
-                  to={item.href}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm font-medium transition-colors h-10 pl-6",
-                    "hover:bg-accent hover:text-accent-foreground",
-                    isActive && "bg-primary text-primary-foreground hover:bg-primary/90"
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="flex-1 text-left">{item.label}</span>
-                  {item.badge && (
-                    <Badge variant="secondary" className="text-xs px-2 py-0">
-                      {item.badge}
-                    </Badge>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-
-          {/* Academics Group */}
-          <div className="pt-2">
-            <Button 
-              variant="ghost" 
-              className="w-full justify-start gap-3 h-8 font-medium text-xs text-muted-foreground"
-              onClick={() => toggleGroup('academics')}
-            >
-              {expandedGroups.academics ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              <span className="flex-1 text-left">ACADEMICS</span>
-            </Button>
-            
-            {expandedGroups.academics && menuGroups.academics.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.href || 
-                              (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
-              
-              return (
-                <Link
-                  key={item.id}
-                  to={item.href}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm font-medium transition-colors h-10 pl-6",
-                    "hover:bg-accent hover:text-accent-foreground",
-                    isActive && "bg-primary text-primary-foreground hover:bg-primary/90"
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="flex-1 text-left">{item.label}</span>
-                  {item.badge && (
-                    <Badge variant="secondary" className="text-xs px-2 py-0">
-                      {item.badge}
-                    </Badge>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-
-          {/* Administration Group */}
-          <div className="pt-2">
-            <Button 
-              variant="ghost" 
-              className="w-full justify-start gap-3 h-8 font-medium text-xs text-muted-foreground"
-              onClick={() => toggleGroup('administration')}
-            >
-              {expandedGroups.administration ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              <span className="flex-1 text-left">ADMINISTRATION</span>
-            </Button>
-            
-            {expandedGroups.administration && menuGroups.administration.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.href || 
-                              (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
-              
-              // If item has href, use Link component, otherwise use Button
-              if (item.href) {
+              {expandedGroups.people && menuGroups.people.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.href || 
+                                (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
+                
                 return (
                   <Link
                     key={item.id}
@@ -337,29 +274,112 @@ export default function SchoolSidebar({ className, activeTab: propActiveTab, onA
                     )}
                   </Link>
                 );
-              }
+              })}
+            </div>
+          )}
+
+          {/* Academics Group */}
+          {menuGroups.academics.length > 0 && (
+            <div className="pt-2">
+              <Button 
+                variant="ghost" 
+                className="w-full justify-start gap-3 h-8 font-medium text-xs text-muted-foreground"
+                onClick={() => toggleGroup('academics')}
+              >
+                {expandedGroups.academics ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                <span className="flex-1 text-left">ACADEMICS</span>
+              </Button>
               
-              return (
-                <Button
-                  key={item.id}
-                  variant={isActive ? "default" : "ghost"}
-                  className={cn(
-                    "w-full justify-start gap-3 h-10 pl-6",
-                    isActive && "bg-primary text-primary-foreground hover:bg-primary/90"
-                  )}
-                  onClick={() => handleItemClick(item.id)}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="flex-1 text-left">{item.label}</span>
-                  {item.badge && (
-                    <Badge variant="secondary" className="text-xs px-2 py-0">
-                      {item.badge}
-                    </Badge>
-                  )}
-                </Button>
-              );
-            })}
-          </div>
+              {expandedGroups.academics && menuGroups.academics.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.href || 
+                                (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
+                
+                return (
+                  <Link
+                    key={item.id}
+                    to={item.href}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm font-medium transition-colors h-10 pl-6",
+                      "hover:bg-accent hover:text-accent-foreground",
+                      isActive && "bg-primary text-primary-foreground hover:bg-primary/90"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="flex-1 text-left">{item.label}</span>
+                    {item.badge && (
+                      <Badge variant="secondary" className="text-xs px-2 py-0">
+                        {item.badge}
+                      </Badge>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Administration Group */}
+          {menuGroups.administration.length > 0 && (
+            <div className="pt-2">
+              <Button 
+                variant="ghost" 
+                className="w-full justify-start gap-3 h-8 font-medium text-xs text-muted-foreground"
+                onClick={() => toggleGroup('administration')}
+              >
+                {expandedGroups.administration ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                <span className="flex-1 text-left">ADMINISTRATION</span>
+              </Button>
+              
+              {expandedGroups.administration && menuGroups.administration.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.href || 
+                                (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
+                
+                // If item has href, use Link component, otherwise use Button
+                if (item.href) {
+                  return (
+                    <Link
+                      key={item.id}
+                      to={item.href}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm font-medium transition-colors h-10 pl-6",
+                        "hover:bg-accent hover:text-accent-foreground",
+                        isActive && "bg-primary text-primary-foreground hover:bg-primary/90"
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span className="flex-1 text-left">{item.label}</span>
+                      {item.badge && (
+                        <Badge variant="secondary" className="text-xs px-2 py-0">
+                          {item.badge}
+                        </Badge>
+                      )}
+                    </Link>
+                  );
+                }
+                
+                return (
+                  <Button
+                    key={item.id}
+                    variant={isActive ? "default" : "ghost"}
+                    className={cn(
+                      "w-full justify-start gap-3 h-10 pl-6",
+                      isActive && "bg-primary text-primary-foreground hover:bg-primary/90"
+                    )}
+                    onClick={() => handleItemClick(item.id)}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="flex-1 text-left">{item.label}</span>
+                    {item.badge && (
+                      <Badge variant="secondary" className="text-xs px-2 py-0">
+                        {item.badge}
+                      </Badge>
+                    )}
+                  </Button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
 

@@ -55,10 +55,76 @@ export function isStudent(session: AuthSession | null): boolean {
   return session?.role === 'student';
 }
 
-export function canAccessAcademicPortal(session: AuthSession | null): boolean {
-  return isTeacher(session) || isSchoolAdmin(session);
+export function isHeadteacher(session: AuthSession | null): boolean {
+  return session?.role === 'headteacher';
 }
 
+export function isAccountant(session: AuthSession | null): boolean {
+  return session?.role === 'accountant';
+}
+
+export function canAccessAcademicPortal(session: AuthSession | null): boolean {
+  return isTeacher(session) || isSchoolAdmin(session) || isHeadteacher(session);
+}
+
+// Dashboard Module Access Control
+export function canAccessStudentManagement(session: AuthSession | null): boolean {
+  return isSchoolAdmin(session) || isHeadteacher(session) || isTeacher(session);
+}
+
+export function canAccessTeacherManagement(session: AuthSession | null): boolean {
+  return isSchoolAdmin(session) || isHeadteacher(session);
+}
+
+export function canAccessAcademicManagement(session: AuthSession | null): boolean {
+  return isSchoolAdmin(session) || isHeadteacher(session) || isTeacher(session);
+}
+
+export function canAccessClassesManagement(session: AuthSession | null): boolean {
+  return isSchoolAdmin(session) || isHeadteacher(session) || isTeacher(session);
+}
+
+export function canAccessSubjectsManagement(session: AuthSession | null): boolean {
+  return isSchoolAdmin(session) || isHeadteacher(session) || isTeacher(session);
+}
+
+export function canAccessAttendanceTracking(session: AuthSession | null): boolean {
+  return isSchoolAdmin(session) || isHeadteacher(session) || isTeacher(session);
+}
+
+export function canAccessGradesManagement(session: AuthSession | null): boolean {
+  return isSchoolAdmin(session) || isHeadteacher(session) || isTeacher(session);
+}
+
+export function canAccessTimetableManagement(session: AuthSession | null): boolean {
+  return isSchoolAdmin(session) || isHeadteacher(session) || isTeacher(session);
+}
+
+export function canAccessFinanceManagement(session: AuthSession | null): boolean {
+  return isSchoolAdmin(session) || isHeadteacher(session) || isAccountant(session);
+}
+
+export function canAccessCommunications(session: AuthSession | null): boolean {
+  return isSchoolAdmin(session) || isHeadteacher(session) || isTeacher(session);
+}
+
+export function canAccessReports(session: AuthSession | null): boolean {
+  return isSchoolAdmin(session) || isHeadteacher(session) || isAccountant(session);
+}
+
+export function canAccessSchoolSettings(session: AuthSession | null): boolean {
+  return isSchoolAdmin(session) || isHeadteacher(session);
+}
+
+export function canAccessEMISExport(session: AuthSession | null): boolean {
+  return isSchoolAdmin(session) || isHeadteacher(session);
+}
+
+export function canAccessParentPortal(session: AuthSession | null): boolean {
+  return isSchoolAdmin(session) || isHeadteacher(session) || isTeacher(session);
+}
+
+// Legacy functions for backward compatibility
 export function canAccessImmigrationPortal(session: AuthSession | null): boolean {
   return true; // Testing: Allow all access
 }

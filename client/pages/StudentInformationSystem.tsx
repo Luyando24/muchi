@@ -50,10 +50,178 @@ interface StudentFormData {
   emisId?: string;
 }
 
+// StudentForm component moved outside to prevent re-creation on every render
+const StudentForm = ({ formData, setFormData }: { 
+  formData: StudentFormData;
+  setFormData: (data: StudentFormData) => void;
+}) => (
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="space-y-2">
+      <Label htmlFor="firstName">First Name *</Label>
+      <Input
+        id="firstName"
+        value={formData.firstName}
+        onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+        placeholder="Enter first name"
+      />
+    </div>
+    
+    <div className="space-y-2">
+      <Label htmlFor="lastName">Last Name *</Label>
+      <Input
+        id="lastName"
+        value={formData.lastName}
+        onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+        placeholder="Enter last name"
+      />
+    </div>
+    
+    <div className="space-y-2">
+      <Label htmlFor="dateOfBirth">Date of Birth *</Label>
+      <Input
+        id="dateOfBirth"
+        type="date"
+        value={formData.dateOfBirth}
+        onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+      />
+    </div>
+    
+    <div className="space-y-2">
+      <Label htmlFor="gender">Gender *</Label>
+      <Select value={formData.gender} onValueChange={(value: 'male' | 'female') => setFormData({ ...formData, gender: value })}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="male">Male</SelectItem>
+          <SelectItem value="female">Female</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+    
+    <div className="space-y-2">
+      <Label htmlFor="nrcNumber">NRC Number</Label>
+      <Input
+        id="nrcNumber"
+        value={formData.nrcNumber}
+        onChange={(e) => setFormData({ ...formData, nrcNumber: e.target.value })}
+        placeholder="e.g., 123456/78/9"
+      />
+    </div>
+    
+    <div className="space-y-2">
+      <Label htmlFor="emisId">EMIS ID</Label>
+      <Input
+        id="emisId"
+        value={formData.emisId}
+        onChange={(e) => setFormData({ ...formData, emisId: e.target.value })}
+        placeholder="Ministry of Education ID"
+      />
+    </div>
+    
+    <div className="space-y-2">
+      <Label htmlFor="guardianName">Guardian Name</Label>
+      <Input
+        id="guardianName"
+        value={formData.guardianName}
+        onChange={(e) => setFormData({ ...formData, guardianName: e.target.value })}
+        placeholder="Parent/Guardian name"
+      />
+    </div>
+    
+    <div className="space-y-2">
+      <Label htmlFor="guardianPhone">Guardian Phone</Label>
+      <Input
+        id="guardianPhone"
+        value={formData.guardianPhone}
+        onChange={(e) => setFormData({ ...formData, guardianPhone: e.target.value })}
+        placeholder="+260 XXX XXX XXX"
+      />
+    </div>
+    
+    <div className="space-y-2">
+      <Label htmlFor="guardianEmail">Guardian Email</Label>
+      <Input
+        id="guardianEmail"
+        type="email"
+        value={formData.guardianEmail}
+        onChange={(e) => setFormData({ ...formData, guardianEmail: e.target.value })}
+        placeholder="guardian@example.com"
+      />
+    </div>
+    
+    <div className="space-y-2">
+      <Label htmlFor="currentGrade">Current Grade</Label>
+      <Select value={formData.currentGrade} onValueChange={(value) => setFormData({ ...formData, currentGrade: value })}>
+        <SelectTrigger>
+          <SelectValue placeholder="Select grade" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="1">Grade 1</SelectItem>
+          <SelectItem value="2">Grade 2</SelectItem>
+          <SelectItem value="3">Grade 3</SelectItem>
+          <SelectItem value="4">Grade 4</SelectItem>
+          <SelectItem value="5">Grade 5</SelectItem>
+          <SelectItem value="6">Grade 6</SelectItem>
+          <SelectItem value="7">Grade 7</SelectItem>
+          <SelectItem value="8">Grade 8</SelectItem>
+          <SelectItem value="9">Grade 9</SelectItem>
+          <SelectItem value="10">Grade 10</SelectItem>
+          <SelectItem value="11">Grade 11</SelectItem>
+          <SelectItem value="12">Grade 12</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+    
+    <div className="space-y-2 md:col-span-2">
+      <Label htmlFor="address">Address</Label>
+      <Textarea
+        id="address"
+        value={formData.address}
+        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+        placeholder="Full address"
+        rows={3}
+      />
+    </div>
+    
+    <div className="space-y-2">
+      <Label htmlFor="district">District</Label>
+      <Input
+        id="district"
+        value={formData.district}
+        onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+        placeholder="District"
+      />
+    </div>
+    
+    <div className="space-y-2">
+      <Label htmlFor="province">Province</Label>
+      <Select value={formData.province} onValueChange={(value) => setFormData({ ...formData, province: value })}>
+        <SelectTrigger>
+          <SelectValue placeholder="Select province" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="central">Central</SelectItem>
+          <SelectItem value="copperbelt">Copperbelt</SelectItem>
+          <SelectItem value="eastern">Eastern</SelectItem>
+          <SelectItem value="luapula">Luapula</SelectItem>
+          <SelectItem value="lusaka">Lusaka</SelectItem>
+          <SelectItem value="muchinga">Muchinga</SelectItem>
+          <SelectItem value="northern">Northern</SelectItem>
+          <SelectItem value="north-western">North-Western</SelectItem>
+          <SelectItem value="southern">Southern</SelectItem>
+          <SelectItem value="western">Western</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  </div>
+);
+
 export default function StudentInformationSystem() {
   const { session } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
+  const [studentCount, setStudentCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
@@ -88,16 +256,19 @@ export default function StudentInformationSystem() {
       
       // Load students
       const studentsResponse = await Api.listStudents({
-        schoolId: session?.schoolId,
-        limit: 100
+        schoolId: session?.schoolId
       });
-      setStudents(studentsResponse.items);
+      setStudents(studentsResponse);
       
       // Load classes
       const classesResponse = await Api.listClasses({
         schoolId: session?.schoolId
       });
-      setClasses(classesResponse.items);
+      setClasses(classesResponse);
+      
+      // Load student statistics
+      const studentStats = await Api.getStudentStats();
+      setStudentCount(studentStats.total);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -107,10 +278,11 @@ export default function StudentInformationSystem() {
 
   const handleAddStudent = async () => {
     try {
+      const currentYear = new Date().getFullYear();
       const newStudent = await Api.createStudent({
         ...formData,
         schoolId: session?.schoolId!,
-        studentNumber: `STU-${Date.now()}`, // Generate unique student number
+        studentNumber: `${currentYear}-${Date.now()}`, // Generate unique student number starting with current year
         enrollmentDate: new Date().toISOString(),
         isActive: true
       });
@@ -219,169 +391,6 @@ export default function StudentInformationSystem() {
     }
   };
 
-  const StudentForm = ({ isEdit = false }: { isEdit?: boolean }) => (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div className="space-y-2">
-        <Label htmlFor="firstName">First Name *</Label>
-        <Input
-          id="firstName"
-          value={formData.firstName}
-          onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-          placeholder="Enter first name"
-        />
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="lastName">Last Name *</Label>
-        <Input
-          id="lastName"
-          value={formData.lastName}
-          onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-          placeholder="Enter last name"
-        />
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="dateOfBirth">Date of Birth *</Label>
-        <Input
-          id="dateOfBirth"
-          type="date"
-          value={formData.dateOfBirth}
-          onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
-        />
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="gender">Gender *</Label>
-        <Select value={formData.gender} onValueChange={(value: 'male' | 'female') => setFormData({ ...formData, gender: value })}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="male">Male</SelectItem>
-            <SelectItem value="female">Female</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="nrcNumber">NRC Number</Label>
-        <Input
-          id="nrcNumber"
-          value={formData.nrcNumber}
-          onChange={(e) => setFormData({ ...formData, nrcNumber: e.target.value })}
-          placeholder="e.g., 123456/78/9"
-        />
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="emisId">EMIS ID</Label>
-        <Input
-          id="emisId"
-          value={formData.emisId}
-          onChange={(e) => setFormData({ ...formData, emisId: e.target.value })}
-          placeholder="Ministry of Education ID"
-        />
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="guardianName">Guardian Name</Label>
-        <Input
-          id="guardianName"
-          value={formData.guardianName}
-          onChange={(e) => setFormData({ ...formData, guardianName: e.target.value })}
-          placeholder="Parent/Guardian name"
-        />
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="guardianPhone">Guardian Phone</Label>
-        <Input
-          id="guardianPhone"
-          value={formData.guardianPhone}
-          onChange={(e) => setFormData({ ...formData, guardianPhone: e.target.value })}
-          placeholder="+260 XXX XXX XXX"
-        />
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="guardianEmail">Guardian Email</Label>
-        <Input
-          id="guardianEmail"
-          type="email"
-          value={formData.guardianEmail}
-          onChange={(e) => setFormData({ ...formData, guardianEmail: e.target.value })}
-          placeholder="guardian@example.com"
-        />
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="currentGrade">Current Grade</Label>
-        <Select value={formData.currentGrade} onValueChange={(value) => setFormData({ ...formData, currentGrade: value })}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select grade" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="1">Grade 1</SelectItem>
-            <SelectItem value="2">Grade 2</SelectItem>
-            <SelectItem value="3">Grade 3</SelectItem>
-            <SelectItem value="4">Grade 4</SelectItem>
-            <SelectItem value="5">Grade 5</SelectItem>
-            <SelectItem value="6">Grade 6</SelectItem>
-            <SelectItem value="7">Grade 7</SelectItem>
-            <SelectItem value="8">Grade 8</SelectItem>
-            <SelectItem value="9">Grade 9</SelectItem>
-            <SelectItem value="10">Grade 10</SelectItem>
-            <SelectItem value="11">Grade 11</SelectItem>
-            <SelectItem value="12">Grade 12</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      
-      <div className="space-y-2 md:col-span-2">
-        <Label htmlFor="address">Address</Label>
-        <Textarea
-          id="address"
-          value={formData.address}
-          onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-          placeholder="Full address"
-          rows={3}
-        />
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="district">District</Label>
-        <Input
-          id="district"
-          value={formData.district}
-          onChange={(e) => setFormData({ ...formData, district: e.target.value })}
-          placeholder="District"
-        />
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="province">Province</Label>
-        <Select value={formData.province} onValueChange={(value) => setFormData({ ...formData, province: value })}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select province" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="central">Central</SelectItem>
-            <SelectItem value="copperbelt">Copperbelt</SelectItem>
-            <SelectItem value="eastern">Eastern</SelectItem>
-            <SelectItem value="luapula">Luapula</SelectItem>
-            <SelectItem value="lusaka">Lusaka</SelectItem>
-            <SelectItem value="muchinga">Muchinga</SelectItem>
-            <SelectItem value="northern">Northern</SelectItem>
-            <SelectItem value="north-western">North-Western</SelectItem>
-            <SelectItem value="southern">Southern</SelectItem>
-            <SelectItem value="western">Western</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-    </div>
-  );
-
   if (loading) {
     return (
       <div className="min-h-screen bg-background p-6">
@@ -403,6 +412,7 @@ export default function StudentInformationSystem() {
       isAdmin={false}
       activeTab="students"
       onAddStudent={() => setIsAddDialogOpen(true)}
+      studentCount={studentCount}
     >
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Action Buttons */}
@@ -425,7 +435,7 @@ export default function StudentInformationSystem() {
                     Enter student information for enrollment and EMIS compliance.
                   </DialogDescription>
                 </DialogHeader>
-                <StudentForm />
+                <StudentForm formData={formData} setFormData={setFormData} />
                 <div className="flex justify-end gap-2 pt-4">
                   <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                     Cancel
@@ -612,7 +622,7 @@ export default function StudentInformationSystem() {
                 Update student information and maintain EMIS compliance.
               </DialogDescription>
             </DialogHeader>
-            <StudentForm isEdit={true} />
+            <StudentForm formData={formData} setFormData={setFormData} />
             <div className="flex justify-end gap-2 pt-4">
               <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
                 Cancel

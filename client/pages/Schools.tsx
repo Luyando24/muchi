@@ -160,7 +160,8 @@ const MOCK_SCHOOLS: School[] = [
 ];
 
 export default function Schools() {
-  const [schools, setSchools] = useState<School[]>(MOCK_SCHOOLS);
+  const [schools, setSchools] = useState<School[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterProvince, setFilterProvince] = useState<string>('all');
@@ -184,6 +185,34 @@ export default function Schools() {
     password: ''
   });
 
+  // Load schools from API on component mount
+  useEffect(() => {
+    loadSchools();
+  }, []);
+
+  const loadSchools = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/schools');
+      if (response.ok) {
+        const schoolsData = await response.json();
+        setSchools(schoolsData);
+      } else {
+        console.error('Failed to load schools');
+        toast.error('Failed to load schools');
+        // Fallback to mock data if API fails
+        setSchools(MOCK_SCHOOLS);
+      }
+    } catch (error) {
+      console.error('Error loading schools:', error);
+      toast.error('Error loading schools');
+      // Fallback to mock data if API fails
+      setSchools(MOCK_SCHOOLS);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredSchools = schools.filter(school => {
     const matchesSearch = school.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          school.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -194,49 +223,85 @@ export default function Schools() {
     return matchesSearch && matchesStatus && matchesProvince;
   });
 
-  const handleAddSchool = () => {
-    const newSchool: School = {
-      id: Date.now().toString(),
-      ...formData,
-      status: 'active',
-      subscriptionPlan: 'none',
-      subscriptionStatus: 'none',
-      userCount: 0,
-      studentCount: 0,
-      teacherCount: 0,
-      createdAt: new Date().toISOString(),
-      lastActivity: new Date().toISOString()
-    };
-    
-    setSchools([...schools, newSchool]);
-    setIsAddDialogOpen(false);
-    resetForm();
-    toast.success('School added successfully');
+  const handleAddSchool = async () => {
+    try {
+      const response = await fetch('/api/schools', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (response.ok) {
+        const newSchool = await response.json();
+        setSchools([...schools, newSchool]);
+        setIsAddDialogOpen(false);
+        resetForm();
+        toast.success('School added successfully');
+      } else {
+        const error = await response.json();
+        toast.error(error.error || 'Failed to create school');
+      }
+    } catch (error) {
+      console.error('Error creating school:', error);
+      toast.error('Error creating school');
+    }
   };
 
-  const handleEditSchool = () => {
+  const handleEditSchool = async () => {
     if (!selectedSchool) return;
     
-    const updatedSchools = schools.map(school =>
-      school.id === selectedSchool.id
-        ? { ...school, ...formData }
-        : school
-    );
-    
-    setSchools(updatedSchools);
-    setIsEditDialogOpen(false);
-    setSelectedSchool(null);
-    resetForm();
-    toast.success('School updated successfully');
+    try {
+      const response = await fetch(`/api/schools/${selectedSchool.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (response.ok) {
+        const updatedSchool = await response.json();
+        const updatedSchools = schools.map(school =>
+          school.id === selectedSchool.id ? updatedSchool : school
+        );
+        setSchools(updatedSchools);
+        setIsEditDialogOpen(false);
+        setSelectedSchool(null);
+        resetForm();
+        toast.success('School updated successfully');
+      } else {
+        const error = await response.json();
+        toast.error(error.error || 'Failed to update school');
+      }
+    } catch (error) {
+      console.error('Error updating school:', error);
+      toast.error('Error updating school');
+    }
   };
 
-  const handleDeleteSchool = () => {
+  const handleDeleteSchool = async () => {
     if (!selectedSchool) return;
     
-    setSchools(schools.filter(school => school.id !== selectedSchool.id));
-    setIsDeleteDialogOpen(false);
-    setSelectedSchool(null);
-    toast.success('School deleted successfully');
+    try {
+      const response = await fetch(`/api/schools/${selectedSchool.id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        setSchools(schools.filter(school => school.id !== selectedSchool.id));
+        setIsDeleteDialogOpen(false);
+        setSelectedSchool(null);
+        toast.success('School deleted successfully');
+      } else {
+        const error = await response.json();
+        toast.error(error.error || 'Failed to delete school');
+      }
+    } catch (error) {
+      console.error('Error deleting school:', error);
+      toast.error('Error deleting school');
+    }
   };
 
   const resetForm = () => {
@@ -302,7 +367,7 @@ export default function Schools() {
   };
 
   return (
-    <DashboardLayout>
+    <DashboardLayout isAdmin={true}>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -585,56 +650,75 @@ export default function Schools() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredSchools.map((school) => (
-                    <TableRow key={school.id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{school.name}</div>
-                          <div className="text-sm text-muted-foreground">{school.code}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="text-sm">{school.district}</div>
-                          <div className="text-xs text-muted-foreground">{school.province}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {SCHOOL_TYPES.find(t => t.value === school.schoolType)?.label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{getStatusBadge(school.status)}</TableCell>
-                      <TableCell>{getSubscriptionBadge(school.subscriptionPlan)}</TableCell>
-                      <TableCell>{school.studentCount}</TableCell>
-                      <TableCell>{school.teacherCount}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openViewDialog(school)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditDialog(school)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openDeleteDialog(school)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8">
+                        <div className="flex items-center justify-center">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                          <span className="ml-2">Loading schools...</span>
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : filteredSchools.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8">
+                        <div className="text-muted-foreground">
+                          No schools found matching your criteria.
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredSchools.map((school) => (
+                      <TableRow key={school.id}>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{school.name}</div>
+                            <div className="text-sm text-muted-foreground">{school.code}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="text-sm">{school.district}</div>
+                            <div className="text-xs text-muted-foreground">{school.province}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {SCHOOL_TYPES.find(t => t.value === school.schoolType)?.label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{getStatusBadge(school.status)}</TableCell>
+                        <TableCell>{getSubscriptionBadge(school.subscriptionPlan)}</TableCell>
+                        <TableCell>{school.studentCount}</TableCell>
+                        <TableCell>{school.teacherCount}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openViewDialog(school)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEditDialog(school)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openDeleteDialog(school)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>

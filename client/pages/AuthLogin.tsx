@@ -40,8 +40,12 @@ export default function AuthLogin() {
       const session = await Api.login({ email, password, userType });
       saveSession(session);
       
-      // Navigate to dashboard regardless of role
-      navigate("/dashboard");
+      // Navigate based on user role
+      if (session.role === "student") {
+        navigate("/student-portal");
+      } else {
+        navigate("/dashboard");
+      }
     } catch (e: any) {
       const errorMessage = String(e?.message || e);
       setError(errorMessage);

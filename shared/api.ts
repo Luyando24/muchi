@@ -52,20 +52,49 @@ export interface Campus {
 
 export interface Teacher {
   id: UUID;
-  schoolId?: UUID; // for school teachers
-  campusId?: UUID; // for teachers at a specific campus
-  email: string;
-  passwordHash?: string; // never sent to clients
-  role: Exclude<UserRole, "student" | "parent">;
+  employeeId: string;
+  schoolId?: UUID;
   firstName: string;
   lastName: string;
-  teacherNumber: TeacherNumber;
-  qualification?: string;
-  subjects?: string[]; // subjects they can teach
+  email: string;
   phone?: string;
+  subject: string;
+  qualification?: string;
+  experienceYears?: number;
+  specialization?: string;
+  department?: string;
+  dateOfBirth?: string;
+  hireDate?: string;
+  salary?: number;
   isActive: boolean;
+  isHeadTeacher: boolean;
+  bio?: string;
+  certifications?: string[];
+  languagesSpoken?: string[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TeacherFormData {
+  schoolId?: UUID;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  subject: string;
+  qualification?: string;
+  experienceYears?: number;
+  specialization?: string;
+  department?: string;
+  dateOfBirth?: string;
+  hireDate?: string;
+  salary?: number;
+  isActive?: boolean;
+  isHeadTeacher?: boolean;
+  bio?: string;
+  certifications?: string[];
+  languagesSpoken?: string[];
+  password?: string;
 }
 
 export interface Student {
@@ -182,17 +211,39 @@ export interface DemoResponse {
 export interface Class {
   id: UUID;
   schoolId: UUID;
-  campusId?: UUID;
-  name: string; // e.g., "Grade 7A", "Form 1B"
-  grade: string; // e.g., "7", "10", "12"
-  section?: string; // e.g., "A", "B", "C"
-  classTeacherId?: UUID; // main teacher for the class
-  capacity?: number;
-  currentEnrollment?: number;
+  className: string;
+  gradeLevel: string;
+  section?: string;
+  subject?: string;
+  teacherId?: UUID;
+  teacherName?: string;
+  roomNumber?: string;
+  capacity: number;
+  currentEnrollment: number;
   academicYear: string;
+  term?: string;
+  schedule?: any; // JSON object for class schedule
+  description?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ClassFormData {
+  schoolId: UUID;
+  className: string;
+  gradeLevel: string;
+  section?: string;
+  subject?: string;
+  teacherId?: UUID;
+  roomNumber?: string;
+  capacity?: number;
+  currentEnrollment?: number;
+  academicYear: string;
+  term?: string;
+  schedule?: any;
+  description?: string;
+  isActive?: boolean;
 }
 
 export interface Subject {
@@ -377,110 +428,396 @@ export class Api {
     return data.students;
   }
 
+  static async getStudentStats(): Promise<{ total: number; byGrade: any[]; byGender: any[]; newStudents: number }> {
+    const response = await fetch('/api/students/stats');
+    if (!response.ok) throw new Error('Failed to fetch student statistics');
+    return response.json();
+  }
+
   // Teacher methods
   static async listTeachers(): Promise<Teacher[]> {
-    // Implementation would fetch from backend
-    return [];
+    const response = await fetch('/api/teachers');
+    if (!response.ok) throw new Error('Failed to fetch teachers');
+    return response.json();
   }
 
-  static async createTeacher(teacher: Partial<Teacher>): Promise<Teacher> {
-    // Implementation would create teacher
-    return {} as Teacher;
+  static async getCurrentTeacher(): Promise<Teacher> {
+    const response = await fetch('/api/teachers/current');
+    if (!response.ok) throw new Error('Failed to fetch current teacher');
+    return response.json();
   }
 
-  static async updateTeacher(id: UUID, teacher: Partial<Teacher>): Promise<Teacher> {
-    // Implementation would update teacher
-    return {} as Teacher;
+  static async getTeacher(id: UUID): Promise<Teacher> {
+    const response = await fetch(`/api/teachers/${id}`);
+    if (!response.ok) throw new Error('Failed to fetch teacher');
+    return response.json();
+  }
+
+  static async createTeacher(teacher: TeacherFormData): Promise<Teacher> {
+    const response = await fetch('/api/teachers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(teacher)
+    });
+    if (!response.ok) throw new Error('Failed to create teacher');
+    return response.json();
+  }
+
+  static async updateTeacher(id: UUID, teacher: Partial<TeacherFormData>): Promise<Teacher> {
+    const response = await fetch(`/api/teachers/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(teacher)
+    });
+    if (!response.ok) throw new Error('Failed to update teacher');
+    return response.json();
   }
 
   static async deleteTeacher(id: UUID): Promise<void> {
-    // Implementation would delete teacher
+    const response = await fetch(`/api/teachers/${id}`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) throw new Error('Failed to delete teacher');
+  }
+
+  static async searchTeachers(params: { q?: string; subject?: string; department?: string }): Promise<Teacher[]> {
+    const searchParams = new URLSearchParams();
+    if (params.q) searchParams.append('q', params.q);
+    if (params.subject) searchParams.append('subject', params.subject);
+    if (params.department) searchParams.append('department', params.department);
+    
+    const response = await fetch(`/api/teachers/search?${searchParams}`);
+    if (!response.ok) throw new Error('Failed to search teachers');
+    return response.json();
+  }
+
+  static async getTeacherStats(): Promise<{ total: number; active: number; headTeachers: number; subjectsTaught: number; departments: number }> {
+    const response = await fetch('/api/teachers/stats');
+    if (!response.ok) throw new Error('Failed to fetch teacher statistics');
+    return response.json();
   }
 
   // Class methods
-  static async listClasses(): Promise<Class[]> {
-    // Implementation would fetch from backend
-    return [];
+  static async listClasses(params?: { schoolId?: UUID; gradeLevel?: string; subject?: string; teacherId?: UUID; academicYear?: string }): Promise<Class[]> {
+    const query = new URLSearchParams();
+    if (params?.schoolId) query.append('schoolId', params.schoolId);
+    if (params?.gradeLevel) query.append('gradeLevel', params.gradeLevel);
+    if (params?.subject) query.append('subject', params.subject);
+    if (params?.teacherId) query.append('teacherId', params.teacherId);
+    if (params?.academicYear) query.append('academicYear', params.academicYear);
+    
+    const response = await fetch(`/api/classes?${query}`);
+    if (!response.ok) throw new Error('Failed to fetch classes');
+    return response.json();
   }
 
-  static async createClass(classData: Partial<Class>): Promise<Class> {
-    // Implementation would create class
-    return {} as Class;
+  static async getClass(id: UUID): Promise<Class> {
+    const response = await fetch(`/api/classes/${id}`);
+    if (!response.ok) throw new Error('Failed to fetch class');
+    return response.json();
   }
 
-  static async updateClass(id: UUID, classData: Partial<Class>): Promise<Class> {
-    // Implementation would update class
-    return {} as Class;
+  static async createClass(classData: ClassFormData): Promise<Class> {
+    const response = await fetch('/api/classes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(classData)
+    });
+    if (!response.ok) {
+      let data: any = null;
+      try {
+        data = await response.json();
+      } catch (_) {
+        // ignore JSON parse errors
+      }
+      const error = new Error(data?.error || data?.message || 'Failed to create class');
+      (error as any).data = data;
+      throw error;
+    }
+    return response.json();
+  }
+
+  static async updateClass(id: UUID, classData: Partial<ClassFormData>): Promise<Class> {
+    const response = await fetch(`/api/classes/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(classData)
+    });
+    if (!response.ok) throw new Error('Failed to update class');
+    return response.json();
   }
 
   static async deleteClass(id: UUID): Promise<void> {
-    // Implementation would delete class
+    const response = await fetch(`/api/classes/${id}`, { method: 'DELETE' });
+    if (!response.ok) throw new Error('Failed to delete class');
+  }
+
+  static async searchClasses(params: { q?: string; schoolId?: UUID }): Promise<Class[]> {
+    const response = await fetch('/api/classes/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    if (!response.ok) throw new Error('Failed to search classes');
+    return response.json();
+  }
+
+  static async getClassStats(schoolId?: UUID): Promise<{ 
+    total: number; 
+    active: number; 
+    gradeLevels: number; 
+    subjects: number; 
+    averageEnrollment: number; 
+    totalEnrollment: number; 
+    averageCapacity: number; 
+    totalCapacity: number; 
+  }> {
+    const query = schoolId ? `?schoolId=${schoolId}` : '';
+    const response = await fetch(`/api/classes/stats${query}`);
+    if (!response.ok) throw new Error('Failed to fetch class statistics');
+    return response.json();
   }
 
   // Subject methods
   static async listSubjects(): Promise<Subject[]> {
-    // Implementation would fetch from backend
-    return [];
+    const response = await fetch('/api/subjects');
+    if (!response.ok) throw new Error('Failed to list subjects');
+    return response.json();
   }
 
   static async createSubject(subject: Partial<Subject>): Promise<Subject> {
-    // Implementation would create subject
-    return {} as Subject;
+    const response = await fetch('/api/subjects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(subject)
+    });
+    if (!response.ok) {
+      let data: any = null;
+      try { data = await response.json(); } catch (_) {}
+      const error = new Error(data?.error || data?.message || 'Failed to create subject');
+      (error as any).data = data;
+      throw error;
+    }
+    return response.json();
   }
 
   static async updateSubject(id: UUID, subject: Partial<Subject>): Promise<Subject> {
-    // Implementation would update subject
-    return {} as Subject;
+    const response = await fetch(`/api/subjects/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(subject)
+    });
+    if (!response.ok) throw new Error('Failed to update subject');
+    return response.json();
   }
 
   static async deleteSubject(id: UUID): Promise<void> {
-    // Implementation would delete subject
+    const response = await fetch(`/api/subjects/${id}`, { method: 'DELETE' });
+    if (!response.ok) throw new Error('Failed to delete subject');
   }
 
   // Assignment methods
-  static async listAssignments(): Promise<Assignment[]> {
-    // Implementation would fetch from backend
-    return [];
+  static async listAssignments(params?: {
+    schoolId?: UUID;
+    classId?: UUID;
+    subjectId?: UUID;
+    teacherId?: UUID;
+    status?: Assignment["status"];
+    category?: Assignment["category"];
+    limit?: number;
+  }): Promise<Assignment[]> {
+    const query = new URLSearchParams();
+    if (params?.schoolId) query.set("schoolId", params.schoolId);
+    if (params?.classId) query.set("classId", params.classId);
+    if (params?.subjectId) query.set("subjectId", params.subjectId);
+    if (params?.teacherId) query.set("teacherId", params.teacherId);
+    if (params?.status) query.set("status", params.status);
+    if (params?.category) query.set("category", params.category);
+    if (params?.limit) query.set("limit", String(params.limit));
+
+    const qs = query.toString();
+    const response = await fetch(`/api/assignments${qs ? `?${qs}` : ""}`);
+    if (!response.ok) throw new Error("Failed to list assignments");
+    return response.json();
   }
 
-  static async getAssignmentStats(): Promise<any> {
-    // Implementation would get assignment statistics
-    return {};
+  static async getAssignmentStats(params?: { schoolId?: UUID }): Promise<{ total: number; overdue: number; completed: number; pending: number }> {
+    const query = params?.schoolId ? `?schoolId=${params.schoolId}` : "";
+    const response = await fetch(`/api/assignments/stats${query}`);
+    if (!response.ok) throw new Error("Failed to fetch assignment statistics");
+    return response.json();
   }
 
-  static async createAssignment(assignment: Partial<Assignment>): Promise<Assignment> {
-    // Implementation would create assignment
-    return {} as Assignment;
+  static async createAssignment(
+    assignment: (Partial<Assignment> & { schoolId: UUID; teacherId?: UUID; instructions?: string })
+  ): Promise<Assignment> {
+    const response = await fetch("/api/assignments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(assignment),
+    });
+    if (!response.ok) {
+      let data: any = null;
+      try { data = await response.json(); } catch (_) {}
+      const error = new Error(data?.error || data?.message || "Failed to create assignment");
+      (error as any).data = data;
+      throw error;
+    }
+    return response.json();
   }
 
-  static async updateAssignment(id: UUID, assignment: Partial<Assignment>): Promise<Assignment> {
-    // Implementation would update assignment
-    return {} as Assignment;
+  static async updateAssignment(id: UUID, assignment: Partial<Assignment> & { instructions?: string }): Promise<Assignment> {
+    const response = await fetch(`/api/assignments/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(assignment),
+    });
+    if (!response.ok) throw new Error("Failed to update assignment");
+    return response.json();
   }
 
   static async deleteAssignment(id: UUID): Promise<void> {
-    // Implementation would delete assignment
+    const response = await fetch(`/api/assignments/${id}`, { method: "DELETE" });
+    if (!response.ok) throw new Error("Failed to delete assignment");
   }
 
-  // Attendance methods
-  static async listAttendance(): Promise<Attendance[]> {
-    // Implementation would fetch from backend
-    return [];
+  // Attendance API methods
+  static async listAttendance(params?: {
+    schoolId?: UUID;
+    classId?: UUID;
+    studentId?: UUID;
+    date?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    status?: Attendance["status"];
+    limit?: number;
+    offset?: number;
+  }): Promise<{ items: Attendance[]; total: number; limit: number; offset: number }> {
+    const queryParams = new URLSearchParams();
+    if (params?.schoolId) queryParams.append('schoolId', params.schoolId);
+    if (params?.classId) queryParams.append('classId', params.classId);
+    if (params?.studentId) queryParams.append('studentId', params.studentId);
+    if (params?.date) queryParams.append('date', params.date);
+    if (params?.dateFrom) queryParams.append('dateFrom', params.dateFrom);
+    if (params?.dateTo) queryParams.append('dateTo', params.dateTo);
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.offset) queryParams.append('offset', params.offset.toString());
+
+    const response = await fetch(`/api/attendance?${queryParams}`);
+    if (!response.ok) throw new Error('Failed to fetch attendance records');
+    return response.json();
   }
 
-  static async getAttendanceForPeriod(period: string): Promise<Attendance[]> {
-    // Implementation would fetch attendance for specific period
-    return [];
+  static async getAttendance(id: UUID): Promise<Attendance> {
+    const response = await fetch(`/api/attendance/${id}`);
+    if (!response.ok) throw new Error('Failed to fetch attendance record');
+    return response.json();
   }
 
-  static async markAttendance(attendance: Partial<Attendance>): Promise<Attendance> {
-    // Implementation would mark attendance
-    return {} as Attendance;
+  static async getAttendanceForPeriod(params: {
+    schoolId: UUID;
+    period: 'today' | 'week' | 'month' | 'term';
+    classId?: UUID;
+    studentId?: UUID;
+  }): Promise<Attendance[]> {
+    const queryParams = new URLSearchParams();
+    queryParams.append('schoolId', params.schoolId);
+    queryParams.append('period', params.period);
+    if (params.classId) queryParams.append('classId', params.classId);
+    if (params.studentId) queryParams.append('studentId', params.studentId);
+
+    const response = await fetch(`/api/attendance/period?${queryParams}`);
+    if (!response.ok) throw new Error('Failed to fetch attendance for period');
+    return response.json();
   }
 
-  static async bulkMarkAttendance(attendanceRecords: Partial<Attendance>[]): Promise<Attendance[]> {
-    // Implementation would mark bulk attendance
-    return [];
+  static async markAttendance(attendance: {
+    studentId: UUID;
+    classId?: UUID;
+    date: string;
+    status: Attendance["status"];
+    remarks?: string;
+    schoolId: UUID;
+  }): Promise<Attendance> {
+    const response = await fetch('/api/attendance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(attendance),
+    });
+    if (!response.ok) throw new Error('Failed to mark attendance');
+    return response.json();
+  }
+
+  static async updateAttendance(id: UUID, attendance: {
+    status: Attendance["status"];
+    remarks?: string;
+  }): Promise<Attendance> {
+    const response = await fetch(`/api/attendance/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(attendance),
+    });
+    if (!response.ok) throw new Error('Failed to update attendance');
+    return response.json();
+  }
+
+  static async deleteAttendance(id: UUID): Promise<void> {
+    const response = await fetch(`/api/attendance/${id}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) throw new Error('Failed to delete attendance record');
+  }
+
+  static async bulkMarkAttendance(data: {
+    classId: UUID;
+    date: string;
+    schoolId: UUID;
+    records: Array<{
+      studentId: UUID;
+      status: Attendance["status"];
+      remarks?: string;
+    }>;
+  }): Promise<{ records: Attendance[] }> {
+    const response = await fetch('/api/attendance/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to bulk mark attendance');
+    return response.json();
+  }
+
+  static async getAttendanceStats(params?: {
+    schoolId: UUID;
+    classId?: UUID;
+    dateFrom?: string;
+    dateTo?: string;
+  }): Promise<{
+    overall: {
+      totalRecords: number;
+      presentCount: number;
+      absentCount: number;
+      lateCount: number;
+      excusedCount: number;
+      attendanceRate: number;
+    };
+    dailyTrends: Array<{
+      date: string;
+      totalStudents: number;
+      presentCount: number;
+      attendanceRate: number;
+    }>;
+  }> {
+    const queryParams = new URLSearchParams();
+    if (params?.schoolId) queryParams.append('schoolId', params.schoolId);
+    if (params?.classId) queryParams.append('classId', params.classId);
+    if (params?.dateFrom) queryParams.append('dateFrom', params.dateFrom);
+    if (params?.dateTo) queryParams.append('dateTo', params.dateTo);
+
+    const response = await fetch(`/api/attendance/stats?${queryParams}`);
+    if (!response.ok) throw new Error('Failed to fetch attendance statistics');
+    return response.json();
   }
 
   // Grade methods

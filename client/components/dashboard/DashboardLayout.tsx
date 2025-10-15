@@ -27,6 +27,9 @@ interface DashboardLayoutProps {
   isAdmin?: boolean;
   activeTab?: string;
   onAddStudent?: () => void;
+  studentCount?: number;
+  teacherCount?: number;
+  classCount?: number;
 }
 
 export default function DashboardLayout({
@@ -36,7 +39,10 @@ export default function DashboardLayout({
   icon,
   isAdmin = false,
   activeTab,
-  onAddStudent
+  onAddStudent,
+  studentCount,
+  teacherCount,
+  classCount
 }: DashboardLayoutProps) {
   const { session } = useAuth();
   const { schoolInfo } = useSchoolInfo();
@@ -208,7 +214,7 @@ export default function DashboardLayout({
             onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} 
           />
         ) : (
-          <SchoolSidebar activeTab={activeTab} onAddStudent={onAddStudent} />
+          <SchoolSidebar activeTab={activeTab} onAddStudent={onAddStudent} studentCount={studentCount} teacherCount={teacherCount} classCount={classCount} />
         )}
         
         {/* Main Content Area */}

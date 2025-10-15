@@ -39,9 +39,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { useAuth } from '@/lib/auth';
+import { useAuth, isTeacher, isSchoolAdmin } from '@/lib/auth';
 import { Api } from '../../shared/api';
-import type { Attendance, Student, Class } from '../../shared/api';
+import type { Attendance, Student, Class, Teacher } from '../../shared/api';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
 
 interface AttendanceRecord {
@@ -71,9 +71,10 @@ export default function AttendanceTracking() {
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
+  const [currentTeacher, setCurrentTeacher] = useState<Teacher | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [selectedClass, setSelectedClass] = useState<string>('all');
+  const [selectedClass, setSelectedClass] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [isBulkAttendanceOpen, setIsBulkAttendanceOpen] = useState(false);
   const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
@@ -82,37 +83,90 @@ export default function AttendanceTracking() {
     date: new Date().toISOString().split('T')[0],
     records: []
   });
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('mark-attendance');
   const [quickMarkMode, setQuickMarkMode] = useState<'present' | 'absent' | null>(null);
+  const [teacherProfileError, setTeacherProfileError] = useState(false);
 
   useEffect(() => {
-    loadData();
-  }, [session, selectedDate]);
+    if (session) {
+      loadData();
+    }
+  }, [session, selectedDate, selectedClass]);
 
   const loadData = async () => {
     try {
       setLoading(true);
+      setTeacherProfileError(false);
       
-      // Load attendance records
-      const attendanceResponse = await Api.listAttendance({
-        schoolId: session?.schoolId,
-        date: selectedDate,
-        limit: 200
-      });
-      setAttendanceRecords(attendanceResponse.items);
+      // If user is a teacher, get their teacher profile and assigned classes
+      if (isTeacher(session)) {
+        try {
+          const teacherProfile = await Api.getCurrentTeacher();
+          setCurrentTeacher(teacherProfile);
+          
+          // Load classes assigned to this teacher
+          const classesResponse = await Api.listClasses({
+            schoolId: session?.schoolId,
+            teacherId: teacherProfile.id
+          });
+          setClasses(classesResponse.items);
+          
+          // Auto-select first class if none selected
+          if (!selectedClass && classesResponse.items.length > 0) {
+            setSelectedClass(classesResponse.items[0].id);
+            return; // This will trigger another loadData call with the selected class
+          }
+        } catch (error) {
+          console.error('Failed to load teacher profile:', error);
+          setTeacherProfileError(true);
+          
+          // Check if user is a school admin - allow access even without teacher profile
+          if (isSchoolAdmin(session)) {
+            console.log('School admin detected, allowing access to attendance module');
+            setTeacherProfileError(false); // Reset error for admins
+            // Load all classes for school admin
+            const classesResponse = await Api.listClasses({
+              schoolId: session?.schoolId
+            });
+            setClasses(classesResponse.items);
+            
+            // Auto-select first class if none selected
+            if (!selectedClass && classesResponse.items.length > 0) {
+              setSelectedClass(classesResponse.items[0].id);
+              return; // This will trigger another loadData call with the selected class
+            }
+          } else {
+            // For non-admin users, stop loading and show error message
+            setLoading(false);
+            return;
+          }
+        }
+      } else {
+        // For non-teachers, load all classes
+        const classesResponse = await Api.listClasses({
+          schoolId: session?.schoolId
+        });
+        setClasses(classesResponse.items);
+      }
       
-      // Load students
-      const studentsResponse = await Api.listStudents({
-        schoolId: session?.schoolId,
-        limit: 200
-      });
-      setStudents(studentsResponse.items);
-      
-      // Load classes
-      const classesResponse = await Api.listClasses({
-        schoolId: session?.schoolId
-      });
-      setClasses(classesResponse.items);
+      // Load students for selected class
+      if (selectedClass) {
+        const studentsResponse = await Api.listStudents({
+          schoolId: session?.schoolId,
+          classId: selectedClass,
+          limit: 200
+        });
+        setStudents(studentsResponse.items);
+        
+        // Load attendance records for selected class and date
+        const attendanceResponse = await Api.listAttendance({
+          schoolId: session?.schoolId,
+          classId: selectedClass,
+          date: selectedDate,
+          limit: 200
+        });
+        setAttendanceRecords(attendanceResponse.items);
+      }
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -228,10 +282,63 @@ export default function AttendanceTracking() {
       student.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.studentNumber.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesClass = selectedClass === 'all' || student.currentClass === selectedClass;
-    
-    return matchesSearch && matchesClass;
+    return matchesSearch;
   });
+
+  // Initialize student attendance status (default to present)
+  const getStudentAttendanceStatus = (studentId: string): 'present' | 'absent' | 'late' | 'excused' => {
+    const record = attendanceRecords.find(r => r.studentId === studentId && r.date === selectedDate);
+    return record?.status || 'present';
+  };
+
+  // Handle bulk attendance submission
+  const handleBulkAttendanceSubmit = async () => {
+    try {
+      if (!selectedClass) return;
+      
+      const attendanceData: BulkAttendanceData = {
+        classId: selectedClass,
+        date: selectedDate,
+        records: filteredStudents.map(student => ({
+          studentId: student.id,
+          status: getStudentAttendanceStatus(student.id),
+          notes: ''
+        }))
+      };
+
+      await Api.recordBulkAttendance(attendanceData);
+      await loadData();
+    } catch (error) {
+      console.error('Failed to submit bulk attendance:', error);
+    }
+  };
+
+  // Toggle student attendance status
+  const toggleStudentStatus = (studentId: string, newStatus: 'present' | 'absent' | 'late' | 'excused') => {
+    // Update local state immediately for better UX
+    setAttendanceRecords(prev => {
+      const existing = prev.find(r => r.studentId === studentId && r.date === selectedDate);
+      if (existing) {
+        return prev.map(r => 
+          r.studentId === studentId && r.date === selectedDate 
+            ? { ...r, status: newStatus }
+            : r
+        );
+      } else {
+        // Create new record
+        const newRecord: AttendanceRecord = {
+          id: `temp-${studentId}-${Date.now()}`,
+          studentId,
+          classId: selectedClass,
+          date: selectedDate,
+          status: newStatus,
+          timeIn: newStatus === 'present' || newStatus === 'late' ? new Date().toISOString() : undefined,
+          notifiedParent: false
+        };
+        return [...prev, newRecord];
+      }
+    });
+  };
 
   const prepareBulkAttendance = (classId: string) => {
     const classStudents = (students || []).filter(s => s.currentClass === getClassName(classId));
@@ -284,6 +391,22 @@ export default function AttendanceTracking() {
           <div className="animate-pulse space-y-6">
             <div className="h-8 bg-muted rounded w-1/3"></div>
             <div className="h-64 bg-muted rounded"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  if (teacherProfileError && !isSchoolAdmin(session)) {
+    return (
+      <div className="min-h-screen bg-background p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center max-w-md p-6 border rounded-lg shadow-sm bg-yellow-50 border-yellow-200 mx-auto">
+            <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold mb-2">Teacher Profile Required</h3>
+            <p className="text-gray-600 mb-4">
+              This module can only be accessed with a teacher account. Please contact your administrator if you believe you should have access.
+            </p>
           </div>
         </div>
       </div>
@@ -588,164 +711,187 @@ export default function AttendanceTracking() {
               </TabsContent>
 
               <TabsContent value="mark-attendance" className="space-y-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Zap className="h-5 w-5" />
-                      Quick Mark Attendance
-                    </CardTitle>
-                    <CardDescription>
-                      Streamlined interface for marking attendance quickly
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    {/* Quick Actions */}
-                    <div className="flex flex-wrap gap-3">
-                      <Button 
-                        onClick={() => handleQuickMarkAll('present')}
-                        className="bg-green-600 hover:bg-green-700"
-                        disabled={filteredStudents.length === 0}
-                      >
-                        <CheckCircle2 className="h-4 w-4 mr-2" />
-                        Mark All Present
-                      </Button>
-                      <Button 
-                        variant="destructive"
-                        onClick={() => handleQuickMarkAll('absent')}
-                        disabled={filteredStudents.length === 0}
-                      >
-                        <X className="h-4 w-4 mr-2" />
-                        Mark All Absent
-                      </Button>
-                      <Button 
-                        variant="outline"
-                        onClick={() => prepareBulkAttendance(classes[0]?.id || '')}
-                      >
-                        <Users2 className="h-4 w-4 mr-2" />
-                        Bulk Mark by Class
-                      </Button>
-                    </div>
-
-                    {/* Filters */}
-                    <div className="flex flex-col sm:flex-row gap-4">
-                      <div className="flex-1">
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                          <Input
-                            placeholder="Search students..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-10"
-                          />
+                {/* Class Selection for Teachers */}
+                {isTeacher(session) && (classes || []).length > 1 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Users className="h-5 w-5" />
+                        Select Class
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {classes.map((cls) => (
+                          <Button
+                            key={cls.id}
+                            variant={selectedClass === cls.id ? "default" : "outline"}
+                            className={`h-auto p-4 justify-start ${
+                              selectedClass === cls.id 
+                                ? "bg-primary text-primary-foreground" 
+                                : "hover:bg-muted"
+                            }`}
+                            onClick={() => setSelectedClass(cls.id)}
+                          >
+                            <div className="text-left">
+                              <div className="font-semibold">{cls.name}</div>
+                              <div className="text-sm opacity-70">
+                                {cls.subject} • Grade {cls.gradeLevel}
+                              </div>
+                            </div>
+                          </Button>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+            
+                {/* Main Attendance Interface */}
+                {selectedClass && (
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="flex items-center gap-2">
+                            <UserCheck className="h-5 w-5" />
+                            Mark Attendance - {(classes || []).find(c => c.id === selectedClass)?.name}
+                          </CardTitle>
+                          <CardDescription>
+                            {new Date(selectedDate).toLocaleDateString()} • {(filteredStudents || []).length} students
+                          </CardDescription>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleBulkAttendanceSubmit}
+                            className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                          >
+                            <CheckCircle2 className="h-4 w-4 mr-2" />
+                            Save Attendance
+                          </Button>
                         </div>
                       </div>
-                      <Select value={selectedClass} onValueChange={setSelectedClass}>
-                        <SelectTrigger className="w-[180px]">
-                          <SelectValue placeholder="Filter by class" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Classes</SelectItem>
-                          {(classes || []).map(cls => (
-                            <SelectItem key={cls.id} value={cls.name}>{cls.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {/* Search Bar */}
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                        <Input
+                          placeholder="Search students..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
 
-                    {/* Quick Mark Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {(filteredStudents || []).map((student) => {
-                        const attendanceRecord = (attendanceRecords || []).find(
-                          r => r.studentId === student.id && r.date === selectedDate
-                        );
-                        
-                        return (
-                          <Card key={student.id} className={`transition-all duration-200 ${
-                            attendanceRecord?.status === 'present' ? 'border-green-200 bg-green-50/50' :
-                            attendanceRecord?.status === 'absent' ? 'border-red-200 bg-red-50/50' :
-                            attendanceRecord?.status === 'late' ? 'border-yellow-200 bg-yellow-50/50' :
-                            attendanceRecord?.status === 'excused' ? 'border-blue-200 bg-blue-50/50' :
-                            'border-gray-200 hover:border-primary/50'
-                          }`}>
-                            <CardContent className="p-4">
-                              <div className="flex items-center gap-3 mb-3">
-                                <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                                  <Users className="h-5 w-5 text-primary" />
+                      {/* Students Grid */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {filteredStudents.map((student) => {
+                          const currentStatus = getStudentAttendanceStatus(student.id);
+                          
+                          return (
+                            <Card key={student.id} className="border-2 hover:shadow-md transition-all duration-200">
+                              <CardContent className="p-4">
+                                <div className="flex items-center gap-3 mb-3">
+                                  <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                                    <Users className="h-5 w-5 text-primary" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="font-semibold text-sm">
+                                      {student.firstName} {student.lastName}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {student.studentNumber}
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className="flex-1">
-                                  <div className="font-medium">{student.firstName} {student.lastName}</div>
-                                  <div className="text-sm text-muted-foreground">{student.studentNumber}</div>
-                                  <Badge variant="outline" className="text-xs mt-1">
-                                    {student.currentClass || 'Not assigned'}
-                                  </Badge>
-                                </div>
-                              </div>
-                              
-                              {attendanceRecord && (
-                                <div className="mb-3">
-                                  <Badge 
-                                    className={`text-xs ${
-                                      attendanceRecord.status === 'present' ? 'bg-green-100 text-green-800' :
-                                      attendanceRecord.status === 'absent' ? 'bg-red-100 text-red-800' :
-                                      attendanceRecord.status === 'late' ? 'bg-yellow-100 text-yellow-800' :
-                                      'bg-blue-100 text-blue-800'
+                                
+                                {/* Status Buttons */}
+                                <div className="grid grid-cols-2 gap-2">
+                                  <Button
+                                    variant={currentStatus === 'present' ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => toggleStudentStatus(student.id, 'present')}
+                                    className={`${
+                                      currentStatus === 'present'
+                                        ? "bg-green-600 hover:bg-green-700 text-white"
+                                        : "border-green-200 text-green-700 hover:bg-green-50"
                                     }`}
                                   >
-                                    {attendanceRecord.status.toUpperCase()}
-                                  </Badge>
-                                  {attendanceRecord.timeIn && (
-                                    <div className="text-xs text-muted-foreground mt-1">
-                                      {new Date(attendanceRecord.timeIn).toLocaleTimeString()}
-                                    </div>
-                                  )}
+                                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                                    Present
+                                  </Button>
+                                  
+                                  <Button
+                                    variant={currentStatus === 'absent' ? "destructive" : "outline"}
+                                    size="sm"
+                                    onClick={() => toggleStudentStatus(student.id, 'absent')}
+                                    className={`${
+                                      currentStatus === 'absent'
+                                        ? ""
+                                        : "border-red-200 text-red-700 hover:bg-red-50"
+                                    }`}
+                                  >
+                                    <X className="h-3 w-3 mr-1" />
+                                    Absent
+                                  </Button>
+                                  
+                                  <Button
+                                    variant={currentStatus === 'late' ? "secondary" : "outline"}
+                                    size="sm"
+                                    onClick={() => toggleStudentStatus(student.id, 'late')}
+                                    className={`${
+                                      currentStatus === 'late'
+                                        ? "bg-yellow-500 hover:bg-yellow-600 text-white"
+                                        : "border-yellow-200 text-yellow-700 hover:bg-yellow-50"
+                                    }`}
+                                  >
+                                    <Timer className="h-3 w-3 mr-1" />
+                                    Late
+                                  </Button>
+                                  
+                                  <Button
+                                    variant={currentStatus === 'excused' ? "secondary" : "outline"}
+                                    size="sm"
+                                    onClick={() => toggleStudentStatus(student.id, 'excused')}
+                                    className={`${
+                                      currentStatus === 'excused'
+                                        ? "bg-blue-500 hover:bg-blue-600 text-white"
+                                        : "border-blue-200 text-blue-700 hover:bg-blue-50"
+                                    }`}
+                                  >
+                                    <AlertCircle className="h-3 w-3 mr-1" />
+                                    Excused
+                                  </Button>
                                 </div>
-                              )}
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
+                      </div>
 
-                              <div className="grid grid-cols-2 gap-2">
-                                <Button
-                                  variant={attendanceRecord?.status === 'present' ? 'default' : 'outline'}
-                                  size="sm"
-                                  onClick={() => handleSmartAttendance(student.id)}
-                                  className={`text-xs ${attendanceRecord?.status === 'present' ? 'bg-green-600 hover:bg-green-700' : ''}`}
-                                >
-                                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                                  Present
-                                </Button>
-                                <Button
-                                  variant={attendanceRecord?.status === 'absent' ? 'destructive' : 'outline'}
-                                  size="sm"
-                                  onClick={() => handleSingleAttendance(student.id, 'absent')}
-                                  className="text-xs"
-                                >
-                                  <X className="h-3 w-3 mr-1" />
-                                  Absent
-                                </Button>
-                                <Button
-                                  variant={attendanceRecord?.status === 'late' ? 'secondary' : 'outline'}
-                                  size="sm"
-                                  onClick={() => handleSingleAttendance(student.id, 'late')}
-                                  className={`text-xs ${attendanceRecord?.status === 'late' ? 'bg-yellow-500 hover:bg-yellow-600 text-white' : ''}`}
-                                >
-                                  <Timer className="h-3 w-3 mr-1" />
-                                  Late
-                                </Button>
-                                <Button
-                                  variant={attendanceRecord?.status === 'excused' ? 'default' : 'outline'}
-                                  size="sm"
-                                  onClick={() => handleSingleAttendance(student.id, 'excused')}
-                                  className={`text-xs ${attendanceRecord?.status === 'excused' ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
-                                >
-                                  <AlertCircle className="h-3 w-3 mr-1" />
-                                  Excused
-                                </Button>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                  </CardContent>
-                </Card>
+                      {(filteredStudents || []).length === 0 && (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                          <p>No students found</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {!selectedClass && isTeacher(session) && (
+                  <Card>
+                    <CardContent className="text-center py-8">
+                      <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                      <h3 className="text-lg font-semibold mb-2">Select a Class</h3>
+                      <p className="text-muted-foreground">
+                        Choose a class from above to start marking attendance
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
               </TabsContent>
 
               <TabsContent value="reports" className="space-y-6">
@@ -924,10 +1070,10 @@ export default function AttendanceTracking() {
             </Button>
             <Button 
               onClick={handleBulkAttendance}
-              disabled={!bulkAttendanceData.classId || bulkAttendanceData.records.length === 0}
+              disabled={!bulkAttendanceData.classId || (bulkAttendanceData.records || []).length === 0}
             >
               <CheckCircle2 className="h-4 w-4 mr-2" />
-              Save Attendance ({bulkAttendanceData.records.length} students)
+              Save Attendance ({(bulkAttendanceData.records || []).length} students)
             </Button>
           </div>
         </DialogContent>

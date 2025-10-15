@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { GraduationCap, Search, Building, UserCheck } from 'lucide-react';
+import { GraduationCap, Search, Building, UserCheck, User, LogOut } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth, clearSession } from '@/lib/auth';
 import { Api } from '../../shared/api';
@@ -36,6 +37,9 @@ export default function SchoolDashboard() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentAssignments, setRecentAssignments] = useState<Assignment[]>([]);
+  const [studentCount, setStudentCount] = useState<number>(0);
+  const [teacherCount, setTeacherCount] = useState<number>(0);
+  const [classCount, setClassCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
   const handleLogout = () => {
@@ -67,6 +71,18 @@ export default function SchoolDashboard() {
             limit: 10
           });
           setRecentAssignments(assignmentsResponse.items);
+
+          // Load student statistics
+          const studentStats = await Api.getStudentStats();
+          setStudentCount(studentStats.total);
+
+          // Load teacher statistics
+          const teacherStats = await Api.getTeacherStats();
+          setTeacherCount(teacherStats.total);
+
+          // Load class statistics
+          const classStats = await Api.getClassStats();
+          setClassCount(classStats.total);
         } catch (error) {
           console.error('Failed to load school data:', error);
         }
@@ -86,6 +102,9 @@ export default function SchoolDashboard() {
           attendanceRate: 0
         });
         setRecentAssignments([]);
+        setStudentCount(0);
+        setTeacherCount(0);
+        setClassCount(0);
       }
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
@@ -231,7 +250,7 @@ export default function SchoolDashboard() {
   }
 
   return (
-    <DashboardLayout>
+    <DashboardLayout studentCount={studentCount} teacherCount={teacherCount} classCount={classCount}>
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">

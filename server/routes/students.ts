@@ -4,6 +4,12 @@ import { Student } from "@shared/api";
 import { query } from "../lib/db";
 import crypto from "crypto";
 
+// Types for bulk operations
+interface BulkStudentResult {
+  success: Student[];
+  failed: { data: Partial<Student>; error: string }[];
+}
+
 // Generate a unique 6-character student card ID
 function generateStudentCardId(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -120,7 +126,9 @@ export const handleCreateStudent: RequestHandler = async (req, res) => {
     
     // Generate salt and hash for NRC (in production, use proper crypto)
     const nrcSalt = crypto.randomBytes(16).toString('hex');
-    const nrcHash = studentData.nrcNumber || 'temp_hash'; // Should be properly hashed in production
+    const nrcHash = studentData.nrcNumber 
+      ? crypto.createHash('sha256').update(studentData.nrcNumber + nrcSalt).digest('hex')
+      : crypto.createHash('sha256').update(`temp_${studentId}_${Date.now()}`).digest('hex'); // Generate unique hash for students without NRC
     
     const params = [
       studentId,
@@ -293,5 +301,148 @@ export const handleSearchStudents: RequestHandler = async (req, res) => {
   } catch (error) {
     console.error('Error searching students:', error);
     res.status(500).json({ error: 'Failed to search students' });
+  }
+};
+
+// Bulk import students
+export const handleBulkImportStudents: RequestHandler = async (req, res) => {
+  try {
+    const studentsData: Partial<Student>[] = req.body.students;
+    
+    if (!Array.isArray(studentsData) || studentsData.length === 0) {
+      return res.status(400).json({ error: 'Invalid or empty students data' });
+    }
+    
+    const result: BulkStudentResult = {
+      success: [],
+      failed: []
+    };
+    
+    // Process each student
+    for (const studentData of studentsData) {
+      try {
+        const studentId = crypto.randomUUID();
+        const studentCardId = generateStudentCardId();
+        const now = new Date().toISOString();
+        
+        // Generate card data
+        const cardId = generateStudentCardId();
+        const cardQrSignature = `STUDENT_${cardId}_${Date.now()}`;
+        
+        // Generate salt and hash for NRC (in production, use proper crypto)
+        const nrcSalt = crypto.randomBytes(16).toString('hex');
+        const nrcHash = studentData.nrcNumber 
+          ? crypto.createHash('sha256').update(studentData.nrcNumber + nrcSalt).digest('hex')
+          : crypto.createHash('sha256').update(`temp_${studentId}_${Date.now()}`).digest('hex'); // Generate unique hash for students without NRC
+        
+        const sql = `
+          INSERT INTO students (
+            id, student_card_id, nrc_hash, nrc_salt,
+            first_name_cipher, last_name_cipher, gender, dob_cipher,
+            phone_cipher, address_cipher, guardian_contact_name_cipher, guardian_contact_phone_cipher,
+            grade_level, enrollment_date, card_id, card_qr_signature,
+            created_at, updated_at
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+          )
+        `;
+        
+        const params = [
+          studentId,
+          studentCardId,
+          nrcHash,
+          nrcSalt,
+          studentData.firstName || '', // Should be encrypted in production
+          studentData.lastName || '', // Should be encrypted in production
+          studentData.gender || '',
+          studentData.dateOfBirth || '', // Should be encrypted in production
+          studentData.guardianPhone || '', // Should be encrypted in production
+          studentData.address || '', // Should be encrypted in production
+          studentData.guardianName || '', // Should be encrypted in production
+          studentData.guardianPhone || '', // Should be encrypted in production
+          studentData.currentGrade || '',
+          studentData.enrollmentDate || now,
+          cardId,
+          cardQrSignature,
+          now,
+          now
+        ];
+        
+        await query(sql, params);
+        
+        // Fetch the created student
+        const queryResult = await query('SELECT * FROM students WHERE id = $1', [studentId]);
+        const student = dbRowToStudent(queryResult.rows[0]);
+        
+        result.success.push(student);
+      } catch (error) {
+        console.error('Error importing student:', error);
+        result.failed.push({
+          data: studentData,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+    
+    res.status(201).json(result);
+  } catch (error) {
+    console.error('Error bulk importing students:', error);
+    res.status(500).json({ error: 'Failed to bulk import students' });
+  }
+};
+
+// Get students by grade level
+export const handleGetStudentsByGrade: RequestHandler = async (req, res) => {
+  try {
+    const { grade } = req.params;
+    
+    if (!grade) {
+      return res.status(400).json({ error: 'Grade level is required' });
+    }
+    
+    const result = await query(
+      'SELECT * FROM students WHERE grade_level = $1 ORDER BY last_name_cipher',
+      [grade]
+    );
+    
+    const students = result.rows.map(dbRowToStudent);
+    res.json({ students });
+  } catch (error) {
+    console.error('Error getting students by grade:', error);
+    res.status(500).json({ error: 'Failed to get students by grade' });
+  }
+};
+
+// Get student statistics
+export const handleGetStudentStats: RequestHandler = async (req, res) => {
+  try {
+    // Get total student count
+    const totalResult = await query('SELECT COUNT(*) as total FROM students');
+    const total = parseInt(totalResult.rows[0].total);
+    
+    // Get students by grade
+    const gradeResult = await query(
+      'SELECT grade_level, COUNT(*) as count FROM students GROUP BY grade_level ORDER BY grade_level'
+    );
+    
+    // Get students by gender
+    const genderResult = await query(
+      'SELECT gender, COUNT(*) as count FROM students GROUP BY gender'
+    );
+    
+    // Get new students in the last 30 days
+    const newStudentsResult = await query(
+      'SELECT COUNT(*) as count FROM students WHERE created_at > NOW() - INTERVAL \'30 days\''
+    );
+    
+    res.json({
+      total,
+      byGrade: gradeResult.rows,
+      byGender: genderResult.rows,
+      newStudents: parseInt(newStudentsResult.rows[0].count)
+    });
+  } catch (error) {
+    console.error('Error getting student statistics:', error);
+    res.status(500).json({ error: 'Failed to get student statistics' });
   }
 };
