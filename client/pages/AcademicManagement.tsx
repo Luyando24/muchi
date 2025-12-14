@@ -63,7 +63,7 @@ interface AssignmentFormProps {
   classes: Class[];
 }
 
-const AssignmentForm = ({ formData, setFormData, subjects, classes }: AssignmentFormProps) => (
+const AssignmentForm = ({ formData, setFormData, subjects, classes, errors }: AssignmentFormProps & { errors?: Record<string, string> }) => (
   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
     <div className="space-y-2">
       <Label htmlFor="title">Assignment Title *</Label>
@@ -72,7 +72,9 @@ const AssignmentForm = ({ formData, setFormData, subjects, classes }: Assignment
         value={formData.title}
         onChange={(e) => setFormData({ ...formData, title: e.target.value })}
         placeholder="Enter assignment title"
+        className={errors?.title ? 'border-destructive' : ''}
       />
+      {errors?.title && <p className="text-sm text-destructive">{errors.title}</p>}
     </div>
     
     <div className="space-y-2">
@@ -98,8 +100,11 @@ const AssignmentForm = ({ formData, setFormData, subjects, classes }: Assignment
     
     <div className="space-y-2">
       <Label htmlFor="subjectId">Subject *</Label>
-      <Select value={formData.subjectId} onValueChange={(value) => setFormData({ ...formData, subjectId: value })}>
-        <SelectTrigger>
+      <Select 
+        value={formData.subjectId} 
+        onValueChange={(value) => setFormData({ ...formData, subjectId: value })}
+      >
+        <SelectTrigger className={errors?.subjectId ? 'border-destructive' : ''}>
           <SelectValue placeholder="Select subject" />
         </SelectTrigger>
         <SelectContent>
@@ -108,12 +113,16 @@ const AssignmentForm = ({ formData, setFormData, subjects, classes }: Assignment
           ))}
         </SelectContent>
       </Select>
+      {errors?.subjectId && <p className="text-sm text-destructive">{errors.subjectId}</p>}
     </div>
     
     <div className="space-y-2">
       <Label htmlFor="classId">Class *</Label>
-      <Select value={formData.classId} onValueChange={(value) => setFormData({ ...formData, classId: value })}>
-        <SelectTrigger>
+      <Select 
+        value={formData.classId} 
+        onValueChange={(value) => setFormData({ ...formData, classId: value })}
+      >
+        <SelectTrigger className={errors?.classId ? 'border-destructive' : ''}>
           <SelectValue placeholder="Select class" />
         </SelectTrigger>
         <SelectContent>
@@ -122,6 +131,7 @@ const AssignmentForm = ({ formData, setFormData, subjects, classes }: Assignment
           ))}
         </SelectContent>
       </Select>
+      {errors?.classId && <p className="text-sm text-destructive">{errors.classId}</p>}
     </div>
     
     <div className="space-y-2">
@@ -131,7 +141,9 @@ const AssignmentForm = ({ formData, setFormData, subjects, classes }: Assignment
         type="datetime-local"
         value={formData.dueDate}
         onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+        className={errors?.dueDate ? 'border-destructive' : ''}
       />
+      {errors?.dueDate && <p className="text-sm text-destructive">{errors.dueDate}</p>}
     </div>
     
     <div className="space-y-2">
@@ -142,7 +154,9 @@ const AssignmentForm = ({ formData, setFormData, subjects, classes }: Assignment
         value={formData.totalMarks}
         onChange={(e) => setFormData({ ...formData, totalMarks: parseInt(e.target.value) })}
         min="1"
+        className={errors?.totalMarks ? 'border-destructive' : ''}
       />
+      {errors?.totalMarks && <p className="text-sm text-destructive">{errors.totalMarks}</p>}
     </div>
     
     <div className="space-y-2 md:col-span-2">
@@ -178,13 +192,20 @@ export default function AcademicManagement() {
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState('assignments');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSubject, setSelectedSubject] = useState<string>('all');
   const [selectedClass, setSelectedClass] = useState<string>('all');
   const [isAssignmentDialogOpen, setIsAssignmentDialogOpen] = useState(false);
+  const [isEditAssignmentDialogOpen, setIsEditAssignmentDialogOpen] = useState(false);
+  const [isDeleteAssignmentDialogOpen, setIsDeleteAssignmentDialogOpen] = useState(false);
   const [isGradeDialogOpen, setIsGradeDialogOpen] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
+  const [assignmentToDelete, setAssignmentToDelete] = useState<Assignment | null>(null);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   
   const [assignmentFormData, setAssignmentFormData] = useState<AssignmentFormData>({
     title: '',
@@ -204,6 +225,17 @@ export default function AcademicManagement() {
     feedback: '',
     gradedDate: new Date().toISOString().split('T')[0]
   });
+
+  // Clear messages after 5 seconds
+  useEffect(() => {
+    if (successMessage || errorMessage) {
+      const timer = setTimeout(() => {
+        setSuccessMessage('');
+        setErrorMessage('');
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage, errorMessage]);
 
   useEffect(() => {
     if (session) {
@@ -240,7 +272,8 @@ export default function AcademicManagement() {
       
       // Load subjects
       const subjectsResponse = await Api.listSubjects({
-        schoolId: session?.schoolId
+        schoolId: session?.schoolId,
+        isActive: true
       });
       setSubjects(subjectsResponse.items);
       
@@ -258,13 +291,53 @@ export default function AcademicManagement() {
       setStudents(studentsResponse.items);
     } catch (error) {
       console.error('Failed to load data:', error);
+      setErrorMessage('Failed to load academic data. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  const validateAssignmentForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (!assignmentFormData.title.trim()) {
+      errors.title = 'Assignment title is required';
+    }
+
+    if (!assignmentFormData.subjectId) {
+      errors.subjectId = 'Subject is required';
+    }
+
+    if (!assignmentFormData.classId) {
+      errors.classId = 'Class is required';
+    }
+
+    if (!assignmentFormData.dueDate) {
+      errors.dueDate = 'Due date is required';
+    } else {
+      const dueDate = new Date(assignmentFormData.dueDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (dueDate < today) {
+        errors.dueDate = 'Due date cannot be in the past';
+      }
+    }
+
+    if (assignmentFormData.totalMarks <= 0) {
+      errors.totalMarks = 'Total marks must be greater than 0';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleCreateAssignment = async () => {
+    if (!validateAssignmentForm()) {
+      return;
+    }
+
     try {
+      setSubmitting(true);
       const newAssignment = await Api.createAssignment({
         ...assignmentFormData,
         schoolId: session?.schoolId!,
@@ -276,13 +349,79 @@ export default function AcademicManagement() {
       setAssignments([...assignments, newAssignment]);
       setIsAssignmentDialogOpen(false);
       resetAssignmentForm();
+      setSuccessMessage('Assignment created successfully!');
     } catch (error) {
       console.error('Failed to create assignment:', error);
+      setErrorMessage('Failed to create assignment. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
+  };
+
+  const handleEditAssignment = async () => {
+    if (!selectedAssignment || !validateAssignmentForm()) {
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const updatedAssignment = await Api.updateAssignment(selectedAssignment.id, assignmentFormData);
+      
+      setAssignments(assignments.map(a => a.id === selectedAssignment.id ? updatedAssignment : a));
+      setIsEditAssignmentDialogOpen(false);
+      setSelectedAssignment(null);
+      resetAssignmentForm();
+      setSuccessMessage('Assignment updated successfully!');
+    } catch (error) {
+      console.error('Failed to update assignment:', error);
+      setErrorMessage('Failed to update assignment. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteAssignment = async () => {
+    if (!assignmentToDelete) return;
+
+    try {
+      setSubmitting(true);
+      await Api.deleteAssignment(assignmentToDelete.id);
+      
+      setAssignments(assignments.filter(a => a.id !== assignmentToDelete.id));
+      setIsDeleteAssignmentDialogOpen(false);
+      setAssignmentToDelete(null);
+      setSuccessMessage('Assignment deleted successfully!');
+    } catch (error) {
+      console.error('Failed to delete assignment:', error);
+      setErrorMessage('Failed to delete assignment. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openEditAssignmentDialog = (assignment: Assignment) => {
+    setSelectedAssignment(assignment);
+    setAssignmentFormData({
+      title: assignment.title,
+      description: assignment.description || '',
+      subjectId: assignment.subjectId,
+      classId: assignment.classId,
+      category: assignment.category,
+      dueDate: assignment.dueDate ? new Date(assignment.dueDate).toISOString().split('T')[0] : '',
+      totalMarks: assignment.totalMarks || 100,
+      instructions: (assignment as any).instructions || ''
+    });
+    setIsEditAssignmentDialogOpen(true);
+  };
+
+  const openDeleteAssignmentDialog = (assignment: Assignment) => {
+    setAssignmentToDelete(assignment);
+    setIsDeleteAssignmentDialogOpen(true);
   };
 
   const handleCreateGrade = async () => {
     try {
+      setSubmitting(true);
       const newGrade = await Api.createGrade({
         ...gradeFormData,
         schoolId: session?.schoolId!,
@@ -293,8 +432,12 @@ export default function AcademicManagement() {
       setGrades([...grades, newGrade]);
       setIsGradeDialogOpen(false);
       resetGradeForm();
+      setSuccessMessage('Grade recorded successfully!');
     } catch (error) {
       console.error('Failed to create grade:', error);
+      setErrorMessage('Failed to record grade. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -314,6 +457,7 @@ export default function AcademicManagement() {
       totalMarks: 100,
       instructions: ''
     });
+    setFormErrors({});
   };
 
   const resetGradeForm = () => {
@@ -373,8 +517,14 @@ export default function AcademicManagement() {
 
   if (loading) {
     return (
-      <DashboardLayout>
-        <div className="animate-pulse space-y-6">
+      <DashboardLayout 
+        icon={<BookOpen className="h-6 w-6" />}
+        title="Academic Management" 
+        description="Manage assignments, grades, and academic performance"
+        isAdmin={false}
+        activeTab="academics"
+      >
+        <div className="p-6 animate-pulse space-y-6">
           <div className="h-8 bg-muted rounded w-1/3"></div>
           <div className="h-64 bg-muted rounded"></div>
         </div>
@@ -391,8 +541,29 @@ export default function AcademicManagement() {
   const gradeStats = getGradeStats();
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
+    <DashboardLayout 
+      icon={<BookOpen className="h-6 w-6" />}
+      title="Academic Management" 
+      description="Manage assignments, grades, and academic performance"
+      isAdmin={false}
+      activeTab="academics"
+    >
+      <div className="p-6 space-y-6">
+        {/* Success/Error Messages */}
+        {successMessage && (
+          <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-md flex items-center gap-2">
+            <CheckCircle className="h-4 w-4" />
+            {successMessage}
+          </div>
+        )}
+        
+        {errorMessage && (
+          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            {errorMessage}
+          </div>
+        )}
+
         {/* Page Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -438,18 +609,66 @@ export default function AcademicManagement() {
                     setFormData={setAssignmentFormData}
                     subjects={subjects || []}
                     classes={classes || []}
+                    errors={formErrors}
                   />
                   <div className="flex justify-end gap-2 pt-4">
-                    <Button variant="outline" onClick={() => setIsAssignmentDialogOpen(false)}>
+                    <Button variant="outline" onClick={() => setIsAssignmentDialogOpen(false)} disabled={submitting}>
                       Cancel
                     </Button>
-                    <Button onClick={handleCreateAssignment}>
-                      Create Assignment
+                    <Button onClick={handleCreateAssignment} disabled={submitting}>
+                      {submitting ? 'Creating...' : 'Create Assignment'}
                     </Button>
                   </div>
                 </DialogContent>
               </Dialog>
             </div>
+
+        {/* Edit Assignment Dialog */}
+        <Dialog open={isEditAssignmentDialogOpen} onOpenChange={setIsEditAssignmentDialogOpen}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Edit Assignment</DialogTitle>
+              <DialogDescription>
+                Update assignment details.
+              </DialogDescription>
+            </DialogHeader>
+            <AssignmentForm 
+              formData={assignmentFormData}
+              setFormData={setAssignmentFormData}
+              subjects={subjects || []}
+              classes={classes || []}
+              errors={formErrors}
+            />
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setIsEditAssignmentDialogOpen(false)} disabled={submitting}>
+                Cancel
+              </Button>
+              <Button onClick={handleEditAssignment} disabled={submitting}>
+                {submitting ? 'Updating...' : 'Update Assignment'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Assignment Dialog */}
+        <Dialog open={isDeleteAssignmentDialogOpen} onOpenChange={setIsDeleteAssignmentDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Assignment</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete "{assignmentToDelete?.title}"? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setIsDeleteAssignmentDialogOpen(false)} disabled={submitting}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleDeleteAssignment} disabled={submitting}>
+                {submitting ? 'Deleting...' : 'Delete Assignment'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -617,10 +836,19 @@ export default function AcademicManagement() {
                             <Button variant="ghost" size="sm">
                               <Eye className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="sm">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => openEditAssignmentDialog(assignment)}
+                            >
                               <Edit className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => openDeleteAssignmentDialog(assignment)}
+                            >
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>

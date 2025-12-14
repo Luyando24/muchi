@@ -22,6 +22,7 @@
     "typecheck": "tsc"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.87.1",
     "@types/bcrypt": "^6.0.0",
     "bcrypt": "^6.0.0",
     "dexie": "^4.2.0",

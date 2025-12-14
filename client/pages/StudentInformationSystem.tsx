@@ -406,15 +406,15 @@ export default function StudentInformationSystem() {
 
   return (
     <DashboardLayout 
+      icon={<Users className="h-6 w-6" />}
       title="Student Information System"
-      subtitle="Manage student records, admissions, and EMIS compliance"
-      icon={<Users className="h-8 w-8 text-primary" />}
+      description="Manage student records, admissions, and EMIS compliance"
       isAdmin={false}
       activeTab="students"
       onAddStudent={() => setIsAddDialogOpen(true)}
-      studentCount={studentCount}
+      studentCount={students?.length || 0}
     >
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="p-6 max-w-7xl mx-auto space-y-6">
         {/* Action Buttons */}
         <div className="flex items-center justify-end gap-2">
           <Button variant="outline" onClick={exportToEMIS}>

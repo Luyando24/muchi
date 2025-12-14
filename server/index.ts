@@ -13,12 +13,6 @@ import {
   handleDeleteSuperAdmin
 } from "./routes/auth";
 import {
-  handleSearchResident,
-  handleRegisterResident,
-  handleUpsertResident,
-  handleListResidents
-} from "./routes/residents";
-import {
   handleListStudents,
   handleGetStudent,
   handleCreateStudent,
@@ -29,25 +23,6 @@ import {
   handleGetStudentsByGrade,
   handleGetStudentStats
 } from "./routes/students";
-import {
-  handleCreateCase,
-  handleListCases,
-  handleUpdateCase,
-  handleGetCase,
-  handleDeleteCase,
-  handleGetCaseStats
-} from "./routes/cases";
-import {
-  handleCreatePermit,
-  handleListPermits,
-  handleUpdatePermit,
-  handleGetPermit,
-  handleDeletePermit,
-  handleGetPermitStats,
-  handleCheckPermitValidity,
-  handleCreateVisa,
-  handleListVisas
-} from "./routes/permits";
 import {
   handleCreateWebsite,
   handleGetWebsite,
@@ -232,27 +207,6 @@ export function createServer() {
 
   // Setup routes for migrations and schema alignment
   app.use("/api/setup", setupRouter);
-
-  // Academic Case routes (repurposed from military cases)
-  app.post("/api/academic-cases", handleCreateCase);
-  app.get("/api/academic-cases", handleListCases);
-  app.put("/api/academic-cases/:caseId", handleUpdateCase);
-  app.get("/api/academic-cases/:caseId", handleGetCase);
-  app.delete("/api/academic-cases/:caseId", handleDeleteCase);
-  app.get("/api/academic-cases/stats", handleGetCaseStats);
-
-  // Immigration Permit routes
-  app.post("/api/permits", handleCreatePermit);
-  app.get("/api/permits", handleListPermits);
-  app.put("/api/permits/:permitId", handleUpdatePermit);
-  app.get("/api/permits/:permitId", handleGetPermit);
-  app.delete("/api/permits/:permitId", handleDeletePermit);
-  app.get("/api/permits/stats", handleGetPermitStats);
-  app.get("/api/permits/:permitNumber/validity", handleCheckPermitValidity);
-
-  // Visa routes (subset of permits)
-  app.post("/api/visas", handleCreateVisa);
-  app.get("/api/visas", handleListVisas);
 
   // Website routes
   app.post("/api/websites", handleCreateWebsite);

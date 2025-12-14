@@ -58,7 +58,7 @@ import {
 import { useAuth } from '@/lib/auth';
 import { Api } from '@/lib/api';
 import { handleError, validateEmail, validateRequired } from '@/lib/errors';
-import AdminSidebar from '@/components/dashboard/AdminSidebar';
+import DashboardLayout from '@/components/dashboard/DashboardLayout';
 
 interface SuperAdmin {
   id: string;
@@ -97,7 +97,6 @@ const PERMISSION_OPTIONS = [
 export default function SuperAdmins() {
   const navigate = useNavigate();
   const { session } = useAuth();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -123,14 +122,59 @@ export default function SuperAdmins() {
     notes: ''
   });
 
+  // Mock data for development
+  const mockSuperAdmins: SuperAdmin[] = [
+    {
+      id: '1',
+      firstName: 'John',
+      lastName: 'Doe',
+      email: 'john.doe@muchi.com',
+      phoneNumber: '+260 123 456 789',
+      role: 'super_admin',
+      permissions: ['manage_schools', 'manage_users', 'system_settings'],
+      createdAt: '2024-01-15T10:30:00Z',
+      lastLogin: '2024-01-20T14:22:00Z',
+      status: 'active'
+    },
+    {
+      id: '2',
+      firstName: 'Jane',
+      lastName: 'Smith',
+      email: 'jane.smith@muchi.com',
+      phoneNumber: '+260 987 654 321',
+      role: 'system_admin',
+      permissions: ['manage_schools', 'view_analytics'],
+      createdAt: '2024-01-10T09:15:00Z',
+      lastLogin: '2024-01-19T16:45:00Z',
+      status: 'active'
+    },
+    {
+      id: '3',
+      firstName: 'Mike',
+      lastName: 'Johnson',
+      email: 'mike.johnson@muchi.com',
+      phoneNumber: '+260 555 123 456',
+      role: 'system_admin',
+      permissions: ['support_access', 'view_analytics'],
+      createdAt: '2024-01-05T11:20:00Z',
+      status: 'inactive'
+    }
+  ];
+
   // Fetch super admins from API
   const fetchSuperAdmins = async () => {
     try {
       setFetchLoading(true);
-      const response = await Api.get('/auth/list-superadmins');
-      setSuperAdmins(response);
+      // Use mock data for now
+      setSuperAdmins(mockSuperAdmins);
+      // Uncomment when API is ready:
+      // const response = await Api.get('/auth/list-superadmins');
+      // setSuperAdmins(response);
     } catch (err) {
-      setError(handleError(err));
+      console.error('Error fetching super admins:', err);
+      setError('Failed to load super admins');
+      // Fallback to mock data
+      setSuperAdmins(mockSuperAdmins);
     } finally {
       setFetchLoading(false);
     }
@@ -188,11 +232,19 @@ export default function SuperAdmins() {
     setError('');
     
     try {
-      // Call the API endpoint with the correct path
-      const response = await Api.post('/auth/register-superadmin', formData);
+      // Mock successful creation
+      const newAdmin: SuperAdmin = {
+        id: Date.now().toString(),
+        ...formData,
+        createdAt: new Date().toISOString(),
+        status: 'active'
+      };
       
-      // Refresh the super admins list
-      await fetchSuperAdmins();
+      setSuperAdmins(prev => [...prev, newAdmin]);
+      
+      // Uncomment when API is ready:
+      // const response = await Api.post('/auth/register-superadmin', formData);
+      // await fetchSuperAdmins();
       
       setSuccess(true);
       
@@ -231,11 +283,12 @@ export default function SuperAdmins() {
     
     setDeleteLoading(true);
     try {
-      // Call the API endpoint with the correct path
-      await Api.delete(`/auth/delete-superadmin/${userToDelete.id}`);
+      // Mock deletion
+      setSuperAdmins(prev => prev.filter(admin => admin.id !== userToDelete.id));
       
-      // Refresh the super admins list
-      await fetchSuperAdmins();
+      // Uncomment when API is ready:
+      // await Api.delete(`/auth/delete-superadmin/${userToDelete.id}`);
+      // await fetchSuperAdmins();
       
       setShowDeleteDialog(false);
       setUserToDelete(null);
@@ -305,165 +358,165 @@ export default function SuperAdmins() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
-      <AdminSidebar 
-        collapsed={sidebarCollapsed} 
-        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} 
-      />
-      
-      <div className="flex-1 flex flex-col">
+    <DashboardLayout 
+      icon={<Shield className="h-6 w-6" />}
+      title="Super Admins" 
+      subtitle="Manage system administrators and their permissions"
+      isAdmin={true}
+      activeTab="admins"
+    >
+      <div className="p-6 space-y-6">
         {/* Header */}
-        <div className="sticky top-0 z-40 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-          <div className="flex items-center justify-between p-4">
-            <div>
-              <h1 className="text-2xl font-bold">Super Admins</h1>
-              <p className="text-sm text-muted-foreground">Manage system administrators and their permissions</p>
-            </div>
-            <Button onClick={() => setShowAddDialog(true)} className="flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              Add Super Admin
-            </Button>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Super Admins</h1>
+            <p className="text-sm text-gray-600 mt-1">Manage system administrators and their permissions</p>
           </div>
+          <Button onClick={() => setShowAddDialog(true)} className="flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            Add Super Admin
+          </Button>
         </div>
 
-        {/* Main Content */}
-        <div className="flex-1 p-6 overflow-auto">
-          <div className="space-y-6">
-            {/* Search and Filters */}
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <div className="flex-1">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                      <Input
-                        placeholder="Search by name or email..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Select value={filterRole} onValueChange={setFilterRole}>
-                      <SelectTrigger className="w-40">
-                        <SelectValue placeholder="Filter by role" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Roles</SelectItem>
-                        <SelectItem value="super_admin">Super Admin</SelectItem>
-                        <SelectItem value="system_admin">System Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select value={filterStatus} onValueChange={setFilterStatus}>
-                      <SelectTrigger className="w-40">
-                        <SelectValue placeholder="Filter by status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Status</SelectItem>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="inactive">Inactive</SelectItem>
-                        <SelectItem value="suspended">Suspended</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+        {/* Search and Filters */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Input
+                    placeholder="Search by name or email..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+              <div className="flex gap-2">
+                <Select value={filterRole} onValueChange={setFilterRole}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Filter by role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Roles</SelectItem>
+                    <SelectItem value="super_admin">Super Admin</SelectItem>
+                    <SelectItem value="system_admin">System Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="suspended">Suspended</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-            {/* Super Admins Table */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <UserCheck className="h-5 w-5" />
-                  Super Administrators ({filteredSuperAdmins.length})
-                </CardTitle>
-                <CardDescription>
-                  System administrators with elevated permissions
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
+        {/* Super Admins Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <UserCheck className="h-5 w-5" />
+              Super Administrators ({filteredSuperAdmins.length})
+            </CardTitle>
+            <CardDescription>
+              System administrators with elevated permissions
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {fetchLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-gray-500">Loading super admins...</div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead>Last Login</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredSuperAdmins.length === 0 ? (
                       <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Role</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Created</TableHead>
-                        <TableHead>Last Login</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+                        <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                          No super admins found matching your criteria
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredSuperAdmins.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={7} className="text-center py-8 text-gray-500">
-                            No super admins found matching your criteria
+                    ) : (
+                      filteredSuperAdmins.map((admin) => (
+                        <TableRow key={admin.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                                <User className="h-4 w-4 text-primary" />
+                              </div>
+                              <div>
+                                <div className="font-medium">{admin.firstName} {admin.lastName}</div>
+                                <div className="text-sm text-gray-500">{admin.phoneNumber}</div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>{admin.email}</TableCell>
+                          <TableCell>{getRoleBadge(admin.role)}</TableCell>
+                          <TableCell>{getStatusBadge(admin.status)}</TableCell>
+                          <TableCell className="text-sm text-gray-500">
+                            {formatDate(admin.createdAt)}
+                          </TableCell>
+                          <TableCell className="text-sm text-gray-500">
+                            {admin.lastLogin ? formatDate(admin.lastLogin) : 'Never'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" className="h-8 w-8 p-0">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                <DropdownMenuItem>
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit User
+                                </DropdownMenuItem>
+                                <DropdownMenuItem>
+                                  <Shield className="mr-2 h-4 w-4" />
+                                  View Permissions
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                  className="text-red-600"
+                                  onClick={() => handleDeleteUser(admin)}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete User
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </TableCell>
                         </TableRow>
-                      ) : (
-                        filteredSuperAdmins.map((admin) => (
-                          <TableRow key={admin.id}>
-                            <TableCell>
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-                                  <User className="h-4 w-4 text-primary" />
-                                </div>
-                                <div>
-                                  <div className="font-medium">{admin.firstName} {admin.lastName}</div>
-                                  <div className="text-sm text-gray-500">{admin.phoneNumber}</div>
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell>{admin.email}</TableCell>
-                            <TableCell>{getRoleBadge(admin.role)}</TableCell>
-                            <TableCell>{getStatusBadge(admin.status)}</TableCell>
-                            <TableCell className="text-sm text-gray-500">
-                              {formatDate(admin.createdAt)}
-                            </TableCell>
-                            <TableCell className="text-sm text-gray-500">
-                              {admin.lastLogin ? formatDate(admin.lastLogin) : 'Never'}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" className="h-8 w-8 p-0">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                  <DropdownMenuItem>
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    Edit User
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem>
-                                    <Shield className="mr-2 h-4 w-4" />
-                                    View Permissions
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem 
-                                    className="text-red-600"
-                                    onClick={() => handleDeleteUser(admin)}
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Delete User
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Add Super Admin Dialog */}
         <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
@@ -556,13 +609,13 @@ export default function SuperAdmins() {
                 </div>
               </div>
 
-              {/* Security Settings */}
+              {/* Account Information */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium flex items-center gap-2">
                   <Lock className="h-5 w-5" />
-                  Security Settings
+                  Account Information
                 </h3>
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="password">Password *</Label>
                     <div className="relative">
@@ -580,7 +633,6 @@ export default function SuperAdmins() {
                         size="sm"
                         className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                         onClick={() => setShowPassword(!showPassword)}
-                        disabled={loading}
                       >
                         {showPassword ? (
                           <EyeOff className="h-4 w-4" />
@@ -589,26 +641,12 @@ export default function SuperAdmins() {
                         )}
                       </Button>
                     </div>
-                    <p className="text-sm text-gray-500">
-                      Password must be at least 8 characters long
-                    </p>
                   </div>
-                </div>
-              </div>
-
-              {/* Role Selection */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium flex items-center gap-2">
-                  <Building className="h-5 w-5" />
-                  Role & Permissions
-                </h3>
-                <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="role">Administrative Role *</Label>
+                    <Label htmlFor="role">Role *</Label>
                     <Select 
                       value={formData.role} 
-                      onValueChange={(value: 'super_admin' | 'system_admin') => handleInputChange('role', value)}
-                      disabled={loading}
+                      onValueChange={(value) => handleInputChange('role', value)}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select role" />
@@ -619,48 +657,47 @@ export default function SuperAdmins() {
                       </SelectContent>
                     </Select>
                   </div>
-
-                  {/* Permissions */}
-                  <div className="space-y-3">
-                    <Label>Permissions *</Label>
-                    <div className="grid grid-cols-1 gap-3">
-                      {PERMISSION_OPTIONS.map((permission) => (
-                        <div key={permission.id} className="flex items-start space-x-3 p-3 border rounded-lg">
-                          <input
-                            type="checkbox"
-                            id={permission.id}
-                            checked={formData.permissions.includes(permission.id)}
-                            onChange={() => handlePermissionToggle(permission.id)}
-                            className="mt-1"
-                            disabled={loading}
-                          />
-                          <div className="flex-1">
-                            <label htmlFor={permission.id} className="text-sm font-medium cursor-pointer">
-                              {permission.label}
-                            </label>
-                            <p className="text-xs text-gray-500 mt-1">{permission.description}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               </div>
 
-              {/* Additional Notes */}
+              {/* Permissions */}
               <div className="space-y-4">
-                <h3 className="text-lg font-medium">Additional Notes</h3>
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Notes (Optional)</Label>
-                  <Textarea
-                    id="notes"
-                    value={formData.notes}
-                    onChange={(e) => handleInputChange('notes', e.target.value)}
-                    placeholder="Any additional notes about this administrator..."
-                    rows={3}
-                    disabled={loading}
-                  />
+                <h3 className="text-lg font-medium flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Permissions *
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {PERMISSION_OPTIONS.map((permission) => (
+                    <div key={permission.id} className="flex items-start space-x-3">
+                      <input
+                        type="checkbox"
+                        id={permission.id}
+                        checked={formData.permissions.includes(permission.id)}
+                        onChange={() => handlePermissionToggle(permission.id)}
+                        className="mt-1 h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                      />
+                      <div className="flex-1">
+                        <Label htmlFor={permission.id} className="text-sm font-medium">
+                          {permission.label}
+                        </Label>
+                        <p className="text-xs text-gray-500 mt-1">{permission.description}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-2">
+                <Label htmlFor="notes">Additional Notes</Label>
+                <Textarea
+                  id="notes"
+                  value={formData.notes}
+                  onChange={(e) => handleInputChange('notes', e.target.value)}
+                  placeholder="Any additional notes about this admin..."
+                  rows={3}
+                  disabled={loading}
+                />
               </div>
 
               <DialogFooter>
@@ -672,18 +709,8 @@ export default function SuperAdmins() {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={loading} className="min-w-[120px]">
-                  {loading ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Creating...
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <Save className="h-4 w-4" />
-                      Create Admin
-                    </div>
-                  )}
+                <Button type="submit" disabled={loading}>
+                  {loading ? 'Creating...' : 'Create Super Admin'}
                 </Button>
               </DialogFooter>
             </form>
@@ -694,65 +721,27 @@ export default function SuperAdmins() {
         <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-destructive">
-                <AlertCircle className="h-5 w-5" />
-                Delete Super Admin
-              </DialogTitle>
+              <DialogTitle>Delete Super Admin</DialogTitle>
               <DialogDescription>
-                Are you sure you want to delete this super admin user? This action cannot be undone.
+                Are you sure you want to delete {userToDelete?.firstName} {userToDelete?.lastName}? 
+                This action cannot be undone and will revoke all their access immediately.
               </DialogDescription>
             </DialogHeader>
-            
-            {userToDelete && (
-              <div className="py-4">
-                <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
-                  <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                    <User className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-medium">{userToDelete.firstName} {userToDelete.lastName}</p>
-                    <p className="text-sm text-muted-foreground">{userToDelete.email}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      {getRoleBadge(userToDelete.role)}
-                      {getStatusBadge(userToDelete.status)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={cancelDelete}
-                disabled={deleteLoading}
-              >
+              <Button variant="outline" onClick={cancelDelete} disabled={deleteLoading}>
                 Cancel
               </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={confirmDeleteUser}
+              <Button 
+                variant="destructive" 
+                onClick={confirmDeleteUser} 
                 disabled={deleteLoading}
-                className="min-w-[120px]"
               >
-                {deleteLoading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Deleting...
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Trash2 className="h-4 w-4" />
-                    Delete User
-                  </div>
-                )}
+                {deleteLoading ? 'Deleting...' : 'Delete'}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

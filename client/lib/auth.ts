@@ -123,28 +123,3 @@ export function canAccessEMISExport(session: AuthSession | null): boolean {
 export function canAccessParentPortal(session: AuthSession | null): boolean {
   return isSchoolAdmin(session) || isHeadteacher(session) || isTeacher(session);
 }
-
-// Legacy functions for backward compatibility
-export function canAccessImmigrationPortal(session: AuthSession | null): boolean {
-  return true; // Testing: Allow all access
-}
-
-export function canManageCases(session: AuthSession | null): boolean {
-  return true; // Testing: Allow all access
-}
-
-export function canManagePermits(session: AuthSession | null): boolean {
-  return true; // Testing: Allow all access
-}
-
-export function canAccessAuditLogs(session: AuthSession | null): boolean {
-  return true; // Testing: Allow all access
-}
-
-export function getOfficerStation(session: AuthSession | null): string | null {
-  return session?.stationId || null;
-}
-
-export function getOfficerImmigrationOffice(session: AuthSession | null): string | null {
-  return session?.immigrationOfficeId || null;
-}

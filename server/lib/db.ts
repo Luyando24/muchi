@@ -3,14 +3,25 @@ const { Pool } = pkg;
 import bcrypt from 'bcrypt';
 
 // Database connection pool
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432'),
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'muchi_db',
+const connectionConfig: any = {
   max: 20, // Maximum number of connections in the pool
-});
+};
+
+if (process.env.DATABASE_URL) {
+  connectionConfig.connectionString = process.env.DATABASE_URL;
+  // Enable SSL for production (required for Supabase/Vercel)
+  if (process.env.NODE_ENV === 'production' || process.env.DATABASE_URL.includes('supabase')) {
+    connectionConfig.ssl = { rejectUnauthorized: false };
+  }
+} else {
+  connectionConfig.host = process.env.DB_HOST || 'localhost';
+  connectionConfig.port = parseInt(process.env.DB_PORT || '5432');
+  connectionConfig.user = process.env.DB_USER || 'postgres';
+  connectionConfig.password = process.env.DB_PASSWORD || '';
+  connectionConfig.database = process.env.DB_NAME || 'muchi_db';
+}
+
+const pool = new Pool(connectionConfig);
 
 // Helper function to execute queries
 import { QueryResultRow } from 'pg';

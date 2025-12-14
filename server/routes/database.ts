@@ -1,22 +1,13 @@
 import express from 'express';
-import { Pool } from 'pg';
 import { RequestHandler } from 'express';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
+import { pool } from '../lib/db';
 
 const router = express.Router();
 const execAsync = promisify(exec);
-
-// Database connection
-const pool = new Pool({
-  user: process.env.DB_USER || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'muchi_db',
-  password: process.env.DB_PASSWORD || 'password',
-  port: parseInt(process.env.DB_PORT || '5432'),
-});
 
 // Database schema information interfaces
 export interface TableInfo {

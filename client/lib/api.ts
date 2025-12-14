@@ -258,13 +258,6 @@ export const Api = {
     };
   },
 
-  async registerPersonnel(
-    payload: RegisterPersonnelRequest,
-  ): Promise<RegisterPersonnelResponse> {
-    // This function is deprecated - military personnel registration removed
-    throw new Error("Military personnel registration is no longer supported");
-  },
-  
   async registerSchool(payload: {
     schoolName: string;
     schoolType: string;
@@ -285,11 +278,6 @@ export const Api = {
 
 // Lightweight in-browser mock for development and offline demo
 import QRCode from "qrcode";
-
-async function createCardQr(resident: Resident): Promise<string> {
-  // In production, backend signs payload; here we encode opaque data for demo only
-  return QRCode.toDataURL(JSON.stringify({ cardId: resident.cardId }));
-}
 
 function slugify(input: string) {
   return input

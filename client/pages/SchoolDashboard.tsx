@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth, clearSession } from '@/lib/auth';
 import { Api } from '../../shared/api';
 import type { Assignment } from '../../shared/api';
@@ -35,6 +35,8 @@ interface DashboardStats {
 export default function SchoolDashboard() {
   const { session } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState<string>("overview");
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentAssignments, setRecentAssignments] = useState<Assignment[]>([]);
   const [studentCount, setStudentCount] = useState<number>(0);
@@ -250,27 +252,17 @@ export default function SchoolDashboard() {
   }
 
   return (
-    <DashboardLayout studentCount={studentCount} teacherCount={teacherCount} classCount={classCount}>
-      <div className="space-y-6">
-        {/* Page Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <GraduationCap className="h-8 w-8 text-primary" />
-            <div>
-              <h1 className="text-2xl font-bold">School Management Dashboard</h1>
-              <p className="text-sm text-muted-foreground">
-                Welcome back, {session?.role === 'teacher' ? 'Teacher' : session?.role === 'headteacher' ? 'Head Teacher' : 'Administrator'}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm">
-              <Search className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
-        <Tabs defaultValue="overview" className="space-y-6">
+    <DashboardLayout
+      icon={<GraduationCap className="h-6 w-6" />}
+      title="School Management Dashboard"
+      description={`Welcome back, ${session?.role === 'teacher' ? 'Teacher' : session?.role === 'headteacher' ? 'Head Teacher' : 'Administrator'}`}
+      isAdmin={false}
+      activeTab="dashboard"
+      onAddStudent={() => navigate('/students/add')}
+      studentCount={studentCount}
+    >
+      <div className="p-6 space-y-6">
+        <Tabs defaultValue="overview" className="space-y-6" id="dashboard-tabs" value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="students">Students</TabsTrigger>

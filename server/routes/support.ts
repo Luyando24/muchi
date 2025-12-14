@@ -1,17 +1,8 @@
 import express from 'express';
-import { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
+import { pool } from '../lib/db';
 
 const router = express.Router();
-
-// Database connection
-const pool = new Pool({
-  user: process.env.DB_USER || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'muchi_db',
-  password: process.env.DB_PASSWORD || 'password',
-  port: parseInt(process.env.DB_PORT || '5432'),
-});
 
 // GET /api/support/tickets - Get all support tickets
 router.get('/tickets', async (req, res) => {

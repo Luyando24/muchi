@@ -1,24 +1,19 @@
 import { useState, useEffect } from 'react';
-import { Building, Users, CreditCard, Search, User, LogOut, Plus, MoreHorizontal, Filter, Menu, TrendingUp, TrendingDown, BarChart3, Activity, DollarSign, Calendar, Bell, Database, HardDrive, Clock, CheckCircle, Download, Settings, Zap, RefreshCw, Shield } from 'lucide-react';
+import { Building, Users, CreditCard, Search, Plus, MoreHorizontal, Filter, TrendingUp, TrendingDown, BarChart3, Activity, DollarSign, Calendar, Bell, Zap, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { Label } from '@/components/ui/label';
 import { useNavigate } from 'react-router-dom';
-import { useAuth, clearSession } from '@/lib/auth';
+import { useAuth } from '@/lib/auth';
 import { Api } from '@/lib/api';
-import ThemeToggle from '@/components/navigation/ThemeToggle';
-import NotificationsPanel from '@/components/dashboard/NotificationsPanel';
-import AdminSidebar from '@/components/dashboard/AdminSidebar';
-import AdminBreadcrumb from '@/components/dashboard/AdminBreadcrumb';
+import DashboardLayout from '@/components/dashboard/DashboardLayout';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -143,7 +138,6 @@ export default function SaasAdminDashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Fetch real data from API
   useEffect(() => {
@@ -301,171 +295,42 @@ export default function SaasAdminDashboard() {
     sub.schoolName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleLogout = () => {
-    clearSession();
-    navigate('/login');
-  };
+
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="animate-pulse space-y-6">
-            <div className="h-8 bg-muted rounded w-1/3"></div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-32 bg-muted rounded"></div>
-              ))}
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-64 bg-muted rounded"></div>
-              ))}
-            </div>
+      <DashboardLayout
+        icon={<BarChart3 className="h-6 w-6" />}
+        title="Admin Dashboard"
+        description="System overview and analytics"
+        isAdmin={true}
+        activeTab="dashboard"
+      >
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-muted rounded w-1/3"></div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-32 bg-muted rounded"></div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-64 bg-muted rounded"></div>
+            ))}
           </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Sidebar */}
-      <AdminSidebar 
-        collapsed={sidebarCollapsed} 
-        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} 
-      />
-      
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Enhanced Sticky Header */}
-        <div className="sticky top-0 z-40 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-          <div className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className="md:hidden"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              <Shield className="h-8 w-8 text-primary" />
-              <div>
-                <h1 className="text-2xl font-bold">MUCHI</h1>
-                <p className="text-sm text-muted-foreground">
-                  SaaS Admin Dashboard
-                </p>
-              </div>
-            </div>
-            
-            {/* Enhanced Right Section */}
-            <div className="flex items-center gap-3">
-              {/* Enhanced Search */}
-              <div className="relative hidden md:block">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search schools, users, subscriptions..."
-                  className="pl-10 w-64 bg-background/50"
-                />
-              </div>
-              
-              {/* Quick Actions */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <Zap className="h-4 w-4" />
-                    <span className="hidden sm:inline">Quick Actions</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuItem>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add New School
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <Users className="mr-2 h-4 w-4" />
-                    Create Admin User
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Refresh System Data
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem>
-                    <Settings className="mr-2 h-4 w-4" />
-                    System Settings
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              
-              {/* Notifications */}
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="h-5 w-5" />
-                <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full text-xs flex items-center justify-center text-white">
-                  3
-                </span>
-              </Button>
-              
-              {/* Status Badges */}
-              <Badge variant="outline">Admin</Badge>
-              <Badge variant="secondary" className="text-green-600">
-                <Activity className="h-3 w-3 mr-1" />
-                System Healthy
-              </Badge>
-              
-              {/* Theme Toggle */}
-              <ThemeToggle />
-              
-              {/* Enhanced User Profile */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      <User className="h-4 w-4" />
-                    </div>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel>
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">
-                        {session?.name || 'Admin User'}
-                      </p>
-                      <p className="text-xs leading-none text-muted-foreground">
-                        {session?.email}
-                      </p>
-                      <Badge variant="outline" className="w-fit mt-1">
-                        Super Admin
-                      </Badge>
-                    </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem>
-                    <User className="mr-2 h-4 w-4" />
-                    Profile Settings
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <Settings className="mr-2 h-4 w-4" />
-                    Admin Preferences
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} className="text-red-500 cursor-pointer">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Logout
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-          
-          {/* Breadcrumb Navigation */}
-          <div className="px-4 pb-3">
-            <AdminBreadcrumb />
-          </div>
-        </div>
-
-        <div className="flex-1 p-6 overflow-auto">
+    <DashboardLayout
+      icon={<BarChart3 className="h-6 w-6" />}
+      title="Admin Dashboard"
+      description="System overview and analytics"
+      isAdmin={true}
+      activeTab="dashboard"
+    >
           <Tabs defaultValue="overview" className="space-y-6">
             <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -896,8 +761,6 @@ export default function SaasAdminDashboard() {
 
 
            </Tabs>
-         </div>
-       </div>
-     </div>
-   );
+    </DashboardLayout>
+  );
  }

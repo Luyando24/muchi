@@ -62,40 +62,9 @@ export default function SchoolSidebar({ className, activeTab: propActiveTab, onA
     });
   };
 
+  // Simple function to set active tab - no longer needed for navigation
   const handleItemClick = (itemId: string) => {
-    if (itemId === 'support') {
-      navigate('/support');
-    } else if (itemId === 'assignments') {
-      navigate('/dashboard/assignments');
-    } else if (itemId === 'classes') {
-      navigate('/dashboard/classes');
-    } else if (itemId === 'subjects') {
-      navigate('/dashboard/subjects');
-    } else if (itemId === 'attendance') {
-      navigate('/dashboard/attendance');
-    } else if (itemId === 'grades') {
-      navigate('/dashboard/grades');
-    } else if (itemId === 'timetable') {
-      navigate('/dashboard/timetable');
-    } else if (itemId === 'finance') {
-      navigate('/dashboard/finance');
-    } else {
-      setActiveTab(itemId);
-      // Ensure the parent Tabs component updates its value
-      setTimeout(() => {
-        const tabsElement = document.querySelector('[data-orientation="horizontal"][role="tablist"]');
-        if (tabsElement) {
-          const tabButton = tabsElement.querySelector(`[data-value="${itemId}"]`);
-          if (tabButton && tabButton instanceof HTMLElement) {
-            tabButton.click();
-          } else {
-            console.log(`Tab button for ${itemId} not found`);
-          }
-        } else {
-          console.log('Tabs element not found');
-        }
-      }, 0);
-    }
+    setActiveTab(itemId);
   };
 
   // Group menu items by category with role-based filtering
@@ -123,7 +92,31 @@ export default function SchoolSidebar({ className, activeTab: propActiveTab, onA
         icon: UserCheck,
         badge: teacherCount ? teacherCount.toLocaleString() : '0',
         href: '/dashboard/teachers'
-      }] : [])
+      }] : []),
+      {
+        id: 'anothertab',
+        label: 'Another Tab',
+        icon: FileText,
+        badge: studentCount ? studentCount.toLocaleString() : '0',
+        onClick: () => {
+          if (location.pathname === '/dashboard') {
+            // If already on dashboard, just click the students tab
+            const studentsTab = document.querySelector('[value="students"]');
+            if (studentsTab) {
+              (studentsTab as HTMLElement).click();
+            }
+          } else {
+            // Navigate to dashboard first, then set active tab
+            navigate('/dashboard');
+            setTimeout(() => {
+              const studentsTab = document.querySelector('[value="students"]');
+              if (studentsTab) {
+                (studentsTab as HTMLElement).click();
+              }
+            }, 100);
+          }
+        }
+      }
     ],
     academics: canAccessAcademicManagement(session) ? [
       {
@@ -196,6 +189,7 @@ export default function SchoolSidebar({ className, activeTab: propActiveTab, onA
         label: 'Support',
         icon: HelpCircle,
         badge: null,
+        href: '/support',
       },
       ...(canAccessSchoolSettings(session) ? [{
         id: 'settings',
@@ -252,10 +246,31 @@ export default function SchoolSidebar({ className, activeTab: propActiveTab, onA
               
               {expandedGroups.people && menuGroups.people.map((item) => {
                 const Icon = item.icon;
+                // Check if the current path matches the item's href or starts with it (for nested routes)
                 const isActive = location.pathname === item.href || 
-                                (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
+                                (item.href !== '/dashboard' && location.pathname.startsWith(item.href)) ||
+                                (item.href?.includes('?tab=') && location.search.includes(`tab=${item.id}`));
                 
-                return (
+                return item.onClick ? (
+                  <Button
+                    key={item.id}
+                    variant="ghost"
+                    onClick={item.onClick}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm font-medium transition-colors h-10 pl-6 justify-start",
+                      "hover:bg-accent hover:text-accent-foreground",
+                      activeTab === item.id && "bg-primary text-primary-foreground hover:bg-primary/90"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="flex-1 text-left">{item.label}</span>
+                    {item.badge && (
+                      <Badge variant="secondary" className="text-xs px-2 py-0">
+                        {item.badge}
+                      </Badge>
+                    )}
+                  </Button>
+                ) : (
                   <Link
                     key={item.id}
                     to={item.href}
@@ -335,38 +350,15 @@ export default function SchoolSidebar({ className, activeTab: propActiveTab, onA
                 const isActive = location.pathname === item.href || 
                                 (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
                 
-                // If item has href, use Link component, otherwise use Button
-                if (item.href) {
-                  return (
-                    <Link
-                      key={item.id}
-                      to={item.href}
-                      className={cn(
-                        "flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm font-medium transition-colors h-10 pl-6",
-                        "hover:bg-accent hover:text-accent-foreground",
-                        isActive && "bg-primary text-primary-foreground hover:bg-primary/90"
-                      )}
-                    >
-                      <Icon className="h-4 w-4" />
-                      <span className="flex-1 text-left">{item.label}</span>
-                      {item.badge && (
-                        <Badge variant="secondary" className="text-xs px-2 py-0">
-                          {item.badge}
-                        </Badge>
-                      )}
-                    </Link>
-                  );
-                }
-                
                 return (
-                  <Button
+                  <Link
                     key={item.id}
-                    variant={isActive ? "default" : "ghost"}
+                    to={item.href}
                     className={cn(
-                      "w-full justify-start gap-3 h-10 pl-6",
+                      "flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm font-medium transition-colors h-10 pl-6",
+                      "hover:bg-accent hover:text-accent-foreground",
                       isActive && "bg-primary text-primary-foreground hover:bg-primary/90"
                     )}
-                    onClick={() => handleItemClick(item.id)}
                   >
                     <Icon className="h-4 w-4" />
                     <span className="flex-1 text-left">{item.label}</span>
@@ -375,7 +367,7 @@ export default function SchoolSidebar({ className, activeTab: propActiveTab, onA
                         {item.badge}
                       </Badge>
                     )}
-                  </Button>
+                  </Link>
                 );
               })}
             </div>
