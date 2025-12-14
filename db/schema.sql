@@ -337,4 +337,205 @@ CREATE TABLE IF NOT EXISTS website_media (
 );
 CREATE INDEX IF NOT EXISTS idx_website_media_website ON website_media(website_id);
 
--- Helper function concept (Laravel should implement application-level encryption using key rotation).
+
+-- Parents
+CREATE TABLE IF NOT EXISTS parents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email CITEXT UNIQUE,
+  password_hash TEXT,
+  first_name TEXT NOT NULL,
+  last_name TEXT NOT NULL,
+  phone TEXT,
+  nrc_number TEXT,
+  address TEXT,
+  occupation TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS student_parents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  parent_id UUID NOT NULL REFERENCES parents(id) ON DELETE CASCADE,
+  relationship TEXT NOT NULL CHECK (relationship IN ('father', 'mother', 'guardian', 'other')),
+  is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(student_id, parent_id)
+);
+CREATE INDEX IF NOT EXISTS idx_student_parents_student ON student_parents(student_id);
+CREATE INDEX IF NOT EXISTS idx_student_parents_parent ON student_parents(parent_id);
+
+-- Finance Module
+
+CREATE TABLE IF NOT EXISTS fee_structures (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  name TEXT NOT NULL, -- e.g. "Grade 8 Term 1 Fees"
+  academic_year TEXT NOT NULL,
+  term TEXT NOT NULL,
+  grade_level TEXT, -- Optional, if applies to specific grade
+  amount DECIMAL(10, 2) NOT NULL,
+  currency TEXT DEFAULT 'ZMW',
+  breakdown JSONB, -- detailed breakdown of fees (tuition, sports, etc)
+  due_date DATE,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_fee_structures_school ON fee_structures(school_id);
+
+CREATE TABLE IF NOT EXISTS invoices (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  invoice_number TEXT NOT NULL,
+  fee_structure_id UUID REFERENCES fee_structures(id) ON DELETE SET NULL,
+  amount DECIMAL(10, 2) NOT NULL,
+  amount_paid DECIMAL(10, 2) DEFAULT 0,
+  balance DECIMAL(10, 2) GENERATED ALWAYS AS (amount - amount_paid) STORED,
+  status TEXT NOT NULL CHECK (status IN ('draft', 'pending', 'partial', 'paid', 'overdue', 'cancelled')),
+  due_date DATE,
+  issued_date DATE DEFAULT CURRENT_DATE,
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(school_id, invoice_number)
+);
+CREATE INDEX IF NOT EXISTS idx_invoices_student ON invoices(student_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_school ON invoices(school_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+
+CREATE TABLE IF NOT EXISTS invoice_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+  description TEXT NOT NULL,
+  quantity INTEGER DEFAULT 1,
+  unit_price DECIMAL(10, 2) NOT NULL,
+  amount DECIMAL(10, 2) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS payments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  invoice_id UUID REFERENCES invoices(id) ON DELETE SET NULL,
+  student_id UUID REFERENCES students(id) ON DELETE SET NULL, -- specific student if no invoice
+  amount DECIMAL(10, 2) NOT NULL,
+  method TEXT CHECK (method IN ('cash', 'bank_transfer', 'mobile_money', 'cheque', 'card', 'other')),
+  reference_number TEXT, -- transaction ID, receipt no
+  payment_date TIMESTAMPTZ DEFAULT now(),
+  recorded_by UUID REFERENCES staff_users(id),
+  status TEXT DEFAULT 'completed' CHECK (status IN ('pending', 'completed', 'failed', 'refunded')),
+  comments TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_payments_school ON payments(school_id);
+CREATE INDEX IF NOT EXISTS idx_payments_invoice ON payments(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_payments_student ON payments(student_id);
+
+
+-- Timetable Module
+
+CREATE TABLE IF NOT EXISTS time_slots (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  name TEXT NOT NULL, -- "Period 1", "Morning Break"
+  start_time TIME NOT NULL,
+  end_time TIME NOT NULL,
+  is_break BOOLEAN DEFAULT FALSE,
+  category TEXT DEFAULT 'regular', -- regular, homeroom, assembly
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  -- typically unique per school? maybe not strict unique to allow flexibility
+);
+
+CREATE TABLE IF NOT EXISTS timetable_entries (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  subject_id UUID REFERENCES subjects(id) ON DELETE CASCADE, -- NULL for breaks/homeroom if needed
+  teacher_id UUID REFERENCES teachers(id) ON DELETE SET NULL,
+  day_of_week TEXT NOT NULL CHECK (day_of_week IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')),
+  start_time TIME NOT NULL,
+  end_time TIME NOT NULL,
+  room_number TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_timetable_class ON timetable_entries(class_id);
+CREATE INDEX IF NOT EXISTS idx_timetable_teacher ON timetable_entries(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_timetable_school ON timetable_entries(school_id);
+
+
+-- Grades Module (Term-based)
+
+CREATE TABLE IF NOT EXISTS term_grades (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+  academic_year TEXT NOT NULL,
+  term TEXT NOT NULL,
+  marks DECIMAL(5, 2), -- e.g. 85.50
+  grade TEXT, -- "A", "B", etc.
+  remarks TEXT,
+  recorded_by UUID REFERENCES staff_users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(student_id, subject_id, class_id, academic_year, term)
+);
+CREATE INDEX IF NOT EXISTS idx_term_grades_student ON term_grades(student_id);
+
+CREATE TABLE IF NOT EXISTS report_cards (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  academic_year TEXT NOT NULL,
+  term TEXT NOT NULL,
+  generated_date DATE DEFAULT CURRENT_DATE,
+  summary_data JSONB, -- Snapshot of grades, attendance summary, teacher comments
+  status TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+
+-- Admissions Module
+
+CREATE TABLE IF NOT EXISTS admission_periods (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  name TEXT NOT NULL, -- "2025 Intake"
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  academic_year TEXT NOT NULL,
+  status TEXT DEFAULT 'open' CHECK (status IN ('open', 'closed', 'upcoming')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS applications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  admission_period_id UUID REFERENCES admission_periods(id) ON DELETE SET NULL,
+  applicant_first_name TEXT NOT NULL,
+  applicant_last_name TEXT NOT NULL,
+  applicant_dob DATE NOT NULL,
+  applicant_gender TEXT,
+  guardian_name TEXT NOT NULL,
+  guardian_email TEXT,
+  guardian_phone TEXT,
+  grade_applying_for TEXT NOT NULL,
+  previous_school TEXT,
+  status TEXT DEFAULT 'submitted' CHECK (status IN ('submitted', 'under_review', 'interview', 'accepted', 'rejected', 'waitlisted')),
+  notes TEXT,
+  documents JSONB, -- links to uploaded docs
+  submission_date TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_applications_school ON applications(school_id);
+

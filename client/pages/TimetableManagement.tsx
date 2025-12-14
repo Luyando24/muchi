@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Calendar, 
-  Clock, 
-  Users, 
-  BookOpen, 
-  MapPin, 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Download, 
-  Upload, 
-  Filter, 
-  Search, 
-  Eye, 
-  Copy, 
+import {
+  Calendar,
+  Clock,
+  Users,
+  BookOpen,
+  MapPin,
+  Plus,
+  Edit,
+  Trash2,
+  Download,
+  Upload,
+  Filter,
+  Search,
+  Eye,
+  Copy,
   RefreshCw,
   AlertTriangle,
   CheckCircle,
@@ -35,29 +35,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/lib/auth';
+import { Api, TimeSlot, TimetableEntry, Teacher, Class, Subject } from '../../shared/api';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
 
-// Mock data interfaces
-interface TimeSlot {
-  id: string;
-  startTime: string;
-  endTime: string;
-  duration: number; // in minutes
-}
 
-interface Subject {
-  id: string;
-  name: string;
-  code: string;
-  color: string;
-}
-
-interface Teacher {
-  id: string;
-  name: string;
-  email: string;
-  subjects: string[];
-}
 
 interface Room {
   id: string;
@@ -94,61 +75,37 @@ interface TimetableConflict {
   entries: string[];
 }
 
+interface Subject {
+  id: string;
+  name: string;
+  code: string;
+  color: string;
+}
+
+interface Room {
+  id: string;
+  name: string;
+  capacity: number;
+  type: 'classroom' | 'lab' | 'hall' | 'library';
+}
+
+interface Class {
+  id: string;
+  name: string;
+  grade: string;
+  section: string;
+  studentCount: number;
+}
+
 const TimetableManagement = () => {
-  const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('overview');
-  const [selectedWeek, setSelectedWeek] = useState(new Date());
-  const [isCreateEntryOpen, setIsCreateEntryOpen] = useState(false);
-  const [isEditEntryOpen, setIsEditEntryOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [selectedClass, setSelectedClass] = useState<string>('all');
-  const [selectedTeacher, setSelectedTeacher] = useState<string>('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
-  const [isConflictResolverOpen, setIsConflictResolverOpen] = useState(false);
-  
-  // Form data
-  const [entryFormData, setEntryFormData] = useState({
-    classId: '',
-    subjectId: '',
-    teacherId: '',
-    roomId: '',
-    dayOfWeek: 1,
-    timeSlotId: '',
-    isRecurring: true,
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: ''
-  });
+  // State for data
+  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
+  const [timetableEntries, setTimetableEntries] = useState<TimetableEntry[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [classes, setClasses] = useState<Class[]>([]);
 
-  // Mock data
-  const timeSlots: TimeSlot[] = [
-    { id: '1', startTime: '08:00', endTime: '08:45', duration: 45 },
-    { id: '2', startTime: '08:45', endTime: '09:30', duration: 45 },
-    { id: '3', startTime: '09:45', endTime: '10:30', duration: 45 },
-    { id: '4', startTime: '10:30', endTime: '11:15', duration: 45 },
-    { id: '5', startTime: '11:30', endTime: '12:15', duration: 45 },
-    { id: '6', startTime: '12:15', endTime: '13:00', duration: 45 },
-    { id: '7', startTime: '14:00', endTime: '14:45', duration: 45 },
-    { id: '8', startTime: '14:45', endTime: '15:30', duration: 45 }
-  ];
-
-  const subjects: Subject[] = [
-    { id: '1', name: 'Mathematics', code: 'MATH', color: '#3B82F6' },
-    { id: '2', name: 'English', code: 'ENG', color: '#10B981' },
-    { id: '3', name: 'Science', code: 'SCI', color: '#F59E0B' },
-    { id: '4', name: 'History', code: 'HIST', color: '#8B5CF6' },
-    { id: '5', name: 'Physical Education', code: 'PE', color: '#EF4444' },
-    { id: '6', name: 'Art', code: 'ART', color: '#EC4899' }
-  ];
-
-  const teachers: Teacher[] = [
-    { id: '1', name: 'John Smith', email: 'john.smith@school.edu', subjects: ['1', '3'] },
-    { id: '2', name: 'Sarah Johnson', email: 'sarah.johnson@school.edu', subjects: ['2'] },
-    { id: '3', name: 'Michael Brown', email: 'michael.brown@school.edu', subjects: ['4'] },
-    { id: '4', name: 'Emily Davis', email: 'emily.davis@school.edu', subjects: ['5'] },
-    { id: '5', name: 'David Wilson', email: 'david.wilson@school.edu', subjects: ['6'] }
-  ];
-
+  // Mock rooms for now (backend not implemented)
   const rooms: Room[] = [
     { id: '1', name: 'Room 101', capacity: 30, type: 'classroom' },
     { id: '2', name: 'Room 102', capacity: 25, type: 'classroom' },
@@ -158,39 +115,47 @@ const TimetableManagement = () => {
     { id: '6', name: 'Library', capacity: 50, type: 'library' }
   ];
 
-  const classes: Class[] = [
-    { id: '1', name: 'Grade 9A', grade: '9', section: 'A', studentCount: 28 },
-    { id: '2', name: 'Grade 9B', grade: '9', section: 'B', studentCount: 30 },
-    { id: '3', name: 'Grade 10A', grade: '10', section: 'A', studentCount: 25 },
-    { id: '4', name: 'Grade 10B', grade: '10', section: 'B', studentCount: 27 },
-    { id: '5', name: 'Grade 11A', grade: '11', section: 'A', studentCount: 22 },
-    { id: '6', name: 'Grade 12A', grade: '12', section: 'A', studentCount: 20 }
-  ];
+  const { session } = useAuth();
 
-  const timetableEntries: TimetableEntry[] = [
-    {
-      id: '1',
-      classId: '1',
-      subjectId: '1',
-      teacherId: '1',
-      roomId: '1',
-      dayOfWeek: 1,
-      timeSlotId: '1',
-      isRecurring: true,
-      startDate: '2024-01-15'
-    },
-    {
-      id: '2',
-      classId: '1',
-      subjectId: '2',
-      teacherId: '2',
-      roomId: '1',
-      dayOfWeek: 1,
-      timeSlotId: '2',
-      isRecurring: true,
-      startDate: '2024-01-15'
+  useEffect(() => {
+    if (session?.schoolId) {
+      loadData();
     }
-  ];
+  }, [session?.schoolId]);
+
+  const loadData = async () => {
+    if (!session?.schoolId) return;
+    try {
+      const [slots, entries, teacherList, subjectList, classList] = await Promise.all([
+        Api.listTimeSlots(session.schoolId),
+        Api.getTimetable({ schoolId: session.schoolId }),
+        Api.listTeachers(session.schoolId),
+        Api.listSubjects(session.schoolId),
+        Api.listClasses(session.schoolId)
+      ]);
+      setTimeSlots(slots);
+      setTimetableEntries(entries);
+      setTeachers(teacherList);
+      setSubjects(subjectList);
+      setClasses(classList);
+    } catch (e) {
+      console.error("Failed to load timetable data", e);
+    }
+  };
+
+  const handleCreateEntry = async () => {
+    try {
+      if (!session?.schoolId) return;
+      await Api.createTimetableEntry({
+        ...entryFormData,
+        schoolId: session.schoolId
+      } as any); // Cast as local IDs might conflict with UUID expectations if not careful
+      setIsCreateEntryOpen(false);
+      loadData();
+    } catch (e) {
+      console.error("Failed to create entry", e);
+    }
+  };
 
   const conflicts: TimetableConflict[] = [
     {
@@ -202,7 +167,7 @@ const TimetableManagement = () => {
   ];
 
   return (
-    <DashboardLayout 
+    <DashboardLayout
       title="Timetable Management"
       subtitle="Manage class schedules and timetables"
       icon={<Calendar className="h-8 w-8 text-primary" />}
@@ -438,7 +403,7 @@ const TimetableManagement = () => {
                             return (
                               <td key={day} className="border border-gray-200 p-2 h-20 relative group">
                                 {entry && subject && teacher && room && classInfo ? (
-                                  <div 
+                                  <div
                                     className="h-full rounded-md p-2 text-xs cursor-pointer transition-all hover:shadow-md"
                                     style={{ backgroundColor: subject.color + '20', borderLeft: `4px solid ${subject.color}` }}
                                     onClick={() => {
@@ -484,7 +449,7 @@ const TimetableManagement = () => {
                                             <Edit className="h-4 w-4 mr-2" />
                                             Edit
                                           </DropdownMenuItem>
-                                          <DropdownMenuItem onClick={() => {}}>
+                                          <DropdownMenuItem onClick={() => { }}>
                                             <Copy className="h-4 w-4 mr-2" />
                                             Duplicate
                                           </DropdownMenuItem>
@@ -498,7 +463,7 @@ const TimetableManagement = () => {
                                     </div>
                                   </div>
                                 ) : (
-                                  <div 
+                                  <div
                                     className="h-full rounded-md border-2 border-dashed border-gray-200 flex items-center justify-center cursor-pointer hover:border-gray-300 hover:bg-gray-50 transition-colors"
                                     onClick={() => {
                                       setEntryFormData({
@@ -528,7 +493,7 @@ const TimetableManagement = () => {
                   </div>
                   {subjects.map(subject => (
                     <div key={subject.id} className="flex items-center gap-2">
-                      <div 
+                      <div
                         className="w-3 h-3 rounded"
                         style={{ backgroundColor: subject.color }}
                       ></div>
@@ -622,7 +587,7 @@ const TimetableManagement = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Class</Label>
-                  <Select value={entryFormData.classId} onValueChange={(value) => setEntryFormData({...entryFormData, classId: value})}>
+                  <Select value={entryFormData.classId} onValueChange={(value) => setEntryFormData({ ...entryFormData, classId: value })}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select class" />
                     </SelectTrigger>
@@ -635,7 +600,7 @@ const TimetableManagement = () => {
                 </div>
                 <div className="space-y-2">
                   <Label>Subject</Label>
-                  <Select value={entryFormData.subjectId} onValueChange={(value) => setEntryFormData({...entryFormData, subjectId: value})}>
+                  <Select value={entryFormData.subjectId} onValueChange={(value) => setEntryFormData({ ...entryFormData, subjectId: value })}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select subject" />
                     </SelectTrigger>
@@ -650,7 +615,7 @@ const TimetableManagement = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Teacher</Label>
-                  <Select value={entryFormData.teacherId} onValueChange={(value) => setEntryFormData({...entryFormData, teacherId: value})}>
+                  <Select value={entryFormData.teacherId} onValueChange={(value) => setEntryFormData({ ...entryFormData, teacherId: value })}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select teacher" />
                     </SelectTrigger>
@@ -663,7 +628,7 @@ const TimetableManagement = () => {
                 </div>
                 <div className="space-y-2">
                   <Label>Room</Label>
-                  <Select value={entryFormData.roomId} onValueChange={(value) => setEntryFormData({...entryFormData, roomId: value})}>
+                  <Select value={entryFormData.roomId} onValueChange={(value) => setEntryFormData({ ...entryFormData, roomId: value })}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select room" />
                     </SelectTrigger>
@@ -677,7 +642,7 @@ const TimetableManagement = () => {
               </div>
               <div className="space-y-2">
                 <Label>Time Slot</Label>
-                <Select value={entryFormData.timeSlotId} onValueChange={(value) => setEntryFormData({...entryFormData, timeSlotId: value})}>
+                <Select value={entryFormData.timeSlotId} onValueChange={(value) => setEntryFormData({ ...entryFormData, timeSlotId: value })}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select time slot" />
                   </SelectTrigger>
@@ -691,10 +656,10 @@ const TimetableManagement = () => {
                 </Select>
               </div>
               <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="recurring" 
+                <Checkbox
+                  id="recurring"
                   checked={entryFormData.isRecurring}
-                  onCheckedChange={(checked) => setEntryFormData({...entryFormData, isRecurring: checked as boolean})}
+                  onCheckedChange={(checked) => setEntryFormData({ ...entryFormData, isRecurring: checked as boolean })}
                 />
                 <Label htmlFor="recurring">Recurring weekly</Label>
               </div>
@@ -702,7 +667,7 @@ const TimetableManagement = () => {
                 <Button variant="outline" onClick={() => setIsCreateEntryOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={() => setIsCreateEntryOpen(false)}>
+                <Button onClick={handleCreateEntry}>
                   Create Entry
                 </Button>
               </div>

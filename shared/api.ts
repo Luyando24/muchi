@@ -349,20 +349,137 @@ export interface SchoolInfo {
   email?: string;
 }
 
+// Finance Interfaces
+export interface FeeStructure {
+  id: UUID;
+  schoolId: UUID;
+  name: string;
+  academicYear: string;
+  term: string;
+  gradeLevel?: string;
+  amount: number;
+  currency?: string;
+  breakdown?: any;
+  dueDate?: string;
+  isActive: boolean;
+}
+
+export interface InvoiceItem {
+  id: UUID;
+  invoiceId: UUID;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  amount: number;
+}
+
 export interface Invoice {
-  // Define invoice properties
+  id: UUID;
+  schoolId: UUID;
+  studentId: UUID;
+  studentName?: string; // joined
+  invoiceNumber: string;
+  feeStructureId?: UUID;
+  amount: number;
+  amountPaid: number;
+  balance: number;
+  status: 'draft' | 'pending' | 'partial' | 'paid' | 'overdue' | 'cancelled';
+  dueDate?: string;
+  issuedDate?: string;
+  items?: InvoiceItem[];
+  createdAt: string;
+  class?: string;
 }
 
 export interface Payment {
-  // Define payment properties
+  id: UUID;
+  schoolId: UUID;
+  invoiceId?: UUID;
+  studentId?: UUID;
+  amount: number;
+  method: 'cash' | 'bank_transfer' | 'mobile_money' | 'cheque' | 'card' | 'other';
+  referenceNumber?: string;
+  paymentDate: string;
+  status: 'pending' | 'completed' | 'failed' | 'refunded';
+  comments?: string;
+}
+
+// Timetable Interfaces
+export interface TimeSlot {
+  id: UUID;
+  schoolId: UUID;
+  name: string;
+  startTime: string; // HH:mm
+  endTime: string;
+  isBreak: boolean;
+  category: string;
+}
+
+export interface TimetableEntry {
+  id: UUID;
+  schoolId: UUID;
+  classId: UUID;
+  subjectId?: UUID;
+  subjectName?: string;
+  teacherId?: UUID;
+  teacherFirstName?: string;
+  teacherLastName?: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  roomNumber?: string;
+}
+
+// Admission Interfaces
+export interface AdmissionPeriod {
+  id: UUID;
+  schoolId: UUID;
+  name: string;
+  startDate: string;
+  endDate: string;
+  academicYear: string;
+  status: 'open' | 'closed' | 'upcoming';
+}
+
+export interface Application {
+  id: UUID;
+  schoolId: UUID;
+  admissionPeriodId?: UUID;
+  periodName?: string;
+  applicantFirstName: string;
+  applicantLastName: string;
+  applicantDob: string;
+  applicantGender?: string;
+  guardianName: string;
+  guardianEmail?: string;
+  guardianPhone?: string;
+  gradeApplyingFor: string;
+  previousSchool?: string;
+  status: 'submitted' | 'under_review' | 'interview' | 'accepted' | 'rejected' | 'waitlisted';
+  notes?: string;
+  documents?: any;
+  submissionDate: string;
+}
+
+export interface ReportCard {
+  id: UUID;
+  schoolId: UUID;
+  studentId: UUID;
+  studentFirstName?: string;
+  studentLastName?: string;
+  academicYear: string;
+  term: string;
+  generatedDate: string;
+  summaryData: any;
+  status: 'draft' | 'published' | 'archived';
 }
 
 export interface Message {
-  // Define message properties
+  // Placeholder confirmed
 }
 
 export interface ReportParams {
-  // Define report params properties
+  // Placeholder confirmed
 }
 
 // API Class with all methods
@@ -374,11 +491,18 @@ export class Api {
     if (params?.campusId) queryParams.append('campusId', params.campusId);
     if (params?.grade) queryParams.append('grade', params.grade);
     if (params?.isActive !== undefined) queryParams.append('isActive', params.isActive.toString());
-    
+
     const response = await fetch(`/api/students?${queryParams}`);
     if (!response.ok) throw new Error('Failed to fetch students');
     const data = await response.json();
     return data.students;
+  }
+
+  static async listStudents(schoolId: UUID): Promise<Student[]> {
+    const response = await fetch(`/api/students?schoolId=${schoolId}`);
+    if (!response.ok) throw new Error('Failed to list students');
+    const data = await response.json();
+    return data; // Assuming /api/students returns array directly unlike /api/students/[id]
   }
 
   static async getStudent(id: UUID): Promise<Student> {
@@ -435,8 +559,9 @@ export class Api {
   }
 
   // Teacher methods
-  static async listTeachers(): Promise<Teacher[]> {
-    const response = await fetch('/api/teachers');
+  static async listTeachers(schoolId?: UUID): Promise<Teacher[]> {
+    const url = schoolId ? `/api/teachers?schoolId=${schoolId}` : '/api/teachers';
+    const response = await fetch(url);
     if (!response.ok) throw new Error('Failed to fetch teachers');
     return response.json();
   }
@@ -485,7 +610,7 @@ export class Api {
     if (params.q) searchParams.append('q', params.q);
     if (params.subject) searchParams.append('subject', params.subject);
     if (params.department) searchParams.append('department', params.department);
-    
+
     const response = await fetch(`/api/teachers/search?${searchParams}`);
     if (!response.ok) throw new Error('Failed to search teachers');
     return response.json();
@@ -505,7 +630,7 @@ export class Api {
     if (params?.subject) query.append('subject', params.subject);
     if (params?.teacherId) query.append('teacherId', params.teacherId);
     if (params?.academicYear) query.append('academicYear', params.academicYear);
-    
+
     const response = await fetch(`/api/classes?${query}`);
     if (!response.ok) throw new Error('Failed to fetch classes');
     return response.json();
@@ -562,15 +687,15 @@ export class Api {
     return response.json();
   }
 
-  static async getClassStats(schoolId?: UUID): Promise<{ 
-    total: number; 
-    active: number; 
-    gradeLevels: number; 
-    subjects: number; 
-    averageEnrollment: number; 
-    totalEnrollment: number; 
-    averageCapacity: number; 
-    totalCapacity: number; 
+  static async getClassStats(schoolId?: UUID): Promise<{
+    total: number;
+    active: number;
+    gradeLevels: number;
+    subjects: number;
+    averageEnrollment: number;
+    totalEnrollment: number;
+    averageCapacity: number;
+    totalCapacity: number;
   }> {
     const query = schoolId ? `?schoolId=${schoolId}` : '';
     const response = await fetch(`/api/classes/stats${query}`);
@@ -579,8 +704,9 @@ export class Api {
   }
 
   // Subject methods
-  static async listSubjects(): Promise<Subject[]> {
-    const response = await fetch('/api/subjects');
+  static async listSubjects(schoolId?: UUID): Promise<Subject[]> {
+    const url = schoolId ? `/api/subjects?schoolId=${schoolId}` : '/api/subjects';
+    const response = await fetch(url);
     if (!response.ok) throw new Error('Failed to list subjects');
     return response.json();
   }
@@ -593,7 +719,7 @@ export class Api {
     });
     if (!response.ok) {
       let data: any = null;
-      try { data = await response.json(); } catch (_) {}
+      try { data = await response.json(); } catch (_) { }
       const error = new Error(data?.error || data?.message || 'Failed to create subject');
       (error as any).data = data;
       throw error;
@@ -658,7 +784,7 @@ export class Api {
     });
     if (!response.ok) {
       let data: any = null;
-      try { data = await response.json(); } catch (_) {}
+      try { data = await response.json(); } catch (_) { }
       const error = new Error(data?.error || data?.message || "Failed to create assignment");
       (error as any).data = data;
       throw error;
@@ -820,49 +946,192 @@ export class Api {
     return response.json();
   }
 
+  // Grade methods (Term-based)
+  static async listTermGrades(params: { schoolId: UUID; studentId?: UUID; classId?: UUID; subjectId?: UUID; academicYear?: string; term?: string }): Promise<any[]> {
+    const query = new URLSearchParams();
+    if (params.schoolId) query.append('schoolId', params.schoolId);
+    if (params.studentId) query.append('studentId', params.studentId);
+    if (params.classId) query.append('classId', params.classId);
+    if (params.subjectId) query.append('subjectId', params.subjectId);
+    if (params.academicYear) query.append('academicYear', params.academicYear);
+    if (params.term) query.append('term', params.term);
+
+    const response = await fetch(`/api/grades/term?${query}`);
+    if (!response.ok) throw new Error('Failed to list grades');
+    return response.json();
+  }
+
+  static async recordTermGrade(gradeData: {
+    schoolId: UUID; studentId: UUID; classId: UUID; subjectId: UUID;
+    academicYear: string; term: string; marks: number; grade?: string; remarks?: string; teacherId?: UUID
+  }): Promise<void> {
+    const response = await fetch('/api/grades/term', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(gradeData)
+    });
+    if (!response.ok) throw new Error('Failed to record grade');
+  }
+
+  static async listReportCards(params: { schoolId: UUID; studentId?: UUID; academicYear?: string; term?: string }): Promise<ReportCard[]> {
+    const query = new URLSearchParams();
+    if (params.schoolId) query.append('schoolId', params.schoolId);
+    if (params.studentId) query.append('studentId', params.studentId);
+    if (params.academicYear) query.append('academicYear', params.academicYear);
+    if (params.term) query.append('term', params.term);
+
+    const response = await fetch(`/api/grades/reports?${query}`);
+    if (!response.ok) throw new Error('Failed to list report cards');
+    return response.json();
+  }
+
+  static async generateReportCard(data: { schoolId: UUID; studentId: UUID; academicYear: string; term: string }): Promise<ReportCard> {
+    const response = await fetch('/api/grades/reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) throw new Error('Failed to generate report card');
+    return response.json();
+  }
+
   // Grade methods
-  static async listGrades(): Promise<Grade[]> {
-    // Implementation would fetch from backend
-    return [];
+  static async listTermGrades(params: { schoolId: UUID; studentId?: UUID; classId?: UUID; subjectId?: UUID; term?: string; academicYear?: string }): Promise<any[]> {
+    const query = new URLSearchParams();
+    query.append('schoolId', params.schoolId);
+    if (params.studentId) query.append('studentId', params.studentId);
+    if (params.classId) query.append('classId', params.classId);
+    if (params.subjectId) query.append('subjectId', params.subjectId);
+    if (params.term) query.append('term', params.term);
+    if (params.academicYear) query.append('academicYear', params.academicYear);
+
+    const response = await fetch(`/api/grades/term?${query}`);
+    if (!response.ok) throw new Error('Failed to list term grades');
+    return response.json();
   }
 
-  static async getGradesForPeriod(period: string): Promise<Grade[]> {
-    // Implementation would fetch grades for specific period
-    return [];
-  }
-
-  static async createGrade(grade: Partial<Grade>): Promise<Grade> {
-    // Implementation would create grade
-    return {} as Grade;
-  }
-
-  static async updateGrade(id: UUID, grade: Partial<Grade>): Promise<Grade> {
-    // Implementation would update grade
-    return {} as Grade;
-  }
-
-  static async deleteGrade(id: UUID): Promise<void> {
-    // Implementation would delete grade
+  static async recordTermGrade(data: any): Promise<{ id: string; message: string }> {
+    const response = await fetch('/api/grades/term', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) throw new Error('Failed to record grade');
+    return response.json();
   }
 
   // Parent methods
-  static async listParents(): Promise<Parent[]> {
-    // Implementation would fetch from backend
-    return [];
+  static async listParents(schoolId?: UUID): Promise<Parent[]> {
+    const query = schoolId ? `?schoolId=${schoolId}` : '';
+    const response = await fetch(`/api/parents${query}`);
+    if (!response.ok) throw new Error('Failed to list parents');
+    return response.json();
   }
 
-  static async createParent(parent: Partial<Parent>): Promise<Parent> {
-    // Implementation would create parent
-    return {} as Parent;
+  static async createParent(parent: Partial<Parent> & { password?: string }): Promise<Parent> {
+    const response = await fetch('/api/parents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(parent)
+    });
+    if (!response.ok) throw new Error('Failed to create parent');
+    return response.json();
   }
 
-  static async updateParent(id: UUID, parent: Partial<Parent>): Promise<Parent> {
-    // Implementation would update parent
-    return {} as Parent;
+  static async linkParentToStudent(data: { parentId: UUID; studentId: UUID; relationship: string; isPrimary?: boolean }): Promise<void> {
+    const response = await fetch('/api/parents/link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) throw new Error('Failed to link parent to student');
   }
 
-  static async deleteParent(id: UUID): Promise<void> {
-    // Implementation would delete parent
+  static async getParentChildren(parentId: UUID): Promise<Student[]> {
+    const response = await fetch(`/api/parents/${parentId}/children`);
+    if (!response.ok) throw new Error('Failed to get parent children');
+    return response.json();
+  }
+
+
+
+
+
+
+  // Timetable methods
+  static async listTimeSlots(schoolId: UUID): Promise<TimeSlot[]> {
+    const response = await fetch(`/api/timetable/slots?schoolId=${schoolId}`);
+    if (!response.ok) throw new Error('Failed to list time slots');
+    return response.json();
+  }
+
+  static async createTimeSlot(slot: Partial<TimeSlot>): Promise<TimeSlot> {
+    const response = await fetch('/api/timetable/slots', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(slot)
+    });
+    if (!response.ok) throw new Error('Failed to create time slot');
+    return response.json();
+  }
+
+  static async getTimetable(params: { schoolId: UUID; classId?: UUID; teacherId?: UUID }): Promise<TimetableEntry[]> {
+    const query = new URLSearchParams();
+    query.append('schoolId', params.schoolId);
+    if (params.classId) query.append('classId', params.classId);
+    if (params.teacherId) query.append('teacherId', params.teacherId);
+
+    const response = await fetch(`/api/timetable/entries?${query}`);
+    if (!response.ok) throw new Error('Failed to get timetable');
+    return response.json();
+  }
+
+  static async createTimetableEntry(entry: Partial<TimetableEntry>): Promise<TimetableEntry> {
+    const response = await fetch('/api/timetable/entries', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(entry)
+    });
+    if (!response.ok) throw new Error('Failed to create timetable entry');
+    return response.json();
+  }
+
+  // Admissions methods
+  static async listAdmissionPeriods(schoolId: UUID): Promise<AdmissionPeriod[]> {
+    const response = await fetch(`/api/admissions/periods?schoolId=${schoolId}`);
+    if (!response.ok) throw new Error('Failed to list admission periods');
+    return response.json();
+  }
+
+  static async createAdmissionPeriod(period: Partial<AdmissionPeriod>): Promise<AdmissionPeriod> {
+    const response = await fetch('/api/admissions/periods', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(period)
+    });
+    if (!response.ok) throw new Error('Failed to create admission period');
+    return response.json();
+  }
+
+  static async listApplications(params: { schoolId: UUID; periodId?: UUID; status?: string }): Promise<Application[]> {
+    const query = new URLSearchParams();
+    query.append('schoolId', params.schoolId);
+    if (params.periodId) query.append('periodId', params.periodId);
+    if (params.status) query.append('status', params.status);
+
+    const response = await fetch(`/api/admissions/applications?${query}`);
+    if (!response.ok) throw new Error('Failed to list applications');
+    return response.json();
+  }
+
+  static async createApplication(app: Partial<Application>): Promise<Application> {
+    const response = await fetch('/api/admissions/applications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(app)
+    });
+    if (!response.ok) throw new Error('Failed to submit application');
+    return response.json();
   }
 
   // EMIS methods
@@ -887,136 +1156,67 @@ export class Api {
   }
 
   // Finance methods
-  static async getFinanceStats(): Promise<any> {
-    // Implementation would get finance statistics
-    return {
-      totalRevenue: 125000,
-      pendingPayments: 45000,
-      overduePayments: 12000,
-      collectionRate: 87.5,
-      monthlyRevenue: [10000, 12000, 15000, 18000, 20000, 22000],
-      paymentMethods: [
-        { method: 'Mobile Money', amount: 75000, count: 150 },
-        { method: 'Bank Transfer', amount: 35000, count: 45 },
-        { method: 'Cash', amount: 15000, count: 80 }
-      ]
-    };
+  static async getFinanceStats(schoolId: UUID): Promise<any> {
+    const response = await fetch(`/api/finance/stats?schoolId=${schoolId}`);
+    if (!response.ok) throw new Error('Failed to fetch finance stats');
+    return response.json();
   }
 
-  static async listInvoices(): Promise<any[]> {
-    // Implementation would fetch invoices
-    return [
-      {
-        id: '1',
-        invoiceNumber: 'INV-2024-001',
-        studentId: '1',
-        studentName: 'John Mwanza',
-        class: 'Grade 10A',
-        amount: 2500,
-        dueDate: '2024-02-15',
-        status: 'pending',
-        items: [
-          { id: '1', description: 'Tuition Fee', quantity: 1, unitPrice: 2000, total: 2000, category: 'tuition' },
-          { id: '2', description: 'Books', quantity: 1, unitPrice: 500, total: 500, category: 'books' }
-        ],
-        createdDate: '2024-01-15'
-      },
-      {
-        id: '2',
-        invoiceNumber: 'INV-2024-002',
-        studentId: '2',
-        studentName: 'Mary Banda',
-        class: 'Grade 11B',
-        amount: 2800,
-        dueDate: '2024-02-10',
-        status: 'paid',
-        items: [
-          { id: '3', description: 'Tuition Fee', quantity: 1, unitPrice: 2200, total: 2200, category: 'tuition' },
-          { id: '4', description: 'Transport', quantity: 1, unitPrice: 600, total: 600, category: 'transport' }
-        ],
-        createdDate: '2024-01-10',
-        paidDate: '2024-02-08',
-        paymentMethod: 'mobile_money'
-      }
-    ];
+  static async listInvoices(params: { schoolId: UUID; studentId?: UUID; status?: string }): Promise<Invoice[]> {
+    const query = new URLSearchParams();
+    query.append('schoolId', params.schoolId);
+    if (params.studentId) query.append('studentId', params.studentId);
+    if (params.status) query.append('status', params.status);
+
+    const response = await fetch(`/api/finance/invoices?${query}`);
+    if (!response.ok) throw new Error('Failed to list invoices');
+    return response.json();
   }
 
-  static async listPayments(): Promise<any[]> {
-    // Implementation would fetch payments
-    return [
-      {
-        id: '1',
-        invoiceId: '2',
-        amount: 2800,
-        method: 'mobile_money',
-        reference: 'MM240208001',
-        status: 'completed',
-        date: '2024-02-08',
-        notes: 'Payment via MTN Mobile Money'
-      },
-      {
-        id: '2',
-        invoiceId: '3',
-        amount: 1500,
-        method: 'bank_transfer',
-        reference: 'BT240210001',
-        status: 'pending',
-        date: '2024-02-10',
-        notes: 'Bank transfer pending verification'
-      }
-    ];
+  static async createInvoice(invoice: Partial<Invoice>): Promise<Invoice> {
+    const response = await fetch('/api/finance/invoices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(invoice)
+    });
+    if (!response.ok) throw new Error('Failed to create invoice');
+    return response.json();
   }
 
-  static async listFeeStructures(): Promise<any[]> {
-    // Implementation would fetch fee structures
-    return [
-      {
-        id: '1',
-        grade: 'Grade 8',
-        term: 'Term 1',
-        tuitionFee: 1800,
-        booksFee: 400,
-        uniformFee: 300,
-        transportFee: 500,
-        mealsFee: 600,
-        activitiesFee: 200,
-        totalFee: 3800
-      },
-      {
-        id: '2',
-        grade: 'Grade 9',
-        term: 'Term 1',
-        tuitionFee: 2000,
-        booksFee: 450,
-        uniformFee: 300,
-        transportFee: 500,
-        mealsFee: 600,
-        activitiesFee: 250,
-        totalFee: 4100
-      },
-      {
-        id: '3',
-        grade: 'Grade 10',
-        term: 'Term 1',
-        tuitionFee: 2200,
-        booksFee: 500,
-        uniformFee: 350,
-        transportFee: 600,
-        mealsFee: 700,
-        activitiesFee: 300,
-        totalFee: 4650
-      }
-    ];
+  static async listPayments(params: { schoolId: UUID; studentId?: UUID }): Promise<Payment[]> {
+    const query = new URLSearchParams();
+    query.append('schoolId', params.schoolId);
+    if (params.studentId) query.append('studentId', params.studentId);
+
+    const response = await fetch(`/api/finance/payments?${query}`);
+    if (!response.ok) throw new Error('Failed to list payments');
+    return response.json();
   }
 
-  static async createInvoice(invoice: Invoice): Promise<Invoice> {
-    // Implementation would create invoice
-    return {} as Invoice;
+  static async recordPayment(payment: Partial<Payment>): Promise<Payment> {
+    const response = await fetch('/api/finance/payments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payment)
+    });
+    if (!response.ok) throw new Error('Failed to record payment');
+    return response.json();
   }
 
-  static async processPayment(payment: Payment): Promise<Payment> {
-    // Implementation would process payment
-    return {} as Payment;
+  static async listFeeStructures(schoolId: UUID): Promise<FeeStructure[]> {
+    const response = await fetch(`/api/finance/fee-structures?schoolId=${schoolId}`);
+    if (!response.ok) throw new Error('Failed to list fee structures');
+    return response.json();
+  }
+
+  static async createFeeStructure(fs: Partial<FeeStructure>): Promise<FeeStructure> {
+    const response = await fetch('/api/finance/fee-structures', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fs)
+    });
+    if (!response.ok) throw new Error('Failed to create fee structure');
+    return response.json();
   }
 
   // Communication methods
@@ -1031,6 +1231,17 @@ export class Api {
   }
 
   // Report methods
+  static async getReportStats(params: { schoolId: UUID; academicYear?: string; term?: string }): Promise<any> {
+    const query = new URLSearchParams();
+    query.append('schoolId', params.schoolId);
+    if (params.academicYear) query.append('academicYear', params.academicYear);
+    if (params.term) query.append('term', params.term);
+
+    const response = await fetch(`/api/reports/stats?${query}`);
+    if (!response.ok) throw new Error('Failed to fetch report stats');
+    return response.json();
+  }
+
   static async generateReport(type: string, params: ReportParams): Promise<any> {
     // Implementation would generate report
     return {};

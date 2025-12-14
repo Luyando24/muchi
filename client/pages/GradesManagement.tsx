@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
-import { 
-  BarChart3, 
-  Plus, 
-  Search, 
-  Filter, 
-  Download, 
-  Upload, 
-  Eye, 
-  Edit, 
+import {
+  BarChart3,
+  Plus,
+  Search,
+  Filter,
+  Download,
+  Upload,
+  Eye,
+  Edit,
   Trash2,
   TrendingUp,
   TrendingDown,
@@ -33,6 +33,7 @@ import { Progress } from '@/components/ui/progress';
 import { useAuth, clearSession } from '@/lib/auth';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
+import { Api, Subject, Class } from '../../shared/api';
 
 interface Grade {
   id: string;
@@ -140,114 +141,116 @@ export default function GradesManagement() {
   });
 
   // Mock data - replace with API calls
+  // Load data from API
   useEffect(() => {
-    const mockGrades: Grade[] = [
-      {
-        id: '1',
-        studentId: 'S001',
-        studentName: 'John Doe',
-        studentNumber: 'STU001',
-        classId: 'C001',
-        className: 'Grade 10A',
-        subjectId: 'SUB001',
-        subjectName: 'Mathematics',
-        assessmentType: 'exam',
-        assessmentName: 'Mid-term Exam',
-        marksObtained: 85,
-        totalMarks: 100,
-        percentage: 85,
-        grade: 'A',
-        gradePoint: 4.0,
-        term: 'Term 1',
-        academicYear: '2024',
-        gradedDate: '2024-01-15',
-        gradedBy: 'Mr. Smith',
-        feedback: 'Excellent work! Keep it up.',
-        status: 'published',
-        createdAt: '2024-01-15T10:00:00Z',
-        updatedAt: '2024-01-15T10:00:00Z'
-      },
-      {
-        id: '2',
-        studentId: 'S002',
-        studentName: 'Jane Smith',
-        studentNumber: 'STU002',
-        classId: 'C001',
-        className: 'Grade 10A',
-        subjectId: 'SUB002',
-        subjectName: 'English',
-        assessmentType: 'assignment',
-        assessmentName: 'Essay Writing',
-        marksObtained: 78,
-        totalMarks: 100,
-        percentage: 78,
-        grade: 'B',
-        gradePoint: 3.0,
-        term: 'Term 1',
-        academicYear: '2024',
-        gradedDate: '2024-01-20',
-        gradedBy: 'Ms. Johnson',
-        feedback: 'Good effort, but needs improvement in grammar.',
-        status: 'published',
-        createdAt: '2024-01-20T14:30:00Z',
-        updatedAt: '2024-01-20T14:30:00Z'
-      }
-    ];
+    if (user?.schoolId) {
+      loadData();
+    }
+  }, [user?.schoolId]);
 
-    const mockStudents: Student[] = [
-      { id: 'S001', name: 'John Doe', studentNumber: 'STU001', classId: 'C001', className: 'Grade 10A' },
-      { id: 'S002', name: 'Jane Smith', studentNumber: 'STU002', classId: 'C001', className: 'Grade 10A' },
-      { id: 'S003', name: 'Mike Johnson', studentNumber: 'STU003', classId: 'C002', className: 'Grade 10B' }
-    ];
+  const loadData = async () => {
+    if (!user?.schoolId) return;
+    try {
+      setLoading(true);
+      const [gradesData, studentsData, subjectsData, classesData] = await Promise.all([
+        Api.listTermGrades({ schoolId: user.schoolId }),
+        Api.listStudents(user.schoolId),
+        Api.listSubjects(user.schoolId),
+        Api.listClasses(user.schoolId)
+      ]);
 
-    const mockSubjects: Subject[] = [
-      { id: 'SUB001', name: 'Mathematics', code: 'MATH' },
-      { id: 'SUB002', name: 'English', code: 'ENG' },
-      { id: 'SUB003', name: 'Science', code: 'SCI' }
-    ];
+      // Map API grades to UI Grade interface
+      const mappedGrades: Grade[] = gradesData.map((g: any) => ({
+        id: g.id,
+        studentId: g.student_id,
+        studentName: `${g.student_first_name} ${g.student_last_name}`,
+        studentNumber: 'N/A', // API might not return this in join, or add to query
+        classId: g.class_id,
+        className: 'N/A', // API join needed for class name?
+        subjectId: g.subject_id,
+        subjectName: g.subject_name,
+        assessmentType: 'exam', // Default or need field in DB
+        assessmentName: 'Term Assessment', // Default
+        marksObtained: g.marks,
+        totalMarks: 100, // Default
+        percentage: g.marks, // Assuming marks is percentage or out of 100
+        grade: g.grade,
+        gradePoint: 0, // Calc
+        term: g.term,
+        academicYear: g.academic_year,
+        gradedDate: g.created_at,
+        gradedBy: 'Teacher',
+        feedback: g.remarks,
+        status: 'published', // Default
+        createdAt: g.created_at,
+        updatedAt: g.updated_at
+      }));
 
-    const mockClasses: Class[] = [
-      { id: 'C001', name: 'Grade 10A', grade: '10' },
-      { id: 'C002', name: 'Grade 10B', grade: '10' },
-      { id: 'C003', name: 'Grade 11A', grade: '11' }
-    ];
+      setGrades(mappedGrades);
 
-    const mockStats: GradeStats = {
-      totalGrades: 150,
-      averagePercentage: 76.5,
-      passRate: 85.2,
-      failRate: 14.8,
-      gradeDistribution: {
-        A: 25,
-        B: 45,
-        C: 35,
-        D: 20,
-        F: 25
-      },
-      subjectPerformance: [
-        { subject: 'Mathematics', average: 78.5, count: 50 },
-        { subject: 'English', average: 74.2, count: 50 },
-        { subject: 'Science', average: 76.8, count: 50 }
-      ],
-      classPerformance: [
-        { class: 'Grade 10A', average: 79.2, count: 75 },
-        { class: 'Grade 10B', average: 73.8, count: 75 }
-      ]
-    };
+      // Map students
+      const mappedStudents: Student[] = studentsData.map((s: any) => ({
+        id: s.id,
+        name: `${s.firstName} ${s.lastName}`,
+        studentNumber: s.studentNumber || '',
+        classId: s.classId || '',
+        className: '' // Need class name join
+      }));
+      setStudents(mappedStudents);
 
-    setGrades(mockGrades);
-    setStudents(mockStudents);
-    setSubjects(mockSubjects);
-    setClasses(mockClasses);
-    setGradeStats(mockStats);
-    setLoading(false);
-  }, []);
+      setSubjects(subjectsData);
+
+      // Map classes
+      const mappedClasses: Class[] = classesData.map((c: any) => ({
+        id: c.id,
+        name: c.className,
+        grade: c.gradeLevel
+      }));
+      setClasses(mappedClasses);
+
+      // Calculate stats
+      calculateStats(mappedGrades);
+
+      setLoading(false);
+    } catch (error) {
+      console.error("Failed to load grades data", error);
+      setLoading(false);
+    }
+  };
+
+  const calculateStats = (gradesList: Grade[]) => {
+    if (gradesList.length === 0) {
+      setGradeStats(null);
+      return;
+    }
+    const total = gradesList.length;
+    const totalPercentage = gradesList.reduce((acc, g) => acc + g.percentage, 0);
+    const avg = totalPercentage / total;
+    const passed = gradesList.filter(g => g.grade !== 'F').length;
+
+    // Distribution
+    const dist = { A: 0, B: 0, C: 0, D: 0, F: 0 };
+    gradesList.forEach(g => {
+      const l = g.grade.charAt(0) as keyof typeof dist;
+      if (dist[l] !== undefined) dist[l]++;
+    });
+
+    setGradeStats({
+      totalGrades: total,
+      averagePercentage: avg,
+      passRate: (passed / total) * 100,
+      failRate: ((total - passed) / total) * 100,
+      gradeDistribution: dist,
+      subjectPerformance: [], // Todo: aggregate by subject
+      classPerformance: [] // Todo: aggregate by class
+    });
+  };
 
   // Filter grades based on search and filters
   const filteredGrades = grades.filter(grade => {
     const matchesSearch = grade.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         grade.subjectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         grade.assessmentName.toLowerCase().includes(searchTerm.toLowerCase());
+      grade.subjectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      grade.assessmentName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesClass = selectedClass === 'all' || grade.classId === selectedClass;
     const matchesSubject = selectedSubject === 'all' || grade.subjectId === selectedSubject;
     const matchesTerm = selectedTerm === 'all' || grade.term === selectedTerm;
@@ -380,33 +383,33 @@ export default function GradesManagement() {
 
   return (
     <>
-    <DashboardLayout>
-      <div className="space-y-6">
-        {/* Page Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Grades Management</h1>
-            <p className="text-sm text-muted-foreground">Manage student grades and assessments</p>
+      <DashboardLayout>
+        <div className="space-y-6">
+          {/* Page Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Grades Management</h1>
+              <p className="text-sm text-muted-foreground">Manage student grades and assessments</p>
+            </div>
+            <div className="flex items-center gap-4">
+              <Button onClick={() => setIsAddDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Grade
+              </Button>
+              <Button variant="outline" onClick={() => setIsBulkEntryOpen(true)}>
+                <Upload className="h-4 w-4 mr-2" />
+                Bulk Entry
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-4">
-            <Button onClick={() => setIsAddDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Grade
-            </Button>
-            <Button variant="outline" onClick={() => setIsBulkEntryOpen(true)}>
-              <Upload className="h-4 w-4 mr-2" />
-              Bulk Entry
-            </Button>
-          </div>
-        </div>
 
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="grades">Grades</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
-            <TabsTrigger value="reports">Reports</TabsTrigger>
-          </TabsList>
+          <Tabs defaultValue="overview" className="space-y-6">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="grades">Grades</TabsTrigger>
+              <TabsTrigger value="analytics">Analytics</TabsTrigger>
+              <TabsTrigger value="reports">Reports</TabsTrigger>
+            </TabsList>
 
             {/* Overview Tab */}
             <TabsContent value="overview" className="space-y-6">
@@ -479,9 +482,9 @@ export default function GradesManagement() {
                           <Badge className={getGradeColor(grade)}>{grade}</Badge>
                           <span className="text-sm">{count} students</span>
                         </div>
-                        <Progress 
-                          value={(count / gradeStats.totalGrades) * 100} 
-                          className="w-24" 
+                        <Progress
+                          value={(count / gradeStats.totalGrades) * 100}
+                          className="w-24"
                         />
                       </div>
                     ))}
@@ -705,10 +708,10 @@ export default function GradesManagement() {
                     <div className="space-y-4">
                       {['assignment', 'test', 'exam', 'project', 'quiz'].map((type) => {
                         const typeGrades = grades.filter(g => g.assessmentType === type);
-                        const average = typeGrades.length > 0 
-                          ? typeGrades.reduce((sum, g) => sum + g.percentage, 0) / typeGrades.length 
+                        const average = typeGrades.length > 0
+                          ? typeGrades.reduce((sum, g) => sum + g.percentage, 0) / typeGrades.length
                           : 0;
-                        
+
                         return (
                           <div key={type} className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -772,7 +775,7 @@ export default function GradesManagement() {
                 </Card>
               </div>
             </TabsContent>
-         </Tabs>
+          </Tabs>
         </div>
       </DashboardLayout>
 
@@ -789,7 +792,7 @@ export default function GradesManagement() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="student">Student *</Label>
-                <Select value={formData.studentId} onValueChange={(value) => setFormData({...formData, studentId: value})}>
+                <Select value={formData.studentId} onValueChange={(value) => setFormData({ ...formData, studentId: value })}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select student" />
                   </SelectTrigger>
@@ -804,7 +807,7 @@ export default function GradesManagement() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="subject">Subject *</Label>
-                <Select value={formData.subjectId} onValueChange={(value) => setFormData({...formData, subjectId: value})}>
+                <Select value={formData.subjectId} onValueChange={(value) => setFormData({ ...formData, subjectId: value })}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select subject" />
                   </SelectTrigger>
@@ -821,7 +824,7 @@ export default function GradesManagement() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="assessmentType">Assessment Type *</Label>
-                <Select value={formData.assessmentType} onValueChange={(value: Grade['assessmentType']) => setFormData({...formData, assessmentType: value})}>
+                <Select value={formData.assessmentType} onValueChange={(value: Grade['assessmentType']) => setFormData({ ...formData, assessmentType: value })}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
@@ -839,7 +842,7 @@ export default function GradesManagement() {
                 <Input
                   id="assessmentName"
                   value={formData.assessmentName}
-                  onChange={(e) => setFormData({...formData, assessmentName: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, assessmentName: e.target.value })}
                   placeholder="e.g., Mid-term Exam"
                 />
               </div>
@@ -851,7 +854,7 @@ export default function GradesManagement() {
                   id="marksObtained"
                   type="number"
                   value={formData.marksObtained}
-                  onChange={(e) => setFormData({...formData, marksObtained: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, marksObtained: e.target.value })}
                   placeholder="e.g., 85"
                 />
               </div>
@@ -861,7 +864,7 @@ export default function GradesManagement() {
                   id="totalMarks"
                   type="number"
                   value={formData.totalMarks}
-                  onChange={(e) => setFormData({...formData, totalMarks: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, totalMarks: e.target.value })}
                   placeholder="e.g., 100"
                 />
               </div>
@@ -869,7 +872,7 @@ export default function GradesManagement() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="term">Term *</Label>
-                <Select value={formData.term} onValueChange={(value) => setFormData({...formData, term: value})}>
+                <Select value={formData.term} onValueChange={(value) => setFormData({ ...formData, term: value })}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select term" />
                   </SelectTrigger>
@@ -882,7 +885,7 @@ export default function GradesManagement() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="status">Status</Label>
-                <Select value={formData.status} onValueChange={(value: Grade['status']) => setFormData({...formData, status: value})}>
+                <Select value={formData.status} onValueChange={(value: Grade['status']) => setFormData({ ...formData, status: value })}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select status" />
                   </SelectTrigger>
@@ -899,7 +902,7 @@ export default function GradesManagement() {
               <Textarea
                 id="feedback"
                 value={formData.feedback}
-                onChange={(e) => setFormData({...formData, feedback: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, feedback: e.target.value })}
                 placeholder="Optional feedback for the student..."
                 rows={3}
               />

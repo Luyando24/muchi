@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { 
-  CreditCard, 
-  DollarSign, 
-  FileText, 
-  Download, 
-  Plus, 
-  Search, 
+import {
+  CreditCard,
+  DollarSign,
+  FileText,
+  Download,
+  Plus,
+  Search,
   Filter,
   Calendar,
   Users,
@@ -35,65 +35,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/lib/auth';
-import { Api } from '../../shared/api';
+import { Api, Invoice, Payment, FeeStructure } from '../../shared/api';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
 
-interface Invoice {
-  id: string;
-  invoiceNumber: string;
-  studentId: string;
-  studentName: string;
-  class: string;
-  amount: number;
-  dueDate: string;
-  status: 'pending' | 'paid' | 'overdue' | 'cancelled';
-  items: InvoiceItem[];
-  createdDate: string;
-  paidDate?: string;
-  paymentMethod?: string;
-}
 
-interface InvoiceItem {
-  id: string;
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  total: number;
-  category: 'tuition' | 'books' | 'uniform' | 'transport' | 'meals' | 'activities' | 'other';
-}
-
-interface Payment {
-  id: string;
-  invoiceId: string;
-  amount: number;
-  method: 'cash' | 'bank_transfer' | 'mobile_money' | 'card';
-  reference: string;
-  status: 'pending' | 'completed' | 'failed';
-  date: string;
-  notes?: string;
-}
-
-interface FeeStructure {
-  id: string;
-  grade: string;
-  term: string;
-  tuitionFee: number;
-  booksFee: number;
-  uniformFee: number;
-  transportFee: number;
-  mealsFee: number;
-  activitiesFee: number;
-  totalFee: number;
-}
-
-interface FinanceStats {
-  totalRevenue: number;
-  pendingPayments: number;
-  overduePayments: number;
-  collectionRate: number;
-  monthlyRevenue: number[];
-  paymentMethods: { method: string; amount: number; count: number }[];
-}
 
 export default function FinanceManagement() {
   const { session } = useAuth();
@@ -138,16 +83,17 @@ export default function FinanceManagement() {
   }, []);
 
   const loadData = async () => {
+    if (!session?.schoolId) return;
     try {
       setLoading(true);
-      
+
       const [invoicesResponse, paymentsResponse, feeStructuresResponse, statsResponse] = await Promise.all([
-        Api.listInvoices(),
-        Api.listPayments(),
-        Api.listFeeStructures(),
-        Api.getFinanceStats()
+        Api.listInvoices({ schoolId: session.schoolId }),
+        Api.listPayments({ schoolId: session.schoolId }),
+        Api.listFeeStructures(session.schoolId),
+        Api.getFinanceStats(session.schoolId)
       ]);
-      
+
       setInvoices(invoicesResponse);
       setPayments(paymentsResponse);
       setFeeStructures(feeStructuresResponse);
@@ -162,19 +108,20 @@ export default function FinanceManagement() {
   const handleCreateInvoice = async () => {
     try {
       const totalAmount = newInvoice.items.reduce((sum, item) => sum + item.total, 0);
-      
+
       await Api.createInvoice({
         ...newInvoice,
+        schoolId: session?.schoolId!,
         amount: totalAmount
       });
-      
+
       setIsCreateInvoiceOpen(false);
       setNewInvoice({
         studentId: '',
         dueDate: new Date(),
         items: []
       });
-      
+
       await loadData();
     } catch (error) {
       console.error('Failed to create invoice:', error);
@@ -183,13 +130,14 @@ export default function FinanceManagement() {
 
   const handleRecordPayment = async () => {
     if (!selectedInvoice) return;
-    
+
     try {
       await Api.recordPayment({
         invoiceId: selectedInvoice.id,
+        schoolId: session?.schoolId!,
         ...newPayment
       });
-      
+
       setIsPaymentDialogOpen(false);
       setNewPayment({
         amount: 0,
@@ -198,7 +146,7 @@ export default function FinanceManagement() {
         notes: ''
       });
       setSelectedInvoice(null);
-      
+
       await loadData();
     } catch (error) {
       console.error('Failed to record payment:', error);
@@ -210,12 +158,13 @@ export default function FinanceManagement() {
       const totalFee = Object.values(newFeeStructure)
         .filter((value, index) => index > 1) // Skip grade and term
         .reduce((sum, fee) => sum + (typeof fee === 'number' ? fee : 0), 0);
-      
+
       await Api.createFeeStructure({
         ...newFeeStructure,
+        schoolId: session?.schoolId!,
         totalFee
       });
-      
+
       setIsFeeStructureOpen(false);
       setNewFeeStructure({
         grade: '',
@@ -227,7 +176,7 @@ export default function FinanceManagement() {
         mealsFee: 0,
         activitiesFee: 0
       });
-      
+
       await loadData();
     } catch (error) {
       console.error('Failed to create fee structure:', error);
@@ -243,7 +192,7 @@ export default function FinanceManagement() {
       total: 0,
       category: 'tuition'
     };
-    
+
     setNewInvoice({
       ...newInvoice,
       items: [...newInvoice.items, newItem]
@@ -255,11 +204,11 @@ export default function FinanceManagement() {
   const updateInvoiceItem = (index: number, field: keyof InvoiceItem, value: InvoiceItemValue) => {
     const updatedItems = [...newInvoice.items];
     updatedItems[index] = { ...updatedItems[index], [field]: value };
-    
+
     if (field === 'quantity' || field === 'unitPrice') {
       updatedItems[index].total = updatedItems[index].quantity * updatedItems[index].unitPrice;
     }
-    
+
     setNewInvoice({ ...newInvoice, items: updatedItems });
   };
 
@@ -300,9 +249,9 @@ export default function FinanceManagement() {
 
   const filteredInvoices = invoices.filter(invoice => {
     const matchesSearch = invoice.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         invoice.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase());
+      invoice.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
-    
+
     return matchesSearch && matchesStatus;
   });
 
@@ -370,7 +319,7 @@ export default function FinanceManagement() {
                 </p>
               </CardContent>
             </Card>
-            
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Pending Payments</CardTitle>
@@ -383,7 +332,7 @@ export default function FinanceManagement() {
                 </p>
               </CardContent>
             </Card>
-            
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Overdue Payments</CardTitle>
@@ -398,7 +347,7 @@ export default function FinanceManagement() {
                 </p>
               </CardContent>
             </Card>
-            
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Collection Rate</CardTitle>
@@ -434,7 +383,7 @@ export default function FinanceManagement() {
               Reports
             </TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="invoices" className="space-y-6">
             {/* Enhanced Filters */}
             <Card className="border-l-4 border-l-primary">
@@ -528,37 +477,37 @@ export default function FinanceManagement() {
                             <div className="flex items-center justify-center gap-1">
                               <Button
                                 variant="ghost"
-                              size="sm"
-                              onClick={() => setSelectedInvoice(invoice)}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            {invoice.status === 'pending' && (
-                              <Button
-                                variant="ghost"
                                 size="sm"
-                                onClick={() => {
-                                  setSelectedInvoice(invoice);
-                                  setIsPaymentDialogOpen(true);
-                                }}
+                                onClick={() => setSelectedInvoice(invoice)}
                               >
-                                <CreditCard className="h-4 w-4" />
+                                <Eye className="h-4 w-4" />
                               </Button>
-                            )}
-                            <Button variant="ghost" size="sm">
-                              <Download className="h-4 w-4" />
-                            </Button>
+                              {invoice.status === 'pending' && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedInvoice(invoice);
+                                    setIsPaymentDialogOpen(true);
+                                  }}
+                                >
+                                  <CreditCard className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button variant="ghost" size="sm">
+                                <Download className="h-4 w-4" />
+                              </Button>
                             </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
-          
+
           <TabsContent value="payments" className="space-y-6">
             <Card>
               <CardHeader>
@@ -608,7 +557,7 @@ export default function FinanceManagement() {
               </CardContent>
             </Card>
           </TabsContent>
-          
+
           <TabsContent value="fee-structures" className="space-y-6">
             <Card>
               <CardHeader>
@@ -662,7 +611,7 @@ export default function FinanceManagement() {
               </CardContent>
             </Card>
           </TabsContent>
-          
+
           <TabsContent value="reports" className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card>
@@ -691,7 +640,7 @@ export default function FinanceManagement() {
                   </div>
                 </CardContent>
               </Card>
-              
+
               <Card>
                 <CardHeader>
                   <CardTitle>Export Options</CardTitle>
@@ -735,8 +684,8 @@ export default function FinanceManagement() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Student</Label>
-                  <Select 
-                    value={newInvoice.studentId} 
+                  <Select
+                    value={newInvoice.studentId}
                     onValueChange={(value) => setNewInvoice({ ...newInvoice, studentId: value })}
                   >
                     <SelectTrigger>
@@ -748,7 +697,7 @@ export default function FinanceManagement() {
                     </SelectContent>
                   </Select>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label>Due Date</Label>
                   <Input
@@ -758,7 +707,7 @@ export default function FinanceManagement() {
                   />
                 </div>
               </div>
-              
+
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <Label className="text-base font-semibold">Invoice Items</Label>
@@ -767,7 +716,7 @@ export default function FinanceManagement() {
                     Add Item
                   </Button>
                 </div>
-                
+
                 {newInvoice.items.map((item, index) => (
                   <div key={item.id} className="grid grid-cols-12 gap-2 items-end">
                     <div className="col-span-3">
@@ -780,8 +729,8 @@ export default function FinanceManagement() {
                     </div>
                     <div className="col-span-2">
                       <Label>Category</Label>
-                      <Select 
-                        value={item.category} 
+                      <Select
+                        value={item.category}
                         onValueChange={(value) => updateInvoiceItem(index, 'category', value)}
                       >
                         <SelectTrigger>
@@ -837,7 +786,7 @@ export default function FinanceManagement() {
                     </div>
                   </div>
                 ))}
-                
+
                 {newInvoice.items.length > 0 && (
                   <div className="flex justify-end">
                     <div className="text-right">
@@ -881,11 +830,11 @@ export default function FinanceManagement() {
                   step="0.01"
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label>Payment Method</Label>
-                <Select 
-                  value={newPayment.method} 
+                <Select
+                  value={newPayment.method}
                   onValueChange={(value: Payment['method']) => setNewPayment({ ...newPayment, method: value })}
                 >
                   <SelectTrigger>
@@ -899,7 +848,7 @@ export default function FinanceManagement() {
                   </SelectContent>
                 </Select>
               </div>
-              
+
               <div className="space-y-2">
                 <Label>Reference Number</Label>
                 <Input
@@ -908,7 +857,7 @@ export default function FinanceManagement() {
                   placeholder="Transaction reference"
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label>Notes (Optional)</Label>
                 <Textarea
@@ -943,8 +892,8 @@ export default function FinanceManagement() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Grade</Label>
-                  <Select 
-                    value={newFeeStructure.grade} 
+                  <Select
+                    value={newFeeStructure.grade}
                     onValueChange={(value) => setNewFeeStructure({ ...newFeeStructure, grade: value })}
                   >
                     <SelectTrigger>
@@ -959,11 +908,11 @@ export default function FinanceManagement() {
                     </SelectContent>
                   </Select>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label>Term</Label>
-                  <Select 
-                    value={newFeeStructure.term} 
+                  <Select
+                    value={newFeeStructure.term}
                     onValueChange={(value) => setNewFeeStructure({ ...newFeeStructure, term: value })}
                   >
                     <SelectTrigger>
@@ -977,7 +926,7 @@ export default function FinanceManagement() {
                   </Select>
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Tuition Fee</Label>
@@ -989,7 +938,7 @@ export default function FinanceManagement() {
                     step="0.01"
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label>Books Fee</Label>
                   <Input
@@ -1000,7 +949,7 @@ export default function FinanceManagement() {
                     step="0.01"
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label>Uniform Fee</Label>
                   <Input
@@ -1011,7 +960,7 @@ export default function FinanceManagement() {
                     step="0.01"
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label>Transport Fee</Label>
                   <Input
@@ -1022,7 +971,7 @@ export default function FinanceManagement() {
                     step="0.01"
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label>Meals Fee</Label>
                   <Input
@@ -1033,7 +982,7 @@ export default function FinanceManagement() {
                     step="0.01"
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label>Activities Fee</Label>
                   <Input
@@ -1045,7 +994,7 @@ export default function FinanceManagement() {
                   />
                 </div>
               </div>
-              
+
               <div className="pt-4 border-t">
                 <div className="text-right">
                   <div className="text-lg font-semibold">

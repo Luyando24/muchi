@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,8 +16,11 @@ import {
   GraduationCap,
   MoreHorizontal
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Api, Subject, SubjectFormData } from '@shared/api';
+import { useAuth } from '@/lib/auth';
 
-// Mock data
 const SUBJECT_CATEGORIES = [
   { value: 'core', label: 'Core Subject', color: 'bg-blue-50 text-blue-700 border-blue-200' },
   { value: 'elective', label: 'Elective', color: 'bg-green-50 text-green-700 border-green-200' },
@@ -25,97 +28,70 @@ const SUBJECT_CATEGORIES = [
   { value: 'extracurricular', label: 'Extracurricular', color: 'bg-orange-50 text-orange-700 border-orange-200' }
 ];
 
-const SUBJECT_LEVELS = [
-  { value: 'primary', label: 'Primary Level' },
-  { value: 'secondary', label: 'Secondary Level' },
-  { value: 'both', label: 'Both Levels' }
-];
-
-const MOCK_SUBJECTS = [
-  {
-    id: '1',
-    name: 'Mathematics',
-    code: 'MATH001',
-    description: 'Core mathematics curriculum covering arithmetic, algebra, and geometry',
-    category: 'core',
-    level: 'both',
-    credits: 4,
-    status: 'active',
-    teacherCount: 12,
-    studentCount: 450,
-    classCount: 18
-  },
-  {
-    id: '2',
-    name: 'English Language',
-    code: 'ENG001',
-    description: 'English language and literature studies',
-    category: 'core',
-    level: 'both',
-    credits: 4,
-    status: 'active',
-    teacherCount: 8,
-    studentCount: 420,
-    classCount: 16
-  },
-  {
-    id: '3',
-    name: 'Computer Science',
-    code: 'CS001',
-    description: 'Introduction to computer science and programming',
-    category: 'elective',
-    level: 'secondary',
-    credits: 3,
-    status: 'active',
-    teacherCount: 4,
-    studentCount: 180,
-    classCount: 6
-  },
-  {
-    id: '4',
-    name: 'Physical Education',
-    code: 'PE001',
-    description: 'Physical fitness and sports activities',
-    category: 'core',
-    level: 'both',
-    credits: 2,
-    status: 'active',
-    teacherCount: 6,
-    studentCount: 400,
-    classCount: 16
-  },
-  {
-    id: '5',
-    name: 'Art & Design',
-    code: 'ART001',
-    description: 'Creative arts and design principles',
-    category: 'elective',
-    level: 'both',
-    credits: 2,
-    status: 'active',
-    teacherCount: 3,
-    studentCount: 120,
-    classCount: 5
-  }
-];
-
 export default function SubjectsTab() {
-  const [subjects] = useState(MOCK_SUBJECTS);
+  const { session } = useAuth();
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
-  
-  // Filter subjects based on search term and category
+
+  useEffect(() => {
+    fetchSubjects();
+  }, []);
+
+  const fetchSubjects = async () => {
+    setLoading(true);
+    try {
+      const fetchedSubjects = await Api.listSubjects({ schoolId: session?.schoolId });
+      setSubjects(fetchedSubjects);
+    } catch (error) {
+      console.error("Failed to fetch subjects", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddOrUpdateSubject = async (formData: SubjectFormData) => {
+    try {
+      if (editingSubject) {
+        await Api.updateSubject(editingSubject.id, formData);
+      } else {
+        await Api.createSubject({ ...formData, schoolId: session?.schoolId });
+      }
+      fetchSubjects();
+      setIsModalOpen(false);
+      setEditingSubject(null);
+    } catch (error) {
+      console.error("Failed to save subject", error);
+    }
+  };
+
+  const handleDeleteSubject = async (id: string) => {
+    try {
+      await Api.deleteSubject(id);
+      fetchSubjects();
+    } catch (error) {
+      console.error("Failed to delete subject", error);
+    }
+  };
+
+  const openModal = (subject: Subject | null = null) => {
+    setEditingSubject(subject);
+    setIsModalOpen(true);
+  };
+
   const filteredSubjects = subjects.filter(subject => {
     const matchesSearch = 
-      subject.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      subject.code.toLowerCase().includes(searchTerm.toLowerCase());
+      subject.subjectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      subject.subjectCode.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesCategory = filterCategory === 'all' || subject.category === filterCategory;
     
     return matchesSearch && matchesCategory;
   });
 
-  // Helper function to get category badge
   const getCategoryBadge = (category: string) => {
     const categoryInfo = SUBJECT_CATEGORIES.find(c => c.value === category);
     return (
@@ -137,53 +113,7 @@ export default function SubjectsTab() {
           <CardContent>
             <div className="text-2xl font-bold">{subjects.length}</div>
             <p className="text-xs text-muted-foreground">
-              {subjects.filter(s => s.status === 'active').length} active subjects
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Teachers</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {subjects.reduce((sum, s) => sum + s.teacherCount, 0)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Across all subjects
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Students</CardTitle>
-            <GraduationCap className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {subjects.reduce((sum, s) => sum + s.studentCount, 0)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Enrolled in subjects
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Average Class Size</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {Math.round(subjects.reduce((sum, s) => sum + s.studentCount, 0) / 
-                subjects.reduce((sum, s) => sum + s.classCount, 0))}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Students per class
+              {subjects.filter(s => s.isActive).length} active subjects
             </p>
           </CardContent>
         </Card>
@@ -233,7 +163,7 @@ export default function SubjectsTab() {
               <CardTitle>Subjects ({filteredSubjects.length})</CardTitle>
               <CardDescription>Manage academic subjects and curriculum</CardDescription>
             </div>
-            <Button>
+            <Button onClick={() => openModal()}>
               <Plus className="h-4 w-4 mr-2" />
               Add Subject
             </Button>
@@ -246,56 +176,141 @@ export default function SubjectsTab() {
                 <TableHead>Subject</TableHead>
                 <TableHead>Code</TableHead>
                 <TableHead>Category</TableHead>
-                <TableHead>Level</TableHead>
                 <TableHead>Credits</TableHead>
-                <TableHead>Teachers</TableHead>
-                <TableHead>Students</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredSubjects.map((subject) => (
-                <TableRow key={subject.id}>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{subject.name}</div>
-                      <div className="text-sm text-muted-foreground truncate max-w-[200px]">
-                        {subject.description}
+              {loading ? (
+                <TableRow><TableCell colSpan={5} className="text-center">Loading...</TableCell></TableRow>
+              ) : (
+                filteredSubjects.map((subject) => (
+                  <TableRow key={subject.id}>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">{subject.subjectName}</div>
+                        <div className="text-sm text-muted-foreground truncate max-w-[200px]">
+                          {subject.description}
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <code className="text-sm bg-muted px-2 py-1 rounded">
-                      {subject.code}
-                    </code>
-                  </TableCell>
-                  <TableCell>{getCategoryBadge(subject.category)}</TableCell>
-                  <TableCell>
-                    {subject.level === 'primary' ? 'Primary' : 
-                     subject.level === 'secondary' ? 'Secondary' : 'Both Levels'}
-                  </TableCell>
-                  <TableCell>{subject.credits}</TableCell>
-                  <TableCell>{subject.teacherCount}</TableCell>
-                  <TableCell>{subject.studentCount}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Button variant="ghost" size="icon">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell>
+                      <code className="text-sm bg-muted px-2 py-1 rounded">
+                        {subject.subjectCode}
+                      </code>
+                    </TableCell>
+                    <TableCell>{getCategoryBadge(subject.category)}</TableCell>
+                    <TableCell>{subject.credits}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="icon" onClick={() => openModal(subject)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteSubject(subject.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      <SubjectFormModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingSubject(null);
+        }}
+        onSubmit={handleAddOrUpdateSubject}
+        initialData={editingSubject}
+      />
     </div>
+  );
+}
+
+function SubjectFormModal({ isOpen, onClose, onSubmit, initialData }) {
+  const [formData, setFormData] = useState<SubjectFormData>({
+    subjectName: '',
+    subjectCode: '',
+    description: '',
+    category: 'core',
+    credits: 0,
+    ...initialData,
+  });
+
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        subjectName: initialData.subjectName || '',
+        subjectCode: initialData.subjectCode || '',
+        description: initialData.description || '',
+        category: initialData.category || 'core',
+        credits: initialData.credits || 0,
+      });
+    } else {
+      setFormData({
+        subjectName: '',
+        subjectCode: '',
+        description: '',
+        category: 'core',
+        credits: 0,
+      });
+    }
+  }, [initialData]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{initialData ? 'Edit Subject' : 'Add New Subject'}</DialogTitle>
+          <DialogDescription>
+            Fill in the details for the subject.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="subjectName">Subject Name</Label>
+            <Input id="subjectName" value={formData.subjectName} onChange={(e) => setFormData({ ...formData, subjectName: e.target.value })} required />
+          </div>
+          <div>
+            <Label htmlFor="subjectCode">Subject Code</Label>
+            <Input id="subjectCode" value={formData.subjectCode} onChange={(e) => setFormData({ ...formData, subjectCode: e.target.value })} required />
+          </div>
+          <div>
+            <Label htmlFor="description">Description</Label>
+            <Input id="description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
+          </div>
+          <div>
+            <Label htmlFor="category">Category</Label>
+            <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a category" />
+              </SelectTrigger>
+              <SelectContent>
+                {SUBJECT_CATEGORIES.map(category => (
+                  <SelectItem key={category.value} value={category.value}>
+                    {category.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="credits">Credits</Label>
+            <Input id="credits" type="number" value={formData.credits} onChange={(e) => setFormData({ ...formData, credits: parseInt(e.target.value, 10) })} />
+          </div>
+          <Button type="submit">Save Subject</Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

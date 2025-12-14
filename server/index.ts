@@ -70,15 +70,15 @@ import {
   handleTriggerBackup,
   handleGetSettingsAudit
 } from "./routes/system-settings";
-import { 
-  handleListTeachers, 
-  handleGetTeacher, 
+import {
+  handleListTeachers,
+  handleGetTeacher,
   handleGetCurrentTeacher,
-  handleCreateTeacher, 
-  handleUpdateTeacher, 
-  handleDeleteTeacher, 
-  handleSearchTeachers, 
-  handleGetTeacherStats 
+  handleCreateTeacher,
+  handleUpdateTeacher,
+  handleDeleteTeacher,
+  handleSearchTeachers,
+  handleGetTeacherStats
 } from './routes/teachers';
 import {
   handleListClasses,
@@ -93,32 +93,50 @@ import notificationsRouter from "./routes/notifications";
 import supportRouter from "./routes/support";
 import databaseRouter from "./routes/database";
 import setupRouter from "./routes/setup";
-  import {
-    handleListSubjects,
-    handleGetSubject,
-    handleCreateSubject,
-    handleUpdateSubject,
-    handleDeleteSubject,
-    handleSearchSubjects
-  } from "./routes/subjects";
-  import {
-    handleListAssignments,
-    handleGetAssignment,
-    handleCreateAssignment,
-    handleUpdateAssignment,
-    handleDeleteAssignment,
-    handleGetAssignmentStats,
-  } from "./routes/assignments";
-  import {
-    handleListAttendance,
-    handleGetAttendance,
-    handleRecordAttendance,
-    handleUpdateAttendance,
-    handleDeleteAttendance,
-    handleRecordBulkAttendance,
-    handleGetAttendanceStats,
-    handleGetAttendanceForPeriod
-  } from "./routes/attendance";
+import {
+  handleListSubjects,
+  handleGetSubject,
+  handleCreateSubject,
+  handleUpdateSubject,
+  handleDeleteSubject,
+  handleSearchSubjects
+} from "./routes/subjects";
+import {
+  handleListAssignments,
+  handleGetAssignment,
+  handleCreateAssignment,
+  handleUpdateAssignment,
+  handleDeleteAssignment,
+  handleGetAssignmentStats,
+} from "./routes/assignments";
+import {
+  handleListAttendance,
+  handleGetAttendance,
+  handleRecordAttendance,
+  handleUpdateAttendance,
+  handleDeleteAttendance,
+  handleRecordBulkAttendance,
+  handleGetAttendanceStats,
+  handleGetAttendanceForPeriod
+} from "./routes/attendance";
+import {
+  handleListFeeStructures, handleCreateFeeStructure, handleUpdateFeeStructure, handleDeleteFeeStructure,
+  handleListInvoices, handleCreateInvoice, handleListPayments, handleRecordPayment, handleGetFinanceStats
+} from "./routes/finance";
+import {
+  handleListTimeSlots, handleCreateTimeSlot, handleUpdateTimeSlot, handleDeleteTimeSlot,
+  handleGetTimetable, handleCreateTimetableEntry, handleUpdateTimetableEntry, handleDeleteTimetableEntry
+} from "./routes/timetable";
+import {
+  handleListTermGrades, handleRecordTermGrade, handleGenerateReportCard, handleListReportCards
+} from "./routes/grades";
+import {
+  handleListAdmissionPeriods, handleCreateAdmissionPeriod, handleListApplications, handleCreateApplication, handleUpdateApplicationStatus
+} from "./routes/admissions";
+import {
+  handleListParents, handleCreateParent, handleLinkParentToStudent, handleGetParentChildren
+} from "./routes/parents";
+import { handleGetReportStats } from "./routes/reports";
 
 export function createServer() {
   console.log("Creating Express server...");
@@ -144,7 +162,7 @@ export function createServer() {
   app.post("/api/auth/register-staff", handleRegisterStaff);
   app.post("/api/auth/register-school", handleRegisterSchool);
   app.post("/api/auth/register-superadmin", handleRegisterSuperAdmin);
-  
+
   // Super Admin Management routes
   app.get("/api/auth/list-superadmins", handleListSuperAdmins);
   app.delete("/api/auth/delete-superadmin/:userId", handleDeleteSuperAdmin);
@@ -213,15 +231,15 @@ export function createServer() {
   app.get("/api/websites", handleGetWebsite);
   app.put("/api/websites", handleUpdateWebsite);
   app.post("/api/websites/publish", handlePublishWebsite);
-  
+
   // Theme routes
   app.get("/api/themes", handleListThemes);
-  
+
   // Page routes
   app.get("/api/pages", handleListPages);
   app.get("/api/pages/:pageId", handleGetPage);
   app.put("/api/pages/:pageId", handleUpdatePage);
-  
+
   // School routes
   app.get("/api/schools", handleListSchools);
   app.get("/api/schools/:id", handleGetSchool);
@@ -248,48 +266,91 @@ export function createServer() {
   app.post("/api/subscriptions", handleCreateSubscription);
   app.put("/api/subscriptions/:id", handleUpdateSubscription);
   app.delete("/api/subscriptions/:id", handleCancelSubscription);
-  
+
   // Plan routes
   app.get("/api/plans", handleGetPlans);
-  
+
   // Payment Method routes
   app.get("/api/payment-methods", handleGetPaymentMethods);
   app.post("/api/payment-methods", handleAddPaymentMethod);
   app.put("/api/payment-methods/:id/default", handleSetDefaultPaymentMethod);
   app.delete("/api/payment-methods/:id", handleDeletePaymentMethod);
-  
+
   // Billing History routes
   app.get("/api/billing-history", handleGetBillingHistory);
 
   // System Settings routes
   app.get("/api/system-settings", handleGetSystemSettings);
   app.put("/api/system-settings", handleUpdateSystemSetting);
-  
+
   // Email Settings routes
   app.get("/api/email-settings", handleGetEmailSettings);
   app.put("/api/email-settings", handleUpdateEmailSettings);
   app.post("/api/email-settings/test", handleTestEmail);
-  
+
   // Security Settings routes
   app.get("/api/security-settings", handleGetSecuritySettings);
   app.put("/api/security-settings", handleUpdateSecuritySettings);
-  
+
   // Backup Settings routes
   app.get("/api/backup-settings", handleGetBackupSettings);
   app.put("/api/backup-settings", handleUpdateBackupSettings);
   app.post("/api/backup-settings/trigger", handleTriggerBackup);
-  
+
   // Settings Audit routes
   app.get("/api/settings-audit", handleGetSettingsAudit);
-  
+
   // Notifications routes
   app.use("/api/notifications", notificationsRouter);
-  
+
   // Support routes
   app.use("/api/support", supportRouter);
-  
+
   // Database management routes
   app.use("/api/database", databaseRouter);
+
+  // --- Finance Routes ---
+  app.get("/api/finance/fee-structures", handleListFeeStructures);
+  app.post("/api/finance/fee-structures", handleCreateFeeStructure);
+  app.put("/api/finance/fee-structures/:id", handleUpdateFeeStructure);
+  app.delete("/api/finance/fee-structures/:id", handleDeleteFeeStructure);
+  app.get("/api/finance/invoices", handleListInvoices);
+  app.post("/api/finance/invoices", handleCreateInvoice);
+  app.get("/api/finance/payments", handleListPayments);
+  app.post("/api/finance/payments", handleRecordPayment);
+  app.get("/api/finance/stats", handleGetFinanceStats);
+
+  // --- Timetable Routes ---
+  app.get("/api/timetable/slots", handleListTimeSlots);
+  app.post("/api/timetable/slots", handleCreateTimeSlot);
+  app.put("/api/timetable/slots/:id", handleUpdateTimeSlot);
+  app.delete("/api/timetable/slots/:id", handleDeleteTimeSlot);
+  app.get("/api/timetable/entries", handleGetTimetable);
+  app.post("/api/timetable/entries", handleCreateTimetableEntry);
+  app.put("/api/timetable/entries/:id", handleUpdateTimetableEntry);
+  app.delete("/api/timetable/entries/:id", handleDeleteTimetableEntry);
+
+  // --- Grades Routes ---
+  app.get("/api/grades/term", handleListTermGrades);
+  app.post("/api/grades/term", handleRecordTermGrade);
+  app.get("/api/grades/reports", handleListReportCards);
+  app.post("/api/grades/reports", handleGenerateReportCard);
+
+  // --- Admissions Routes ---
+  app.get("/api/admissions/periods", handleListAdmissionPeriods);
+  app.post("/api/admissions/periods", handleCreateAdmissionPeriod);
+  app.get("/api/admissions/applications", handleListApplications);
+  app.post("/api/admissions/applications", handleCreateApplication);
+  app.put("/api/admissions/applications/:id/status", handleUpdateApplicationStatus);
+
+  // --- Parent Routes ---
+  app.get("/api/parents", handleListParents);
+  app.post("/api/parents", handleCreateParent);
+  app.post("/api/parents/link", handleLinkParentToStudent);
+  app.get("/api/parents/:id/children", handleGetParentChildren);
+
+  // --- Report Routes ---
+  app.get("/api/reports/stats", handleGetReportStats);
 
   // Setup routes
   app.use("/api/setup", setupRouter);
