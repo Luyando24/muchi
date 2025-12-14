@@ -27,7 +27,7 @@ import {
   validateStudentData,
 } from "./errors";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 const USE_MOCK =
   (import.meta.env.VITE_USE_MOCK as string | undefined) === "true";
 

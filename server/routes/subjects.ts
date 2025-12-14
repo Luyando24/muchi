@@ -6,11 +6,11 @@ function dbRowToSubject(row: any): Subject {
   return {
     id: row.id,
     schoolId: row.school_id,
-    name: row.name,
-    code: row.code,
+    subjectName: row.name,
+    subjectCode: row.code,
     description: row.description,
-    grade: row.grade,
-    isCore: row.is_core,
+    category: row.category,
+    credits: row.credits,
     isActive: row.is_active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -37,7 +37,7 @@ export async function handleListSubjects(req: Request, res: Response) {
       params.push(isActive === 'true');
     }
 
-    query += ` ORDER BY name ASC, code ASC`;
+    query += ` ORDER BY name ASC`;
 
     const result = await pool.query(query, params);
     res.json(result.rows.map(dbRowToSubject));
@@ -63,25 +63,25 @@ export async function handleGetSubject(req: Request, res: Response) {
 
 export async function handleCreateSubject(req: Request, res: Response) {
   try {
-    const { schoolId, name, code, description, grade, isCore, isActive } = req.body || {};
+    const { schoolId, subjectName, subjectCode, description, category, credits, isActive } = req.body || {};
 
-    if (!schoolId || !name || !code) {
-      return res.status(400).json({ error: 'schoolId, name, and code are required' });
+    if (!schoolId || !subjectName || !subjectCode) {
+      return res.status(400).json({ error: 'schoolId, subjectName, and subjectCode are required' });
     }
 
     const insertQuery = `
-      INSERT INTO subjects (id, school_id, name, code, description, grade, is_core, is_active)
+      INSERT INTO subjects (id, school_id, name, code, description, category, credits, is_active)
       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, COALESCE($7, TRUE))
       RETURNING *
     `;
 
     const result = await pool.query(insertQuery, [
       schoolId,
-      name,
-      code,
+      subjectName,
+      subjectCode,
       description ?? null,
-      grade ?? null,
-      isCore ?? true,
+      category ?? 'core',
+      credits ?? 0,
       isActive ?? true,
     ]);
 
@@ -98,7 +98,7 @@ export async function handleCreateSubject(req: Request, res: Response) {
 export async function handleUpdateSubject(req: Request, res: Response) {
   try {
     const { subjectId } = req.params;
-    const data = req.body as Partial<Subject>;
+    const data = req.body as Partial<SubjectFormData>;
 
     const exists = await pool.query('SELECT id FROM subjects WHERE id = $1', [subjectId]);
     if (exists.rows.length === 0) {
@@ -109,11 +109,11 @@ export async function handleUpdateSubject(req: Request, res: Response) {
     const values: any[] = [];
     let idx = 0;
 
-    if (data.name !== undefined) { idx++; fields.push(`name = $${idx}`); values.push(data.name); }
-    if (data.code !== undefined) { idx++; fields.push(`code = $${idx}`); values.push(data.code); }
+    if (data.subjectName !== undefined) { idx++; fields.push(`name = $${idx}`); values.push(data.subjectName); }
+    if (data.subjectCode !== undefined) { idx++; fields.push(`code = $${idx}`); values.push(data.subjectCode); }
     if (data.description !== undefined) { idx++; fields.push(`description = $${idx}`); values.push(data.description); }
-    if (data.grade !== undefined) { idx++; fields.push(`grade = $${idx}`); values.push(data.grade); }
-    if (data.isCore !== undefined) { idx++; fields.push(`is_core = $${idx}`); values.push(data.isCore); }
+    if (data.category !== undefined) { idx++; fields.push(`category = $${idx}`); values.push(data.category); }
+    if (data.credits !== undefined) { idx++; fields.push(`credits = $${idx}`); values.push(data.credits); }
     if (data.isActive !== undefined) { idx++; fields.push(`is_active = $${idx}`); values.push(data.isActive); }
 
     if (fields.length === 0) {

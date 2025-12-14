@@ -249,14 +249,24 @@ export interface ClassFormData {
 export interface Subject {
   id: UUID;
   schoolId: UUID;
-  name: string; // e.g., "Mathematics", "English", "Science"
-  code: string; // e.g., "MATH", "ENG", "SCI"
+  subjectName: string; // e.g., "Mathematics", "English", "Science"
+  subjectCode: string; // e.g., "MATH", "ENG", "SCI"
   description?: string;
-  grade?: string; // specific grade or "all"
-  isCore: boolean; // true for core subjects, false for electives
+  category: 'core' | 'elective' | 'vocational' | 'extracurricular';
+  credits?: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SubjectFormData {
+  schoolId?: UUID;
+  subjectName: string;
+  subjectCode: string;
+  description?: string;
+  category: 'core' | 'elective' | 'vocational' | 'extracurricular';
+  credits?: number;
+  isActive?: boolean;
 }
 
 export interface Enrollment {
