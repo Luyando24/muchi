@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import { handleDemo } from "./routes/demo";
+import { handleDemo } from "./routes/demo.js";
 import {
   handleLogin,
   handleStudentLogin,
@@ -11,7 +11,7 @@ import {
   handleRegisterSuperAdmin,
   handleListSuperAdmins,
   handleDeleteSuperAdmin
-} from "./routes/auth";
+} from "./routes/auth.js";
 import {
   handleListStudents,
   handleGetStudent,
@@ -22,7 +22,7 @@ import {
   handleBulkImportStudents,
   handleGetStudentsByGrade,
   handleGetStudentStats
-} from "./routes/students";
+} from "./routes/students.js";
 import {
   handleCreateWebsite,
   handleGetWebsite,
@@ -32,19 +32,19 @@ import {
   handleListPages,
   handleGetPage,
   handleUpdatePage
-} from "./routes/websites";
+} from "./routes/websites.js";
 import {
   handleListSchools,
   handleGetSchool,
   handleCreateSchool,
   handleUpdateSchool,
   handleDeleteSchool
-} from "./routes/schools";
+} from "./routes/schools.js";
 import {
   handleGetDashboardStats,
   handleGetSchoolsWithSubscriptions,
   handleGetSubscriptions
-} from "./routes/dashboard";
+} from "./routes/dashboard.js";
 import {
   handleGetSubscriptions as handleGetAllSubscriptions,
   handleGetPlans,
@@ -56,7 +56,7 @@ import {
   handleAddPaymentMethod,
   handleSetDefaultPaymentMethod,
   handleDeletePaymentMethod
-} from "./routes/subscriptions";
+} from "./routes/subscriptions.js";
 import {
   handleGetSystemSettings,
   handleUpdateSystemSetting,
@@ -69,7 +69,7 @@ import {
   handleUpdateBackupSettings,
   handleTriggerBackup,
   handleGetSettingsAudit
-} from "./routes/system-settings";
+} from "./routes/system-settings.js";
 import {
   handleListTeachers,
   handleGetTeacher,
@@ -79,7 +79,7 @@ import {
   handleDeleteTeacher,
   handleSearchTeachers,
   handleGetTeacherStats
-} from './routes/teachers';
+} from './routes/teachers.js';
 import {
   handleListClasses,
   handleGetClass,
@@ -88,11 +88,11 @@ import {
   handleDeleteClass,
   handleSearchClasses,
   handleGetClassStats
-} from "./routes/classes";
-import notificationsRouter from "./routes/notifications";
-import supportRouter from "./routes/support";
-import databaseRouter from "./routes/database";
-import setupRouter from "./routes/setup";
+} from "./routes/classes.js";
+import notificationsRouter from "./routes/notifications.js";
+import supportRouter from "./routes/support.js";
+import databaseRouter from "./routes/database.js";
+import setupRouter from "./routes/setup.js";
 import {
   handleListSubjects,
   handleGetSubject,
@@ -100,7 +100,7 @@ import {
   handleUpdateSubject,
   handleDeleteSubject,
   handleSearchSubjects
-} from "./routes/subjects";
+} from "./routes/subjects.js";
 import {
   handleListAssignments,
   handleGetAssignment,
@@ -108,7 +108,7 @@ import {
   handleUpdateAssignment,
   handleDeleteAssignment,
   handleGetAssignmentStats,
-} from "./routes/assignments";
+} from "./routes/assignments.js";
 import {
   handleListAttendance,
   handleGetAttendance,
@@ -118,18 +118,18 @@ import {
   handleRecordBulkAttendance,
   handleGetAttendanceStats,
   handleGetAttendanceForPeriod
-} from "./routes/attendance";
+} from "./routes/attendance.js";
 import {
   handleListFeeStructures, handleCreateFeeStructure, handleUpdateFeeStructure, handleDeleteFeeStructure,
   handleListInvoices, handleCreateInvoice, handleListPayments, handleRecordPayment, handleGetFinanceStats
-} from "./routes/finance";
+} from "./routes/finance.js";
 import {
   handleListTimeSlots, handleCreateTimeSlot, handleUpdateTimeSlot, handleDeleteTimeSlot,
   handleGetTimetable, handleCreateTimetableEntry, handleUpdateTimetableEntry, handleDeleteTimetableEntry
-} from "./routes/timetable";
+} from "./routes/timetable.js";
 import {
   handleListTermGrades, handleRecordTermGrade, handleGenerateReportCard, handleListReportCards
-} from "./routes/grades";
+} from "./routes/grades.js";
 import {
   handleListAdmissionPeriods, handleCreateAdmissionPeriod, handleListApplications, handleCreateApplication, handleUpdateApplicationStatus
 } from "./routes/admissions";
