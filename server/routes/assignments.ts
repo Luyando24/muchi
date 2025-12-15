@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import { Assignment, UUID } from '../../shared/api';
-import { pool } from '../lib/db';
+import { Assignment, UUID } from '../../shared/api.js';
+import { pool } from '../lib/db.js';
 
 function dbRowToAssignment(row: any): Assignment {
   return {

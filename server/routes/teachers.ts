@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { Pool } from 'pg';
-import { Teacher, TeacherFormData } from '../../shared/api';
-import { pool, hashPassword } from '../lib/db';
+import { Teacher, TeacherFormData } from '../../shared/api.js';
+import { pool, hashPassword } from '../lib/db.js';
 
 // Helper function to convert database row to Teacher object
 function dbRowToTeacher(row: any): Teacher {

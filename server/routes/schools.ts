@@ -1,5 +1,5 @@
 import { RequestHandler } from 'express';
-import { query, hashPassword } from '../lib/db';
+import { query, hashPassword } from '../lib/db.js';
 import { v4 as uuidv4 } from 'uuid';
 
 // Get all schools

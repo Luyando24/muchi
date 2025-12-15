@@ -1,7 +1,7 @@
 import { RequestHandler } from "express";
 import { v4 as uuidv4 } from "uuid";
-import { Attendance } from "@shared/api";
-import { query } from "../lib/db";
+import { Attendance } from "@shared/api.js";
+import { query } from "../lib/db.js";
 
 // Convert database row to Attendance object
 function dbRowToAttendance(row: any): Attendance {

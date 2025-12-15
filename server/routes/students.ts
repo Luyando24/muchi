@@ -1,7 +1,7 @@
 import { RequestHandler } from "express";
 import { v4 as uuidv4 } from "uuid";
-import { Student } from "@shared/api";
-import { query } from "../lib/db";
+import { Student } from "@shared/api.js";
+import { query } from "../lib/db.js";
 import crypto from "crypto";
 
 // Types for bulk operations

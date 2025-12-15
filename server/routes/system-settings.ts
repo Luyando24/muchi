@@ -1,10 +1,5 @@
 import { RequestHandler } from "express";
-import { Pool } from "pg";
-
-// Database connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+import { pool } from "../lib/db.js";
 
 // Get system settings by category or all settings
 export const handleGetSystemSettings: RequestHandler = async (req, res) => {

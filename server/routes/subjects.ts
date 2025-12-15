@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { Subject } from '../../shared/api';
+import { Subject } from '../../shared/api.js';
 import { pool } from '../lib/db';
 
 function dbRowToSubject(row: any): Subject {

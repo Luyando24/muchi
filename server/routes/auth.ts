@@ -10,7 +10,7 @@ import {
   RegisterSchoolRequest,
   RegisterSchoolResponse,
 } from "@shared/api";
-import { query, hashPassword, verifyPassword } from "../lib/db";
+import { query, hashPassword, verifyPassword } from "../lib/db.js";
 
 // Helper function to create school code
 function createSchoolCode(name: string): string {

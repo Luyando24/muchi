@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { Pool } from 'pg';
-import { Class, ClassFormData } from '../../shared/api';
-import { pool } from '../lib/db';
+import { Class, ClassFormData } from '../../shared/api.js';
+import { pool } from '../lib/db.js';
 
 // Helper function to convert database row to Class object
 function dbRowToClass(row: any): Class {

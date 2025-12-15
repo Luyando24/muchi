@@ -1,5 +1,5 @@
 import { RequestHandler } from 'express';
-import { query } from '../lib/db';
+import { query } from '../lib/db.js';
 
 export interface DashboardStats {
   totalSchools: number;

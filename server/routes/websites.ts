@@ -1,5 +1,5 @@
 import { RequestHandler } from 'express';
-import { query } from '../lib/db';
+import { query } from '../lib/db.js';
 import {
   SchoolWebsite,
   WebsiteTheme,
@@ -12,7 +12,7 @@ import {
   UpdatePageRequest,
   CreateComponentRequest,
   UpdateComponentRequest
-} from '../../shared/api';
+} from '../../shared/api.js';
 import { v4 as uuidv4 } from 'uuid';
 
 // Helper function to generate subdomain from school name
