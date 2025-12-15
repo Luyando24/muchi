@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Api } from "@/lib/api";
+import { Api } from "@shared/api";
 import { saveSession, useAuth } from "@/lib/auth";
 import { handleError, validateEmail, validateRequired } from "@/lib/errors";
 import { School } from "lucide-react";
