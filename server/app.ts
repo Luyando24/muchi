@@ -248,18 +248,9 @@ export function createServer() {
   app.delete("/api/schools/:id", handleDeleteSchool);
 
   // Dashboard routes
-  app.get("/api/dashboard/stats", (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    handleGetDashboardStats(req, res);
-  });
-  app.get("/api/dashboard/schools", (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    handleGetSchoolsWithSubscriptions(req, res);
-  });
-  app.get("/api/dashboard/subscriptions", (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    handleGetSubscriptions(req, res);
-  });
+  app.get("/api/dashboard/stats", handleGetDashboardStats);
+  app.get("/api/dashboard/schools", handleGetSchoolsWithSubscriptions);
+  app.get("/api/dashboard/subscriptions", handleGetSubscriptions);
 
   // Subscription Management routes
   app.get("/api/subscriptions", handleGetAllSubscriptions);
