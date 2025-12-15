@@ -132,11 +132,11 @@ import {
 } from "./routes/grades.js";
 import {
   handleListAdmissionPeriods, handleCreateAdmissionPeriod, handleListApplications, handleCreateApplication, handleUpdateApplicationStatus
-} from "./routes/admissions";
+} from "./routes/admissions.js";
 import {
   handleListParents, handleCreateParent, handleLinkParentToStudent, handleGetParentChildren
-} from "./routes/parents";
-import { handleGetReportStats } from "./routes/reports";
+} from "./routes/parents.js";
+import { handleGetReportStats } from "./routes/reports.js";
 
 export function createServer() {
   console.log("Creating Express server...");
