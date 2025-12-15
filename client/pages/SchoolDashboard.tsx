@@ -151,107 +151,53 @@ export default function SchoolDashboard() {
     );
   }
 
-  // Show welcome screen for users without a school ID
-  if (!session?.schoolId) {
-    return (
-      <div className="min-h-screen bg-background">
-        {/* Header */}
-        <div className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-          <div className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-4">
-              <GraduationCap className="h-8 w-8 text-primary" />
-              <div>
-                <h1 className="text-xl font-semibold">MUCHI Dashboard</h1>
-                <p className="text-sm text-muted-foreground">Welcome, {session?.userId}</p>
-              </div>
-            </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                  <User className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{session?.userId}</p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {session?.role}
-                    </p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Log out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-
-        {/* Welcome Content */}
-        <div className="p-6">
-          <div className="max-w-4xl mx-auto">
-            <div className="text-center space-y-6">
-              <div className="space-y-2">
-                <h2 className="text-3xl font-bold tracking-tight">Welcome to MUCHI</h2>
-                <p className="text-lg text-muted-foreground">
-                  You're successfully logged in! To access school-specific features, you'll need to be associated with a school.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Building className="h-5 w-5" />
-                      Register New School
-                    </CardTitle>
-                    <CardDescription>
-                      Set up a new school in the MUCHI system
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button className="w-full" asChild>
-                      <Link to="/register">Register School</Link>
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <UserCheck className="h-5 w-5" />
-                      Contact Administrator
-                    </CardTitle>
-                    <CardDescription>
-                      Get help from your system administrator
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button variant="outline" className="w-full">
-                      Contact Support
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="mt-8 p-4 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground">
-                  <strong>Demo User:</strong> You're currently logged in as a demo user. 
-                  In a production environment, users would be associated with specific schools 
-                  to access the full dashboard functionality.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
+    <DashboardLayout
+      icon={<GraduationCap className="h-6 w-6" />}
+      title="School Management Dashboard"
+      description={`Welcome back, ${session?.role === 'teacher' ? 'Teacher' : session?.role === 'headteacher' ? 'Head Teacher' : 'Administrator'}`}
+      isAdmin={false}
+      activeTab="dashboard"
+      onAddStudent={() => navigate('/students/add')}
+      studentCount={studentCount}
+    >
+      <div className="p-6 space-y-6">
+        <Tabs defaultValue="overview" className="space-y-6" id="dashboard-tabs" value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="students">Students</TabsTrigger>
+            <TabsTrigger value="assignments">Assignments</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="support">Support</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="space-y-6">
+            <SchoolOverview />
+          </TabsContent>
+
+          <TabsContent value="students" className="space-y-6">
+            <StudentsTab />
+          </TabsContent>
+
+          <TabsContent value="assignments" className="space-y-6">
+            <RecentTasks assignments={recentAssignments} getPriorityColor={getPriorityColor} getStatusColor={getStatusColor} />
+          </TabsContent>
+
+          <TabsContent value="analytics" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <TaskCompletionRate stats={stats} />
+              <PerformanceMetrics stats={stats} />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="support" className="space-y-6">
+            <SupportTab />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </DashboardLayout>
+  );
+}
     <DashboardLayout
       icon={<GraduationCap className="h-6 w-6" />}
       title="School Management Dashboard"
