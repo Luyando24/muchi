@@ -196,3 +196,5 @@ export default function SchoolDashboard() {
         </Tabs>
       </div>
     </DashboardLayout>
+  );
+}
