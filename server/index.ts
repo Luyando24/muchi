@@ -138,8 +138,6 @@ import {
 } from "./routes/parents.js";
 import { handleGetReportStats } from "./routes/reports.js";
 
-import serverlessHttp from "serverless-http";
-
 export function createServer() {
   console.log("Creating Express server...");
   const app = express();
@@ -360,4 +358,4 @@ export function createServer() {
   return app;
 }
 
-export default serverlessHttp(createServer());
+export default createServer;
