@@ -158,6 +158,12 @@ export interface AuthSession {
 export interface LoginRequest {
   email: string;
   password: string;
+  userType?: "staff" | "student";
+}
+
+export interface LoginResponse {
+  session: AuthSession;
+  message?: string;
 }
 
 export interface StudentLoginRequest {
