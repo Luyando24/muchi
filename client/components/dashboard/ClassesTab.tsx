@@ -26,6 +26,11 @@ import { useAuth } from '@/lib/auth';
 export default function ClassesTab() {
   const { session } = useAuth();
   const [classes, setClasses] = useState<Class[]>([]);
+  const [mockClasses, setMockClasses] = useState<Class[]>([
+    { id: '1', className: 'Grade 1A', gradeLevel: '1', currentEnrollment: 25, teacherName: 'Mr. Phiri', roomNumber: '101', isActive: true },
+    { id: '2', className: 'Grade 2B', gradeLevel: '2', currentEnrollment: 30, teacherName: 'Mrs. Banda', roomNumber: '102', isActive: true },
+    { id: '3', className: 'Grade 3C', gradeLevel: '3', currentEnrollment: 28, teacherName: 'Ms. Zulu', roomNumber: '103', isActive: false },
+  ]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<Class | null>(null);
@@ -37,8 +42,8 @@ export default function ClassesTab() {
   const fetchClasses = async () => {
     setLoading(true);
     try {
-      const fetchedClasses = await Api.listClasses({ schoolId: session?.schoolId });
-      setClasses(fetchedClasses);
+      // MOCK DATA
+      setClasses(mockClasses);
     } catch (error) {
       console.error("Failed to fetch classes", error);
     } finally {
@@ -49,9 +54,10 @@ export default function ClassesTab() {
   const handleAddOrUpdateClass = async (formData: ClassFormData) => {
     try {
       if (editingClass) {
-        await Api.updateClass(editingClass.id, formData);
+        setMockClasses(mockClasses.map(c => c.id === editingClass.id ? { ...editingClass, ...formData } : c));
       } else {
-        await Api.createClass({ ...formData, schoolId: session?.schoolId });
+        const newClass = { id: Date.now().toString(), ...formData, currentEnrollment: 0, isActive: true };
+        setMockClasses([...mockClasses, newClass]);
       }
       fetchClasses();
       setIsModalOpen(false);
@@ -63,7 +69,7 @@ export default function ClassesTab() {
 
   const handleDeleteClass = async (id: string) => {
     try {
-      await Api.deleteClass(id);
+      setMockClasses(mockClasses.filter(c => c.id !== id));
       fetchClasses();
     } catch (error) {
       console.error("Failed to delete class", error);

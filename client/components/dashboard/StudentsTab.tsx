@@ -111,7 +111,7 @@ export default function StudentsTab() {
     try {
       setLoading(true);
       
-      if (session?.schoolId) {
+      if (false) {
         // Load students
         const studentsResponse = await Api.listStudents({
           schoolId: session.schoolId,
@@ -262,7 +262,7 @@ export default function StudentsTab() {
 
     try {
       setSubmitting(true);
-      if (session?.schoolId) {
+      if (false) {
         const newStudent = await Api.createStudent({
           ...formData,
           schoolId: session.schoolId
@@ -300,7 +300,7 @@ export default function StudentsTab() {
     
     try {
       setSubmitting(true);
-      if (session?.schoolId) {
+      if (false) {
         const updatedStudent = await Api.updateStudent(selectedStudent.id, formData);
         setStudents(students.map(s => s.id === selectedStudent.id ? updatedStudent : s));
         setSuccessMessage('Student updated successfully!');
@@ -327,7 +327,7 @@ export default function StudentsTab() {
     
     try {
       setSubmitting(true);
-      if (session?.schoolId) {
+      if (false) {
         await Api.deleteStudent(studentToDelete.id);
       }
       setStudents(students.filter(s => s.id !== studentToDelete.id));
