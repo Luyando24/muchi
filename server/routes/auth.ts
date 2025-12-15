@@ -238,26 +238,30 @@ export const handleRegisterSchool: RequestHandler = async (req, res) => {
     }: RegisterSchoolRequest = req.body;
 
     // Check if email already exists
+    console.log("handleRegisterSchool: Checking for existing admin email...");
     const existingUserResult = await query(
       'SELECT id FROM staff_users WHERE email = $1',
       [adminEmail]
     );
+    console.log("handleRegisterSchool: Existing user check complete. Rows found:", existingUserResult.rows.length);
 
     if (existingUserResult.rows.length > 0) {
       return res.status(400).json({ error: "Admin email already registered" });
     }
 
-    // Check if school code already exists
+    console.log("handleRegisterSchool: Checking for existing school code...");
     const existingSchoolResult = await query(
       'SELECT id FROM schools WHERE code = $1',
       [schoolCode]
     );
+    console.log("handleRegisterSchool: Existing school check complete. Rows found:", existingSchoolResult.rows.length);
 
     if (existingSchoolResult.rows.length > 0) {
       return res.status(400).json({ error: "School code already in use" });
     }
     
     // Create school
+    console.log("handleRegisterSchool: Creating school...");
     const schoolId = uuidv4();
     
     await query(
@@ -265,16 +269,21 @@ export const handleRegisterSchool: RequestHandler = async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [schoolId, schoolName, schoolCode, address, district, province, schoolType, isGovernment]
     );
+    console.log("handleRegisterSchool: School created with ID:", schoolId);
     
     // Create staff user (school admin)
+    console.log("handleRegisterSchool: Creating admin user...");
     const adminUserId = uuidv4();
+    console.log("handleRegisterSchool: Hashing admin password...");
     const passwordHash = await hashPassword(adminPassword); // Hash the admin password
+    console.log("handleRegisterSchool: Password hashed.");
     
     await query(
       `INSERT INTO staff_users (id, school_id, email, password_hash, role, first_name, last_name, is_active) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [adminUserId, schoolId, adminEmail, passwordHash, "admin", adminFirstName, adminLastName, true]
     );
+    console.log("handleRegisterSchool: Admin user created with ID:", adminUserId);
     
     const response: RegisterSchoolResponse = {
       schoolId,
