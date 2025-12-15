@@ -138,9 +138,10 @@ import {
 } from "./routes/parents.js";
 import { handleGetReportStats } from "./routes/reports.js";
 
-export function createServer() {
-  console.log("Creating Express server...");
-  const app = express();
+import serverlessHttp from "serverless-http";
+
+console.log("Creating Express server...");
+const app = express();
 
   // Middleware
   app.use(cors({ origin: 'https://muchi.vercel.app' }));
@@ -355,5 +356,4 @@ export function createServer() {
   // Setup routes
   app.use("/api/setup", setupRouter);
 
-  return app;
-}
+export default serverlessHttp(app);
