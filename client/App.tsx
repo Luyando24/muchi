@@ -78,65 +78,49 @@ const App = () => {
               {/* Student Portal - No auth required for UI development */}
               <Route path="/student-portal" element={<StudentPortal />} />
               
-              {/* Protected School Portal Routes */}
-              <Route element={<ProtectedRoute allowedRoles={["admin", "headteacher", "teacher", "accountant"]} />}>
-                <Route path="/school" element={<SchoolDashboard />} />
-                <Route path="/dashboard" element={<SchoolDashboard />} />
-              </Route>
+              {/* Public School Portal Routes (Formerly Protected) */}
+              <Route path="/school" element={<SchoolDashboard />} />
+              <Route path="/dashboard" element={<SchoolDashboard />} />
               
-              {/* Student Management - Admin, Headteacher, Teacher */}
-              <Route element={<ProtectedRoute allowedRoles={["admin", "headteacher", "teacher"]} />}>
-                <Route path="/students" element={<StudentInformationSystem />} />
-                <Route path="/dashboard/students" element={<StudentInformationSystem />} />
-              </Route>
+              {/* Student Management (Formerly Protected) */}
+              <Route path="/students" element={<StudentInformationSystem />} />
+              <Route path="/dashboard/students" element={<StudentInformationSystem />} />
               
-              {/* Teacher Management - Admin, Headteacher only */}
-              <Route element={<ProtectedRoute allowedRoles={["admin", "headteacher"]} />}>
-                <Route path="/dashboard/teachers" element={<TeacherManagement />} />
-              </Route>
+              {/* Teacher Management (Formerly Protected) */}
+              <Route path="/dashboard/teachers" element={<TeacherManagement />} />
               
-              {/* Academic Management - Admin, Headteacher, Teacher */}
-              <Route element={<ProtectedRoute allowedRoles={["admin", "headteacher", "teacher"]} />}>
-                <Route path="/academics" element={<AcademicManagement />} />
-                <Route path="/dashboard/assignments" element={<AcademicManagement />} />
-                <Route path="/classes" element={<ClassesManagement />} />
-                <Route path="/dashboard/classes" element={<ClassesManagement />} />
-                <Route path="/subjects" element={<SubjectsManagement />} />
-                <Route path="/dashboard/subjects" element={<SubjectsManagement />} />
-                <Route path="/attendance" element={<AttendanceTracking />} />
-                <Route path="/dashboard/attendance" element={<AttendanceTracking />} />
-                <Route path="/grades" element={<GradesManagement />} />
-                <Route path="/dashboard/grades" element={<GradesManagement />} />
-                <Route path="/timetable" element={<TimetableManagement />} />
-                <Route path="/dashboard/timetable" element={<TimetableManagement />} />
-                <Route path="/communications" element={<CommunicationsManagement />} />
-                <Route path="/dashboard/communications" element={<CommunicationsManagement />} />
-                <Route path="/parent-portal" element={<ParentPortal />} />
-              </Route>
+              {/* Academic Management (Formerly Protected) */}
+              <Route path="/academics" element={<AcademicManagement />} />
+              <Route path="/dashboard/assignments" element={<AcademicManagement />} />
+              <Route path="/classes" element={<ClassesManagement />} />
+              <Route path="/dashboard/classes" element={<ClassesManagement />} />
+              <Route path="/subjects" element={<SubjectsManagement />} />
+              <Route path="/dashboard/subjects" element={<SubjectsManagement />} />
+              <Route path="/attendance" element={<AttendanceTracking />} />
+              <Route path="/dashboard/attendance" element={<AttendanceTracking />} />
+              <Route path="/grades" element={<GradesManagement />} />
+              <Route path="/dashboard/grades" element={<GradesManagement />} />
+              <Route path="/timetable" element={<TimetableManagement />} />
+              <Route path="/dashboard/timetable" element={<TimetableManagement />} />
+              <Route path="/communications" element={<CommunicationsManagement />} />
+              <Route path="/dashboard/communications" element={<CommunicationsManagement />} />
+              <Route path="/parent-portal" element={<ParentPortal />} />
               
-              {/* Finance Management - Admin, Headteacher, Accountant */}
-              <Route element={<ProtectedRoute allowedRoles={["admin", "headteacher", "accountant"]} />}>
-                <Route path="/finance" element={<FinanceManagement />} />
-                <Route path="/dashboard/finance" element={<FinanceManagement />} />
-              </Route>
+              {/* Finance Management (Formerly Protected) */}
+              <Route path="/finance" element={<FinanceManagement />} />
+              <Route path="/dashboard/finance" element={<FinanceManagement />} />
               
-              {/* Reports - Admin, Headteacher, Accountant */}
-              <Route element={<ProtectedRoute allowedRoles={["admin", "headteacher", "accountant"]} />}>
-                <Route path="/reports" element={<ReportsManagement />} />
-                <Route path="/dashboard/reports" element={<ReportsManagement />} />
-              </Route>
+              {/* Reports (Formerly Protected) */}
+              <Route path="/reports" element={<ReportsManagement />} />
+              <Route path="/dashboard/reports" element={<ReportsManagement />} />
               
-              {/* School Settings & EMIS - Admin, Headteacher only */}
-              <Route element={<ProtectedRoute allowedRoles={["admin", "headteacher"]} />}>
-                <Route path="/settings" element={<SchoolSettings />} />
-                <Route path="/dashboard/settings" element={<SchoolSettings />} />
-                <Route path="/emis" element={<EMISExport />} />
-              </Route>
+              {/* School Settings & EMIS (Formerly Protected) */}
+              <Route path="/settings" element={<SchoolSettings />} />
+              <Route path="/dashboard/settings" element={<SchoolSettings />} />
+              <Route path="/emis" element={<EMISExport />} />
               
-              {/* Support - All authenticated users */}
-              <Route element={<ProtectedRoute allowedRoles={["admin", "headteacher", "teacher", "accountant"]} />}>
-                <Route path="/support" element={<UserSupportPage />} />
-              </Route>
+              {/* Support (Formerly Protected) */}
+              <Route path="/support" element={<UserSupportPage />} />
               
               {/* Protected SaaS Admin Routes - Only for superadmin */}
               <Route element={<ProtectedRoute allowedRoles={["superadmin"]} />}>
