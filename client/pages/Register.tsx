@@ -57,10 +57,10 @@ export default function Register() {
         district,
         province,
         isGovernment,
-        adminFirstName: firstName,
-        adminLastName: lastName,
-        adminEmail: email,
-        adminPassword: password,
+        adminFirstName: adminFirstName,
+        adminLastName: adminLastName,
+        adminEmail: adminEmail,
+        adminPassword: adminPassword,
       });
       
       saveSession({
