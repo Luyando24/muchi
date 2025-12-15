@@ -6,17 +6,21 @@ import { Api } from "@/lib/api";
 import { saveSession } from "@/lib/auth";
 import { useNavigate, Link } from "react-router-dom";
 import { School } from "lucide-react";
-import { handleError, validateStaffData } from "@/lib/errors";
+import { handleError, validateEmail, validateRequired } from "@/lib/errors";
 
 export default function Register() {
   const [schoolName, setSchoolName] = useState("");
-  const [schoolType, setSchoolType] = useState<"primary" | "secondary" | "college">("secondary");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [schoolCode, setSchoolCode] = useState("");
+  const [schoolType, setSchoolType] = useState<"primary" | "secondary" | "combined">("secondary");
+  const [address, setAddress] = useState("");
+  const [district, setDistrict] = useState("");
+  const [province, setProvince] = useState("");
+  const [isGovernment, setIsGovernment] = useState(false);
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
+  const [adminFirstName, setAdminFirstName] = useState("");
+  const [adminLastName, setAdminLastName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -27,28 +31,43 @@ export default function Register() {
     setLoading(true);
     
     try {
-      if (password !== confirmPassword) {
+      if (adminPassword !== confirmPassword) {
         throw new Error("Passwords do not match");
       }
-      
-      validateStaffData({ email, password, firstName, lastName });
+
+      validateRequired(schoolName, "School Name");
+      validateRequired(schoolCode, "School Code");
+      validateRequired(address, "Address");
+      validateRequired(district, "District");
+      validateRequired(province, "Province");
+      validateRequired(adminFirstName, "First Name");
+      validateRequired(adminLastName, "Last Name");
+      validateRequired(adminEmail, "Email");
+      validateRequired(adminPassword, "Password");
+
+      if (!validateEmail(adminEmail)) {
+        throw new Error("Please enter a valid email address");
+      }
       
       const res = await Api.registerSchool({
         schoolName,
-        schoolType,
-        email,
-        password,
-        firstName,
-        lastName,
-        phoneNumber,
-        role: "admin",
+        schoolCode,
+        schoolType: schoolType as "primary" | "secondary" | "combined",
+        address,
+        district,
+        province,
+        isGovernment,
+        adminFirstName: firstName,
+        adminLastName: lastName,
+        adminEmail: email,
+        adminPassword: password,
       });
       
       saveSession({
-        userId: res.userId,
+        userId: res.adminUserId,
         role: "admin",
         schoolId: res.schoolId,
-        tokens: { accessToken: res.userId, expiresInSec: 3600 },
+        tokens: { accessToken: res.adminUserId, expiresInSec: 3600 },
       });
       
       navigate("/dashboard");
@@ -94,11 +113,11 @@ export default function Register() {
                   </Button>
                   <Button
                     type="button"
-                    variant={schoolType === "college" ? "default" : "outline"}
+                    variant={schoolType === "combined" ? "default" : "outline"}
                     className="flex-1"
-                    onClick={() => setSchoolType("college")}
+                    onClick={() => setSchoolType("combined")}
                   >
-                    College
+                    Combined School
                   </Button>
                 </div>
               </div>
@@ -112,26 +131,63 @@ export default function Register() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
                 <Input
-                  placeholder="First Name"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  required
-                />
-                <Input
-                  placeholder="Last Name"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="School Code"
+                  value={schoolCode}
+                  onChange={(e) => setSchoolCode(e.target.value)}
                   required
                 />
               </div>
 
               <div className="space-y-2">
                 <Input
-                  placeholder="Phone Number"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  placeholder="Address"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  placeholder="District"
+                  value={district}
+                  onChange={(e) => setDistrict(e.target.value)}
+                  required
+                />
+                <Input
+                  placeholder="Province"
+                  value={province}
+                  onChange={(e) => setProvince(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="isGovernment"
+                  checked={isGovernment}
+                  onChange={(e) => setIsGovernment(e.target.checked)}
+                  className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                />
+                <label htmlFor="isGovernment" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                  Government School
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  placeholder="Admin First Name"
+                  value={adminFirstName}
+                  onChange={(e) => setAdminFirstName(e.target.value)}
+                  required
+                />
+                <Input
+                  placeholder="Admin Last Name"
+                  value={adminLastName}
+                  onChange={(e) => setAdminLastName(e.target.value)}
                   required
                 />
               </div>
@@ -139,9 +195,9 @@ export default function Register() {
               <div className="space-y-2">
                 <Input
                   type="email"
-                  placeholder="Email Address"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Admin Email Address"
+                  value={adminEmail}
+                  onChange={(e) => setAdminEmail(e.target.value)}
                   required
                 />
               </div>
@@ -149,9 +205,9 @@ export default function Register() {
               <div className="space-y-2">
                 <Input
                   type="password"
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Admin Password"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
                   required
                 />
               </div>
@@ -159,7 +215,7 @@ export default function Register() {
               <div className="space-y-2">
                 <Input
                   type="password"
-                  placeholder="Confirm Password"
+                  placeholder="Confirm Admin Password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required

@@ -208,6 +208,25 @@ export interface RegisterTeacherResponse {
   campusId?: UUID;
 }
 
+export interface RegisterSchoolRequest {
+  schoolName: string;
+  schoolCode: string;
+  address: string;
+  district: string;
+  province: string;
+  schoolType: "primary" | "secondary" | "combined";
+  isGovernment: boolean;
+  adminFirstName: string;
+  adminLastName: string;
+  adminEmail: string;
+  adminPassword?: string;
+}
+
+export interface RegisterSchoolResponse {
+  schoolId: UUID;
+  adminUserId: UUID;
+}
+
 export interface DemoResponse {
   message: string;
 }

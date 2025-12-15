@@ -7,6 +7,8 @@ import {
   RegisterStaffRequest,
   AuthSession,
   RegisterStaffResponse,
+  RegisterSchoolRequest,
+  RegisterSchoolResponse,
 } from "@shared/api";
 import { query, hashPassword, verifyPassword } from "../lib/db";
 
@@ -223,48 +225,60 @@ export const handleRegisterSchool: RequestHandler = async (req, res) => {
   try {
     const {
       schoolName,
+      schoolCode,
+      address,
+      district,
+      province,
       schoolType,
-      email,
-      password,
-      firstName,
-      lastName,
-      phoneNumber,
-      role = "admin",
-    } = req.body;
-    
+      isGovernment,
+      adminFirstName,
+      adminLastName,
+      adminEmail,
+      adminPassword,
+    }: RegisterSchoolRequest = req.body;
+
     // Check if email already exists
     const existingUserResult = await query(
       'SELECT id FROM staff_users WHERE email = $1',
-      [email]
+      [adminEmail]
     );
-    
+
     if (existingUserResult.rows.length > 0) {
-      return res.status(400).json({ error: "Email already registered" });
+      return res.status(400).json({ error: "Admin email already registered" });
+    }
+
+    // Check if school code already exists
+    const existingSchoolResult = await query(
+      'SELECT id FROM schools WHERE code = $1',
+      [schoolCode]
+    );
+
+    if (existingSchoolResult.rows.length > 0) {
+      return res.status(400).json({ error: "School code already in use" });
     }
     
-    // Create school (using hospitals table for now since the schema is school-based)
+    // Create school
     const schoolId = uuidv4();
-    const schoolCode = createSchoolCode(schoolName);
     
     await query(
-      `INSERT INTO hospitals (id, name, code, address, district, province, phone) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [schoolId, schoolName, schoolCode, "", "", "", phoneNumber || ""]
+      `INSERT INTO schools (id, name, code, address, district, province, school_type, is_government) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [schoolId, schoolName, schoolCode, address, district, province, schoolType, isGovernment]
     );
     
     // Create staff user (school admin)
-    const userId = uuidv4();
-    const passwordHash = await hashPassword(password);
+    const adminUserId = uuidv4();
+    const passwordHash = await hashPassword(adminPassword); // Hash the admin password
     
     await query(
-      `INSERT INTO staff_users (id, hospital_id, email, password_hash, role, first_name, last_name, phone, is_active) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [userId, schoolId, email, passwordHash, role, firstName, lastName, phoneNumber || "", true]
+      `INSERT INTO staff_users (id, school_id, email, password_hash, role, first_name, last_name, is_active) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [adminUserId, schoolId, adminEmail, passwordHash, "admin", adminFirstName, adminLastName, true]
     );
     
-    const response = {
-      userId,
+    const response: RegisterSchoolResponse = {
       schoolId,
+      adminUserId,
     };
     
     res.status(201).json(response);
