@@ -508,12 +508,7 @@ export class Api {
     return data.students;
   }
 
-  static async listStudents(schoolId: UUID): Promise<Student[]> {
-    const response = await fetch(`/api/students?schoolId=${schoolId}`);
-    if (!response.ok) throw new Error('Failed to list students');
-    const data = await response.json();
-    return data; // Assuming /api/students returns array directly unlike /api/students/[id]
-  }
+
 
   static async getStudent(id: UUID): Promise<Student> {
     const response = await fetch(`/api/students/${id}`);
@@ -1005,30 +1000,7 @@ export class Api {
     return response.json();
   }
 
-  // Grade methods
-  static async listTermGrades(params: { schoolId: UUID; studentId?: UUID; classId?: UUID; subjectId?: UUID; term?: string; academicYear?: string }): Promise<any[]> {
-    const query = new URLSearchParams();
-    query.append('schoolId', params.schoolId);
-    if (params.studentId) query.append('studentId', params.studentId);
-    if (params.classId) query.append('classId', params.classId);
-    if (params.subjectId) query.append('subjectId', params.subjectId);
-    if (params.term) query.append('term', params.term);
-    if (params.academicYear) query.append('academicYear', params.academicYear);
 
-    const response = await fetch(`/api/grades/term?${query}`);
-    if (!response.ok) throw new Error('Failed to list term grades');
-    return response.json();
-  }
-
-  static async recordTermGrade(data: any): Promise<{ id: string; message: string }> {
-    const response = await fetch('/api/grades/term', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    if (!response.ok) throw new Error('Failed to record grade');
-    return response.json();
-  }
 
   // Parent methods
   static async listParents(schoolId?: UUID): Promise<Parent[]> {

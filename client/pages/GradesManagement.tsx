@@ -154,7 +154,7 @@ export default function GradesManagement() {
       setLoading(true);
       const [gradesData, studentsData, subjectsData, classesData] = await Promise.all([
         Api.listTermGrades({ schoolId: user.schoolId }),
-        Api.listStudents(user.schoolId),
+        Api.listStudents({ schoolId: user.schoolId }),
         Api.listSubjects(user.schoolId),
         Api.listClasses(user.schoolId)
       ]);
