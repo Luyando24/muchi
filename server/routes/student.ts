@@ -38,7 +38,7 @@ const requireStudent = async (req: Request, res: Response, next: any) => {
     (req as any).profile = profile;
     
     // Check for active license
-    requireActiveLicense(req, res, next);
+    await requireActiveLicense(req, res, next);
   } catch (error) {
     console.error('Auth Middleware Error:', error);
     res.status(500).json({ message: 'Internal Server Error' });

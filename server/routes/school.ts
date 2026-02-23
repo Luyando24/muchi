@@ -145,7 +145,7 @@ const requireSchoolRole = (allowedRoles: string[]) => {
       (req as any).profile = profile; 
       
       // Check for active license
-      requireActiveLicense(req, res, next);
+      await requireActiveLicense(req, res, next);
     } catch (error: any) {
       console.error('Auth Middleware Error:', error);
       res.status(500).json({ message: 'Internal Server Error', error: error.message });
