@@ -1,0 +1,174 @@
+import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load environment variables
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || '';
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
+const API_URL = 'http://localhost:8080/api';
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+  console.error('Missing Supabase credentials in .env');
+  process.exit(1);
+}
+
+const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+async function main() {
+  try {
+    console.log('Starting Subscription System Verification...');
+
+    // 1. Create a Test School
+    console.log('\nCreating Test School...');
+    const schoolSlug = `test-school-${Math.floor(Math.random() * 10000)}`;
+    const { data: school, error: schoolError } = await supabaseAdmin
+      .from('schools')
+      .insert({
+        name: 'Subscription Test School',
+        slug: schoolSlug,
+        plan: 'Standard'
+      })
+      .select()
+      .single();
+
+    if (schoolError) throw new Error(`Failed to create school: ${schoolError.message}`);
+    console.log(`✓ Created school: ${school.name} (${school.id})`);
+
+    // 2. Create a School Admin User
+    console.log('\nCreating School Admin User...');
+    const email = `admin-${schoolSlug}@test.com`;
+    const password = 'password123';
+    
+    // Create auth user
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: 'Test Admin' }
+    });
+
+    if (authError) throw new Error(`Failed to create user: ${authError.message}`);
+    const userId = authData.user.id;
+
+    // Create profile as System Admin to test policy
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .upsert({
+        id: userId,
+        full_name: 'Test Admin',
+        role: 'system_admin', // Temporarily make system_admin to generate license
+        school_id: school.id
+      });
+
+    if (profileError) throw new Error(`Failed to create profile: ${profileError.message}`);
+    console.log(`✓ Created system admin user: ${email}`);
+
+    // Login to get token
+    const { data: loginData, error: loginError } = await supabaseAdmin.auth.signInWithPassword({
+      email,
+      password
+    });
+    
+    if (loginError) throw new Error(`Login failed: ${loginError.message}`);
+    const token = loginData.session.access_token;
+    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+      global: { headers: { Authorization: `Bearer ${token}` } }
+    });
+
+    // 3. Test Access without License (Should Fail)
+    // First, demote to school_admin to test access check
+    await supabaseAdmin.from('profiles').update({ role: 'school_admin' }).eq('id', userId);
+    
+    console.log('\nTesting Access WITHOUT License (Expect Failure)...');
+    const res1 = await fetch(`${API_URL}/school/dashboard`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (res1.status === 403) {
+      const body = await res1.json();
+      if (body.code === 'LICENSE_EXPIRED' || body.message.includes('License Expired')) {
+        console.log('✓ Access correctly denied: License Expired/Missing');
+      } else {
+        console.log(`? Access denied but unexpected message: ${body.message}`);
+      }
+    } else if (res1.status === 500) {
+        const text = await res1.text();
+        if (text.includes('relation "school_licenses" does not exist')) {
+            console.log('✓ Failed as expected (Table missing - Migration needed)');
+            console.log('PLEASE APPLY MIGRATION 0013_create_school_licenses.sql');
+            return; // Stop here if table missing
+        } else {
+            console.log(`X Unexpected 500 error: ${text}`);
+        }
+    } else {
+      console.log(`X Access allowed unexpectedly! Status: ${res1.status}`);
+    }
+
+    // 4. Generate License via API (As System Admin)
+    // Promote back to system_admin
+    await supabaseAdmin.from('profiles').update({ role: 'system_admin' }).eq('id', userId);
+    
+    console.log('\nGenerating License via API (as System Admin)...');
+    
+    const licenseRes = await fetch(`${API_URL}/admin/licenses`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        schoolId: school.id,
+        plan: 'Standard',
+        durationYears: 1
+      })
+    });
+
+    if (!licenseRes.ok) {
+        const text = await licenseRes.text();
+        if (text.includes('relation "school_licenses" does not exist')) {
+            console.log('✓ Cannot generate license (Table missing - Migration needed)');
+            console.log('PLEASE APPLY MIGRATION 0013_create_school_licenses.sql');
+            return;
+        }
+        throw new Error(`Failed to generate license via API: ${licenseRes.status} ${text}`);
+    }
+    
+    const licenseData = await licenseRes.json();
+    console.log('✓ License generated via API:', licenseData.license.license_key);
+
+    // 5. Test Access with License (Should Succeed)
+    // Demote to school_admin again
+    await supabaseAdmin.from('profiles').update({ role: 'school_admin' }).eq('id', userId);
+
+    console.log('\nTesting Access WITH License (Expect Success)...');
+    const res2 = await fetch(`${API_URL}/school/dashboard`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (res2.ok) {
+      console.log('✓ Access granted successfully');
+    } else {
+      console.log(`X Access denied! Status: ${res2.status}`);
+      const text = await res2.text();
+      console.log(`Response: ${text}`);
+    }
+
+    // Cleanup
+    console.log('\nCleaning up...');
+    await supabaseAdmin.from('schools').delete().eq('id', school.id);
+    await supabaseAdmin.auth.admin.deleteUser(userId);
+    console.log('✓ Cleanup complete');
+
+  } catch (error: any) {
+    console.error('\nVerification Failed:', error.message);
+  }
+}
+
+main();

@@ -1,6 +1,3 @@
-import { createServer } from '../server/index.js';
-import serverless from 'serverless-http';
+import app from '../server/index';
 
-const app = createServer();
-
-export default serverless(app);
+export default app;

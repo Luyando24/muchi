@@ -98,32 +98,32 @@ body {
 
     
     --primary: 220 85% 55%;
-    --primary-foreground: 0 0% 100%;
+    --primary-foreground: 210 40% 98%;
 
-    --secondary: 270 25% 15%;
-    --secondary-foreground: 270 40% 90%;
+    --secondary: 270 30% 15%;
+    --secondary-foreground: 210 40% 98%;
 
-    --muted: 220 25% 15%;
-    --muted-foreground: 220 20% 65%;
+    --muted: 220 30% 15%;
+    --muted-foreground: 215 20% 65%;
 
-    --accent: 270 35% 18%;
-    --accent-foreground: 270 40% 90%;
+    --accent: 270 30% 15%;
+    --accent-foreground: 210 40% 98%;
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 220 25% 18%;
-    --input: 220 25% 18%;
+    --border: 220 30% 15%;
+    --input: 220 30% 15%;
     --ring: 220 85% 55%;
 
     /* Sidebar */
-    --sidebar-background: 220 50% 7%;
+    --sidebar-background: 220 40% 5%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 220 85% 55%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 270 30% 12%;
-    --sidebar-accent-foreground: 270 40% 90%;
-    --sidebar-border: 220 30% 12%;
+    --sidebar-accent: 270 30% 15%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 220 30% 15%;
     --sidebar-ring: 220 85% 55%;
   }
 }
@@ -132,9 +132,55 @@ body {
   * {
     @apply border-border;
   }
-
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@media print {
+  /* Hide the main app root and other direct children */
+  body > *:not(.print-portal) {
+    display: none !important;
+  }
+  
+  /* Reset page margins and padding */
+  @page {
+    margin: 0.5cm;
+    size: auto;
+  }
+
+  /* Portal-based print solution */
+  .print-portal {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: white;
+    color: black;
+    z-index: 9999;
+  }
+
+  /* Utilities */
+  .print\:hidden {
+    display: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  
+  /* Ensure background colors print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+@media screen {
+  .print-portal {
+    display: none;
   }
 }
 

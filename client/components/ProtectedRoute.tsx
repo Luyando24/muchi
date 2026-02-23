@@ -1,43 +1,80 @@
-import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { useAuth } from "@/lib/auth";
+import { useEffect, useState } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
+import { Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 interface ProtectedRouteProps {
-  redirectPath?: string;
+  children: React.ReactNode;
   allowedRoles?: string[];
 }
 
-export const ProtectedRoute = ({
-  redirectPath = "/login",
-  allowedRoles,
-}: ProtectedRouteProps) => {
-  const { session } = useAuth();
+export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
+  const [loading, setLoading] = useState(true);
+  const [authorized, setAuthorized] = useState(false);
   const location = useLocation();
+  const { toast } = useToast();
 
-  // First check if user is logged in at all
-  if (!session) {
-    return <Navigate to={redirectPath} replace />;
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (!session) {
+          setLoading(false);
+          return;
+        }
+
+        if (allowedRoles && allowedRoles.length > 0) {
+          // Check user role from profiles table
+          const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
+
+          if (error || !profile) {
+            console.error('Error fetching profile:', error);
+            setLoading(false);
+            return;
+          }
+
+          if (allowedRoles.includes(profile.role)) {
+            setAuthorized(true);
+          } else {
+             toast({
+              variant: "destructive",
+              title: "Access Denied",
+              description: `You do not have permission to access this page. Required role: ${allowedRoles.join(', ')}`,
+            });
+          }
+        } else {
+          // No specific roles required, just authentication
+          setAuthorized(true);
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkAuth();
+  }, [allowedRoles, toast]);
+
+  if (loading) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
-  // If allowedRoles is specified, check if the user has the required role
-  if (allowedRoles && !allowedRoles.includes(session.role)) {
-    // Redirect to appropriate dashboard based on user role
-    switch (session.role) {
-      case "superadmin":
-        return <Navigate to="/admin" replace />;
-      case "school":
-        return <Navigate to="/dashboard" replace />;
-      case "teacher":
-        return <Navigate to="/teacher" replace />;
-      case "student":
-        return <Navigate to="/student-portal" replace />;
-      case "parent":
-        return <Navigate to="/parent" replace />;
-
-      default:
-        return <Navigate to="/" replace />;
-    }
+  if (!authorized) {
+    // If not authorized but we have a session (meaning role mismatch), go to home or previous page
+    // If no session, go to login
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // User is authenticated and has the required role (or no role restriction)
-  return <Outlet />;
-};
+  return <>{children}</>;
+}

@@ -1,19 +1,16 @@
-import { GraduationCap, Users, FileText, Search, BookOpen, Globe, QrCode, UserCheck, Menu, School, Calendar, BarChart3, DollarSign } from 'lucide-react';
+import { ArrowRight, GraduationCap, Users, FileText, Search, BookOpen, Globe, QrCode, UserCheck, Menu, School, Calendar, BarChart3, DollarSign } from 'lucide-react';
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import ThemeToggle from "@/components/navigation/ThemeToggle";
 import { useState } from 'react';
 
 import Chatbot from '@/components/Landing/Chatbot';
-import DemoModal from '@/components/Landing/DemoModal';
 
 export default function Index() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Chatbot />
-      <DemoModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
       <header className="sticky top-0 border-b bg-background/80 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60 z-50 shadow-sm">
         <div className="container mx-auto flex items-center justify-between py-4 px-4">
           <Link to="/" className="flex items-center gap-2">
@@ -28,17 +25,16 @@ export default function Index() {
           <nav className="hidden md:flex items-center gap-8 text-base font-medium">
             <a href="#features" className="text-muted-foreground hover:text-primary transition-colors">Features</a>
             <a href="#benefits" className="text-muted-foreground hover:text-primary transition-colors">Benefits</a>
-            <a href="#pricing" className="text-muted-foreground hover:text-primary transition-colors">Pricing</a>
             <a href="#testimonials" className="text-muted-foreground hover:text-primary transition-colors">Testimonials</a>
             <a href="#faq" className="text-muted-foreground hover:text-primary transition-colors">FAQ</a>
             <a href="#contact" className="text-muted-foreground hover:text-primary transition-colors">Contact</a>
             
             <div className="flex items-center gap-2">
-              <Button asChild variant="outline" className="font-medium">
-                <Link to="/dashboard">Free Trial</Link>
+              <Button asChild variant="outline" className="rounded-full font-medium">
+                <Link to="/system-admin">System Admin</Link>
               </Button>
               <Button asChild variant="default" className="rounded-full font-medium">
-                <Link to="/login">Sign In</Link>
+                <Link to="/login">Get Started</Link>
               </Button>
               <ThemeToggle />
             </div>
@@ -47,8 +43,17 @@ export default function Index() {
           {/* Mobile Navigation */}
           <div className="flex items-center gap-2 md:hidden">
             <ThemeToggle />
-            <Button asChild variant="default" className="rounded-full">
-              <Link to="/login">Sign In</Link>
+            <Button asChild variant="outline" size="sm" className="rounded-full">
+              <Link to="/teacher-portal">Teacher</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm" className="rounded-full">
+              <Link to="/school-admin">Admin</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm" className="rounded-full">
+              <Link to="/system-admin">SysAdmin</Link>
+            </Button>
+            <Button asChild variant="default" size="sm" className="rounded-full">
+              <Link to="/student-portal">Student</Link>
             </Button>
             <Button variant="ghost" onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2">
               <Menu className="h-6 w-6" />
@@ -61,12 +66,14 @@ export default function Index() {
             <nav className="flex flex-col gap-4 p-4">
               <a href="#features" className="text-muted-foreground hover:text-primary transition-colors py-2">Features</a>
               <a href="#benefits" className="text-muted-foreground hover:text-primary transition-colors py-2">Benefits</a>
-              <a href="#pricing" className="text-muted-foreground hover:text-primary transition-colors py-2">Pricing</a>
               <a href="#testimonials" className="text-muted-foreground hover:text-primary transition-colors py-2">Testimonials</a>
               <a href="#faq" className="text-muted-foreground hover:text-primary transition-colors py-2">FAQ</a>
               <a href="#contact" className="text-muted-foreground hover:text-primary transition-colors py-2">Contact</a>
               <Button asChild variant="outline" className="mt-2 font-medium">
-                <Link to="/register">Free Trial</Link>
+                <Link to="/system-admin">System Admin</Link>
+              </Button>
+              <Button asChild variant="default" className="mt-2 font-medium">
+                <Link to="/login">Get Started</Link>
               </Button>
             </nav>
           </div>
@@ -86,13 +93,10 @@ export default function Index() {
               </p>
               <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
                 <Button size="lg" className="text-lg px-8 py-6 rounded-full bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all">
-                  <Link to="/dashboard" className="flex items-center gap-2">Start Free Trial <GraduationCap className="ml-2" /></Link>
+                  <Link to="/login" className="flex items-center gap-2">Get Started <ArrowRight className="ml-2" /></Link>
                 </Button>
                 <Button size="lg" variant="outline" className="text-lg px-8 py-6 rounded-full bg-white/10 hover:bg-white/20 text-white border-white/30 shadow-lg hover:shadow-xl transition-all">
-                  <Link to="/school" className="flex items-center gap-2">View Demo <School className="ml-2" /></Link>
-                </Button>
-                <Button size="lg" variant="outline" className="text-lg px-8 py-6 rounded-full bg-white/10 hover:bg-white/20 text-white border-white/30 shadow-lg hover:shadow-xl transition-all">
-                  <a href="#pricing" className="flex items-center gap-2">View Pricing <FileText className="ml-2" /></a>
+                  <a href="#features" className="flex items-center gap-2">Features <FileText className="ml-2" /></a>
                 </Button>
               </div>
 
@@ -145,11 +149,7 @@ export default function Index() {
               </div>
               <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Student Information System</h3>
               <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Comprehensive student records management with academic history, contact information, and performance tracking.</p>
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/90 to-primary/80 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 rounded-2xl">
-                <Button asChild className="shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300">
-                  <Link to="/student-information-system">Learn More</Link>
-                </Button>
-              </div>
+
             </div>
             <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2">
               <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
@@ -157,11 +157,7 @@ export default function Index() {
               </div>
               <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Attendance Tracking</h3>
               <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Automated attendance system with real-time tracking, reports, and parent notifications.</p>
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/90 to-primary/80 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 rounded-2xl">
-                <Button asChild className="shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300">
-                  <Link to="/attendance-tracking">Learn More</Link>
-                </Button>
-              </div>
+
             </div>
             <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2">
               <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
@@ -169,11 +165,7 @@ export default function Index() {
               </div>
               <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Academic Management</h3>
               <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Complete curriculum planning, grading system, and academic performance analytics.</p>
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/90 to-primary/80 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 rounded-2xl">
-                <Button asChild className="shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300">
-                  <Link to="/academic-management">Learn More</Link>
-                </Button>
-              </div>
+
             </div>
           </div>
         </div>
@@ -252,11 +244,7 @@ export default function Index() {
                 </div>
                 <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Student Records</h3>
                 <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Comprehensive student information management with academic history tracking.</p>
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/90 to-primary/80 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 rounded-2xl">
-                  <Button asChild className="shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300">
-                    <Link to="/student-information-system">Explore</Link>
-                  </Button>
-                </div>
+
               </div>
             {/* Category 2 */}
               <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2">
@@ -265,11 +253,7 @@ export default function Index() {
                 </div>
                 <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Staff Management</h3>
                 <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Track teacher qualifications, assignments, and performance evaluations.</p>
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/90 to-primary/80 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 rounded-2xl">
-                  <Button asChild className="shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300">
-                    <Link to="/staff-management">Explore</Link>
-                  </Button>
-                </div>
+
               </div>
             {/* Category 3 */}
               <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2">
@@ -278,11 +262,7 @@ export default function Index() {
                 </div>
                 <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Parent Portal</h3>
                 <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Engage parents with real-time access to student progress, attendance, and school communications.</p>
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/90 to-primary/80 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 rounded-2xl">
-                  <Button asChild className="shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300">
-                    <Link to="/parent-portal">Explore</Link>
-                  </Button>
-                </div>
+
               </div>
             {/* Category 4 */}
               <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2">
@@ -291,11 +271,7 @@ export default function Index() {
                 </div>
                 <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">EMIS Integration</h3>
                 <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Export data to Education Management Information System for Ministry compliance.</p>
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/90 to-primary/80 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 rounded-2xl">
-                  <Button asChild className="shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300">
-                    <Link to="/emis-export">Explore</Link>
-                  </Button>
-                </div>
+
               </div>
             {/* Category 5 */}
               <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2">
@@ -304,11 +280,7 @@ export default function Index() {
                 </div>
                 <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Finance Management</h3>
                 <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Track school fees, manage budgets, and generate financial reports.</p>
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/90 to-primary/80 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 rounded-2xl">
-                  <Button asChild className="shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300">
-                    <Link to="/finance-management">Explore</Link>
-                  </Button>
-                </div>
+
               </div>
             {/* Category 6 */}
             <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2">
@@ -317,11 +289,7 @@ export default function Index() {
               </div>
               <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Library Management</h3>
               <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Catalog books, track loans, and manage digital resources for students.</p>
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/90 to-primary/80 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 rounded-2xl">
-                <Button asChild className="shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300">
-                  <Link to="/library-management">Explore</Link>
-                </Button>
-              </div>
+
             </div>
           </div>
         </div>
@@ -560,148 +528,7 @@ export default function Index() {
         </div>
       </section>
 
-      {/* Pricing Section */}
-      <section className="py-20 bg-background/50" id="pricing">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">Simple, Transparent Pricing</h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto mt-2 leading-relaxed">Choose the plan that works best for your school's needs and budget</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {/* Basic Plan */}
-            <div className="relative rounded-2xl border bg-card p-6 shadow-sm transition-all duration-300 hover:shadow-lg">
-              <div className="absolute -top-5 left-0 right-0 mx-auto w-fit rounded-full bg-muted px-3 py-1 text-sm font-medium">
-                Starter
-              </div>
-              <div className="mt-4 text-center">
-                <h3 className="text-xl font-semibold">Basic</h3>
-                <div className="mt-4 flex items-baseline justify-center">
-                  <span className="text-4xl font-bold">K2,475</span>
-                  <span className="ml-1 text-muted-foreground">/month</span>
-                </div>
-                <p className="mt-2 text-sm text-muted-foreground">For small schools just getting started</p>
-              </div>
-              <ul className="mt-6 space-y-3 text-sm">
-                <li className="flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4 text-primary"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                  Up to 200 student records
-                </li>
-                <li className="flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4 text-primary"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                  Student Information System
-                </li>
-                <li className="flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4 text-primary"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                  Basic attendance tracking
-                </li>
-                <li className="flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4 text-primary"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                  Standard reports
-                </li>
-                <li className="flex items-center text-muted-foreground">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
-                  Parent portal
-                </li>
-                <li className="flex items-center text-muted-foreground">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
-                  Finance management
-                </li>
-              </ul>
-              <Button className="mt-6 w-full" asChild>
-                <Link to="/register">Start Free Trial</Link>
-              </Button>
-            </div>
 
-            {/* Standard Plan */}
-            <div className="relative rounded-2xl border bg-primary/5 p-6 shadow-md transition-all duration-300 hover:shadow-xl">
-              <div className="absolute -top-5 left-0 right-0 mx-auto w-fit rounded-full bg-primary px-3 py-1 text-sm font-medium text-primary-foreground">
-                Most Popular
-              </div>
-              <div className="mt-4 text-center">
-                <h3 className="text-xl font-semibold">Standard</h3>
-                <div className="mt-4 flex items-baseline justify-center">
-                  <span className="text-4xl font-bold">K6,225</span>
-                  <span className="ml-1 text-muted-foreground">/month</span>
-                </div>
-                <p className="mt-2 text-sm text-muted-foreground">For growing schools with additional needs</p>
-              </div>
-              <ul className="mt-6 space-y-3 text-sm">
-                <li className="flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4 text-primary"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                  Up to 500 student records
-                </li>
-                <li className="flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4 text-primary"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                  All Basic features
-                </li>
-                <li className="flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4 text-primary"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                  Advanced attendance tracking
-                </li>
-                <li className="flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4 text-primary"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                  Parent portal
-                </li>
-                <li className="flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4 text-primary"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                  Basic finance management
-                </li>
-                <li className="flex items-center text-muted-foreground">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
-                  EMIS integration
-                </li>
-              </ul>
-              <Button className="mt-6 w-full" asChild>
-                <Link to="/register">Start Free Trial</Link>
-              </Button>
-            </div>
-
-            {/* Premium Plan */}
-            <div className="relative rounded-2xl border bg-card p-6 shadow-sm transition-all duration-300 hover:shadow-lg">
-              <div className="absolute -top-5 left-0 right-0 mx-auto w-fit rounded-full bg-muted px-3 py-1 text-sm font-medium">
-                Enterprise
-              </div>
-              <div className="mt-4 text-center">
-                <h3 className="text-xl font-semibold">Premium</h3>
-                <div className="mt-4 flex items-baseline justify-center">
-                  <span className="text-4xl font-bold">K12,475</span>
-                  <span className="ml-1 text-muted-foreground">/month</span>
-                </div>
-                <p className="mt-2 text-sm text-muted-foreground">For large schools with comprehensive needs</p>
-              </div>
-              <ul className="mt-6 space-y-3 text-sm">
-                <li className="flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4 text-primary"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                  Unlimited student records
-                </li>
-                <li className="flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4 text-primary"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                  All Standard features
-                </li>
-                <li className="flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4 text-primary"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                  Full finance management
-                </li>
-                <li className="flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4 text-primary"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                  EMIS integration
-                </li>
-                <li className="flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4 text-primary"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                  Library management
-                </li>
-                <li className="flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4 text-primary"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                  Priority support
-                </li>
-              </ul>
-              <Button className="mt-6 w-full" asChild>
-                <Link to="/register">Start Free Trial</Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
 
 
 
