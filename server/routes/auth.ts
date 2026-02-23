@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { LoginRequest, LoginResponse, User } from '../../shared/api';
+import { LoginRequest, LoginResponse, User } from '../../shared/api.js';
 
 const router = Router();
 

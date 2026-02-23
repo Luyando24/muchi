@@ -1,5 +1,5 @@
 
-import { supabaseAdmin } from './supabase';
+import { supabaseAdmin } from './supabase.js';
 
 // Helper to ensure settings exist (auto-set logic)
 export async function ensureSchoolSettings(schoolId: string) {

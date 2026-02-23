@@ -1,7 +1,7 @@
 
 import { Router, Request, Response } from 'express';
-import { supabaseAdmin } from '../lib/supabase';
-import { requireActiveLicense } from '../middleware/license';
+import { supabaseAdmin } from '../lib/supabase.js';
+import { requireActiveLicense } from '../middleware/license.js';
 
 const router = Router();
 
@@ -187,8 +187,8 @@ router.get('/assignments', requireStudent, async (req: Request, res: Response) =
       type: a.type,
       category: a.category,
       assignmentNumber: a.assignment_number,
-      status: submissionMap.get(a.id)?.status || 'pending',
-      grade: submissionMap.get(a.id)?.grade
+      status: (submissionMap.get(a.id) as any)?.status || 'pending',
+      grade: (submissionMap.get(a.id) as any)?.grade
     }));
 
     res.json(result);

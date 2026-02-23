@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { ServerNode } from '../../shared/api';
+import { ServerNode } from '../../shared/api.js';
 
 const router = Router();
 

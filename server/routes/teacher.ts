@@ -1,8 +1,8 @@
 
 import { Router, Request, Response } from 'express';
-import { supabaseAdmin } from '../lib/supabase';
-import { requireActiveLicense } from '../middleware/license';
-import { ensureSchoolSettings } from '../lib/school-settings';
+import { supabaseAdmin } from '../lib/supabase.js';
+import { requireActiveLicense } from '../middleware/license.js';
+import { ensureSchoolSettings } from '../lib/school-settings.js';
 import { randomUUID } from 'crypto';
 
 const router = Router();

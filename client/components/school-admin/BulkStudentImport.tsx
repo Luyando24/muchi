@@ -59,8 +59,8 @@ export default function BulkStudentImport({ onImportSuccess }: { onImportSuccess
           grade: row['Grade'] || row['Class'] || '',
           gender: row['Gender'] || '',
           guardian: row['Guardian'] || row['Parent'] || '',
-          status: 'Pending'
-        })).filter(s => s.name && s.name.trim() !== '');
+          status: 'Pending' as const
+        })).filter((s: ImportedStudent) => s.name && s.name.trim() !== '');
 
         setPreviewData(students);
       } catch (error) {

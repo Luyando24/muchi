@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
-import { School } from '../../shared/api';
-import { supabaseAdmin } from '../lib/supabase';
+import { School } from '../../shared/api.js';
+import { supabaseAdmin } from '../lib/supabase.js';
 
 const router = Router();
 

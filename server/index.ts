@@ -2,14 +2,14 @@ import express from 'express';
 import cors from 'cors';
 
 // Import Routes
-import { authRouter } from './routes/auth';
-import { schoolRouter } from './routes/schools';
-import { userRouter } from './routes/users';
-import { infrastructureRouter } from './routes/infrastructure';
-import { adminRouter } from './routes/admin';
-import { schoolAdminRouter } from './routes/school';
-import { studentRouter } from './routes/student';
-import { teacherRouter } from './routes/teacher';
+import { authRouter } from './routes/auth.js';
+import { schoolRouter } from './routes/schools.js';
+import { userRouter } from './routes/users.js';
+import { infrastructureRouter } from './routes/infrastructure.js';
+import { adminRouter } from './routes/admin.js';
+import { schoolAdminRouter } from './routes/school.js';
+import { studentRouter } from './routes/student.js';
+import { teacherRouter } from './routes/teacher.js';
 
 const app = express();
 const port = process.env.PORT || 3000;

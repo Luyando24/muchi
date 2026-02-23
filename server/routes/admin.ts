@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { supabaseAdmin } from '../lib/supabase';
+import { supabaseAdmin } from '../lib/supabase.js';
 import * as os from 'os';
 import * as crypto from 'crypto';
 
