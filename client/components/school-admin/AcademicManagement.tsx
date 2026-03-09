@@ -516,6 +516,7 @@ export default function AcademicManagement() {
       });
       if (res.ok) {
         const data = await res.json();
+        // Updated API returns subject details object, we need IDs
         setSelectedClassSubjects(data.map((s: any) => s.id));
       }
     } catch (error) {

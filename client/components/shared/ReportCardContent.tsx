@@ -225,7 +225,7 @@ export const ReportCardContent = ({ data, term, academicYear, className = "" }: 
                 Head Teacher's Remark
               </h4>
               <p className="text-sm leading-relaxed text-slate-800 font-medium font-serif italic border-l-2 border-slate-900 pl-4">
-                "{(() => {
+                {(() => {
                   if (!grades || grades.length === 0) return "Academic data unavailable for this period.";
                   
                   // Helper for student reference
@@ -275,7 +275,7 @@ export const ReportCardContent = ({ data, term, academicYear, className = "" }: 
 
                   // Combine parts
                   return [opening, strengths, improvements, closing].filter(Boolean).join(" ");
-                })()}"
+                })()}
               </p>
             </div>
           </div>
