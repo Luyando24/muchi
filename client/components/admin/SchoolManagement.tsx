@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Building, 
-  Plus, 
-  Search, 
-  MoreVertical, 
-  Edit, 
-  Trash2, 
+import {
+  Building,
+  Plus,
+  Search,
+  MoreVertical,
+  Edit,
+  Trash2,
   Loader2,
   ExternalLink
 } from 'lucide-react';
@@ -41,6 +41,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -82,12 +83,14 @@ export default function SchoolManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSchool, setEditingSchool] = useState<School | null>(null);
-  
+
   // License Management State
   const [isLicenseDialogOpen, setIsLicenseDialogOpen] = useState(false);
   const [selectedSchool, setSelectedSchool] = useState<School | null>(null);
   const [licenseDuration, setLicenseDuration] = useState(1);
   const [generatingLicense, setGeneratingLicense] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const { toast } = useToast();
 
@@ -140,18 +143,18 @@ export default function SchoolManagement() {
 
   const getActiveLicense = (school: School) => {
     if (!school.school_licenses) return null;
-    return school.school_licenses.find(l => 
+    return school.school_licenses.find(l =>
       l.status === 'active' && new Date(l.end_date) > new Date()
     );
   };
 
   const handleGenerateLicense = async () => {
     if (!selectedSchool) return;
-    
+
     setGeneratingLicense(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       const response = await fetch('/api/admin/licenses', {
         method: 'POST',
         headers: {
@@ -174,7 +177,7 @@ export default function SchoolManagement() {
         title: "Success",
         description: "License generated successfully",
       });
-      
+
       // Keep dialog open to see the new license
       // setIsLicenseDialogOpen(false); 
       fetchSchools();
@@ -193,7 +196,7 @@ export default function SchoolManagement() {
   const handleExtendLicense = async (licenseId: string, currentEndDate: string) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       const newEndDate = new Date(currentEndDate);
       newEndDate.setFullYear(newEndDate.getFullYear() + 1);
 
@@ -261,7 +264,7 @@ export default function SchoolManagement() {
           .from('schools')
           .update(values)
           .eq('id', editingSchool.id);
-        
+
         if (error) throw error;
         toast({ title: "School updated successfully" });
       } else {
@@ -270,11 +273,11 @@ export default function SchoolManagement() {
         const { error } = await supabase
           .from('schools')
           .insert(values);
-        
+
         if (error) throw error;
         toast({ title: "School created successfully" });
       }
-      
+
       setIsDialogOpen(false);
       form.reset();
       setEditingSchool(null);
@@ -288,18 +291,19 @@ export default function SchoolManagement() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this school? This action cannot be undone.")) return;
-
+  const handleDelete = async () => {
+    if (!deleteTargetId) return;
+    setIsDeleting(true);
     try {
       const { error } = await supabase
         .from('schools')
         .delete()
-        .eq('id', id);
+        .eq('id', deleteTargetId);
 
       if (error) throw error;
-      
+
       toast({ title: "School deleted successfully" });
+      setDeleteTargetId(null);
       fetchSchools();
     } catch (error: any) {
       toast({
@@ -307,6 +311,8 @@ export default function SchoolManagement() {
         title: "Delete failed",
         description: error.message,
       });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -334,7 +340,7 @@ export default function SchoolManagement() {
     setIsDialogOpen(true);
   };
 
-  const filteredSchools = schools.filter(school => 
+  const filteredSchools = schools.filter(school =>
     school.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     school.slug.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -413,7 +419,7 @@ export default function SchoolManagement() {
                     </FormItem>
                   )}
                 />
-                 <FormField
+                <FormField
                   control={form.control}
                   name="address"
                   render={({ field }) => (
@@ -440,8 +446,8 @@ export default function SchoolManagement() {
       <div className="flex items-center space-x-2">
         <div className="relative flex-1">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search schools..." 
+          <Input
+            placeholder="Search schools..."
             className="pl-8 max-w-sm"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -463,7 +469,7 @@ export default function SchoolManagement() {
           </TableHeader>
           <TableBody>
             {loading ? (
-               <TableRow>
+              <TableRow>
                 <TableCell colSpan={5} className="h-24 text-center">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                 </TableCell>
@@ -531,9 +537,9 @@ export default function SchoolManagement() {
                         <DropdownMenuItem onClick={() => openEditDialog(school)}>
                           <Edit className="mr-2 h-4 w-4" /> Edit Details
                         </DropdownMenuItem>
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           className="text-red-600 focus:text-red-600"
-                          onClick={() => handleDelete(school.id)}
+                          onClick={() => setDeleteTargetId(school.id)}
                         >
                           <Trash2 className="mr-2 h-4 w-4" /> Delete School
                         </DropdownMenuItem>
@@ -546,7 +552,7 @@ export default function SchoolManagement() {
           </TableBody>
         </Table>
       </div>
-      
+
       <Dialog open={isLicenseDialogOpen} onOpenChange={setIsLicenseDialogOpen}>
         <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
@@ -574,41 +580,41 @@ export default function SchoolManagement() {
                     selectedSchool.school_licenses
                       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                       .map((license) => (
-                      <TableRow key={license.id}>
-                        <TableCell>
-                          <Badge variant={
-                            license.status === 'active' && new Date(license.end_date) > new Date() 
-                              ? 'default' 
-                              : 'destructive'
-                          }>
-                            {license.status === 'active' && new Date(license.end_date) < new Date() ? 'expired' : license.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{license.license_key.substring(0, 8)}...</TableCell>
-                        <TableCell>{new Date(license.start_date).toLocaleDateString()}</TableCell>
-                        <TableCell>{new Date(license.end_date).toLocaleDateString()}</TableCell>
-                        <TableCell className="text-right space-x-2">
-                          {license.status === 'active' && new Date(license.end_date) > new Date() && (
-                            <>
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => handleExtendLicense(license.id, license.end_date)}
-                              >
-                                Extend
-                              </Button>
-                              <Button 
-                                variant="destructive" 
-                                size="sm"
-                                onClick={() => handleRevokeLicense(license.id)}
-                              >
-                                Revoke
-                              </Button>
-                            </>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))
+                        <TableRow key={license.id}>
+                          <TableCell>
+                            <Badge variant={
+                              license.status === 'active' && new Date(license.end_date) > new Date()
+                                ? 'default'
+                                : 'destructive'
+                            }>
+                              {license.status === 'active' && new Date(license.end_date) < new Date() ? 'expired' : license.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">{license.license_key.substring(0, 8)}...</TableCell>
+                          <TableCell>{new Date(license.start_date).toLocaleDateString()}</TableCell>
+                          <TableCell>{new Date(license.end_date).toLocaleDateString()}</TableCell>
+                          <TableCell className="text-right space-x-2">
+                            {license.status === 'active' && new Date(license.end_date) > new Date() && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleExtendLicense(license.id, license.end_date)}
+                                >
+                                  Extend
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleRevokeLicense(license.id)}
+                                >
+                                  Revoke
+                                </Button>
+                              </>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
                   ) : (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground py-4">
@@ -637,7 +643,7 @@ export default function SchoolManagement() {
                     />
                   </div>
                 </div>
-                
+
                 <div className="flex-1 text-sm text-muted-foreground pb-3">
                   New license will expire on: <span className="font-medium text-foreground">{new Date(new Date().setFullYear(new Date().getFullYear() + licenseDuration)).toLocaleDateString()}</span>
                 </div>
@@ -662,6 +668,16 @@ export default function SchoolManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={!!deleteTargetId}
+        onOpenChange={(open) => !open && setDeleteTargetId(null)}
+        title="Delete School"
+        description="Are you sure you want to delete this school? This action cannot be undone and will remove all associated data."
+        confirmLabel="Delete School"
+        variant="danger"
+        loading={isDeleting}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  FileText, 
-  Download, 
-  Plus, 
+import {
+  FileText,
+  Download,
+  Plus,
   Trash2,
   Loader2,
   GraduationCap,
@@ -36,6 +36,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { Report } from '@shared/api';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 const reportCategories = [
   { name: "Academic Reports", icon: GraduationCap, description: "Performance, grades, and exam results", type: "Academic" },
@@ -48,7 +49,9 @@ export default function ReportsManagement() {
   const [reports, setReports] = useState<Report[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerateOpen, setIsGenerateOpen] = useState(false);
-  const [schoolSettings, setSchoolSettings] = useState<{academic_year: string, current_term: string} | null>(null);
+  const [schoolSettings, setSchoolSettings] = useState<{ academic_year: string, current_term: string } | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -85,7 +88,7 @@ export default function ReportsManagement() {
       const params = new URLSearchParams();
       if (term) params.append('term', term);
       if (year) params.append('academicYear', year);
-      
+
       if (params.toString()) {
         url += `?${params.toString()}`;
       }
@@ -178,33 +181,27 @@ export default function ReportsManagement() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this report?')) return;
-
+  const handleDelete = async () => {
+    if (!deleteTargetId) return;
+    setIsDeleting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/reports/${id}`, {
+      const response = await fetch(`/api/school/reports/${deleteTargetId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
-        }
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
       if (!response.ok) throw new Error('Failed to delete report');
 
-      toast({
-        title: "Success",
-        description: "Report deleted successfully",
-      });
+      toast({ title: "Success", description: "Report deleted successfully" });
+      setDeleteTargetId(null);
       fetchReports();
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -242,7 +239,7 @@ export default function ReportsManagement() {
                   Select the type of report you want to generate.
                   {schoolSettings && (
                     <div className="mt-2 p-2 bg-muted rounded-md flex items-center gap-2 text-sm">
-                      <span className="font-medium text-foreground">Auto-set for:</span> 
+                      <span className="font-medium text-foreground">Auto-set for:</span>
                       {schoolSettings.current_term}, {schoolSettings.academic_year}
                     </div>
                   )}
@@ -251,21 +248,21 @@ export default function ReportsManagement() {
               <form onSubmit={handleGenerate} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="title">Report Title</Label>
-                  <Input 
-                    id="title" 
-                    name="title" 
-                    placeholder="e.g., Q1 Financial Summary" 
-                    value={formData.title} 
-                    onChange={handleInputChange} 
-                    required 
+                  <Input
+                    id="title"
+                    name="title"
+                    placeholder="e.g., Q1 Financial Summary"
+                    value={formData.title}
+                    onChange={handleInputChange}
+                    required
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="type">Report Type</Label>
-                  <Select 
-                    name="type" 
-                    value={formData.type} 
+                  <Select
+                    name="type"
+                    value={formData.type}
                     onValueChange={(val) => handleSelectChange('type', val)}
                   >
                     <SelectTrigger>
@@ -283,12 +280,12 @@ export default function ReportsManagement() {
 
                 <div className="space-y-2">
                   <Label htmlFor="description">Description (Optional)</Label>
-                  <Input 
-                    id="description" 
-                    name="description" 
-                    placeholder="Brief description of the report..." 
-                    value={formData.description} 
-                    onChange={handleInputChange} 
+                  <Input
+                    id="description"
+                    name="description"
+                    placeholder="Brief description of the report..."
+                    value={formData.description}
+                    onChange={handleInputChange}
                   />
                 </div>
 
@@ -372,7 +369,7 @@ export default function ReportsManagement() {
                           <Button variant="ghost" size="sm" onClick={() => handleDownload(report)}>
                             <Download className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleDelete(report.id)}>
+                          <Button variant="ghost" size="sm" onClick={() => setDeleteTargetId(report.id)}>
                             <Trash2 className="h-4 w-4 text-red-500" />
                           </Button>
                         </div>
@@ -385,6 +382,16 @@ export default function ReportsManagement() {
           </div>
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={!!deleteTargetId}
+        onOpenChange={(open) => !open && setDeleteTargetId(null)}
+        title="Delete Report?"
+        description="Are you sure you want to delete this report? This action cannot be undone."
+        confirmLabel="Delete Report"
+        variant="danger"
+        loading={isDeleting}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

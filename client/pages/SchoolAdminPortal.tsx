@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { 
+import {
   LayoutDashboard,
   Users,
   GraduationCap,
@@ -87,7 +87,7 @@ export default function SchoolAdminPortal() {
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "students", label: "Students", icon: GraduationCap },
     { id: "teachers", label: "Teachers", icon: Users },
-    { id: "academics", label: "Academics", icon: Building2 },
+    { id: "academics", label: "Academics & Results", icon: Building2 },
     { id: "gradebook", label: "Gradebook", icon: GraduationCap },
     { id: "finance", label: "Finance", icon: CreditCard },
     { id: "reports", label: "Reports", icon: PieChart },
@@ -109,7 +109,7 @@ export default function SchoolAdminPortal() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      <SchoolAdminNavbar 
+      <SchoolAdminNavbar
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
         activeTab={activeTab}
@@ -155,7 +155,7 @@ export default function SchoolAdminPortal() {
 
         {/* Overlay for mobile */}
         {isSidebarOpen && (
-          <div 
+          <div
             className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
             onClick={() => setIsSidebarOpen(false)}
           />

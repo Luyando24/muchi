@@ -8,7 +8,7 @@ const router = Router();
 // Middleware to verify Student Role
 const requireStudent = async (req: Request, res: Response, next: any) => {
   const token = req.headers.authorization?.split(' ')[1];
-  
+
   if (!token) {
     return res.status(401).json({ message: 'Unauthorized: No token provided' });
   }
@@ -36,7 +36,7 @@ const requireStudent = async (req: Request, res: Response, next: any) => {
 
     (req as any).user = user;
     (req as any).profile = profile;
-    
+
     // Check for active license
     await requireActiveLicense(req, res, next);
   } catch (error) {
@@ -62,7 +62,7 @@ router.get('/dashboard', requireStudent, async (req: Request, res: Response) => 
     let attendanceRate = 100;
     let daysPresent = 0;
     let daysAbsent = 0;
-    
+
     if (attendance && attendance.length > 0) {
       daysPresent = attendance.filter(a => a.status === 'present').length;
       daysAbsent = attendance.filter(a => a.status === 'absent').length;
@@ -81,7 +81,7 @@ router.get('/dashboard', requireStudent, async (req: Request, res: Response) => 
     // 4. Calculate Performance Status (Ethical alternative to Rank)
     let performanceStatus = 'N/A';
     let termAverage = 0;
-    
+
     // Get student's current class
     const { data: enrollment } = await supabaseAdmin
       .from('enrollments')
@@ -113,14 +113,14 @@ router.get('/dashboard', requireStudent, async (req: Request, res: Response) => 
           .eq('term', latestGrade.term);
 
         if (studentGrades && studentGrades.length > 0) {
-           const total = studentGrades.reduce((sum, g) => sum + (g.percentage || 0), 0);
-           termAverage = Math.round(total / studentGrades.length);
+          const total = studentGrades.reduce((sum, g) => sum + (g.percentage || 0), 0);
+          termAverage = Math.round(total / studentGrades.length);
 
-           if (termAverage >= 75) performanceStatus = "Outstanding";
-           else if (termAverage >= 65) performanceStatus = "Very Good";
-           else if (termAverage >= 55) performanceStatus = "Good";
-           else if (termAverage >= 45) performanceStatus = "Satisfactory";
-           else performanceStatus = "Needs Improvement";
+          if (termAverage >= 75) performanceStatus = "Outstanding";
+          else if (termAverage >= 65) performanceStatus = "Very Good";
+          else if (termAverage >= 55) performanceStatus = "Good";
+          else if (termAverage >= 45) performanceStatus = "Satisfactory";
+          else performanceStatus = "Needs Improvement";
         }
       }
     }
@@ -209,7 +209,7 @@ router.post('/assignments/:id/submit', requireStudent, async (req: Request, res:
     // Check if assignment exists and is for student's class
     // We can skip strict class check for now if we trust the ID, but better to check
     // For now, just upsert submission
-    
+
     const { data, error } = await supabaseAdmin
       .from('submissions')
       .upsert({
@@ -269,51 +269,80 @@ router.get('/grades', requireStudent, async (req: Request, res: Response) => {
 
     if (enrollmentError) console.error('Error fetching enrollment:', enrollmentError);
 
-    // 4. Fetch Grades
-    const { data: grades, error: gradesError } = await supabaseAdmin
+    // 4. Fetch Grades - only Published grades for student view
+    const { data: rawGrades, error: gradesError } = await supabaseAdmin
       .from('student_grades')
       .select(`
         *,
         subjects(name, code, department)
       `)
       .eq('student_id', studentId)
+      .eq('status', 'Published')
       .order('academic_year', { ascending: false })
       .order('term', { ascending: false });
 
     if (gradesError) throw gradesError;
 
+    // Remove duplicates: key by (year, term, subject code) to handle multiple subject rows with same code
+    const gradesMap = new Map<string, any>();
+    if (rawGrades && rawGrades.length > 0) {
+      const sortedGrades = [...rawGrades].sort((a, b) => {
+        if (a.academic_year !== b.academic_year) return b.academic_year.localeCompare(a.academic_year);
+        if (a.term !== b.term) return b.term.localeCompare(a.term);
+        const timeA = new Date(a.calculated_at || a.created_at).getTime();
+        const timeB = new Date(b.calculated_at || b.created_at).getTime();
+        return timeB - timeA;  // newest first
+      });
+
+      for (const grade of sortedGrades) {
+        // Use subject code as the dedup key — handles multiple DB rows for the same subject
+        const subjectCode = grade.subjects?.code || grade.subject_id;
+        const key = `${grade.academic_year}-${grade.term}-${subjectCode}`;
+        if (!gradesMap.has(key)) {
+          gradesMap.set(key, grade);
+        }
+      }
+    }
+    const grades = Array.from(gradesMap.values());
+
+    // Re-sort after deduplication so grouping works correctly
+    grades.sort((a, b) => {
+      if (a.academic_year !== b.academic_year) return b.academic_year.localeCompare(a.academic_year);
+      return b.term.localeCompare(a.term);
+    });
+
     // 5. Group by Term/Year
     const termResults: any[] = [];
     let currentGroup: any = null;
-    
+
     // Since the query is sorted by year desc, term desc, we can just iterate and group
     for (const grade of grades) {
-        if (!currentGroup || currentGroup.term !== grade.term || currentGroup.academicYear !== grade.academic_year) {
-            if (currentGroup) {
-                termResults.push(currentGroup);
-            }
-            currentGroup = {
-                term: grade.term,
-                academicYear: grade.academic_year,
-                grades: []
-            };
+      if (!currentGroup || currentGroup.term !== grade.term || currentGroup.academicYear !== grade.academic_year) {
+        if (currentGroup) {
+          termResults.push(currentGroup);
         }
-        currentGroup.grades.push(grade);
+        currentGroup = {
+          term: grade.term,
+          academicYear: grade.academic_year,
+          grades: []
+        };
+      }
+      currentGroup.grades.push(grade);
     }
     if (currentGroup) {
-        termResults.push(currentGroup);
+      termResults.push(currentGroup);
     }
 
     // Construct final response
     const response = {
-        student: {
-            name: profile.full_name,
-            studentNumber: profile.student_number || 'N/A',
-            class: enrollment?.classes?.name || 'Unassigned'
-        },
-        school: school,
-        gradingScale: gradingScale || [],
-        termResults: termResults
+      student: {
+        name: profile.full_name,
+        studentNumber: profile.student_number || 'N/A',
+        class: enrollment?.classes?.name || 'Unassigned'
+      },
+      school: school,
+      gradingScale: gradingScale || [],
+      termResults: termResults
     };
 
     res.json(response);
@@ -336,19 +365,19 @@ router.get('/subjects', requireStudent, async (req: Request, res: Response) => {
       .eq('student_id', studentId);
 
     if (ssError) {
-        // If table doesn't exist (42P01) or other error, fallback to class subjects
-        if (ssError.code !== '42P01') console.warn('Error fetching student_subjects:', ssError);
-        throw new Error('Fallback to class subjects');
+      // If table doesn't exist (42P01) or other error, fallback to class subjects
+      if (ssError.code !== '42P01') console.warn('Error fetching student_subjects:', ssError);
+      throw new Error('Fallback to class subjects');
     }
 
     if (studentSubjects && studentSubjects.length > 0) {
-        const subjects = studentSubjects.map((ss: any) => ({
-            id: ss.subjects?.id,
-            name: ss.subjects?.name,
-            code: ss.subjects?.code,
-            department: ss.subjects?.department
-        })).filter((s: any) => s.id); // Filter out nulls
-        return res.json(subjects);
+      const subjects = studentSubjects.map((ss: any) => ({
+        id: ss.subjects?.id,
+        name: ss.subjects?.name,
+        code: ss.subjects?.code,
+        department: ss.subjects?.department
+      })).filter((s: any) => s.id); // Filter out nulls
+      return res.json(subjects);
     }
 
     // 2. Fallback: If no student-specific subjects found, try class subjects
@@ -357,35 +386,35 @@ router.get('/subjects', requireStudent, async (req: Request, res: Response) => {
   } catch (fallback) {
     // Fallback logic: Get class -> class_subjects
     try {
-        const { data: enrollment } = await supabaseAdmin
-            .from('enrollments')
-            .select('class_id')
-            .eq('student_id', studentId)
-            .eq('status', 'Active')
-            .maybeSingle();
+      const { data: enrollment } = await supabaseAdmin
+        .from('enrollments')
+        .select('class_id')
+        .eq('student_id', studentId)
+        .eq('status', 'Active')
+        .maybeSingle();
 
-        if (!enrollment || !enrollment.class_id) {
-            return res.json([]); // No class, no subjects
-        }
+      if (!enrollment || !enrollment.class_id) {
+        return res.json([]); // No class, no subjects
+      }
 
-        const { data: classSubjects, error: csError } = await supabaseAdmin
-            .from('class_subjects')
-            .select('subject_id, subjects(id, name, code, department)')
-            .eq('class_id', enrollment.class_id);
+      const { data: classSubjects, error: csError } = await supabaseAdmin
+        .from('class_subjects')
+        .select('subject_id, subjects(id, name, code, department)')
+        .eq('class_id', enrollment.class_id);
 
-        if (csError) throw csError;
+      if (csError) throw csError;
 
-        const subjects = classSubjects.map((cs: any) => ({
-            id: cs.subjects?.id,
-            name: cs.subjects?.name,
-            code: cs.subjects?.code,
-            department: cs.subjects?.department
-        })).filter((s: any) => s.id);
+      const subjects = classSubjects.map((cs: any) => ({
+        id: cs.subjects?.id,
+        name: cs.subjects?.name,
+        code: cs.subjects?.code,
+        department: cs.subjects?.department
+      })).filter((s: any) => s.id);
 
-        res.json(subjects);
+      res.json(subjects);
     } catch (error: any) {
-        console.error('Get Student Subjects Error:', error);
-        res.status(500).json({ message: error.message });
+      console.error('Get Student Subjects Error:', error);
+      res.status(500).json({ message: error.message });
     }
   }
 });
@@ -414,12 +443,12 @@ router.get('/attendance', requireStudent, async (req: Request, res: Response) =>
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
-    
+
     const thisMonthRecords = attendance.filter(a => {
       const recordDate = new Date(a.date);
       return recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear;
     });
-    
+
     const thisMonthTotal = thisMonthRecords.length;
     const thisMonthPresent = thisMonthRecords.filter(a => a.status === 'present').length;
     const thisMonthPercentage = thisMonthTotal > 0 ? Math.round((thisMonthPresent / thisMonthTotal) * 100) : 100;

@@ -15,7 +15,8 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // API Routes
 app.use('/api/auth', authRouter);
@@ -34,7 +35,7 @@ app.get('/api/ping', (req, res) => {
 
 // Demo endpoint
 app.get('/api/demo', (req, res) => {
-  res.json({ 
+  res.json({
     message: 'Hello from the backend!',
     status: 'success'
   });

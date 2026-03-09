@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { supabaseAdmin } from '../lib/supabase.js';
+import { WhatsAppService } from '../services/whatsappService.js';
 import { requireActiveLicense } from '../middleware/license.js';
 import { ensureSchoolSettings } from '../lib/school-settings.js';
 
@@ -112,7 +113,7 @@ router.get('/public-events', async (req: Request, res: Response) => {
 const requireSchoolRole = (allowedRoles: string[]) => {
   return async (req: Request, res: Response, next: any) => {
     const token = req.headers.authorization?.split(' ')[1];
-    
+
     if (!token) {
       return res.status(401).json({ message: 'Unauthorized: No token provided' });
     }
@@ -142,8 +143,8 @@ const requireSchoolRole = (allowedRoles: string[]) => {
 
       // Attach user and profile to request
       (req as any).user = user;
-      (req as any).profile = profile; 
-      
+      (req as any).profile = profile;
+
       // Check for active license
       await requireActiveLicense(req, res, next);
     } catch (error: any) {
@@ -162,7 +163,7 @@ router.get('/dashboard', requireSchoolRole(['school_admin', 'teacher']), async (
   const schoolId = profile.school_id;
 
   console.log(`[Dashboard] Fetching stats for School ID: ${schoolId}, User: ${user.email}, Role: ${profile.role}`);
-  
+
   try {
     // Parallel fetch for counts
     const [students, teachers, classes] = await Promise.all([
@@ -177,7 +178,7 @@ router.get('/dashboard', requireSchoolRole(['school_admin', 'teacher']), async (
 
     const studentCount = students.count || 0;
     const teacherCount = teachers.count || 0;
-    
+
     console.log(`[Dashboard] Counts - Students: ${studentCount}, Teachers: ${teacherCount}, Classes: ${classes.count || 0}`);
 
     // 4. Calculate Attendance Rate (Today)
@@ -200,11 +201,11 @@ router.get('/dashboard', requireSchoolRole(['school_admin', 'teacher']), async (
         .eq('school_id', schoolId)
         .eq('date', today)
         .eq('status', 'present');
-      
+
       // Calculate against submitted attendance for accurate daily rate
       const rate = Math.round(((presentCount || 0) / totalAttendanceToday) * 100);
       attendanceRateValue = `${rate}%`;
-      
+
       // Simple trend logic
       if (rate >= 95) attendanceTrend = "+2%";
       else if (rate < 80) attendanceTrend = "-5%";
@@ -217,13 +218,13 @@ router.get('/dashboard', requireSchoolRole(['school_admin', 'teacher']), async (
       overview: {
         totalStudents: { value: studentCount, trend: "+5%", status: "up" },
         totalTeachers: { value: teacherCount, trend: "+0%", status: "up" },
-        revenue: { value: "K0", trend: "+0%", status: "up" }, 
+        revenue: { value: "K0", trend: "+0%", status: "up" },
         attendanceRate: { value: attendanceRateValue, trend: attendanceTrend, status: attendanceRateValue === "--" || parseInt(attendanceRateValue) >= 90 ? "up" : "down" }
       },
-      recentActivities: [], 
-      financialSummary: [], 
-      pendingApprovals: [], 
-      announcements: [] 
+      recentActivities: [],
+      financialSummary: [],
+      pendingApprovals: [],
+      announcements: []
     };
 
     console.log('Sending dashboard data:', JSON.stringify(responseData, null, 2));
@@ -241,7 +242,7 @@ router.get('/students', requireSchoolRole(['school_admin', 'teacher']), async (r
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
   console.log(`[Students] Fetching students for School ID: ${schoolId}`);
-  
+
   try {
     const { data: students, error } = await supabaseAdmin
       .from('profiles')
@@ -317,7 +318,7 @@ router.get('/students/:id/details', requireSchoolRole(['school_admin', 'teacher'
       .from('student_subjects')
       .select('subjects(name, code)')
       .eq('student_id', studentId);
-      //.eq('academic_year', enrollment?.academic_year || new Date().getFullYear().toString()); // Optional: filter by year
+    //.eq('academic_year', enrollment?.academic_year || new Date().getFullYear().toString()); // Optional: filter by year
 
     if (subjectsError) {
       console.error('Error fetching student subjects:', subjectsError);
@@ -331,7 +332,7 @@ router.get('/students/:id/details', requireSchoolRole(['school_admin', 'teacher'
         .from('attendance')
         .select('status, academic_year, term')
         .eq('student_id', studentId);
-      
+
       if (error) throw error;
       attendanceStats = data;
     } catch (e: any) {
@@ -341,10 +342,10 @@ router.get('/students/:id/details', requireSchoolRole(['school_admin', 'teacher'
         .from('attendance')
         .select('status')
         .eq('student_id', studentId);
-        
+
       if (!error) attendanceStats = data;
     }
-    
+
     // Get current settings for term-specific stats
     const settings = await ensureSchoolSettings(schoolId);
     const currentAcademicYear = settings?.academic_year || new Date().getFullYear().toString();
@@ -370,34 +371,34 @@ router.get('/students/:id/details', requireSchoolRole(['school_admin', 'teacher'
     if (attendanceStats) {
       attendanceStats.forEach((record: any) => {
         const status = record.status?.toLowerCase() as keyof typeof attendanceSummary;
-        
+
         // Overall Stats
         if (attendanceSummary.overall.hasOwnProperty(status)) {
           (attendanceSummary.overall as any)[status]++;
         }
         attendanceSummary.overall.total++;
-        
+
         // Current Term Stats (Default)
         // If record has no year/term (fallback mode), count it as current to show something
-        const isCurrent = (record.academic_year === currentAcademicYear && record.term === currentTerm) || 
-                          (!record.academic_year && !record.term);
+        const isCurrent = (record.academic_year === currentAcademicYear && record.term === currentTerm) ||
+          (!record.academic_year && !record.term);
 
         if (isCurrent) {
-           if (attendanceSummary.hasOwnProperty(status)) {
-             (attendanceSummary as any)[status]++;
-           }
-           attendanceSummary.total++;
+          if (attendanceSummary.hasOwnProperty(status)) {
+            (attendanceSummary as any)[status]++;
+          }
+          attendanceSummary.total++;
         }
       });
-      
+
       // Calculate Rates - Overall
       attendanceSummary.overall.rate = attendanceSummary.overall.total > 0
         ? Math.round(((attendanceSummary.overall.present + attendanceSummary.overall.late) / attendanceSummary.overall.total) * 100)
         : 0;
-        
+
       // Calculate Rates - Current Term
-      attendanceSummary.rate = attendanceSummary.total > 0 
-        ? Math.round(((attendanceSummary.present + attendanceSummary.late) / attendanceSummary.total) * 100) 
+      attendanceSummary.rate = attendanceSummary.total > 0
+        ? Math.round(((attendanceSummary.present + attendanceSummary.late) / attendanceSummary.total) * 100)
         : 0;
     }
 
@@ -432,7 +433,7 @@ router.get('/students/:id/details', requireSchoolRole(['school_admin', 'teacher'
 async function generateUniqueStudentNumber(): Promise<string> {
   let isUnique = false;
   let studentNumber = '';
-  
+
   while (!isUnique) {
     // Generate format: YY + Month + Random 4 digits (e.g., 24051234)
     const now = new Date();
@@ -440,13 +441,13 @@ async function generateUniqueStudentNumber(): Promise<string> {
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const random = Math.floor(1000 + Math.random() * 9000).toString(); // 4 digits
     studentNumber = `${year}${month}${random}`;
-    
+
     // Check uniqueness
     const { count } = await supabaseAdmin
       .from('profiles')
       .select('*', { count: 'exact', head: true })
       .eq('student_number', studentNumber);
-      
+
     if (count === 0) {
       isUnique = true;
     }
@@ -463,11 +464,11 @@ router.post('/create-student', requireSchoolRole(['school_admin']), async (req: 
   try {
     // 1. Generate Student Number
     const studentNumber = await generateUniqueStudentNumber();
-    
+
     // 2. Determine Email to use
     // If email is provided, use it. Otherwise generate a dummy email.
-    const emailToUse = email && email.trim() !== '' 
-      ? email 
+    const emailToUse = email && email.trim() !== ''
+      ? email
       : `${studentNumber}@student.muchi.app`;
 
     // 3. Create Auth User
@@ -501,8 +502,8 @@ router.post('/create-student', requireSchoolRole(['school_admin']), async (req: 
       if (profileError) console.error('Error updating student profile:', profileError);
     }
 
-    res.status(201).json({ 
-      message: 'Student created successfully', 
+    res.status(201).json({
+      message: 'Student created successfully',
       user: user.user,
       studentNumber: studentNumber,
       emailUsed: emailToUse
@@ -529,63 +530,63 @@ router.post('/students/bulk', requireSchoolRole(['school_admin']), async (req: R
   // Process sequentially to avoid rate limits and ensure uniqueness
   for (const student of students) {
     try {
-        const studentNumber = await generateUniqueStudentNumber();
-        const emailToUse = student.email && student.email.trim() !== '' 
-            ? student.email 
-            : `${studentNumber}@student.muchi.app`;
-        
-        // Default password
-        const password = "Student123"; 
+      const studentNumber = await generateUniqueStudentNumber();
+      const emailToUse = student.email && student.email.trim() !== ''
+        ? student.email
+        : `${studentNumber}@student.muchi.app`;
 
-        const { data: user, error: userError } = await supabaseAdmin.auth.admin.createUser({
-            email: emailToUse,
-            password: password,
-            email_confirm: true,
-            user_metadata: {
-                full_name: student.name,
-                role: 'student',
-                school_id: schoolId
-            }
-        });
+      // Default password
+      const password = "Student123";
 
-        if (userError) throw userError;
-
-        if (user.user) {
-            // Check if profile exists (created by trigger) or needs creation/update
-            // The trigger usually creates the profile on auth.users insert.
-            // We update it with specific student fields.
-            const { error: profileError } = await supabaseAdmin
-                .from('profiles')
-                .update({
-                    grade: student.grade,
-                    guardian_name: student.guardian,
-                    gender: student.gender,
-                    student_number: studentNumber,
-                    enrollment_status: 'Active',
-                    fees_status: 'Pending'
-                })
-                .eq('id', user.user.id);
-
-            if (profileError) {
-                console.error(`Profile update error for ${student.name}:`, profileError);
-                // If update fails, we might want to log it but not necessarily delete the user 
-                // as the user exists. But for consistency, maybe we should.
-                // For now, just log.
-                throw profileError;
-            }
-            importedCount++;
+      const { data: user, error: userError } = await supabaseAdmin.auth.admin.createUser({
+        email: emailToUse,
+        password: password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: student.name,
+          role: 'student',
+          school_id: schoolId
         }
+      });
+
+      if (userError) throw userError;
+
+      if (user.user) {
+        // Check if profile exists (created by trigger) or needs creation/update
+        // The trigger usually creates the profile on auth.users insert.
+        // We update it with specific student fields.
+        const { error: profileError } = await supabaseAdmin
+          .from('profiles')
+          .update({
+            grade: student.grade,
+            guardian_name: student.guardian,
+            gender: student.gender,
+            student_number: studentNumber,
+            enrollment_status: 'Active',
+            fees_status: 'Pending'
+          })
+          .eq('id', user.user.id);
+
+        if (profileError) {
+          console.error(`Profile update error for ${student.name}:`, profileError);
+          // If update fails, we might want to log it but not necessarily delete the user 
+          // as the user exists. But for consistency, maybe we should.
+          // For now, just log.
+          throw profileError;
+        }
+        importedCount++;
+      }
     } catch (error: any) {
-        console.error(`Error importing student ${student.name}:`, error);
-        errors.push({ name: student.name, error: error.message });
+      console.error(`Error importing student ${student.name}:`, error);
+      errors.push({ name: student.name, error: error.message });
     }
   }
 
-  res.json({ 
-    message: 'Bulk import completed', 
-    importedCount, 
+  res.json({
+    message: 'Bulk import completed',
+    importedCount,
     total: students.length,
-    errors 
+    errors
   });
 });
 
@@ -595,14 +596,14 @@ router.put('/students/:id', requireSchoolRole(['school_admin']), async (req: Req
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
   const { id } = req.params;
-  const { 
-    firstName, 
-    lastName, 
-    grade, 
-    gender, 
-    guardian, 
-    status, 
-    fees, 
+  const {
+    firstName,
+    lastName,
+    grade,
+    gender,
+    guardian,
+    status,
+    fees,
     email,
     phone_number,
     address,
@@ -719,7 +720,7 @@ router.post('/students/:id/enroll', requireSchoolRole(['school_admin']), async (
           status: 'Active'
         })
         .eq('id', existingEnrollment.id);
-        
+
       if (error) throw error;
     } else {
       // Create new enrollment
@@ -734,7 +735,7 @@ router.post('/students/:id/enroll', requireSchoolRole(['school_admin']), async (
         })
         .select()
         .single();
-        
+
       if (error) throw error;
       enrollmentId = newEnrollment.id;
     }
@@ -756,25 +757,25 @@ router.post('/students/:id/enroll', requireSchoolRole(['school_admin']), async (
           .from('student_subjects')
           .delete()
           .eq('enrollment_id', enrollmentId);
-          
-        if (deleteError) {
-            // Ignore error if table doesn't exist, but log others
-            if (deleteError.code !== '42P01') console.error('Error clearing student subjects:', deleteError);
-        } else {
-            // 3. Insert new subjects
-            const studentSubjects = classSubjects.map((cs: any) => ({
-                student_id: id,
-                subject_id: cs.subject_id,
-                class_id: classId,
-                academic_year: academicYear,
-                enrollment_id: enrollmentId
-            }));
 
-            const { error: insertError } = await supabaseAdmin
-                .from('student_subjects')
-                .insert(studentSubjects);
-                
-            if (insertError) console.error('Error auto-subscribing subjects:', insertError);
+        if (deleteError) {
+          // Ignore error if table doesn't exist, but log others
+          if (deleteError.code !== '42P01') console.error('Error clearing student subjects:', deleteError);
+        } else {
+          // 3. Insert new subjects
+          const studentSubjects = classSubjects.map((cs: any) => ({
+            student_id: id,
+            subject_id: cs.subject_id,
+            class_id: classId,
+            academic_year: academicYear,
+            enrollment_id: enrollmentId
+          }));
+
+          const { error: insertError } = await supabaseAdmin
+            .from('student_subjects')
+            .insert(studentSubjects);
+
+          if (insertError) console.error('Error auto-subscribing subjects:', insertError);
         }
       }
     } catch (subError) {
@@ -898,40 +899,33 @@ router.post('/grades/batch', requireSchoolRole(['school_admin', 'teacher']), asy
   }
 });
 
-// POST /api/school/results/publish
-// Publish results for a class/term
-router.post('/results/publish', requireSchoolRole(['school_admin', 'teacher']), async (req: Request, res: Response) => {
+// POST /api/school/results/submit
+// Teachers submit their grades to the admin
+router.post('/results/submit', requireSchoolRole(['teacher']), async (req: Request, res: Response) => {
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
   const { term, academicYear, classId, subjectId } = req.body;
 
-  if (!term || !academicYear) {
-    return res.status(400).json({ message: 'Term and Academic Year are required' });
+  if (!term || !academicYear || !subjectId || !classId) {
+    return res.status(400).json({ message: 'Term, Academic Year, Class and Subject are required' });
   }
 
   try {
     let query = supabaseAdmin
       .from('student_grades')
-      .update({ status: 'Published' })
+      .update({ status: 'Submitted' })
       .eq('school_id', schoolId)
       .eq('term', term)
-      .eq('academic_year', academicYear);
+      .eq('academic_year', academicYear)
+      .eq('subject_id', subjectId);
 
-    // Filter by subject if provided (Teacher publishing their subject)
-    if (subjectId) {
-      query = query.eq('subject_id', subjectId);
-    }
-
-    // If classId is provided, we need to filter students in that class.
-    // However, update with join is tricky in Supabase/PostgREST.
-    // Easier to find student IDs first.
-    if (classId) {
+    if (classId && classId !== 'all') {
       const { data: enrollments } = await supabaseAdmin
         .from('enrollments')
         .select('student_id')
         .eq('class_id', classId)
         .eq('academic_year', academicYear);
-      
+
       if (enrollments && enrollments.length > 0) {
         const studentIds = enrollments.map(e => e.student_id);
         query = query.in('student_id', studentIds);
@@ -944,9 +938,293 @@ router.post('/results/publish', requireSchoolRole(['school_admin', 'teacher']), 
 
     if (error) throw error;
 
-    res.json({ message: 'Results published successfully', count });
+    res.json({ message: 'Results submitted to admin successfully', count, status: 'Submitted' });
+  } catch (error: any) {
+    console.error('Submit Results Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/school/results/publish
+// Publish results for a class/term (Admin)
+router.post('/results/publish', requireSchoolRole(['school_admin', 'teacher']), async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const schoolId = profile.school_id;
+  const { term, academicYear, classId, subjectId } = req.body;
+
+  if (!term || !academicYear) {
+    return res.status(400).json({ message: 'Term and Academic Year are required' });
+  }
+
+  try {
+    const isTeacher = profile.role === 'teacher';
+    // Teachers submit to admin (Submitted), Admins publish to students (Published)
+    const targetStatus = isTeacher ? 'Submitted' : 'Published';
+
+    // If Admin is publishing, ensure we only publish 'Submitted' records, 
+    // OR we can publish everything.
+    // Requirement: "school admin checks if all students subjects have been published before the admin can actually publish all results"
+    // This implies we should check if everything is ready.
+
+    // For this endpoint, we will simply perform the status update. 
+    // The check should happen in the frontend or a separate validation endpoint, 
+    // OR we fail here if not ready.
+
+    // Let's implement the update logic:
+    let query = supabaseAdmin
+      .from('student_grades')
+      .update({ status: targetStatus })
+      .eq('school_id', schoolId)
+      .eq('term', term)
+      .eq('academic_year', academicYear);
+
+    // Filter by subject if provided
+    if (subjectId) {
+      query = query.eq('subject_id', subjectId);
+    }
+    // If teacher didn't provide subjectId, we should probably restrict them to their subjects
+    // But for now, we rely on the frontend sending the subjectId.
+
+    // If classId is provided and not 'all', filter by student IDs in that class
+    if (classId && classId !== 'all') {
+      const { data: enrollments } = await supabaseAdmin
+        .from('enrollments')
+        .select('student_id')
+        .eq('class_id', classId)
+        .eq('academic_year', academicYear);
+
+      if (enrollments && enrollments.length > 0) {
+        const studentIds = enrollments.map(e => e.student_id);
+        query = query.in('student_id', studentIds);
+      } else {
+        return res.json({ message: 'No students found in this class' });
+      }
+    }
+
+    const { error, count } = await query;
+    if (error) throw error;
+
+    // Trigger WhatsApp Notifications if publishing as Admin
+    if (targetStatus === 'Published' && count > 0) {
+      try {
+        // 1. Fetch Subject Name if subjectId is provided
+        let subjectName = '';
+        if (subjectId) {
+          const { data: subject } = await supabaseAdmin
+            .from('subjects')
+            .select('name')
+            .eq('id', subjectId)
+            .single();
+          subjectName = subject?.name || '';
+        }
+
+        // 2. Fetch affected students and their guardian contact info
+        let studentQuery = supabaseAdmin
+          .from('profiles')
+          .select('id, full_name, guardian_contact')
+          .eq('school_id', schoolId)
+          .eq('role', 'student');
+
+        if (classId && classId !== 'all') {
+          const { data: enrollments } = await supabaseAdmin
+            .from('enrollments')
+            .select('student_id')
+            .eq('class_id', classId)
+            .eq('academic_year', academicYear);
+
+          if (enrollments && enrollments.length > 0) {
+            studentQuery = studentQuery.in('id', enrollments.map(e => e.student_id));
+          }
+        }
+
+        // If subjectId was provided, we strictly only notify students who have a grade for this term/subject
+        // but since we just updated their status, we can assume all students in the class might be relevant
+        // or we can be more precise by querying student_grades.
+        const { data: studentsToNotify } = await studentQuery;
+
+        if (studentsToNotify && studentsToNotify.length > 0) {
+          console.log(`[Notification] Triggering WhatsApp messages for ${studentsToNotify.length} students`);
+
+          // Send notifications sequentially to avoid overwhelming the provider or rate limits
+          for (const student of studentsToNotify) {
+            if (student.guardian_contact) {
+              await WhatsAppService.sendResultPublishedNotification(
+                student.guardian_contact,
+                student.full_name || 'your child',
+                subjectName || 'the term'
+              );
+            }
+          }
+        }
+      } catch (notifError) {
+        console.error('Failed to send WhatsApp notifications:', notifError);
+        // We don't fail the whole request if notifications fail
+      }
+    }
+
+    const action = isTeacher ? 'submitted to admin' : 'published to students';
+    res.json({ message: `Results ${action} successfully`, count, status: targetStatus });
   } catch (error: any) {
     console.error('Publish Results Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/school/results/status
+// Check submission status for a class/term
+router.get('/results/status', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const schoolId = profile.school_id;
+  const { classId, term, academicYear, subjectId } = req.query;
+
+  if (!term || !academicYear) {
+    return res.status(400).json({ message: 'Term and Academic Year are required' });
+  }
+
+  try {
+    // 1. Get all subjects for this class (from assignments or student_subjects?)
+    // Using student_subjects gives us the subjects students are enrolled in.
+    // We want to know: For each subject, what is the status of grades?
+
+    // Get unique subjects for the class(es)
+    let classSubjectsQuery = supabaseAdmin
+      .from('student_subjects')
+      .select('subject_id, subjects(name)')
+      .eq('academic_year', academicYear);
+
+    if (classId && classId !== 'all') {
+      classSubjectsQuery = classSubjectsQuery.eq('class_id', classId);
+    }
+
+    if (subjectId && subjectId !== 'all') {
+      classSubjectsQuery = classSubjectsQuery.eq('subject_id', subjectId);
+    }
+
+    const { data: classSubjects, error: subjError } = await classSubjectsQuery;
+
+    if (subjError) throw subjError;
+
+    // Deduplicate subjects
+    const uniqueSubjects = Array.from(new Set(classSubjects?.map(s => JSON.stringify(s.subjects)) || []))
+      .map((s: string) => JSON.parse(s))
+      .filter(s => s); // Ensure valid subjects
+
+    // 2. Check grade status for each subject
+    const statusReport = [];
+
+    // Get all grades for this class/term
+    let enrollmentsQuery = supabaseAdmin
+      .from('enrollments')
+      .select('student_id')
+      .eq('academic_year', academicYear);
+
+    if (classId && classId !== 'all') {
+      enrollmentsQuery = enrollmentsQuery.eq('class_id', classId);
+    }
+
+    const { data: enrollments } = await enrollmentsQuery;
+
+    const studentIds = enrollments?.map(e => e.student_id) || [];
+
+    if (studentIds.length === 0) {
+      return res.json([]);
+    }
+
+    let gradesQuery = supabaseAdmin
+      .from('student_grades')
+      .select('subject_id, status')
+      .in('student_id', studentIds)
+      .eq('term', term)
+      .eq('academic_year', academicYear);
+
+    if (subjectId && subjectId !== 'all') {
+      gradesQuery = gradesQuery.eq('subject_id', subjectId);
+    }
+
+    const { data: grades } = await gradesQuery;
+
+    // Analyze status per subject
+    // We can map subject_id -> status set
+    const subjectStatusMap = new Map<string, Set<string>>();
+
+    grades?.forEach(g => {
+      if (!subjectStatusMap.has(g.subject_id)) {
+        subjectStatusMap.set(g.subject_id, new Set());
+      }
+      subjectStatusMap.get(g.subject_id)?.add(g.status);
+    });
+
+    // Build report
+    // We need to fetch subject names for the IDs in grades if not in classSubjects
+    // But let's use the classSubjects we fetched earlier as the base list of "Expected Subjects"
+    // Wait, student_subjects might be empty if not populated. 
+    // Let's use the subjects found in grades + subjects found in assignments? 
+    // For now, use subjects found in grades as "Active Subjects".
+
+    // Let's fetch all subjects to map IDs to names
+    const { data: allSubjects } = await supabaseAdmin
+      .from('subjects')
+      .select('id, name')
+      .eq('school_id', schoolId);
+
+    const subjectNameMap = new Map(allSubjects?.map(s => [s.id, s.name]));
+
+    // Fetch teachers assigned to subjects for this class
+    let classAssignedTeachersQuery = supabaseAdmin
+      .from('class_subjects')
+      .select('subject_id, profiles(full_name)');
+
+    if (classId && classId !== 'all') {
+      classAssignedTeachersQuery = classAssignedTeachersQuery.eq('class_id', classId);
+    }
+
+    const { data: classAssignedTeachers } = await classAssignedTeachersQuery;
+
+    const subjectTeacherMap = new Map();
+    classAssignedTeachers?.forEach((cs: any) => {
+      if (cs.profiles && cs.profiles.full_name) {
+        subjectTeacherMap.set(cs.subject_id, cs.profiles.full_name);
+      } else if (cs.profiles && cs.profiles.length > 0 && cs.profiles[0].full_name) {
+        // In case it's an array due to foreign key mapping
+        subjectTeacherMap.set(cs.subject_id, cs.profiles[0].full_name);
+      }
+    });
+
+    // Iterate over all subjects that have grades
+    const subjectsWithGrades = Array.from(subjectStatusMap.keys());
+
+    for (const subjId of subjectsWithGrades) {
+      const statuses = subjectStatusMap.get(subjId)!;
+      let overallStatus = 'Draft';
+
+      if (statuses.has('Draft')) overallStatus = 'Draft';
+      else if (statuses.has('Submitted') && !statuses.has('Published')) overallStatus = 'Submitted';
+      else if (statuses.has('Published')) overallStatus = 'Published'; // Mixed?
+
+      // If ALL are published, then Published.
+      // If ALL are Submitted (or Published), then Submitted.
+      // If ANY is Draft, then Draft (incomplete).
+
+      if (statuses.has('Draft')) {
+        overallStatus = 'Draft';
+      } else if (Array.from(statuses).every(s => s === 'Published')) {
+        overallStatus = 'Published';
+      } else if (Array.from(statuses).every(s => s === 'Submitted' || s === 'Published')) {
+        overallStatus = 'Submitted';
+      }
+
+      statusReport.push({
+        id: subjId,
+        name: subjectNameMap.get(subjId) || 'Unknown Subject',
+        teacher: subjectTeacherMap.get(subjId) || 'Unassigned',
+        status: overallStatus
+      });
+    }
+
+    res.json(statusReport);
+
+  } catch (error: any) {
+    console.error('Grade Status Error:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -981,18 +1259,32 @@ router.get('/results/report-card/:studentId', requireSchoolRole(['school_admin',
     // 1. Fetch Student Profile & Class
     const { data: student } = await supabaseAdmin
       .from('profiles')
-      .select('*, enrollments(classes(name))')
+      .select('*, enrollments(class_id, classes(id, name))')
       .eq('id', studentId)
       .eq('school_id', schoolId)
-      .eq('enrollments.academic_year', academicYear)
       .single();
 
     if (!student) return res.status(404).json({ message: 'Student not found' });
 
-    // 2. Fetch Grades (Only Published if Student)
+    const classId = student.enrollments?.[0]?.class_id;
+
+    // 2. Fetch All Class Subjects (to ensure full list)
+    let allClassSubjects: any[] = [];
+    if (classId) {
+      const { data: subjects } = await supabaseAdmin
+        .from('class_subjects')
+        .select('subject_id, subjects(id, name, code, department)')
+        .eq('class_id', classId);
+      
+      if (subjects) {
+        allClassSubjects = subjects.map((s: any) => s.subjects).filter(Boolean);
+      }
+    }
+
+    // 3. Fetch Grades (Only Published if Student)
     let gradesQuery = supabaseAdmin
       .from('student_grades')
-      .select('*, subjects(name, code, department)')
+      .select('*, subjects(id, name, code, department)')
       .eq('student_id', studentId)
       .eq('term', term)
       .eq('academic_year', academicYear);
@@ -1001,7 +1293,57 @@ router.get('/results/report-card/:studentId', requireSchoolRole(['school_admin',
       gradesQuery = gradesQuery.eq('status', 'Published');
     }
 
-    const { data: grades } = await gradesQuery;
+    const { data: rawGrades } = await gradesQuery;
+
+    // Remove duplicates manually (keeping the most recently calculated one if any)
+    const gradesMap = new Map();
+    if (rawGrades && rawGrades.length > 0) {
+      const sortedGrades = [...rawGrades].sort((a, b) => {
+        const timeA = new Date(a.calculated_at || a.created_at).getTime();
+        const timeB = new Date(b.calculated_at || b.created_at).getTime();
+        return timeB - timeA; // descending
+      });
+
+      for (const grade of sortedGrades) {
+        // Use subject_id as key if available, fallback to code
+        const key = grade.subject_id || grade.subjects?.code;
+        if (key && !gradesMap.has(key)) {
+          gradesMap.set(key, grade);
+        }
+      }
+    }
+
+    // Merge: Ensure all class subjects are present
+    const finalGrades = allClassSubjects.map(subject => {
+      // Check if we have a grade for this subject
+      const existingGrade = gradesMap.get(subject.id) || gradesMap.get(subject.code);
+      
+      if (existingGrade) {
+        return existingGrade;
+      }
+
+      // Return placeholder for absent/missing grade
+      return {
+        id: `missing-${subject.id}`,
+        student_id: studentId,
+        subject_id: subject.id,
+        subjects: subject,
+        percentage: null,
+        grade: 'ABSENT', // Special marker
+        remarks: 'Not Recorded',
+        term,
+        academic_year: academicYear
+      };
+    });
+
+    // Add any grades that might not be in class_subjects (e.g. electives or errors)
+    // Only add if not already in finalGrades
+    const processedSubjectIds = new Set(allClassSubjects.map(s => s.id));
+    for (const grade of gradesMap.values()) {
+      if (grade.subject_id && !processedSubjectIds.has(grade.subject_id)) {
+        finalGrades.push(grade);
+      }
+    }
 
     // 3. Fetch Grading Scales (for key)
     const { data: scales } = await supabaseAdmin
@@ -1013,16 +1355,14 @@ router.get('/results/report-card/:studentId', requireSchoolRole(['school_admin',
     // 4. Fetch School Details
     const { data: schoolDetails } = await supabaseAdmin
       .from('schools')
-      .select('name, address, email, phone, website, logo_url')
+      .select('name, address, email, phone, website, logo_url, signature_url, seal_url')
       .eq('id', schoolId)
       .single();
-
-    // 5. Calculate Position (Rank) in Class - Optional/Complex
-    // Skipping for now, can be added later
 
     res.json({
       school: schoolDetails,
       student: {
+        id: student.id,
         name: student.full_name,
         studentNumber: student.student_number,
         class: student.enrollments?.[0]?.classes?.name || 'N/A',
@@ -1030,12 +1370,133 @@ router.get('/results/report-card/:studentId', requireSchoolRole(['school_admin',
       },
       term,
       academicYear,
-      grades: grades || [],
+      grades: finalGrades || [],
       gradingScale: scales || []
     });
 
   } catch (error: any) {
     console.error('Report Card Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/school/results/batch-report-cards
+// Generate batch report cards for a class
+router.get('/results/batch-report-cards', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const schoolId = profile.school_id;
+  const { classId, term, academicYear } = req.query as { classId: string, term: string, academicYear: string };
+
+  if (!classId || !term || !academicYear) {
+    return res.status(400).json({ message: 'Missing required parameters' });
+  }
+
+  try {
+    // 1. Fetch Shared Info (School Details & Grading Scales)
+    const { data: schoolDetails } = await supabaseAdmin
+      .from('schools')
+      .select('name, address, email, phone, website, logo_url, signature_url, seal_url')
+      .eq('id', schoolId)
+      .single();
+
+    const { data: scales } = await supabaseAdmin
+      .from('grading_scales')
+      .select('*')
+      .eq('school_id', schoolId)
+      .order('min_percentage', { ascending: false });
+
+    // 2. Fetch all students in the class
+    const { data: enrollments, error: enrollmentError } = await supabaseAdmin
+      .from('enrollments')
+      .select('student_id, profiles!enrollments_student_id_fkey(full_name, student_number), classes(name)')
+      .eq('class_id', classId)
+      .eq('academic_year', academicYear);
+
+    if (enrollmentError) throw enrollmentError;
+    if (!enrollments || enrollments.length === 0) {
+      return res.json([]);
+    }
+
+    const studentIds = enrollments.map(e => e.student_id);
+
+    // 2b. Fetch Class Subjects (to ensure we list ALL subjects, even if absent)
+    const { data: classSubjects } = await supabaseAdmin
+      .from('class_subjects')
+      .select('subject_id, subjects(id, name, code, department)')
+      .eq('class_id', classId);
+
+    const allClassSubjects = (classSubjects || []).map((cs: any) => cs.subjects).filter(Boolean);
+
+    // 3. Fetch all grades for these students
+    const { data: allGrades, error: gradesError } = await supabaseAdmin
+      .from('student_grades')
+      .select('*, subjects(id, name, code, department)')
+      .in('student_id', studentIds)
+      .eq('term', term)
+      .eq('academic_year', academicYear);
+
+    if (gradesError) throw gradesError;
+
+    // 4. Group data by student
+    const reportCards = enrollments.map(enrollment => {
+      const studentId = enrollment.student_id;
+      // Get recorded grades for this student
+      const recordedGrades = allGrades?.filter(g => g.student_id === studentId) || [];
+
+      // Deduplicate grades (keeping newest)
+      const gradesMap = new Map();
+      const sortedGrades = [...recordedGrades].sort((a, b) => {
+        const timeA = new Date(a.calculated_at || a.created_at).getTime();
+        const timeB = new Date(b.calculated_at || b.created_at).getTime();
+        return timeB - timeA;
+      });
+
+      for (const grade of sortedGrades) {
+        const subjectCode = grade.subjects?.code || grade.subject_id;
+        if (!gradesMap.has(subjectCode)) {
+          gradesMap.set(subjectCode, grade);
+        }
+      }
+
+      // Merge with Class Subjects to include "ABSENT" entries
+      const finalGrades = allClassSubjects.map((subject: any) => {
+        const existingGrade = gradesMap.get(subject.code || subject.id);
+        
+        if (existingGrade) {
+          return existingGrade;
+        }
+
+        // Return an "ABSENT" grade object if no grade exists
+        return {
+          student_id: studentId,
+          subject_id: subject.id,
+          subjects: subject,
+          grade: 'ABSENT',
+          percentage: null,
+          status: 'Published' // Assuming generated reports treat absent as published state for printing
+        };
+      });
+
+      return {
+        school: schoolDetails,
+        student: {
+          id: enrollment.student_id,
+          name: (enrollment.profiles as any)?.full_name,
+          studentNumber: (enrollment.profiles as any)?.student_number,
+          class: (enrollment.classes as any)?.name || 'N/A',
+          attendance: 0
+        },
+        term,
+        academicYear,
+        grades: finalGrades,
+        gradingScale: scales || []
+      };
+    });
+
+    res.json(reportCards);
+
+  } catch (error: any) {
+    console.error('Batch Report Card Error:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -1120,7 +1581,7 @@ router.delete('/students/:id', requireSchoolRole(['school_admin']), async (req: 
 router.get('/teachers', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
-  
+
   try {
     const { data: teachers, error } = await supabaseAdmin
       .from('profiles')
@@ -1254,11 +1715,11 @@ router.put('/teachers/:id', requireSchoolRole(['school_admin']), async (req: Req
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
   const { id } = req.params;
-  const { 
-    firstName, 
-    lastName, 
-    department, 
-    subjects, 
+  const {
+    firstName,
+    lastName,
+    department,
+    subjects,
     status,
     phone_number,
     address,
@@ -1278,11 +1739,11 @@ router.put('/teachers/:id', requireSchoolRole(['school_admin']), async (req: Req
     if (phone_number !== undefined) updateData.phone_number = phone_number;
     if (address !== undefined) updateData.address = address;
     if (qualifications !== undefined) updateData.qualifications = qualifications;
-    
+
     // Handle date_of_birth: empty string means null, undefined means no change
     if (date_of_birth !== undefined) {
-      updateData.date_of_birth = (date_of_birth && typeof date_of_birth === 'string' && date_of_birth.trim() !== '') 
-        ? date_of_birth 
+      updateData.date_of_birth = (date_of_birth && typeof date_of_birth === 'string' && date_of_birth.trim() !== '')
+        ? date_of_birth
         : null;
     }
 
@@ -1313,7 +1774,7 @@ router.delete('/teachers/:id', requireSchoolRole(['school_admin']), async (req: 
     // Also clear auth access? For now just status.
     const { error } = await supabaseAdmin
       .from('profiles')
-      .update({ 
+      .update({
         employment_status: 'Terminated',
         updated_at: new Date()
       })
@@ -1338,7 +1799,7 @@ router.delete('/teachers/:id', requireSchoolRole(['school_admin']), async (req: 
 router.get('/subjects', requireSchoolRole(['school_admin', 'teacher']), async (req: Request, res: Response) => {
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
-  
+
   try {
     let query = supabaseAdmin
       .from('subjects')
@@ -1347,54 +1808,54 @@ router.get('/subjects', requireSchoolRole(['school_admin', 'teacher']), async (r
       .order('name', { ascending: true });
 
     // Filter for teachers: only show subjects they teach or lead
-     if (profile.role === 'teacher') {
-       // 1. Subjects they teach
-       const { data: taughtSubjects, error: taughtError } = await supabaseAdmin
-         .from('class_subjects')
-         .select('subject_id')
-         .eq('teacher_id', profile.id);
-       
-       if (taughtError) console.error('Error fetching taught subjects:', taughtError);
-       
-       const taughtSubjectIds = taughtSubjects?.map((s: any) => s.subject_id) || [];
+    if (profile.role === 'teacher') {
+      // 1. Subjects they teach
+      const { data: taughtSubjects, error: taughtError } = await supabaseAdmin
+        .from('class_subjects')
+        .select('subject_id')
+        .eq('teacher_id', profile.id);
 
-       // 2. Subjects they are Head of Department for
-        const { data: headSubjects, error: headError } = await supabaseAdmin
-          .from('subjects')
-          .select('id')
-          .eq('head_teacher_id', profile.id);
-        
-        if (headError) console.error('Error fetching head subjects:', headError);
-        
-        const headSubjectIds = headSubjects?.map((s: any) => s.id) || [];
- 
-        // 3. Subjects in classes where they are Class Teacher
-        // First get the classes they manage
-        const { data: classTeacherClasses } = await supabaseAdmin
-          .from('classes')
-          .select('id')
-          .eq('class_teacher_id', profile.id);
-        
-        const classTeacherClassIds = classTeacherClasses?.map((c: any) => c.id) || [];
-        
-        let classTeacherSubjectIds: string[] = [];
-        if (classTeacherClassIds.length > 0) {
-          const { data: classSubjects } = await supabaseAdmin
-            .from('class_subjects')
-            .select('subject_id')
-            .in('class_id', classTeacherClassIds);
-            
-          classTeacherSubjectIds = classSubjects?.map((s: any) => s.subject_id) || [];
-        }
+      if (taughtError) console.error('Error fetching taught subjects:', taughtError);
 
-        const allIds = Array.from(new Set([...taughtSubjectIds, ...headSubjectIds, ...classTeacherSubjectIds]));
+      const taughtSubjectIds = taughtSubjects?.map((s: any) => s.subject_id) || [];
 
-       if (allIds.length > 0) {
-         query = query.in('id', allIds);
-       } else {
-         return res.json([]);
-       }
-     }
+      // 2. Subjects they are Head of Department for
+      const { data: headSubjects, error: headError } = await supabaseAdmin
+        .from('subjects')
+        .select('id')
+        .eq('head_teacher_id', profile.id);
+
+      if (headError) console.error('Error fetching head subjects:', headError);
+
+      const headSubjectIds = headSubjects?.map((s: any) => s.id) || [];
+
+      // 3. Subjects in classes where they are Class Teacher
+      // First get the classes they manage
+      const { data: classTeacherClasses } = await supabaseAdmin
+        .from('classes')
+        .select('id')
+        .eq('class_teacher_id', profile.id);
+
+      const classTeacherClassIds = classTeacherClasses?.map((c: any) => c.id) || [];
+
+      let classTeacherSubjectIds: string[] = [];
+      if (classTeacherClassIds.length > 0) {
+        const { data: classSubjects } = await supabaseAdmin
+          .from('class_subjects')
+          .select('subject_id')
+          .in('class_id', classTeacherClassIds);
+
+        classTeacherSubjectIds = classSubjects?.map((s: any) => s.subject_id) || [];
+      }
+
+      const allIds = Array.from(new Set([...taughtSubjectIds, ...headSubjectIds, ...classTeacherSubjectIds]));
+
+      if (allIds.length > 0) {
+        query = query.in('id', allIds);
+      } else {
+        return res.json([]);
+      }
+    }
 
     const { data: subjects, error } = await query;
 
@@ -1498,7 +1959,7 @@ router.delete('/subjects/:id', requireSchoolRole(['school_admin']), async (req: 
 router.get('/classes', requireSchoolRole(['school_admin', 'teacher']), async (req: Request, res: Response) => {
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
-  
+
   try {
     let query = supabaseAdmin
       .from('classes')
@@ -1513,7 +1974,7 @@ router.get('/classes', requireSchoolRole(['school_admin', 'teacher']), async (re
         .from('class_subjects')
         .select('class_id')
         .eq('teacher_id', profile.id);
-      
+
       const subjectClassIds = subjectClasses?.map((c: any) => c.class_id) || [];
 
       // 2. Classes where they are Class Teacher
@@ -1521,7 +1982,7 @@ router.get('/classes', requireSchoolRole(['school_admin', 'teacher']), async (re
         .from('classes')
         .select('id')
         .eq('class_teacher_id', profile.id);
-      
+
       const teacherClassIds = teacherClasses?.map((c: any) => c.id) || [];
 
       const allIds = Array.from(new Set([...subjectClassIds, ...teacherClassIds]));
@@ -1569,7 +2030,7 @@ router.get('/classes/:id/students', requireSchoolRole(['school_admin', 'teacher'
       .eq('class_id', classId)
       //.eq('school_id', schoolId) // enrollment has school_id, good to check
       .eq('academic_year', academicYear);
-      
+
     if (error) throw error;
 
     const students = enrollments.map((e: any) => ({
@@ -1671,12 +2132,25 @@ router.get('/classes/:id/subjects', requireSchoolRole(['school_admin', 'teacher'
   try {
     const { data, error } = await supabaseAdmin
       .from('class_subjects')
-      .select('subject_id, subjects(id, name, code, department)')
+      .select(`
+        id,
+        subject_id,
+        teacher_id,
+        subjects(id, name, code, department),
+        profiles:teacher_id(id, full_name)
+      `)
       .eq('class_id', id);
 
     if (error) throw error;
-    // Map to just subjects
-    const subjects = data.map((item: any) => item.subjects);
+    
+    // Map to a cleaner structure
+    const subjects = data.map((item: any) => ({
+      ...item.subjects,
+      classSubjectId: item.id,
+      teacherId: item.teacher_id,
+      teacherName: item.profiles?.full_name
+    }));
+    
     res.json(subjects);
   } catch (error: any) {
     console.error('Get Class Subjects Error:', error);
@@ -1684,41 +2158,72 @@ router.get('/classes/:id/subjects', requireSchoolRole(['school_admin', 'teacher'
   }
 });
 
-// POST /api/school/classes/:id/subjects
-router.post('/classes/:id/subjects', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
+// POST /api/school/classes/:id/subjects/assign
+// Assign or update a teacher for a subject in a class
+router.post('/classes/:id/subjects/assign', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { subjectIds } = req.body;
+  const { subjectId, teacherId } = req.body;
 
-  if (!Array.isArray(subjectIds)) {
-    return res.status(400).json({ message: 'subjectIds must be an array' });
+  if (!subjectId) {
+    return res.status(400).json({ message: 'Subject ID is required' });
   }
 
   try {
-    // 1. Delete existing subjects
-    const { error: deleteError } = await supabaseAdmin
+    // Check if the assignment already exists
+    const { data: existing } = await supabaseAdmin
       .from('class_subjects')
-      .delete()
-      .eq('class_id', id);
-    
-    if (deleteError) throw deleteError;
+      .select('id')
+      .eq('class_id', id)
+      .eq('subject_id', subjectId)
+      .single();
 
-    // 2. Insert new subjects
-    if (subjectIds.length > 0) {
-      const subjectsToInsert = subjectIds.map((subjectId: string) => ({
-        class_id: id,
-        subject_id: subjectId
-      }));
-
-      const { error: insertError } = await supabaseAdmin
+    let result;
+    if (existing) {
+      // Update existing assignment
+      const { data, error } = await supabaseAdmin
         .from('class_subjects')
-        .insert(subjectsToInsert);
-      
-      if (insertError) throw insertError;
+        .update({ teacher_id: teacherId || null })
+        .eq('id', existing.id)
+        .select()
+        .single();
+      if (error) throw error;
+      result = data;
+    } else {
+      // Create new assignment
+      const { data, error } = await supabaseAdmin
+        .from('class_subjects')
+        .insert({
+          class_id: id,
+          subject_id: subjectId,
+          teacher_id: teacherId || null
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      result = data;
     }
 
-    res.json({ message: 'Class subjects updated successfully' });
+    res.json(result);
   } catch (error: any) {
-    console.error('Update Class Subjects Error:', error);
+    console.error('Assign Subject Teacher Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE /api/school/classes/:id/subjects/:subjectId
+router.delete('/classes/:id/subjects/:subjectId', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
+  const { id, subjectId } = req.params;
+  try {
+    const { error } = await supabaseAdmin
+      .from('class_subjects')
+      .delete()
+      .eq('class_id', id)
+      .eq('subject_id', subjectId);
+
+    if (error) throw error;
+    res.json({ message: 'Subject removed from class' });
+  } catch (error: any) {
+    console.error('Remove Class Subject Error:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -1729,7 +2234,7 @@ router.post('/classes/:id/subjects', requireSchoolRole(['school_admin']), async 
 router.get('/finance', requireSchoolRole(['school_admin', 'teacher']), async (req: Request, res: Response) => {
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
-  
+
   try {
     const { data: records, error } = await supabaseAdmin
       .from('finance_records')
@@ -1828,7 +2333,7 @@ router.delete('/finance/:id', requireSchoolRole(['school_admin']), async (req: R
 router.get('/finance/stats', requireSchoolRole(['school_admin', 'teacher']), async (req: Request, res: Response) => {
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
-  
+
   try {
     const { data: records, error } = await supabaseAdmin
       .from('finance_records')
@@ -1848,7 +2353,7 @@ router.get('/finance/stats', requireSchoolRole(['school_admin', 'teacher']), asy
     records.forEach((record: any) => {
       const amount = Number(record.amount);
       const recordDate = new Date(record.date);
-      
+
       if (record.type === 'income') {
         totalRevenue += amount;
         if (recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear) {
@@ -1882,7 +2387,7 @@ router.get('/reports', requireSchoolRole(['school_admin', 'teacher']), async (re
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
   const { term, academicYear } = req.query;
-  
+
   try {
     let query = supabaseAdmin
       .from('reports')
@@ -1893,7 +2398,7 @@ router.get('/reports', requireSchoolRole(['school_admin', 'teacher']), async (re
     if (academicYear) {
       query = query.eq('academic_year', academicYear);
     }
-    
+
     if (term) {
       query = query.eq('term', term);
     }
@@ -1912,11 +2417,11 @@ router.get('/reports', requireSchoolRole(['school_admin', 'teacher']), async (re
         .select('*, generated_by:generated_by(full_name)')
         .eq('school_id', schoolId)
         .order('created_at', { ascending: false });
-        
+
       if (error) throw error;
       reports = data;
     }
-    
+
     res.json(reports);
   } catch (error: any) {
     console.error('Get Reports Error:', error);
@@ -1989,7 +2494,7 @@ router.delete('/reports/:id', requireSchoolRole(['school_admin']), async (req: R
 router.get('/calendar', requireSchoolRole(['school_admin', 'teacher', 'student']), async (req: Request, res: Response) => {
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
-  
+
   try {
     const { data: events, error } = await supabaseAdmin
       .from('calendar_events')
@@ -2090,20 +2595,58 @@ router.delete('/calendar/:id', requireSchoolRole(['school_admin']), async (req: 
 
 // --- SETTINGS ENDPOINTS ---
 
+// POST /api/school/upload-asset
+router.post('/upload-asset', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const schoolId = profile.school_id;
+  const { fileName, fileData, contentType } = req.body;
+
+  if (!fileName || !fileData) {
+    return res.status(400).json({ message: 'Missing file data' });
+  }
+
+  try {
+    // Convert base64 to buffer if it's a data URL, otherwise assume it's just base64
+    const base64Data = fileData.includes(',') ? fileData.split(',')[1] : fileData;
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    // Ensure the filename is prefixed with schoolId for isolation
+    const finalFileName = fileName.startsWith(schoolId) ? fileName : `${schoolId}/${fileName}`;
+
+    const { data, error } = await supabaseAdmin.storage
+      .from('school-assets')
+      .upload(finalFileName, buffer, {
+        contentType: contentType || 'image/png',
+        upsert: true
+      });
+
+    if (error) throw error;
+
+    const { data: { publicUrl } } = supabaseAdmin.storage
+      .from('school-assets')
+      .getPublicUrl(finalFileName);
+
+    res.json({ publicUrl });
+  } catch (error: any) {
+    console.error('Upload Asset Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // GET /api/school/settings
 // Allow teachers and students to read settings too (for academic year context)
 router.get('/settings', requireSchoolRole(['school_admin', 'teacher', 'student']), async (req: Request, res: Response) => {
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
-  
+
   try {
     // Use ensureSchoolSettings to get (and optionally init) settings
     const school = await ensureSchoolSettings(schoolId);
 
     if (!school) {
-        return res.status(404).json({ message: 'School settings not found' });
+      return res.status(404).json({ message: 'School settings not found' });
     }
-    
+
     res.json(school);
   } catch (error: any) {
     console.error('Get School Settings Error:', error);
@@ -2115,7 +2658,7 @@ router.get('/settings', requireSchoolRole(['school_admin', 'teacher', 'student']
 router.put('/settings', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
-  const { name, academic_year, current_term, email, phone, address, website } = req.body;
+  const { name, academic_year, current_term, email, phone, address, website, signature_url, seal_url, logo_url } = req.body;
 
   try {
     const { data, error } = await supabaseAdmin
@@ -2128,6 +2671,9 @@ router.put('/settings', requireSchoolRole(['school_admin']), async (req: Request
         phone,
         address,
         website,
+        signature_url,
+        seal_url,
+        logo_url,
         updated_at: new Date()
       })
       .eq('id', schoolId)
@@ -2419,6 +2965,180 @@ router.delete('/grading-weights/:id', requireSchoolRole(['school_admin']), async
   }
 });
 
+// GET /api/school/results/unpublished
+// Returns all student × subject pairs that are missing a Published grade for the given term/year.
+// This catches BOTH: grades entered but not yet published, AND subjects not graded at all.
+router.get('/results/unpublished', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const schoolId = profile.school_id;
+  const { classId, term, academicYear, subjectId } = req.query as Record<string, string>;
+
+  if (!term || !academicYear) {
+    return res.status(400).json({ message: 'Missing required query params: term, academicYear' });
+  }
+
+  try {
+    // 1. Get target class IDs for this school
+    let targetClassIds: string[] = [];
+    if (classId && classId !== 'all') {
+      targetClassIds = [classId];
+    } else {
+      const { data: schoolClasses } = await supabaseAdmin
+        .from('classes')
+        .select('id')
+        .eq('school_id', schoolId);
+      targetClassIds = (schoolClasses || []).map((c: any) => c.id);
+    }
+
+    if (targetClassIds.length === 0) return res.json([]);
+
+    // 2. Get enrolled students per class
+    const { data: enrollments } = await supabaseAdmin
+      .from('enrollments')
+      .select('student_id, class_id, profiles!enrollments_student_id_fkey(full_name), classes(name)')
+      .in('class_id', targetClassIds)
+      .eq('status', 'Active');
+
+    if (!enrollments || enrollments.length === 0) return res.json([]);
+
+    // 3. Get subjects assigned to each class (via class_subjects)
+    let classSubjectsQuery = supabaseAdmin
+      .from('class_subjects')
+      .select(`
+        class_id,
+        subject_id,
+        teacher_id,
+        subjects(name, code, head_teacher_id)
+      `)
+      .in('class_id', targetClassIds);
+
+    if (subjectId && subjectId !== 'all') {
+      classSubjectsQuery = classSubjectsQuery.eq('subject_id', subjectId);
+    }
+
+    const { data: classSubjectRows } = await classSubjectsQuery;
+
+    if (!classSubjectRows || classSubjectRows.length === 0) {
+      // No subjects assigned to classes — nothing to check
+      return res.json([]);
+    }
+
+    // Collect all teacher IDs from class_subjects.teacher_id AND subjects.head_teacher_id as fallback
+    // Also look up from assignments table which teacher made assignments for this class+subject
+    const { data: assignmentTeacherRows } = await supabaseAdmin
+      .from('assignments')
+      .select('class_id, subject_id, teacher_id')
+      .in('class_id', targetClassIds)
+      .not('teacher_id', 'is', null);
+
+    // Build a map: "classId-subjectId" -> teacher_id, from assignments
+    const assignmentTeacherMap = new Map<string, string>();
+    for (const a of (assignmentTeacherRows || [])) {
+      const k = `${a.class_id}-${a.subject_id}`;
+      if (!assignmentTeacherMap.has(k)) assignmentTeacherMap.set(k, a.teacher_id);
+    }
+
+    // Collect all unique teacher IDs (from class_subjects.teacher_id, head_teacher_id, and assignments)
+    const allTeacherIds = [...new Set([
+      ...classSubjectRows.map((cs: any) => cs.teacher_id).filter(Boolean),
+      ...classSubjectRows.map((cs: any) => {
+        // Handle both single object and array returned by Supabase
+        const subject = Array.isArray(cs.subjects) ? cs.subjects[0] : cs.subjects;
+        return subject?.head_teacher_id;
+      }).filter(Boolean),
+      ...Array.from(assignmentTeacherMap.values()),
+    ])];
+
+    const teacherMap = new Map<string, string>();
+    if (allTeacherIds.length > 0) {
+      const { data: teachers } = await supabaseAdmin
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', allTeacherIds);
+      (teachers || []).forEach((t: any) => teacherMap.set(t.id, t.full_name));
+    }
+
+    // 4. Fetch all Published grades for these students in the term
+    const studentIds = [...new Set(enrollments.map((e: any) => e.student_id))];
+    let publishedGradesQuery = supabaseAdmin
+      .from('student_grades')
+      .select('student_id, subject_id, status')
+      .in('student_id', studentIds)
+      .eq('term', term)
+      .eq('academic_year', academicYear)
+      .eq('status', 'Published');
+
+    if (subjectId && subjectId !== 'all') {
+      publishedGradesQuery = publishedGradesQuery.eq('subject_id', subjectId);
+    }
+    const { data: publishedGrades } = await publishedGradesQuery;
+
+    // Build a Set of "studentId-subjectId" pairs that are already Published
+    const publishedSet = new Set(
+      (publishedGrades || []).map((g: any) => `${g.student_id}-${g.subject_id}`)
+    );
+
+    // 5. Also fetch any grades that exist but are NOT Published (Draft / Submitted)
+    let draftGradesQuery = supabaseAdmin
+      .from('student_grades')
+      .select('student_id, subject_id, status')
+      .in('student_id', studentIds)
+      .eq('term', term)
+      .eq('academic_year', academicYear)
+      .neq('status', 'Published');
+
+    if (subjectId && subjectId !== 'all') {
+      draftGradesQuery = draftGradesQuery.eq('subject_id', subjectId);
+    }
+    const { data: draftGrades } = await draftGradesQuery;
+
+    const draftMap = new Map(
+      (draftGrades || []).map((g: any) => [`${g.student_id}-${g.subject_id}`, g.status])
+    );
+
+    // 6. Build a lookup of class → subject rows
+    const classSubjectMap = new Map<string, any[]>();
+    for (const cs of classSubjectRows) {
+      if (!classSubjectMap.has(cs.class_id)) classSubjectMap.set(cs.class_id, []);
+      classSubjectMap.get(cs.class_id)!.push(cs);
+    }
+
+    // 7. For each enrollment × subject, check if Published grade exists
+    const missing: any[] = [];
+    for (const enrollment of enrollments) {
+      const subjects = classSubjectMap.get(enrollment.class_id) || [];
+      for (const cs of subjects) {
+        const key = `${enrollment.student_id}-${cs.subject_id}`;
+        if (!publishedSet.has(key)) {
+          const existingStatus = draftMap.get(key) || 'Not Entered';
+          const subject = Array.isArray(cs.subjects) ? cs.subjects[0] : cs.subjects;
+
+          missing.push({
+            studentId: enrollment.student_id,
+            studentName: (enrollment as any).profiles?.full_name || 'Unknown Student',
+            className: (enrollment as any).classes?.name || 'Unknown Class',
+            subjectId: cs.subject_id,
+            subjectName: subject?.name || 'Unknown Subject',
+            subjectCode: subject?.code || '',
+            teacherName: (
+              teacherMap.get(cs.teacher_id) ||
+              teacherMap.get(assignmentTeacherMap.get(`${enrollment.class_id}-${cs.subject_id}`) || '') ||
+              teacherMap.get(subject?.head_teacher_id) ||
+              'Unassigned'
+            ),
+            status: existingStatus,
+          });
+        }
+      }
+    }
+
+    res.json(missing);
+  } catch (error: any) {
+    console.error('Unpublished Grades Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // POST /api/school/calculate-grades
 // Calculate and publish term grades for a class/subject based on weights
 router.post('/calculate-grades', requireSchoolRole(['school_admin', 'teacher']), async (req: Request, res: Response) => {
@@ -2426,11 +3146,164 @@ router.post('/calculate-grades', requireSchoolRole(['school_admin', 'teacher']),
   const schoolId = profile.school_id;
   const { classId, subjectId, term, academicYear } = req.body;
 
-  if (!classId || !term || !academicYear) {
-    return res.status(400).json({ message: 'Missing required fields: classId, term, academicYear' });
+  if (!term || !academicYear) {
+    return res.status(400).json({ message: 'Missing required fields: term, academicYear' });
   }
 
   try {
+    // PRE-CHECK: Block calculation if any grades are not yet published
+    // We run the identical checking logic as the /results/unpublished endpoint
+    let targetClassIds: string[] = [];
+    if (classId && classId !== 'all') {
+      targetClassIds = [classId];
+    } else {
+      const { data: schoolClasses } = await supabaseAdmin
+        .from('classes')
+        .select('id')
+        .eq('school_id', schoolId);
+      targetClassIds = (schoolClasses || []).map((c: any) => c.id);
+    }
+
+    let studentIds: string[] = [];
+    let allEnrollments: any[] = [];
+
+    if (targetClassIds.length > 0) {
+      // 1. Get enrolled students
+      const { data: enrollments } = await supabaseAdmin
+        .from('enrollments')
+        .select('student_id, class_id, profiles!enrollments_student_id_fkey(full_name), classes(name)')
+        .in('class_id', targetClassIds)
+        .eq('status', 'Active');
+
+      if (enrollments && enrollments.length > 0) {
+        allEnrollments = enrollments;
+        studentIds = enrollments.map((e: any) => e.student_id);
+
+        // 2. Get class subjects
+        let classSubjectRowsQuery = supabaseAdmin
+          .from('class_subjects')
+          .select(`
+              class_id,
+              subject_id,
+              teacher_id,
+              subjects(name, code, head_teacher_id)
+            `)
+          .in('class_id', targetClassIds);
+
+        if (subjectId && subjectId !== 'all') {
+          classSubjectRowsQuery = classSubjectRowsQuery.eq('subject_id', subjectId);
+        }
+        const { data: classSubjectRows } = await classSubjectRowsQuery;
+
+        if (classSubjectRows && classSubjectRows.length > 0) {
+          // 3. Collect teacher IDs
+          const { data: assignmentTeacherRows } = await supabaseAdmin
+            .from('assignments')
+            .select('class_id, subject_id, teacher_id')
+            .in('class_id', targetClassIds)
+            .not('teacher_id', 'is', null);
+
+          const assignmentTeacherMap = new Map<string, string>();
+          for (const a of (assignmentTeacherRows || [])) {
+            assignmentTeacherMap.set(`${a.class_id}-${a.subject_id}`, a.teacher_id);
+          }
+
+          const allTeacherIds = [...new Set([
+            ...classSubjectRows.map((cs: any) => cs.teacher_id).filter(Boolean),
+            ...classSubjectRows.map((cs: any) => {
+              const subject = Array.isArray(cs.subjects) ? cs.subjects[0] : cs.subjects;
+              return subject?.head_teacher_id;
+            }).filter(Boolean),
+            ...Array.from(assignmentTeacherMap.values()),
+          ])];
+
+          const teacherMap = new Map<string, string>();
+          if (allTeacherIds.length > 0) {
+            const { data: teachers } = await supabaseAdmin
+              .from('profiles')
+              .select('id, full_name')
+              .in('id', allTeacherIds);
+            (teachers || []).forEach((t: any) => teacherMap.set(t.id, t.full_name));
+          }
+
+          // 4. Fetch Published & Draft grades
+          let publishedGradesQuery = supabaseAdmin
+            .from('student_grades')
+            .select('student_id, subject_id')
+            .in('student_id', studentIds)
+            .eq('term', term)
+            .eq('academic_year', academicYear)
+            .eq('status', 'Published');
+
+          if (subjectId && subjectId !== 'all') {
+            publishedGradesQuery = publishedGradesQuery.eq('subject_id', subjectId);
+          }
+          const { data: publishedGrades } = await publishedGradesQuery;
+
+          const publishedSet = new Set(
+            (publishedGrades || []).map((g: any) => `${g.student_id}-${g.subject_id}`)
+          );
+
+          let draftGradesQuery = supabaseAdmin
+            .from('student_grades')
+            .select('student_id, subject_id, status')
+            .in('student_id', studentIds)
+            .eq('term', term)
+            .eq('academic_year', academicYear)
+            .neq('status', 'Published');
+
+          if (subjectId && subjectId !== 'all') {
+            draftGradesQuery = draftGradesQuery.eq('subject_id', subjectId);
+          }
+          const { data: draftGrades } = await draftGradesQuery;
+
+          const draftMap = new Map(
+            (draftGrades || []).map((g: any) => [`${g.student_id}-${g.subject_id}`, g.status])
+          );
+
+          // 5. Find missing grades
+          const classSubjectMap = new Map<string, any[]>();
+          for (const cs of classSubjectRows) {
+            if (!classSubjectMap.has(cs.class_id)) classSubjectMap.set(cs.class_id, []);
+            classSubjectMap.get(cs.class_id)!.push(cs);
+          }
+
+          const missing: any[] = [];
+          for (const enrollment of allEnrollments) {
+            const subjects = classSubjectMap.get(enrollment.class_id) || [];
+            for (const cs of subjects) {
+              const key = `${enrollment.student_id}-${cs.subject_id}`;
+              if (!publishedSet.has(key)) {
+                const subject = Array.isArray(cs.subjects) ? cs.subjects[0] : cs.subjects;
+                missing.push({
+                  studentId: enrollment.student_id,
+                  studentName: (enrollment as any).profiles?.full_name || 'Unknown Student',
+                  className: (enrollment as any).classes?.name || 'Unknown Class',
+                  subjectId: cs.subject_id,
+                  subjectName: subject?.name || 'Unknown Subject',
+                  subjectCode: subject?.code || '',
+                  teacherName: (
+                    teacherMap.get(cs.teacher_id) ||
+                    teacherMap.get(assignmentTeacherMap.get(`${enrollment.class_id}-${cs.subject_id}`) || '') ||
+                    teacherMap.get(subject?.head_teacher_id) ||
+                    'Unassigned'
+                  ),
+                  status: draftMap.get(key) || 'Not Entered',
+                });
+              }
+            }
+          }
+
+          if (missing.length > 0) {
+            return res.status(400).json({
+              message: `Cannot calculate grades: ${missing.length} grade record(s) have not been published by teachers yet.`,
+              unpublished: missing,
+            });
+          }
+        }
+      }
+    }
+
     console.log(`[Grading] Calculating grades for Class: ${classId}, Subject: ${subjectId || 'All'}, Term: ${term}`);
 
     // 1. Get Grading Weights
@@ -2456,28 +3329,47 @@ router.post('/calculate-grades', requireSchoolRole(['school_admin', 'teacher']),
       return res.status(400).json({ message: 'No grading scales defined for this school' });
     }
 
-    // 3. Get Students in Class
-    const { data: enrollments, error: enrollError } = await supabaseAdmin
+    // 3. Get Students in Class(es)
+    let enrollmentsQuery = supabaseAdmin
       .from('enrollments')
       .select('student_id')
-      .eq('class_id', classId)
       .eq('status', 'Active');
+    // 3. Ensure studentIds are populated for calculation, even if pre-check was skipped or found no students
+    if (studentIds.length === 0) {
+      // Re-fetch if not done in pre-check (e.g. if targetClassIds was somehow empty or we skipped pre-check)
+      // Actually, targetClassIds should always have at least one if classId is provided or school has classes.
+      // But let's be safe.
+      let enrollmentsQuery = supabaseAdmin
+        .from('enrollments')
+        .select('student_id')
+        .eq('status', 'Active');
 
-    if (enrollError) throw enrollError;
-    const studentIds = enrollments.map((e: any) => e.student_id);
+      if (classId && classId !== 'all') {
+        enrollmentsQuery = enrollmentsQuery.eq('class_id', classId);
+      } else {
+        enrollmentsQuery = enrollmentsQuery.in('class_id', targetClassIds);
+      }
+
+      const { data: enrollments, error: enrollError } = await enrollmentsQuery;
+      if (enrollError) throw enrollError;
+      studentIds = (enrollments || []).map((e: any) => e.student_id);
+    }
 
     if (studentIds.length === 0) {
-      return res.json({ message: 'No active students in this class' });
+      return res.status(400).json({ message: 'No active students found in this class' });
     }
 
     // 4. Get Assignments & Submissions
-    // Filter assignments by class and optionally subject
+    // Filter assignments by class(es) and optionally subject
     let assignmentsQuery = supabaseAdmin
       .from('assignments')
-      .select('id, type, max_score, subject_id')
-      .eq('class_id', classId);
+      .select('id, type, subject_id, class_id'); // Ensure class_id is selected for cross-referencing if needed
 
-    if (subjectId) {
+    if (classId && classId !== 'all') {
+      assignmentsQuery = assignmentsQuery.eq('class_id', classId);
+    }
+
+    if (subjectId && subjectId !== 'all') {
       assignmentsQuery = assignmentsQuery.eq('subject_id', subjectId);
     }
 
@@ -2485,7 +3377,7 @@ router.post('/calculate-grades', requireSchoolRole(['school_admin', 'teacher']),
     if (assignError) throw assignError;
 
     if (!assignments || assignments.length === 0) {
-      return res.json({ message: 'No assignments found for calculation' });
+      return res.status(400).json({ message: 'No assignments found for calculation. Please ensure assignments are created for this class and subject.' });
     }
 
     const assignmentIds = assignments.map((a: any) => a.id);
@@ -2494,7 +3386,7 @@ router.post('/calculate-grades', requireSchoolRole(['school_admin', 'teacher']),
     // Fetch submissions for these assignments and students
     const { data: submissions, error: subError } = await supabaseAdmin
       .from('submissions')
-      .select('student_id, assignment_id, score')
+      .select('student_id, assignment_id, score, max_score')
       .in('assignment_id', assignmentIds)
       .in('student_id', studentIds)
       .not('score', 'is', null);
@@ -2504,11 +3396,11 @@ router.post('/calculate-grades', requireSchoolRole(['school_admin', 'teacher']),
     // 5. Calculate Grades per Student per Subject
     // If subjectId is not provided, we might need to group by subject. 
     // For simplicity, let's assume if subjectId is missing, we calculate for ALL subjects in the class assignments.
-    
+
     // Group assignments by Subject
     const assignmentsBySubject = new Map<string | null, any[]>();
     assignments.forEach((a: any) => {
-      const sId = a.subject_id || null; 
+      const sId = a.subject_id || null;
       if (!assignmentsBySubject.has(sId)) {
         assignmentsBySubject.set(sId, []);
       }
@@ -2525,15 +3417,15 @@ router.post('/calculate-grades', requireSchoolRole(['school_admin', 'teacher']),
         let totalWeightUsed = 0;
 
         // Group student's submissions for this subject by Type
-        const studentSubmissions = submissions?.filter((s: any) => 
-          s.student_id === studentId && 
+        const studentSubmissions = submissions?.filter((s: any) =>
+          s.student_id === studentId &&
           subjAssignments.some((a: any) => a.id === s.assignment_id)
         ) || [];
 
         // Calculate score for each weight category (e.g. Homework, Exam)
         for (const weight of weights) {
           const typeAssignments = subjAssignments.filter((a: any) => a.type === weight.assessment_type);
-          
+
           if (typeAssignments.length === 0) continue; // No assignments of this type
 
           let typeTotalScore = 0;
@@ -2543,7 +3435,7 @@ router.post('/calculate-grades', requireSchoolRole(['school_admin', 'teacher']),
             const sub = studentSubmissions.find((s: any) => s.assignment_id === a.id);
             if (sub) {
               typeTotalScore += (sub.score || 0);
-              typeMaxScore += (a.max_score || 100);
+              typeMaxScore += (sub.max_score || 100);
             }
           });
 
@@ -2558,7 +3450,7 @@ router.post('/calculate-grades', requireSchoolRole(['school_admin', 'teacher']),
         // If we want strict 100%, we might leave it. But usually safe to normalize.
         let finalPercentage = 0;
         if (totalWeightUsed > 0) {
-           finalPercentage = (totalWeightedScore / totalWeightUsed) * 100;
+          finalPercentage = (totalWeightedScore / totalWeightUsed) * 100;
         }
 
         // Determine Letter Grade
@@ -2574,7 +3466,7 @@ router.post('/calculate-grades', requireSchoolRole(['school_admin', 'teacher']),
           academic_year: academicYear,
           grade: letterGrade,
           percentage: roundedPercentage,
-          comments: `Calculated on ${new Date().toISOString().split('T')[0]}`
+          calculated_at: new Date().toISOString()
         });
       }
     }
@@ -2588,8 +3480,8 @@ router.post('/calculate-grades', requireSchoolRole(['school_admin', 'teacher']),
       if (upsertError) throw upsertError;
     }
 
-    res.json({ 
-      message: 'Grades calculated successfully', 
+    res.json({
+      message: 'Grades calculated successfully',
       count: gradesToUpsert.length,
       details: gradesToUpsert.map(g => ({ student: g.student_id, subject: g.subject_id, grade: g.grade }))
     });
@@ -2655,7 +3547,7 @@ router.get('/timetables', requireSchoolRole(['school_admin', 'teacher', 'student
 
     if (class_id) query = query.eq('class_id', class_id);
     if (teacher_id) query = query.eq('teacher_id', teacher_id);
-    
+
     // Filter by academic year and term if resolved
     if (targetYear) query = query.eq('academic_year', targetYear);
     if (targetTerm) query = query.eq('term', targetTerm);
@@ -2696,16 +3588,16 @@ router.post('/timetables', requireSchoolRole(['school_admin']), async (req: Requ
 
     // Ensure we have a context
     if (!targetYear || !targetTerm) {
-        return res.status(400).json({ message: 'Academic year and term could not be determined. Please configure school settings.' });
+      return res.status(400).json({ message: 'Academic year and term could not be determined. Please configure school settings.' });
     }
 
     // Check for conflicts (simple overlap check)
     // 1. Same class, overlapping time
     // 2. Same teacher, overlapping time (if teacher assigned)
     // 3. Same room, overlapping time (if room assigned)
-    
+
     // For now, let's just create it and let the UI handle visual conflict detection or add strict checks later
-    
+
     const { data, error } = await supabaseAdmin
       .from('timetables')
       .insert({
@@ -2891,7 +3783,7 @@ router.delete('/admins/:id', requireSchoolRole(['school_admin']), async (req: Re
 
     // Delete from Auth
     const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(id);
-    
+
     if (deleteError) throw deleteError;
 
     // Ensure profile is deleted

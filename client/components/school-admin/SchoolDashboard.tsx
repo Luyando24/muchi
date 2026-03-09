@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ArrowUpRight, 
-  ArrowDownRight, 
-  Download, 
-  UserPlus, 
-  CreditCard, 
-  Settings, 
-  GraduationCap, 
+import {
+  ArrowUpRight,
+  ArrowDownRight,
+  Download,
+  UserPlus,
+  CreditCard,
+  Settings,
+  GraduationCap,
   Users,
   Megaphone,
   Plus,
@@ -30,6 +30,7 @@ import { supabase } from '@/lib/supabase';
 import { SchoolDashboardStats, Announcement } from '@shared/api';
 import LicenseAccessDenied from '@/components/common/LicenseAccessDenied';
 import { cn } from "@/lib/utils";
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 export default function SchoolDashboard() {
   const [data, setData] = useState<SchoolDashboardStats | null>(null);
@@ -41,6 +42,8 @@ export default function SchoolDashboard() {
   const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(false);
   const [newAnnouncement, setNewAnnouncement] = useState({ title: '', content: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [deleteAnnouncementId, setDeleteAnnouncementId] = useState<string | null>(null);
+  const [isDeletingAnnouncement, setIsDeletingAnnouncement] = useState(false);
 
   const fetchDashboardData = async () => {
     try {
@@ -73,7 +76,7 @@ export default function SchoolDashboard() {
 
   useEffect(() => {
     fetchDashboardData();
-    
+
     // Auto-refresh every 30 seconds
     const interval = setInterval(fetchDashboardData, 30000);
     return () => clearInterval(interval);
@@ -109,7 +112,7 @@ export default function SchoolDashboard() {
         title: "Success",
         description: "Announcement posted successfully"
       });
-      
+
       setIsAnnouncementOpen(false);
       setNewAnnouncement({ title: '', content: '' });
       fetchDashboardData(); // Refresh data
@@ -124,34 +127,27 @@ export default function SchoolDashboard() {
     }
   };
 
-  const handleDeleteAnnouncement = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this announcement?')) return;
-
+  const handleDeleteAnnouncement = async () => {
+    if (!deleteAnnouncementId) return;
+    setIsDeletingAnnouncement(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No session found");
 
-      const response = await fetch(`/api/school/announcements/${id}`, {
+      const response = await fetch(`/api/school/announcements/${deleteAnnouncementId}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`
-        }
+        headers: { Authorization: `Bearer ${session.access_token}` }
       });
 
       if (!response.ok) throw new Error('Failed to delete announcement');
 
-      toast({
-        title: "Success",
-        description: "Announcement deleted successfully"
-      });
-      
-      fetchDashboardData(); // Refresh data
+      toast({ title: "Success", description: "Announcement deleted successfully" });
+      setDeleteAnnouncementId(null);
+      fetchDashboardData();
     } catch (err: any) {
-      toast({
-        title: "Error",
-        description: err.message,
-        variant: "destructive"
-      });
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setIsDeletingAnnouncement(false);
     }
   };
 
@@ -175,7 +171,7 @@ export default function SchoolDashboard() {
         title: "Success",
         description: `Request ${status.toLowerCase()} successfully`
       });
-      
+
       fetchDashboardData(); // Refresh data
     } catch (err: any) {
       toast({
@@ -211,7 +207,7 @@ export default function SchoolDashboard() {
   }
 
   if (!data) return null;
-  
+
   // Defensive check for data structure
   if (!data.overview) {
     console.error('Invalid dashboard data structure:', data);
@@ -236,7 +232,7 @@ export default function SchoolDashboard() {
             <Download className="h-4 w-4 mr-2" />
             Export Report
           </Button>
-          
+
           <Dialog open={isAnnouncementOpen} onOpenChange={setIsAnnouncementOpen}>
             <DialogTrigger asChild>
               <Button>
@@ -399,7 +395,7 @@ export default function SchoolDashboard() {
                         </div>
                       </div>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => handleDeleteAnnouncement(announcement.id as string)}>
+                    <Button variant="ghost" size="sm" onClick={() => setDeleteAnnouncementId(announcement.id as string)}>
                       <Trash2 className="h-4 w-4 text-slate-400 hover:text-red-600" />
                     </Button>
                   </div>
@@ -506,18 +502,18 @@ export default function SchoolDashboard() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             className="text-green-600 hover:text-green-700 hover:bg-green-50"
                             onClick={() => handleUpdateApproval(approval.id, 'Approved')}
                           >
                             <CheckCircle className="h-4 w-4 mr-1" />
                             Approve
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             className="text-red-600 hover:text-red-700 hover:bg-red-50"
                             onClick={() => handleUpdateApproval(approval.id, 'Rejected')}
                           >
@@ -540,6 +536,16 @@ export default function SchoolDashboard() {
           </CardContent>
         </Card>
       </div>
+      <ConfirmDialog
+        open={!!deleteAnnouncementId}
+        onOpenChange={(open) => !open && setDeleteAnnouncementId(null)}
+        title="Delete Announcement?"
+        description="Are you sure you want to delete this announcement? It will be removed for all teachers and students immediately."
+        confirmLabel="Delete Announcement"
+        variant="danger"
+        loading={isDeletingAnnouncement}
+        onConfirm={handleDeleteAnnouncement}
+      />
     </div>
   );
 }

@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { 
-  BookOpen, 
-  Calendar, 
-  ClipboardCheck, 
-  User, 
-  Bell, 
-  TrendingUp, 
-  Clock, 
-  FileText, 
+import {
+  BookOpen,
+  Calendar,
+  ClipboardCheck,
+  User,
+  Bell,
+  TrendingUp,
+  Clock,
+  FileText,
   Download,
   CheckCircle,
   GraduationCap,
@@ -56,6 +56,7 @@ import {
 import ThemeToggle from '@/components/navigation/ThemeToggle';
 import { useToast } from "@/components/ui/use-toast";
 import GradebookView from '@/components/school-admin/GradebookView';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 // Interfaces
 interface Stats {
@@ -94,9 +95,9 @@ interface Student {
 }
 
 interface Subject {
-    id: string;
-    name: string;
-    code: string;
+  id: string;
+  name: string;
+  code: string;
 }
 
 interface SchoolSettings {
@@ -105,16 +106,16 @@ interface SchoolSettings {
 }
 
 interface Submission {
-    id: string;
-    student_id: string;
-    assignment_id: string;
-    submitted_at: string;
-    status: string;
-    file_url?: string;
-    grade?: number;
-    feedback?: string;
-    students?: { first_name: string; last_name: string };
-    assignments?: { title: string };
+  id: string;
+  student_id: string;
+  assignment_id: string;
+  submitted_at: string;
+  status: string;
+  file_url?: string;
+  grade?: number;
+  feedback?: string;
+  students?: { first_name: string; last_name: string };
+  assignments?: { title: string };
 }
 
 interface TimetableEntry {
@@ -133,7 +134,7 @@ const formatTime = (time: string) => {
 
 export default function TeacherPortal() {
   const navigate = useNavigate();
-  
+
   // UI State
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -151,14 +152,16 @@ export default function TeacherPortal() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
-  
+
   // Attendance & Students State
   const [selectedClassId, setSelectedClassId] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [students, setStudents] = useState<Student[]>([]);
-  const [attendanceState, setAttendanceState] = useState<{[key: string]: {status: string, remarks: string}}>({});
+  const [attendanceState, setAttendanceState] = useState<{ [key: string]: { status: string, remarks: string } }>({});
   const [attendanceSearchQuery, setAttendanceSearchQuery] = useState("");
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
 
   // New Assignment Form State
@@ -203,11 +206,11 @@ export default function TeacherPortal() {
         .select('*, schools(*)')
         .eq('id', user.id)
         .single();
-        
+
       setProfile(profile);
-      
+
       if (profile) {
-          await fetchDashboardData();
+        await fetchDashboardData();
       }
       // 6. Timetable
       const timetableData = await fetchWithAuth('/api/teacher/timetable');
@@ -231,8 +234,8 @@ export default function TeacherPortal() {
 
     const response = await fetch(url, { ...options, headers });
     if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Fetch failed');
+      const error = await response.json();
+      throw new Error(error.message || 'Fetch failed');
     }
     return response.json();
   };
@@ -262,7 +265,7 @@ export default function TeacherPortal() {
       // 3. Assignments
       const assignmentsData = await fetchWithAuth('/api/teacher/assignments');
       setAssignments(assignmentsData);
-      
+
       // 4. Subjects
       const subjectsData = await fetchWithAuth('/api/teacher/subjects');
       setSubjects(subjectsData);
@@ -285,11 +288,11 @@ export default function TeacherPortal() {
       setLoading(false);
     }
   };
-  
+
   const fetchStudentsAndAttendance = async () => {
     if (!selectedClassId) return;
     if (!selectedDate) return;
-    
+
     try {
       // Fetch students
       const studentsData = await fetchWithAuth(`/api/teacher/classes/${selectedClassId}/students`);
@@ -297,10 +300,10 @@ export default function TeacherPortal() {
 
       // Fetch existing attendance
       const attendanceData = await fetchWithAuth(`/api/teacher/attendance/${selectedClassId}/${selectedDate}`);
-      
+
       // Initialize attendance state
       const newAttendanceState: any = {};
-      
+
       // Check if selected date is a weekend
       const [year, month, day] = selectedDate.split('-').map(Number);
       const dateObj = new Date(year, month - 1, day);
@@ -329,58 +332,58 @@ export default function TeacherPortal() {
   };
 
   const handleCreateAssignment = async () => {
-      // Validate inputs
-      if (!newAssignment.title || !newAssignment.class_id || !newAssignment.subject_id || !newAssignment.due_date) {
-        toast({
-          title: "Missing Fields",
-          description: "Please fill in all required fields (Title, Class, Subject, Due Date).",
-          variant: "destructive"
-        });
-        return;
-      }
+    // Validate inputs
+    if (!newAssignment.title || !newAssignment.class_id || !newAssignment.subject_id || !newAssignment.due_date) {
+      toast({
+        title: "Missing Fields",
+        description: "Please fill in all required fields (Title, Class, Subject, Due Date).",
+        variant: "destructive"
+      });
+      return;
+    }
 
-      try {
-          const url = editingAssignmentId 
-            ? `/api/teacher/assignments/${editingAssignmentId}`
-            : '/api/teacher/assignments';
-          const method = editingAssignmentId ? 'PUT' : 'POST';
+    try {
+      const url = editingAssignmentId
+        ? `/api/teacher/assignments/${editingAssignmentId}`
+        : '/api/teacher/assignments';
+      const method = editingAssignmentId ? 'PUT' : 'POST';
 
-          await fetchWithAuth(url, {
-              method,
-              body: JSON.stringify(newAssignment)
-          });
-          
-          setIsCreateAssignmentOpen(false);
-          setEditingAssignmentId(null);
+      await fetchWithAuth(url, {
+        method,
+        body: JSON.stringify(newAssignment)
+      });
 
-          // Refresh assignments
-          const assignmentsData = await fetchWithAuth('/api/teacher/assignments');
-          setAssignments(assignmentsData);
-          
-          toast({
-            title: editingAssignmentId ? "Assignment Updated" : "Assignment Created",
-            description: `Successfully ${editingAssignmentId ? 'updated' : 'created'} assignment.`
-          });
+      setIsCreateAssignmentOpen(false);
+      setEditingAssignmentId(null);
 
-          // Reset form
-          setNewAssignment({
-            title: '',
-            description: '',
-            class_id: '',
-            subject_id: '',
-            due_date: '',
-            type: 'homework',
-            category: 'Homework',
-            assignment_number: 1
-          });
-      } catch (error) {
-          console.error('Error creating assignment:', error);
-          toast({
-            title: "Error",
-            description: "Failed to save assignment.",
-            variant: "destructive"
-          });
-      }
+      // Refresh assignments
+      const assignmentsData = await fetchWithAuth('/api/teacher/assignments');
+      setAssignments(assignmentsData);
+
+      toast({
+        title: editingAssignmentId ? "Assignment Updated" : "Assignment Created",
+        description: `Successfully ${editingAssignmentId ? 'updated' : 'created'} assignment.`
+      });
+
+      // Reset form
+      setNewAssignment({
+        title: '',
+        description: '',
+        class_id: '',
+        subject_id: '',
+        due_date: '',
+        type: 'homework',
+        category: 'Homework',
+        assignment_number: 1
+      });
+    } catch (error) {
+      console.error('Error creating assignment:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save assignment.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleEditAssignment = (assignment: Assignment) => {
@@ -398,15 +401,19 @@ export default function TeacherPortal() {
     setIsCreateAssignmentOpen(true);
   };
 
-  const handleDeleteAssignment = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this assignment?')) return;
+  const handleDeleteAssignment = async () => {
+    if (!deleteTargetId) return;
+    setIsDeleting(true);
     try {
-      await fetchWithAuth(`/api/teacher/assignments/${id}`, { method: 'DELETE' });
-      setAssignments(prev => prev.filter(a => a.id !== id));
+      await fetchWithAuth(`/api/teacher/assignments/${deleteTargetId}`, { method: 'DELETE' });
+      setAssignments(prev => prev.filter(a => a.id !== deleteTargetId));
+      setDeleteTargetId(null);
       toast({ title: "Assignment Deleted" });
     } catch (error) {
       console.error(error);
       toast({ title: "Error", description: "Failed to delete assignment", variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -436,20 +443,20 @@ export default function TeacherPortal() {
           status: 'graded'
         })
       });
-      
+
       const updatedSubmission = response; // The API returns the upserted submission object
 
       // Update local state
       setGradingSubmissions(prev => prev.map(item => {
         if (item.student_id === studentId) {
           return {
-             ...item,
-             submission: updatedSubmission
+            ...item,
+            submission: updatedSubmission
           };
         }
         return item;
       }));
-      
+
       toast({ title: "Grade Saved", description: "Student grade has been updated." });
     } catch (error) {
       console.error('Error saving grade:', error);
@@ -469,12 +476,12 @@ export default function TeacherPortal() {
 
   const saveAttendance = async () => {
     if (!selectedClassId) {
-        toast({ title: "Error", description: "Please select a class", variant: "destructive" });
-        return;
+      toast({ title: "Error", description: "Please select a class", variant: "destructive" });
+      return;
     }
     if (!selectedDate) {
-        toast({ title: "Error", description: "Please select a date", variant: "destructive" });
-        return;
+      toast({ title: "Error", description: "Please select a date", variant: "destructive" });
+      return;
     }
 
     setSavingAttendance(true);
@@ -488,7 +495,7 @@ export default function TeacherPortal() {
       await fetchWithAuth('/api/teacher/attendance', {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json'
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           classId: selectedClassId,
@@ -500,10 +507,10 @@ export default function TeacherPortal() {
       toast({ title: "Success", description: "Attendance saved successfully!" });
     } catch (error: any) {
       console.error("Error saving attendance:", error);
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to save attendance.", 
-        variant: "destructive" 
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save attendance.",
+        variant: "destructive"
       });
     } finally {
       setSavingAttendance(false);
@@ -564,32 +571,32 @@ export default function TeacherPortal() {
                     MUCHI Teacher Portal
                   </h1>
                   <div className="flex items-center gap-2">
-                      <p className="text-xs text-slate-600 dark:text-slate-400">{profile?.schools?.name || 'School Name'}</p>
-                      {schoolSettings && (
-                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal">
-                          {schoolSettings.academic_year} | {schoolSettings.current_term}
-                        </Badge>
-                      )}
+                    <p className="text-xs text-slate-600 dark:text-slate-400">{profile?.schools?.name || 'School Name'}</p>
+                    {schoolSettings && (
+                      <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal">
+                        {schoolSettings.academic_year} | {schoolSettings.current_term}
+                      </Badge>
+                    )}
                   </div>
                 </div>
               </div>
-              
+
               {/* Breadcrumb */}
-               <div className="hidden md:flex items-center text-sm text-slate-500 ml-4 border-l pl-4 border-slate-200 dark:border-slate-700">
-                  <span className="font-medium text-slate-900 dark:text-white capitalize">{activeTab}</span>
-               </div>
+              <div className="hidden md:flex items-center text-sm text-slate-500 ml-4 border-l pl-4 border-slate-200 dark:border-slate-700">
+                <span className="font-medium text-slate-900 dark:text-white capitalize">{activeTab}</span>
+              </div>
             </div>
 
             {/* Search Bar (Center) */}
             <div className="hidden md:flex flex-1 max-w-md mx-8">
-               <div className="relative w-full">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-                  <Input 
-                    type="search" 
-                    placeholder="Search students, classes, assignments..." 
-                    className="w-full pl-9 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 focus-visible:ring-blue-500"
-                  />
-               </div>
+              <div className="relative w-full">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                <Input
+                  type="search"
+                  placeholder="Search students, classes, assignments..."
+                  className="w-full pl-9 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 focus-visible:ring-blue-500"
+                />
+              </div>
             </div>
 
             {/* User Menu */}
@@ -606,49 +613,49 @@ export default function TeacherPortal() {
                   <DropdownMenuLabel>Notifications</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {/* Mock Notifications */}
-                   <div className="max-h-64 overflow-y-auto">
-                      <DropdownMenuItem className="cursor-pointer">
-                        <div className="flex flex-col gap-1">
-                          <p className="text-sm font-medium">New Assignment Submission</p>
-                          <p className="text-xs text-slate-500">John Doe submitted "Physics Homework"</p>
-                          <p className="text-xs text-slate-400 mt-1">2 mins ago</p>
-                        </div>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem className="cursor-pointer">
-                         <div className="flex flex-col gap-1">
-                          <p className="text-sm font-medium">Staff Meeting Reminder</p>
-                          <p className="text-xs text-slate-500">Meeting starts in 1 hour in Room 101</p>
-                          <p className="text-xs text-slate-400 mt-1">1 hour ago</p>
-                        </div>
-                      </DropdownMenuItem>
-                   </div>
-                   <DropdownMenuSeparator />
-                   <DropdownMenuItem className="justify-center text-blue-600 cursor-pointer">
-                      View all notifications
-                   </DropdownMenuItem>
+                  <div className="max-h-64 overflow-y-auto">
+                    <DropdownMenuItem className="cursor-pointer">
+                      <div className="flex flex-col gap-1">
+                        <p className="text-sm font-medium">New Assignment Submission</p>
+                        <p className="text-xs text-slate-500">John Doe submitted "Physics Homework"</p>
+                        <p className="text-xs text-slate-400 mt-1">2 mins ago</p>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="cursor-pointer">
+                      <div className="flex flex-col gap-1">
+                        <p className="text-sm font-medium">Staff Meeting Reminder</p>
+                        <p className="text-xs text-slate-500">Meeting starts in 1 hour in Room 101</p>
+                        <p className="text-xs text-slate-400 mt-1">1 hour ago</p>
+                      </div>
+                    </DropdownMenuItem>
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="justify-center text-blue-600 cursor-pointer">
+                    View all notifications
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
 
               <ThemeToggle />
-              
+
               {/* Profile Dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="flex items-center gap-2 px-2 hover:bg-slate-100 dark:hover:bg-slate-800">
                     <Avatar className="h-8 w-8">
-                        <AvatarImage src={profile?.avatar_url} />
-                        <AvatarFallback>{profile?.first_name?.[0]}{profile?.last_name?.[0]}</AvatarFallback>
+                      <AvatarImage src={profile?.avatar_url} />
+                      <AvatarFallback>{profile?.first_name?.[0]}{profile?.last_name?.[0]}</AvatarFallback>
                     </Avatar>
                     <div className="hidden sm:block text-left">
-                        <p className="text-sm font-medium text-slate-900 dark:text-white leading-none">
-                          {(profile?.first_name || profile?.last_name) 
-                            ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim()
-                            : (profile?.full_name || user?.email || 'Teacher')}
-                        </p>
-                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                          {profile?.department || 'Teacher'}
-                        </p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-white leading-none">
+                        {(profile?.first_name || profile?.last_name)
+                          ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim()
+                          : (profile?.full_name || user?.email || 'Teacher')}
+                      </p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                        {profile?.department || 'Teacher'}
+                      </p>
                     </div>
                     <ChevronDown className="h-4 w-4 text-slate-500 hidden sm:block" />
                   </Button>
@@ -711,7 +718,7 @@ export default function TeacherPortal() {
 
         {/* Overlay for mobile */}
         {isSidebarOpen && (
-          <div 
+          <div
             className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
             onClick={() => setIsSidebarOpen(false)}
           />
@@ -731,8 +738,8 @@ export default function TeacherPortal() {
                     Here's what's happening in your classes today.
                   </p>
                 </div>
-                <Button onClick={() => { 
-                  setActiveTab("grading"); 
+                <Button onClick={() => {
+                  setActiveTab("grading");
                   setIsCreateAssignmentOpen(true);
                   setEditingAssignmentId(null);
                   setNewAssignment({
@@ -837,7 +844,7 @@ export default function TeacherPortal() {
                     <CardDescription>Latest updates from your classes</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                     <p className="text-sm text-slate-500 text-center py-4">No recent activity to show.</p>
+                    <p className="text-sm text-slate-500 text-center py-4">No recent activity to show.</p>
                   </CardContent>
                 </Card>
               </div>
@@ -955,11 +962,11 @@ export default function TeacherPortal() {
                               </div>
                             </TableCell>
                             {days.map(day => {
-                              const slot = timetable.find(t => 
-                                t.day_of_week === day && 
+                              const slot = timetable.find(t =>
+                                t.day_of_week === day &&
                                 formatTime(t.start_time) === time
                               );
-                              
+
                               return (
                                 <TableCell key={day} className={!slot ? "text-slate-400 italic" : "font-medium text-blue-600 dark:text-blue-400"}>
                                   {slot ? (
@@ -1009,7 +1016,7 @@ export default function TeacherPortal() {
                           <Users className="h-4 w-4 mr-3 text-slate-400" />
                           {cls.student_count || 0} Students
                         </div>
-                        
+
                         <div className="flex gap-2 pt-2">
                           <Button className="flex-1" size="sm" onClick={() => {
                             setSelectedClassId(cls.id);
@@ -1039,7 +1046,7 @@ export default function TeacherPortal() {
                   <p className="text-slate-600 dark:text-slate-400">Manage assignments and grading.</p>
                 </div>
                 <div className="flex gap-2">
-                   <Dialog open={isCreateAssignmentOpen} onOpenChange={setIsCreateAssignmentOpen}>
+                  <Dialog open={isCreateAssignmentOpen} onOpenChange={setIsCreateAssignmentOpen}>
                     <DialogTrigger asChild>
                       <Button onClick={() => {
                         setEditingAssignmentId(null);
@@ -1068,13 +1075,13 @@ export default function TeacherPortal() {
                       <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-4 items-center gap-4">
                           <Label htmlFor="title" className="text-right">Title</Label>
-                          <Input id="title" value={newAssignment.title} onChange={(e) => setNewAssignment({...newAssignment, title: e.target.value})} className="col-span-3" />
+                          <Input id="title" value={newAssignment.title} onChange={(e) => setNewAssignment({ ...newAssignment, title: e.target.value })} className="col-span-3" />
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                           <Label htmlFor="class" className="text-right">Class</Label>
-                          <Select 
-                            value={newAssignment.class_id} 
-                            onValueChange={(val) => setNewAssignment({...newAssignment, class_id: val})}
+                          <Select
+                            value={newAssignment.class_id}
+                            onValueChange={(val) => setNewAssignment({ ...newAssignment, class_id: val })}
                           >
                             <SelectTrigger className="col-span-3">
                               <SelectValue placeholder="Select Class" />
@@ -1088,9 +1095,9 @@ export default function TeacherPortal() {
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                           <Label htmlFor="subject" className="text-right">Subject</Label>
-                          <Select 
-                            value={newAssignment.subject_id} 
-                            onValueChange={(val) => setNewAssignment({...newAssignment, subject_id: val})}
+                          <Select
+                            value={newAssignment.subject_id}
+                            onValueChange={(val) => setNewAssignment({ ...newAssignment, subject_id: val })}
                           >
                             <SelectTrigger className="col-span-3">
                               <SelectValue placeholder="Select Subject" />
@@ -1104,11 +1111,11 @@ export default function TeacherPortal() {
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                           <Label htmlFor="dueDate" className="text-right">Due Date</Label>
-                          <Input id="dueDate" type="date" value={newAssignment.due_date} onChange={(e) => setNewAssignment({...newAssignment, due_date: e.target.value})} className="col-span-3" />
+                          <Input id="dueDate" type="date" value={newAssignment.due_date} onChange={(e) => setNewAssignment({ ...newAssignment, due_date: e.target.value })} className="col-span-3" />
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                           <Label htmlFor="desc" className="text-right">Description</Label>
-                          <Textarea id="desc" value={newAssignment.description} onChange={(e) => setNewAssignment({...newAssignment, description: e.target.value})} className="col-span-3" />
+                          <Textarea id="desc" value={newAssignment.description} onChange={(e) => setNewAssignment({ ...newAssignment, description: e.target.value })} className="col-span-3" />
                         </div>
                       </div>
                       <DialogFooter>
@@ -1167,7 +1174,7 @@ export default function TeacherPortal() {
                                 <PenTool className="h-4 w-4 mr-2" />
                                 Edit
                               </Button>
-                              <Button variant="ghost" size="sm" onClick={() => handleDeleteAssignment(item.id)}>
+                              <Button variant="ghost" size="sm" onClick={() => setDeleteTargetId(item.id)}>
                                 <Trash2 className="h-4 w-4 text-red-500" />
                               </Button>
                             </div>
@@ -1188,7 +1195,7 @@ export default function TeacherPortal() {
                       {selectedAssignment?.classes?.name} - {selectedAssignment?.subjects?.name}
                     </DialogDescription>
                   </DialogHeader>
-                  
+
                   <div className="py-4">
                     <Table>
                       <TableHeader>
@@ -1220,10 +1227,10 @@ export default function TeacherPortal() {
                               )}
                             </TableCell>
                             <TableCell>
-                              <Input 
-                                type="number" 
-                                className="w-20" 
-                                defaultValue={item.submission?.score || ''} 
+                              <Input
+                                type="number"
+                                className="w-20"
+                                defaultValue={item.submission?.score || ''}
                                 onChange={(e) => {
                                   // Update local state temporarily or handle on save
                                   item.tempScore = e.target.value;
@@ -1231,8 +1238,8 @@ export default function TeacherPortal() {
                               />
                             </TableCell>
                             <TableCell>
-                              <Input 
-                                placeholder="Feedback..." 
+                              <Input
+                                placeholder="Feedback..."
                                 defaultValue={item.submission?.feedback || ''}
                                 onChange={(e) => {
                                   item.tempFeedback = e.target.value;
@@ -1240,8 +1247,8 @@ export default function TeacherPortal() {
                               />
                             </TableCell>
                             <TableCell>
-                              <Button 
-                                size="sm" 
+                              <Button
+                                size="sm"
                                 onClick={() => {
                                   const score = parseFloat(item.tempScore !== undefined ? item.tempScore : (item.submission?.score || 0));
                                   const feedback = item.tempFeedback !== undefined ? item.tempFeedback : (item.submission?.feedback || '');
@@ -1296,11 +1303,11 @@ export default function TeacherPortal() {
                 </div>
                 <div className="w-full sm:w-[200px]">
                   <Label className="text-sm font-medium mb-1.5 block">Date</Label>
-                   <div className="relative">
+                  <div className="relative">
                     <Calendar className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-                    <Input 
-                      type="date" 
-                      className="pl-9" 
+                    <Input
+                      type="date"
+                      className="pl-9"
                       value={selectedDate}
                       onChange={(e) => setSelectedDate(e.target.value)}
                     />
@@ -1310,8 +1317,8 @@ export default function TeacherPortal() {
                   <Label className="text-sm font-medium mb-1.5 block">Search Student</Label>
                   <div className="relative">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-                    <Input 
-                      type="text" 
+                    <Input
+                      type="text"
                       placeholder="Search by name or number..."
                       className="pl-9"
                       value={attendanceSearchQuery}
@@ -1324,90 +1331,89 @@ export default function TeacherPortal() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {students.length > 0 ? (
                   students
-                  .filter(s => 
-                    s.name.toLowerCase().includes(attendanceSearchQuery.toLowerCase()) || 
-                    s.studentId.toLowerCase().includes(attendanceSearchQuery.toLowerCase())
-                  )
-                  .map((student) => {
-                  const state = attendanceState[student.id] || { status: 'present', remarks: '' };
-                  return (
-                    <Card key={student.id} className={`${
-                      state.status === 'absent' ? 'border-red-500 bg-red-50 dark:bg-red-900/10' : 
-                      state.status === 'late' ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/10' : 
-                      state.status === 'excused' ? 'border-slate-400 bg-slate-100 dark:bg-slate-800/50' :
-                      state.status === 'present' ? 'border-green-500 bg-green-50 dark:bg-green-900/10' :
-                      'border-slate-200 dark:border-slate-700'
-                    }`}>
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-10 w-10">
-                              <AvatarFallback>{student.name?.[0] || 'S'}</AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <p className="font-medium text-slate-900 dark:text-white line-clamp-1">{student.name}</p>
-                              <p className="text-xs text-slate-500 font-mono">{student.studentId}</p>
+                    .filter(s =>
+                      s.name.toLowerCase().includes(attendanceSearchQuery.toLowerCase()) ||
+                      s.studentId.toLowerCase().includes(attendanceSearchQuery.toLowerCase())
+                    )
+                    .map((student) => {
+                      const state = attendanceState[student.id] || { status: 'present', remarks: '' };
+                      return (
+                        <Card key={student.id} className={`${state.status === 'absent' ? 'border-red-500 bg-red-50 dark:bg-red-900/10' :
+                          state.status === 'late' ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/10' :
+                            state.status === 'excused' ? 'border-slate-400 bg-slate-100 dark:bg-slate-800/50' :
+                              state.status === 'present' ? 'border-green-500 bg-green-50 dark:bg-green-900/10' :
+                                'border-slate-200 dark:border-slate-700'
+                          }`}>
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between mb-4">
+                              <div className="flex items-center gap-3">
+                                <Avatar className="h-10 w-10">
+                                  <AvatarFallback>{student.name?.[0] || 'S'}</AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="font-medium text-slate-900 dark:text-white line-clamp-1">{student.name}</p>
+                                  <p className="text-xs text-slate-500 font-mono">{student.studentId}</p>
+                                </div>
+                              </div>
+                              <Badge variant={state.status === 'present' ? 'default' : state.status === 'absent' ? 'destructive' : 'secondary'}>
+                                {state.status.charAt(0).toUpperCase() + state.status.slice(1)}
+                              </Badge>
                             </div>
-                          </div>
-                          <Badge variant={state.status === 'present' ? 'default' : state.status === 'absent' ? 'destructive' : 'secondary'}>
-                            {state.status.charAt(0).toUpperCase() + state.status.slice(1)}
-                          </Badge>
-                        </div>
-                        
-                        <div className="space-y-3">
-                          <div className="grid grid-cols-4 gap-2">
-                             <Button 
-                                variant={state.status === 'present' ? 'default' : 'outline'} 
-                                size="sm" 
-                                className={`w-full ${state.status === 'present' ? 'bg-green-600 hover:bg-green-700' : ''}`}
-                                onClick={() => handleAttendanceChange(student.id, 'status', 'present')}
-                                title="Present"
-                              >
-                                P
-                              </Button>
-                              <Button 
-                                variant={state.status === 'absent' ? 'destructive' : 'outline'} 
-                                size="sm" 
-                                className="w-full"
-                                onClick={() => handleAttendanceChange(student.id, 'status', 'absent')}
-                                title="Absent"
-                              >
-                                A
-                              </Button>
-                              <Button 
-                                variant={state.status === 'late' ? 'secondary' : 'outline'} 
-                                size="sm" 
-                                className={`w-full ${state.status === 'late' ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' : ''}`}
-                                onClick={() => handleAttendanceChange(student.id, 'status', 'late')}
-                                title="Late"
-                              >
-                                L
-                              </Button>
-                              <Button 
-                                variant={state.status === 'excused' ? 'secondary' : 'outline'} 
-                                size="sm" 
-                                className={`w-full ${state.status === 'excused' ? 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200' : ''}`}
-                                onClick={() => handleAttendanceChange(student.id, 'status', 'excused')}
-                                title="Excused"
-                              >
-                                E
-                              </Button>
-                          </div>
-                          
-                          <Input 
-                            placeholder="Remarks (optional)" 
-                            className="h-8 text-xs"
-                            value={state.remarks}
-                            onChange={(e) => handleAttendanceChange(student.id, 'remarks', e.target.value)}
-                          />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })) : (
-                   <div className="col-span-full text-center py-10 text-slate-500">
-                      {selectedClassId ? 'No students found in this class' : 'Please select a class to view students'}
-                   </div>
+
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-4 gap-2">
+                                <Button
+                                  variant={state.status === 'present' ? 'default' : 'outline'}
+                                  size="sm"
+                                  className={`w-full ${state.status === 'present' ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                                  onClick={() => handleAttendanceChange(student.id, 'status', 'present')}
+                                  title="Present"
+                                >
+                                  P
+                                </Button>
+                                <Button
+                                  variant={state.status === 'absent' ? 'destructive' : 'outline'}
+                                  size="sm"
+                                  className="w-full"
+                                  onClick={() => handleAttendanceChange(student.id, 'status', 'absent')}
+                                  title="Absent"
+                                >
+                                  A
+                                </Button>
+                                <Button
+                                  variant={state.status === 'late' ? 'secondary' : 'outline'}
+                                  size="sm"
+                                  className={`w-full ${state.status === 'late' ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' : ''}`}
+                                  onClick={() => handleAttendanceChange(student.id, 'status', 'late')}
+                                  title="Late"
+                                >
+                                  L
+                                </Button>
+                                <Button
+                                  variant={state.status === 'excused' ? 'secondary' : 'outline'}
+                                  size="sm"
+                                  className={`w-full ${state.status === 'excused' ? 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200' : ''}`}
+                                  onClick={() => handleAttendanceChange(student.id, 'status', 'excused')}
+                                  title="Excused"
+                                >
+                                  E
+                                </Button>
+                              </div>
+
+                              <Input
+                                placeholder="Remarks (optional)"
+                                className="h-8 text-xs"
+                                value={state.remarks}
+                                onChange={(e) => handleAttendanceChange(student.id, 'remarks', e.target.value)}
+                              />
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })) : (
+                  <div className="col-span-full text-center py-10 text-slate-500">
+                    {selectedClassId ? 'No students found in this class' : 'Please select a class to view students'}
+                  </div>
                 )}
               </div>
             </TabsContent>
@@ -1462,18 +1468,18 @@ export default function TeacherPortal() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label>Phone Number</Label>
-                            <Input 
-                              placeholder="+1 (555) 000-0000" 
+                            <Input
+                              placeholder="+1 (555) 000-0000"
                               value={profile?.phone_number || ''}
-                              onChange={(e) => setProfile({...profile, phone_number: e.target.value})}
+                              onChange={(e) => setProfile({ ...profile, phone_number: e.target.value })}
                             />
                           </div>
                           <div className="space-y-2">
                             <Label>Address</Label>
-                            <Input 
-                              placeholder="123 Main St" 
+                            <Input
+                              placeholder="123 Main St"
                               value={profile?.address || ''}
-                              onChange={(e) => setProfile({...profile, address: e.target.value})}
+                              onChange={(e) => setProfile({ ...profile, address: e.target.value })}
                             />
                           </div>
                         </div>
@@ -1532,27 +1538,37 @@ export default function TeacherPortal() {
                 </div>
               </div>
               <Card>
-                  <CardHeader>
-                    <div className="flex items-center gap-2">
-                      <Moon className="h-5 w-5 text-blue-600" />
-                      <CardTitle>Appearance</CardTitle>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Moon className="h-5 w-5 text-blue-600" />
+                    <CardTitle>Appearance</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label className="text-base">Dark Mode</Label>
+                      <p className="text-sm text-slate-500">Toggle between light and dark themes.</p>
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label className="text-base">Dark Mode</Label>
-                        <p className="text-sm text-slate-500">Toggle between light and dark themes.</p>
-                      </div>
-                      <ThemeToggle />
-                    </div>
-                  </CardContent>
-                </Card>
+                    <ThemeToggle />
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
 
           </Tabs>
         </main>
       </div>
+      <ConfirmDialog
+        open={!!deleteTargetId}
+        onOpenChange={(open) => !open && setDeleteTargetId(null)}
+        title="Delete Assignment"
+        description="Are you sure you want to delete this assignment? This action cannot be undone."
+        confirmLabel="Delete Assignment"
+        variant="danger"
+        loading={isDeleting}
+        onConfirm={handleDeleteAssignment}
+      />
     </div>
   );
 }

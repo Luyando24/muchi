@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Users, 
-  Plus, 
-  Search, 
-  MoreVertical, 
-  Edit, 
-  Trash2, 
+import {
+  Users,
+  Plus,
+  Search,
+  MoreVertical,
+  Edit,
+  Trash2,
   Loader2,
   Key,
   ShieldAlert
@@ -46,6 +46,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 // Schema for creating a system admin or school admin
 const userSchema = z.object({
@@ -78,6 +79,8 @@ export default function UserManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof userSchema>>({
@@ -135,7 +138,7 @@ export default function UserManagement() {
         .from('schools')
         .select('id, name')
         .order('name');
-      
+
       if (error) throw error;
       setSchools(data || []);
     } catch (error: any) {
@@ -174,55 +177,53 @@ export default function UserManagement() {
       });
     }
   };
-  
+
   const handleUpdateUser = async (values: z.infer<typeof userSchema>) => {
-     if (!editingUser) return;
-     
-     try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('No session');
-
-        const response = await fetch(`/api/admin/users/${editingUser.id}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${session.access_token}`
-            },
-            body: JSON.stringify(values),
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to update user');
-        }
-        
-        toast({ title: "User updated successfully" });
-        setIsDialogOpen(false);
-        setEditingUser(null);
-        form.reset();
-        fetchUsers();
-        
-     } catch (error: any) {
-        toast({
-            variant: "destructive",
-            title: "Update failed",
-            description: error.message,
-        });
-     }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this user? This will also remove their login access.")) return;
+    if (!editingUser) return;
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('No session');
 
-      const response = await fetch(`/api/admin/users/${id}`, {
-        method: 'DELETE',
+      const response = await fetch(`/api/admin/users/${editingUser.id}`, {
+        method: 'PUT',
         headers: {
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`
-        }
+        },
+        body: JSON.stringify(values),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update user');
+      }
+
+      toast({ title: "User updated successfully" });
+      setIsDialogOpen(false);
+      setEditingUser(null);
+      form.reset();
+      fetchUsers();
+
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Update failed",
+        description: error.message,
+      });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTargetId) return;
+    setIsDeleting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('No session');
+
+      const response = await fetch(`/api/admin/users/${deleteTargetId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${session.access_token}` }
       });
 
       if (!response.ok) {
@@ -231,14 +232,12 @@ export default function UserManagement() {
       }
 
       toast({ title: "User deleted successfully" });
+      setDeleteTargetId(null);
       fetchUsers();
-      
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Delete failed",
-        description: error.message,
-      });
+      toast({ variant: "destructive", title: "Delete failed", description: error.message });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -246,7 +245,7 @@ export default function UserManagement() {
     setEditingUser(user);
     form.reset({
       full_name: user.full_name,
-      email: user.email || '', 
+      email: user.email || '',
       role: user.role as 'system_admin' | 'school_admin',
       school_id: user.school_id || 'none',
     });
@@ -265,7 +264,7 @@ export default function UserManagement() {
     setIsDialogOpen(true);
   };
 
-  const filteredUsers = users.filter(user => 
+  const filteredUsers = users.filter(user =>
     user.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     user.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (user.schools?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
@@ -306,36 +305,36 @@ export default function UserManagement() {
                     </FormItem>
                   )}
                 />
-                
+
                 {!editingUser && (
-                    <>
+                  <>
                     <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
+                      control={form.control}
+                      name="email"
+                      render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl>
                             <Input placeholder="user@example.com" {...field} />
-                        </FormControl>
-                        <FormMessage />
+                          </FormControl>
+                          <FormMessage />
                         </FormItem>
-                    )}
+                      )}
                     />
                     <FormField
-                    control={form.control}
-                    name="password"
-                    render={({ field }) => (
+                      control={form.control}
+                      name="password"
+                      render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Password</FormLabel>
-                        <FormControl>
+                          <FormLabel>Password</FormLabel>
+                          <FormControl>
                             <Input type="password" placeholder="******" {...field} />
-                        </FormControl>
-                        <FormMessage />
+                          </FormControl>
+                          <FormMessage />
                         </FormItem>
-                    )}
+                      )}
                     />
-                    </>
+                  </>
                 )}
 
                 <FormField
@@ -402,8 +401,8 @@ export default function UserManagement() {
       <div className="flex items-center space-x-2">
         <div className="relative flex-1">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search users..." 
+          <Input
+            placeholder="Search users..."
             className="pl-8 max-w-sm"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -423,7 +422,7 @@ export default function UserManagement() {
           </TableHeader>
           <TableBody>
             {loading ? (
-               <TableRow>
+              <TableRow>
                 <TableCell colSpan={4} className="h-24 text-center">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                 </TableCell>
@@ -444,11 +443,10 @@ export default function UserManagement() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        user.role === 'system_admin' 
-                        ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300' 
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${user.role === 'system_admin'
+                        ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
                         : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                    }`}>
+                      }`}>
                       {user.role.replace('_', ' ')}
                     </span>
                   </TableCell>
@@ -466,13 +464,13 @@ export default function UserManagement() {
                         <DropdownMenuItem onClick={() => openEditDialog(user)}>
                           <Edit className="mr-2 h-4 w-4" /> Edit Details
                         </DropdownMenuItem>
-                         <DropdownMenuItem onClick={() => toast({ title: "Reset Password", description: "Password reset link sent to user email." })}>
+                        <DropdownMenuItem onClick={() => toast({ title: "Reset Password", description: "Password reset link sent to user email." })}>
                           <Key className="mr-2 h-4 w-4" /> Reset Password
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           className="text-red-600 focus:text-red-600"
-                          onClick={() => handleDelete(user.id)}
+                          onClick={() => setDeleteTargetId(user.id)}
                         >
                           <Trash2 className="mr-2 h-4 w-4" /> Delete User
                         </DropdownMenuItem>
@@ -485,6 +483,16 @@ export default function UserManagement() {
           </TableBody>
         </Table>
       </div>
+      <ConfirmDialog
+        open={!!deleteTargetId}
+        onOpenChange={(open) => !open && setDeleteTargetId(null)}
+        title="Delete User?"
+        description="Are you sure you want to delete this user? This will permanently remove their account and login access. This action cannot be undone."
+        confirmLabel="Delete User"
+        variant="danger"
+        loading={isDeleting}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

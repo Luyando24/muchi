@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Search, 
-  Filter, 
-  MoreVertical, 
-  Download, 
-  UserPlus, 
-  Trash2, 
+import {
+  Search,
+  Filter,
+  MoreVertical,
+  Download,
+  UserPlus,
+  Trash2,
   Edit,
   Loader2,
   Eye
@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 interface Teacher {
   id: string;
@@ -65,6 +66,8 @@ export default function TeacherManagement() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [currentTeacher, setCurrentTeacher] = useState<Teacher | null>(null);
   const [viewTeacherId, setViewTeacherId] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
   const [availableSubjects, setAvailableSubjects] = useState<Option[]>([]);
 
@@ -257,14 +260,14 @@ export default function TeacherManagement() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this teacher? This action cannot be undone.')) return;
-
+  const handleDelete = async () => {
+    if (!deleteTargetId) return;
+    setIsDeleting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/teachers/${id}`, {
+      const response = await fetch(`/api/school/teachers/${deleteTargetId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${session.access_token}`
@@ -277,6 +280,7 @@ export default function TeacherManagement() {
         title: "Success",
         description: "Teacher deleted successfully",
       });
+      setDeleteTargetId(null);
       fetchTeachers();
     } catch (error: any) {
       toast({
@@ -284,10 +288,12 @@ export default function TeacherManagement() {
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
-  const filteredTeachers = teachers.filter(teacher => 
+  const filteredTeachers = teachers.filter(teacher =>
     teacher.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     teacher.department.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -333,7 +339,7 @@ export default function TeacherManagement() {
                     <Input id="lastName" name="lastName" value={formData.lastName} onChange={handleInputChange} required />
                   </div>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="email">Email Address</Label>
                   <Input id="email" name="email" type="email" value={formData.email} onChange={handleInputChange} required />
@@ -405,9 +411,9 @@ export default function TeacherManagement() {
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-                <Input 
-                  placeholder="Search teachers..." 
-                  className="pl-9 w-[200px] md:w-[300px]" 
+                <Input
+                  placeholder="Search teachers..."
+                  className="pl-9 w-[200px] md:w-[300px]"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -501,7 +507,7 @@ export default function TeacherManagement() {
                               <Edit className="h-4 w-4 mr-2" />
                               Edit Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(teacher.id)}>
+                            <DropdownMenuItem className="text-red-600" onClick={() => setDeleteTargetId(teacher.id)}>
                               <Trash2 className="h-4 w-4 mr-2" />
                               Delete Account
                             </DropdownMenuItem>
@@ -537,7 +543,7 @@ export default function TeacherManagement() {
                 <Input id="edit-lastName" name="lastName" value={formData.lastName} onChange={handleInputChange} required />
               </div>
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="edit-email">Email Address</Label>
               <Input id="edit-email" name="email" type="email" value={formData.email} disabled className="bg-slate-100" />
@@ -591,6 +597,16 @@ export default function TeacherManagement() {
           </form>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={!!deleteTargetId}
+        onOpenChange={(open) => !open && setDeleteTargetId(null)}
+        title="Delete Teacher Account?"
+        description="Are you sure you want to delete this teacher? This action cannot be undone and will remove all their associated data."
+        confirmLabel="Delete Teacher"
+        variant="danger"
+        loading={isDeleting}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

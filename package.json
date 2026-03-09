@@ -11,7 +11,7 @@
     ]
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "node dev.js",
     "start:api": "tsx watch server/index.ts",
     "build": "vite build",
     "test": "vitest --run",

@@ -85,68 +85,88 @@ ALTER TABLE student_grades ENABLE ROW LEVEL SECURITY;
 -- Policies (Simplified for development - allow authenticated users to read appropriate data)
 -- In production, these should be stricter (e.g. students can only see their own grades)
 
-CREATE POLICY "Users can view their own enrollments" ON enrollments
-  FOR SELECT USING (auth.uid() = student_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can view their own enrollments" ON enrollments
+    FOR SELECT USING (auth.uid() = student_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "School staff can view enrollments" ON enrollments
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE id = auth.uid() AND school_id = enrollments.school_id AND role IN ('school_admin', 'teacher')
-    )
-  );
+DO $$ BEGIN
+  CREATE POLICY "School staff can view enrollments" ON enrollments
+    FOR ALL USING (
+      EXISTS (
+        SELECT 1 FROM profiles 
+        WHERE id = auth.uid() AND school_id = enrollments.school_id AND role IN ('school_admin', 'teacher')
+      )
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Assignments: Students see assignments for their class; Teachers see assignments they created or for their school
-CREATE POLICY "Students view assignments for their class" ON assignments
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM enrollments 
-      WHERE student_id = auth.uid() AND class_id = assignments.class_id
-    )
-  );
+DO $$ BEGIN
+  CREATE POLICY "Students view assignments for their class" ON assignments
+    FOR SELECT USING (
+      EXISTS (
+        SELECT 1 FROM enrollments 
+        WHERE student_id = auth.uid() AND class_id = assignments.class_id
+      )
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
   
-CREATE POLICY "Staff view assignments" ON assignments
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE id = auth.uid() AND school_id = assignments.school_id AND role IN ('school_admin', 'teacher')
-    )
-  );
+DO $$ BEGIN
+  CREATE POLICY "Staff view assignments" ON assignments
+    FOR ALL USING (
+      EXISTS (
+        SELECT 1 FROM profiles 
+        WHERE id = auth.uid() AND school_id = assignments.school_id AND role IN ('school_admin', 'teacher')
+      )
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Submissions: Students see/create their own; Teachers see all for their assignments
-CREATE POLICY "Students manage their submissions" ON submissions
-  FOR ALL USING (auth.uid() = student_id);
+DO $$ BEGIN
+  CREATE POLICY "Students manage their submissions" ON submissions
+    FOR ALL USING (auth.uid() = student_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "Staff view submissions" ON submissions
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE id = auth.uid() 
-      AND role IN ('school_admin', 'teacher')
-      AND school_id = (SELECT school_id FROM assignments WHERE id = submissions.assignment_id)
-    )
-  );
+DO $$ BEGIN
+  CREATE POLICY "Staff view submissions" ON submissions
+    FOR ALL USING (
+      EXISTS (
+        SELECT 1 FROM profiles 
+        WHERE id = auth.uid() 
+        AND role IN ('school_admin', 'teacher')
+        AND school_id = (SELECT school_id FROM assignments WHERE id = submissions.assignment_id)
+      )
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Attendance: Students view own; Staff view all
-CREATE POLICY "Students view own attendance" ON attendance
-  FOR SELECT USING (auth.uid() = student_id);
+DO $$ BEGIN
+  CREATE POLICY "Students view own attendance" ON attendance
+    FOR SELECT USING (auth.uid() = student_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "Staff manage attendance" ON attendance
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE id = auth.uid() AND school_id = attendance.school_id AND role IN ('school_admin', 'teacher')
-    )
-  );
+DO $$ BEGIN
+  CREATE POLICY "Staff manage attendance" ON attendance
+    FOR ALL USING (
+      EXISTS (
+        SELECT 1 FROM profiles 
+        WHERE id = auth.uid() AND school_id = attendance.school_id AND role IN ('school_admin', 'teacher')
+      )
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Grades: Students view own; Staff manage
-CREATE POLICY "Students view own grades" ON student_grades
-  FOR SELECT USING (auth.uid() = student_id);
+DO $$ BEGIN
+  CREATE POLICY "Students view own grades" ON student_grades
+    FOR SELECT USING (auth.uid() = student_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "Staff manage grades" ON student_grades
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE id = auth.uid() AND school_id = student_grades.school_id AND role IN ('school_admin', 'teacher')
-    )
-  );
+DO $$ BEGIN
+  CREATE POLICY "Staff manage grades" ON student_grades
+    FOR ALL USING (
+      EXISTS (
+        SELECT 1 FROM profiles 
+        WHERE id = auth.uid() AND school_id = student_grades.school_id AND role IN ('school_admin', 'teacher')
+      )
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;

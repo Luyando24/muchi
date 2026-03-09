@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Search, 
-  Filter, 
-  MoreVertical, 
-  Download, 
-  UserPlus, 
-  Trash2, 
+import {
+  Search,
+  Filter,
+  MoreVertical,
+  Download,
+  UserPlus,
+  Trash2,
   Edit,
   Loader2,
   Eye,
@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 interface Student {
   id: string;
@@ -75,6 +76,8 @@ export default function StudentManagement() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [currentStudent, setCurrentStudent] = useState<Student | null>(null);
   const [viewStudentId, setViewStudentId] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
 
   // Form states
@@ -106,7 +109,7 @@ export default function StudentManagement() {
       ]);
 
       if (!studentsRes.ok) throw new Error('Failed to fetch students');
-      
+
       const studentsData = await studentsRes.json();
       setStudents(studentsData);
 
@@ -254,14 +257,14 @@ export default function StudentManagement() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this student? This action cannot be undone.')) return;
-
+  const handleDelete = async () => {
+    if (!deleteTargetId) return;
+    setIsDeleting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/students/${id}`, {
+      const response = await fetch(`/api/school/students/${deleteTargetId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${session.access_token}`
@@ -274,6 +277,7 @@ export default function StudentManagement() {
         title: "Success",
         description: "Student deleted successfully",
       });
+      setDeleteTargetId(null);
       fetchStudents();
     } catch (error: any) {
       toast({
@@ -281,10 +285,12 @@ export default function StudentManagement() {
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
-  const filteredStudents = students.filter(student => 
+  const filteredStudents = students.filter(student =>
     student.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     student.grade.toLowerCase().includes(searchQuery.toLowerCase()) ||
     student.id.toLowerCase().includes(searchQuery.toLowerCase())
@@ -306,7 +312,7 @@ export default function StudentManagement() {
             <Download className="h-4 w-4 mr-2" />
             Export List
           </Button>
-          
+
           <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
@@ -315,10 +321,10 @@ export default function StudentManagement() {
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[800px]">
-                <BulkStudentImport onImportSuccess={() => {
-                  setIsImportOpen(false);
-                  fetchStudents();
-                }} />
+              <BulkStudentImport onImportSuccess={() => {
+                setIsImportOpen(false);
+                fetchStudents();
+              }} />
             </DialogContent>
           </Dialog>
 
@@ -405,9 +411,9 @@ export default function StudentManagement() {
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-                <Input 
-                  placeholder="Search students..." 
-                  className="pl-9 w-[200px] md:w-[300px]" 
+                <Input
+                  placeholder="Search students..."
+                  className="pl-9 w-[200px] md:w-[300px]"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -463,10 +469,10 @@ export default function StudentManagement() {
                       <TableCell>{student.guardian}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={
-                          student.fees === 'Paid' ? 'bg-green-50 text-green-700 border-green-200' : 
-                          student.fees === 'Pending' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 
-                          student.fees === 'Partial' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                          'bg-red-50 text-red-700 border-red-200'
+                          student.fees === 'Paid' ? 'bg-green-50 text-green-700 border-green-200' :
+                            student.fees === 'Pending' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                              student.fees === 'Partial' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                'bg-red-50 text-red-700 border-red-200'
                         }>
                           {student.fees}
                         </Badge>
@@ -492,7 +498,7 @@ export default function StudentManagement() {
                               <Edit className="h-4 w-4 mr-2" />
                               Edit Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(student.id)}>
+                            <DropdownMenuItem className="text-red-600" onClick={() => setDeleteTargetId(student.id)}>
                               <Trash2 className="h-4 w-4 mr-2" />
                               Delete Student
                             </DropdownMenuItem>
@@ -591,6 +597,16 @@ export default function StudentManagement() {
           </form>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={!!deleteTargetId}
+        onOpenChange={(open) => !open && setDeleteTargetId(null)}
+        title="Delete Student?"
+        description="Are you sure you want to delete this student? This action cannot be undone and will remove all associated records."
+        confirmLabel="Delete Student"
+        variant="danger"
+        loading={isDeleting}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

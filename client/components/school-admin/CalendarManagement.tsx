@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Calendar, 
-  Download, 
-  Plus, 
+import {
+  Calendar,
+  Download,
+  Plus,
   Trash2,
   Edit,
   Loader2,
@@ -35,12 +35,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { CalendarEvent } from '@shared/api';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 export default function CalendarManagement() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -160,14 +163,14 @@ export default function CalendarManagement() {
     }
   };
 
-  const handleDeleteEvent = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this event?')) return;
-
+  const handleDeleteEvent = async () => {
+    if (!deleteTargetId) return;
+    setIsDeleting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/calendar/${id}`, {
+      const response = await fetch(`/api/school/calendar/${deleteTargetId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${session.access_token}`
@@ -176,18 +179,14 @@ export default function CalendarManagement() {
 
       if (!response.ok) throw new Error('Failed to delete event');
 
-      toast({
-        title: "Success",
-        description: "Event deleted successfully.",
-      });
+      toast({ title: "Success", description: "Event deleted successfully." });
+      setDeleteTargetId(null);
       fetchEvents();
     } catch (error: any) {
       console.error('Error deleting event:', error);
-      toast({
-        title: "Error",
-        description: "Failed to delete event.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to delete event.", variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -203,7 +202,7 @@ export default function CalendarManagement() {
             <Download className="h-4 w-4 mr-2" />
             Export Calendar
           </Button>
-          
+
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger asChild>
               <Button onClick={resetForm}>
@@ -221,46 +220,46 @@ export default function CalendarManagement() {
               <form onSubmit={handleAddEvent} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="title">Event Title</Label>
-                  <Input 
-                    id="title" 
-                    name="title" 
-                    placeholder="e.g., Final Exams" 
-                    value={formData.title} 
-                    onChange={handleInputChange} 
-                    required 
+                  <Input
+                    id="title"
+                    name="title"
+                    placeholder="e.g., Final Exams"
+                    value={formData.title}
+                    onChange={handleInputChange}
+                    required
                   />
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="date">Date</Label>
-                    <Input 
-                      id="date" 
-                      name="date" 
+                    <Input
+                      id="date"
+                      name="date"
                       type="date"
-                      value={formData.date} 
-                      onChange={handleInputChange} 
-                      required 
+                      value={formData.date}
+                      onChange={handleInputChange}
+                      required
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="time">Time</Label>
-                    <Input 
-                      id="time" 
-                      name="time" 
+                    <Input
+                      id="time"
+                      name="time"
                       type="time"
-                      value={formData.time} 
-                      onChange={handleInputChange} 
-                      required 
+                      value={formData.time}
+                      onChange={handleInputChange}
+                      required
                     />
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="type">Event Type</Label>
-                  <Select 
-                    name="type" 
-                    value={formData.type} 
+                  <Select
+                    name="type"
+                    value={formData.type}
                     onValueChange={(val) => handleSelectChange('type', val)}
                   >
                     <SelectTrigger>
@@ -279,23 +278,23 @@ export default function CalendarManagement() {
 
                 <div className="space-y-2">
                   <Label htmlFor="location">Location</Label>
-                  <Input 
-                    id="location" 
-                    name="location" 
-                    placeholder="e.g., Main Hall" 
-                    value={formData.location} 
-                    onChange={handleInputChange} 
+                  <Input
+                    id="location"
+                    name="location"
+                    placeholder="e.g., Main Hall"
+                    value={formData.location}
+                    onChange={handleInputChange}
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="description">Description</Label>
-                  <Textarea 
-                    id="description" 
-                    name="description" 
-                    placeholder="Additional details..." 
-                    value={formData.description} 
-                    onChange={handleInputChange} 
+                  <Textarea
+                    id="description"
+                    name="description"
+                    placeholder="Additional details..."
+                    value={formData.description}
+                    onChange={handleInputChange}
                   />
                 </div>
 
@@ -340,19 +339,19 @@ export default function CalendarManagement() {
                       <div className="flex justify-between items-start">
                         <h4 className="font-semibold text-slate-900 dark:text-white">{event.title}</h4>
                         <div className="flex gap-1">
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             className="opacity-0 group-hover:opacity-100 h-8 w-8 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
                             onClick={() => handleEdit(event)}
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             className="opacity-0 group-hover:opacity-100 h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => handleDeleteEvent(event.id)}
+                            onClick={() => setDeleteTargetId(event.id)}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -398,6 +397,16 @@ export default function CalendarManagement() {
           </CardContent>
         </Card>
       </div>
+      <ConfirmDialog
+        open={!!deleteTargetId}
+        onOpenChange={(open) => !open && setDeleteTargetId(null)}
+        title="Delete Event?"
+        description="Are you sure you want to delete this calendar event? This action cannot be undone."
+        confirmLabel="Delete Event"
+        variant="danger"
+        loading={isDeleting}
+        onConfirm={handleDeleteEvent}
+      />
     </div>
   );
 }

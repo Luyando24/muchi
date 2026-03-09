@@ -1,16 +1,19 @@
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Search, 
-  Filter, 
-  MoreVertical, 
-  Plus, 
-  Trash2, 
+import {
+  Search,
+  Filter,
+  MoreVertical,
+  Plus,
+  Trash2,
   Edit,
   Loader2,
   BookOpen,
   Layers,
-  Calendar
+  Calendar,
+  AlertTriangle,
+  ClipboardList,
+  Printer
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -44,6 +47,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 interface Teacher {
   id: string;
@@ -85,6 +89,7 @@ interface GradingWeight {
 }
 
 import TimetableManagement from './TimetableManagement';
+import ResultPrinter from './ResultPrinter';
 
 export default function AcademicManagement() {
   const [activeTab, setActiveTab] = useState('classes');
@@ -115,10 +120,35 @@ export default function AcademicManagement() {
   const [classForm, setClassForm] = useState({ id: '', name: '', level: '', room: '', capacity: 40, classTeacherId: '' });
   const [scaleForm, setScaleForm] = useState({ id: '', grade: '', min_percentage: 0, max_percentage: 100, description: '' });
   const [weightForm, setWeightForm] = useState({ id: '', assessment_type: '', weight_percentage: 0 });
-  
+
   // Grade Calculation State
-  const [calcForm, setCalcForm] = useState({ classId: '', subjectId: 'all', term: '', academicYear: '' });
+  const [calcForm, setCalcForm] = useState({ classId: 'all', subjectId: 'all', term: '', academicYear: '' });
   const [isCalculating, setIsCalculating] = useState(false);
+  const [gradeStatus, setGradeStatus] = useState<{ id: string, name: string, status: string, teacher: string }[]>([]);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+
+  // Unpublished Grades / Readiness Report State
+  const [unpublishedGrades, setUnpublishedGrades] = useState<any[]>([]);
+  const [isReadinessReportOpen, setIsReadinessReportOpen] = useState(false);
+  const [isLoadingReadiness, setIsLoadingReadiness] = useState(false);
+
+  // Allocation State
+  const [allocationClassId, setAllocationClassId] = useState<string>('');
+  const [classSubjects, setClassSubjects] = useState<any[]>([]);
+  const [isLoadingAllocations, setIsLoadingAllocations] = useState(false);
+  const [isAddAllocationOpen, setIsAddAllocationOpen] = useState(false);
+  const [allocationForm, setAllocationForm] = useState({ subjectId: '', teacherId: '' });
+
+  // Confirmation State
+  const [confirmState, setConfirmState] = useState<{
+    type: 'subject' | 'class' | 'scale' | 'weight' | 'publish' | null;
+    id?: string;
+    message?: string;
+    title?: string;
+  }>({ type: null });
+  const [isActionLoading, setIsActionLoading] = useState(false);
 
   // Fetch Data
   const fetchData = async () => {
@@ -143,14 +173,14 @@ export default function AcademicManagement() {
       if (teachersRes.ok) setTeachers(await teachersRes.json());
       if (scalesRes.ok) setGradingScales(await scalesRes.json());
       if (weightsRes.ok) setGradingWeights(await weightsRes.json());
-      
+
       if (settingsRes.ok) {
         const settings = await settingsRes.json();
         setSchoolSettings(settings);
-        setCalcForm(prev => ({ 
-          ...prev, 
-          term: settings.current_term || 'Term 1', 
-          academicYear: settings.academic_year || new Date().getFullYear().toString() 
+        setCalcForm(prev => ({
+          ...prev,
+          term: settings.current_term || 'Term 1',
+          academicYear: settings.academic_year || new Date().getFullYear().toString()
         }));
       }
 
@@ -165,6 +195,93 @@ export default function AcademicManagement() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const fetchAllocations = async (classId: string) => {
+    if (!classId) return;
+    setIsLoadingAllocations(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      
+      const res = await fetch(`/api/school/classes/${classId}/subjects`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      
+      if (res.ok) {
+        setClassSubjects(await res.json());
+      }
+    } catch (error) {
+      console.error('Error fetching allocations:', error);
+      toast({ title: "Error", description: "Failed to load class subjects", variant: "destructive" });
+    } finally {
+      setIsLoadingAllocations(false);
+    }
+  };
+
+  useEffect(() => {
+    if (allocationClassId) {
+      fetchAllocations(allocationClassId);
+    }
+  }, [allocationClassId]);
+
+  const handleAllocationSubmit = async () => {
+    if (!allocationClassId || !allocationForm.subjectId) return;
+    
+    setIsActionLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/school/classes/${allocationClassId}/subjects/assign`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          subjectId: allocationForm.subjectId,
+          teacherId: allocationForm.teacherId || null
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to assign subject');
+      }
+
+      toast({ title: "Success", description: "Subject assigned successfully" });
+      setIsAddAllocationOpen(false);
+      setAllocationForm({ subjectId: '', teacherId: '' });
+      fetchAllocations(allocationClassId);
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleRemoveAllocation = async (subjectId: string) => {
+    if (!allocationClassId) return;
+    
+    if (!confirm('Are you sure you want to remove this subject from the class?')) return;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/school/classes/${allocationClassId}/subjects/${subjectId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+
+      if (!response.ok) throw new Error('Failed to remove subject');
+
+      toast({ title: "Success", description: "Subject removed successfully" });
+      fetchAllocations(allocationClassId);
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
 
   // Subject Handlers
   const handleSubjectSubmit = async (e: React.FormEvent, isEdit: boolean) => {
@@ -197,13 +314,14 @@ export default function AcademicManagement() {
     }
   };
 
-  const handleDeleteSubject = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this subject?')) return;
+  const handleDeleteSubject = async () => {
+    if (!confirmState.id) return;
+    setIsActionLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/subjects/${id}`, {
+      const response = await fetch(`/api/school/subjects/${confirmState.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
@@ -211,9 +329,12 @@ export default function AcademicManagement() {
       if (!response.ok) throw new Error('Failed to delete subject');
 
       toast({ title: "Success", description: "Subject deleted successfully" });
+      setConfirmState({ type: null });
       fetchData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsActionLoading(false);
     }
   };
 
@@ -248,13 +369,14 @@ export default function AcademicManagement() {
     }
   };
 
-  const handleDeleteClass = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this class?')) return;
+  const handleDeleteClass = async () => {
+    if (!confirmState.id) return;
+    setIsActionLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/classes/${id}`, {
+      const response = await fetch(`/api/school/classes/${confirmState.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
@@ -262,9 +384,12 @@ export default function AcademicManagement() {
       if (!response.ok) throw new Error('Failed to delete class');
 
       toast({ title: "Success", description: "Class deleted successfully" });
+      setConfirmState({ type: null });
       fetchData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsActionLoading(false);
     }
   };
 
@@ -299,13 +424,14 @@ export default function AcademicManagement() {
     }
   };
 
-  const handleDeleteScale = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this grading scale?')) return;
+  const handleDeleteScale = async () => {
+    if (!confirmState.id) return;
+    setIsActionLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/grading-scales/${id}`, {
+      const response = await fetch(`/api/school/grading-scales/${confirmState.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
@@ -313,9 +439,12 @@ export default function AcademicManagement() {
       if (!response.ok) throw new Error('Failed to delete grading scale');
 
       toast({ title: "Success", description: "Grading scale deleted successfully" });
+      setConfirmState({ type: null });
       fetchData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsActionLoading(false);
     }
   };
 
@@ -350,13 +479,14 @@ export default function AcademicManagement() {
     }
   };
 
-  const handleDeleteWeight = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this assessment weight?')) return;
+  const handleDeleteWeight = async () => {
+    if (!confirmState.id) return;
+    setIsActionLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/grading-weights/${id}`, {
+      const response = await fetch(`/api/school/grading-weights/${confirmState.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
@@ -364,9 +494,12 @@ export default function AcademicManagement() {
       if (!response.ok) throw new Error('Failed to delete assessment weight');
 
       toast({ title: "Success", description: "Assessment weight deleted successfully" });
+      setConfirmState({ type: null });
       fetchData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsActionLoading(false);
     }
   };
 
@@ -440,16 +573,158 @@ export default function AcademicManagement() {
 
       const data = await response.json();
 
-      if (!response.ok) throw new Error(data.message || 'Failed to calculate grades');
+      if (!response.ok) {
+        // If blocked by unpublished grades, show the readiness report instead of just a toast
+        if (response.status === 400 && data.unpublished && data.unpublished.length > 0) {
+          setUnpublishedGrades(data.unpublished);
+          setIsReadinessReportOpen(true);
+          toast({ title: "Calculation Blocked", description: data.message, variant: "destructive" });
+        } else {
+          throw new Error(data.message || 'Failed to calculate grades');
+        }
+        return;
+      }
 
-      toast({ 
-        title: "Calculation Complete", 
-        description: `Successfully calculated grades for ${data.count} students.` 
+      toast({
+        title: data.count > 0 ? "Calculation Complete" : "Nothing to Calculate",
+        description: data.count > 0
+          ? `Successfully calculated grades for ${data.count} students.`
+          : `No grade changes were necessary for the selected criteria.`
       });
+
+      // Auto-check status after calculation
+      handleCheckStatus();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
       setIsCalculating(false);
+    }
+  };
+
+  // Readiness Report Handler — loads unpublished grades for admin visibility
+  const handleReadinessReport = async () => {
+    if (!calcForm.term || !calcForm.academicYear) {
+      toast({ title: "Error", description: "Please select Term and Year first", variant: "destructive" });
+      return;
+    }
+
+    setIsLoadingReadiness(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const params = new URLSearchParams({
+        classId: calcForm.classId,
+        subjectId: calcForm.subjectId,
+        term: calcForm.term,
+        academicYear: calcForm.academicYear
+      });
+
+      const response = await fetch(`/api/school/results/unpublished?${params}`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+
+      setUnpublishedGrades(data);
+      setIsReadinessReportOpen(true);
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsLoadingReadiness(false);
+    }
+  };
+
+  const handleCheckStatus = async () => {
+    if (!calcForm.classId || !calcForm.term || !calcForm.academicYear) {
+      toast({ title: "Error", description: "Please select Class, Term and Year first", variant: "destructive" });
+      return;
+    }
+
+    setIsCheckingStatus(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/school/results/status?classId=${calcForm.classId}&subjectId=${calcForm.subjectId}&term=${calcForm.term}&academicYear=${calcForm.academicYear}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to fetch status');
+
+      setGradeStatus(data);
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsCheckingStatus(false);
+    }
+  };
+
+  const handlePublishResults = async () => {
+    if (!calcForm.classId || !calcForm.term || !calcForm.academicYear) return;
+
+    setIsActionLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch('/api/school/results/publish', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          classId: calcForm.classId,
+          subjectId: calcForm.subjectId === 'all' ? null : calcForm.subjectId,
+          term: calcForm.term,
+          academicYear: calcForm.academicYear
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to publish results');
+
+      toast({ title: "Success", description: data.message });
+      setConfirmState({ type: null });
+      handleCheckStatus();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleConfirm = () => {
+    switch (confirmState.type) {
+      case 'subject': handleDeleteSubject(); break;
+      case 'class': handleDeleteClass(); break;
+      case 'scale': handleDeleteScale(); break;
+      case 'weight': handleDeleteWeight(); break;
+      case 'publish': handlePublishResults(); break;
+      default: setConfirmState({ type: null });
+    }
+  };
+  const initiatePublish = () => {
+    if (!calcForm.classId || !calcForm.term || !calcForm.academicYear) return;
+
+    const unready = gradeStatus.filter(s => s.status === 'Draft');
+    if (unready.length > 0) {
+      setConfirmState({
+        type: 'publish',
+        title: 'Draft Results Warning',
+        message: `Warning: ${unready.length} subjects are still in Draft. They will NOT be visible to students. Continue anyway?`
+      });
+    } else {
+      setConfirmState({
+        type: 'publish',
+        title: 'Publish Results',
+        message: 'Are you sure you want to publish ALL results to the Student Dashboard?'
+      });
     }
   };
 
@@ -461,31 +736,46 @@ export default function AcademicManagement() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Academic Management</h2>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Academics & Results</h2>
           <p className="text-slate-600 dark:text-slate-400">Manage classes, subjects, and curriculum.</p>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList>
-          <TabsTrigger value="classes" className="flex items-center gap-2">
+        <TabsList className="w-full justify-start h-auto p-1 bg-slate-100/50 dark:bg-slate-800/50">
+          <TabsTrigger value="classes" className="flex items-center gap-2 px-4 py-2">
             <Layers className="h-4 w-4" /> Classes
           </TabsTrigger>
-          <TabsTrigger value="subjects" className="flex items-center gap-2">
+          <TabsTrigger value="subjects" className="flex items-center gap-2 px-4 py-2">
             <BookOpen className="h-4 w-4" /> Subjects
           </TabsTrigger>
-          <TabsTrigger value="timetable" className="flex items-center gap-2">
+          <TabsTrigger value="allocations" className="flex items-center gap-2 px-4 py-2">
+            <Layers className="h-4 w-4" /> Subject Allocation
+          </TabsTrigger>
+          <TabsTrigger value="timetable" className="flex items-center gap-2 px-4 py-2">
             <Calendar className="h-4 w-4" /> Timetable
           </TabsTrigger>
-          <TabsTrigger value="grading-scales" className="flex items-center gap-2">
+          <TabsTrigger value="grading-scales" className="flex items-center gap-2 px-4 py-2">
             <Layers className="h-4 w-4" /> Grading Scales
           </TabsTrigger>
-          <TabsTrigger value="grading-weights" className="flex items-center gap-2">
+          <TabsTrigger value="grading-weights" className="flex items-center gap-2 px-4 py-2">
             <Layers className="h-4 w-4" /> Assessment Weights
           </TabsTrigger>
-          <TabsTrigger value="grade-calculation" className="flex items-center gap-2">
-            <Layers className="h-4 w-4" /> Calculate Grades
-          </TabsTrigger>
+
+          <div className="ml-auto flex items-center gap-2 px-1 border-l border-slate-200 dark:border-slate-700 ml-4">
+            <TabsTrigger
+              value="grade-calculation"
+              className="flex items-center gap-2 px-4 py-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white transition-all duration-200"
+            >
+              <Layers className="h-4 w-4" /> Publish Results
+            </TabsTrigger>
+            <TabsTrigger
+              value="printer"
+              className="flex items-center gap-2 px-4 py-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white transition-all duration-200"
+            >
+              <Printer className="h-4 w-4" /> Print Results
+            </TabsTrigger>
+          </div>
         </TabsList>
 
         {/* CLASSES TAB */}
@@ -511,26 +801,26 @@ export default function AcademicManagement() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Class Name</Label>
-                        <Input required placeholder="e.g. Grade 10A" value={classForm.name} onChange={e => setClassForm({...classForm, name: e.target.value})} />
+                        <Input required placeholder="e.g. Grade 10A" value={classForm.name} onChange={e => setClassForm({ ...classForm, name: e.target.value })} />
                       </div>
                       <div className="space-y-2">
                         <Label>Level</Label>
-                        <Input required placeholder="e.g. 10" value={classForm.level} onChange={e => setClassForm({...classForm, level: e.target.value})} />
+                        <Input required placeholder="e.g. 10" value={classForm.level} onChange={e => setClassForm({ ...classForm, level: e.target.value })} />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Room</Label>
-                        <Input placeholder="e.g. 301" value={classForm.room} onChange={e => setClassForm({...classForm, room: e.target.value})} />
+                        <Input placeholder="e.g. 301" value={classForm.room} onChange={e => setClassForm({ ...classForm, room: e.target.value })} />
                       </div>
                       <div className="space-y-2">
                         <Label>Capacity</Label>
-                        <Input type="number" required value={classForm.capacity} onChange={e => setClassForm({...classForm, capacity: parseInt(e.target.value)})} />
+                        <Input type="number" required value={classForm.capacity} onChange={e => setClassForm({ ...classForm, capacity: parseInt(e.target.value) })} />
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label>Class Teacher</Label>
-                      <Select value={classForm.classTeacherId} onValueChange={v => setClassForm({...classForm, classTeacherId: v})}>
+                      <Select value={classForm.classTeacherId} onValueChange={v => setClassForm({ ...classForm, classTeacherId: v })}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select teacher" />
                         </SelectTrigger>
@@ -586,7 +876,7 @@ export default function AcademicManagement() {
                           }}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" className="text-red-500" onClick={() => handleDeleteClass(cls.id)}>
+                          <Button variant="ghost" size="sm" className="text-red-500" onClick={() => setConfirmState({ type: 'class', id: cls.id })}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -629,20 +919,20 @@ export default function AcademicManagement() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Subject Name</Label>
-                        <Input required placeholder="e.g. Mathematics" value={subjectForm.name} onChange={e => setSubjectForm({...subjectForm, name: e.target.value})} />
+                        <Input required placeholder="e.g. Mathematics" value={subjectForm.name} onChange={e => setSubjectForm({ ...subjectForm, name: e.target.value })} />
                       </div>
                       <div className="space-y-2">
                         <Label>Code</Label>
-                        <Input placeholder="e.g. MAT101" value={subjectForm.code} onChange={e => setSubjectForm({...subjectForm, code: e.target.value})} />
+                        <Input placeholder="e.g. MAT101" value={subjectForm.code} onChange={e => setSubjectForm({ ...subjectForm, code: e.target.value })} />
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label>Department</Label>
-                      <Input placeholder="e.g. Science" value={subjectForm.department} onChange={e => setSubjectForm({...subjectForm, department: e.target.value})} />
+                      <Input placeholder="e.g. Science" value={subjectForm.department} onChange={e => setSubjectForm({ ...subjectForm, department: e.target.value })} />
                     </div>
                     <div className="space-y-2">
                       <Label>Head of Department</Label>
-                      <Select value={subjectForm.headTeacherId} onValueChange={v => setSubjectForm({...subjectForm, headTeacherId: v})}>
+                      <Select value={subjectForm.headTeacherId} onValueChange={v => setSubjectForm({ ...subjectForm, headTeacherId: v })}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select teacher" />
                         </SelectTrigger>
@@ -692,7 +982,7 @@ export default function AcademicManagement() {
                           }}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" className="text-red-500" onClick={() => handleDeleteSubject(sub.id)}>
+                          <Button variant="ghost" size="sm" className="text-red-500" onClick={() => setConfirmState({ type: 'subject', id: sub.id })}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -713,6 +1003,166 @@ export default function AcademicManagement() {
         </TabsContent>
 
         {/* TIMETABLE TAB */}
+        {/* ALLOCATIONS TAB */}
+        <TabsContent value="allocations" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Subject Allocation</CardTitle>
+                <CardDescription>Assign teachers to subjects for each class.</CardDescription>
+              </div>
+              <div className="flex gap-4 items-center">
+                <Select value={allocationClassId} onValueChange={setAllocationClassId}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Select Class" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {classes.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Dialog open={isAddAllocationOpen} onOpenChange={setIsAddAllocationOpen}>
+                  <DialogTrigger asChild>
+                    <Button disabled={!allocationClassId}>
+                      <Plus className="h-4 w-4 mr-2" /> Assign Subject
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Assign Subject to Class</DialogTitle>
+                      <DialogDescription>Select a subject and a teacher.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Subject</Label>
+                        <Select 
+                          value={allocationForm.subjectId} 
+                          onValueChange={v => setAllocationForm({...allocationForm, subjectId: v})}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select Subject" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {subjects
+                              .filter(s => !classSubjects.some(cs => cs.id === s.id))
+                              .map(s => (
+                                <SelectItem key={s.id} value={s.id}>{s.name} ({s.code})</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Teacher</Label>
+                        <Select 
+                          value={allocationForm.teacherId} 
+                          onValueChange={v => setAllocationForm({...allocationForm, teacherId: v})}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select Teacher" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {teachers.map(t => (
+                              <SelectItem key={t.id} value={t.id}>{t.fullName}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button onClick={handleAllocationSubmit} disabled={!allocationForm.subjectId}>Assign</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {!allocationClassId ? (
+                <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">
+                  Please select a class to view allocations.
+                </div>
+              ) : isLoadingAllocations ? (
+                <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div>
+              ) : classSubjects.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  No subjects assigned to this class yet.
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Subject Code</TableHead>
+                      <TableHead>Subject Name</TableHead>
+                      <TableHead>Department</TableHead>
+                      <TableHead>Assigned Teacher</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {classSubjects.map((cs) => (
+                      <TableRow key={cs.classSubjectId}>
+                        <TableCell>{cs.code}</TableCell>
+                        <TableCell className="font-medium">{cs.name}</TableCell>
+                        <TableCell>{cs.department}</TableCell>
+                        <TableCell>
+                           <Select 
+                             value={cs.teacherId || "unassigned"} 
+                             onValueChange={async (newTeacherId) => {
+                               try {
+                                 const { data: { session } } = await supabase.auth.getSession();
+                                 if (!session) return;
+                                 
+                                 const response = await fetch(`/api/school/classes/${allocationClassId}/subjects/assign`, {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${session.access_token}`
+                                    },
+                                    body: JSON.stringify({
+                                      subjectId: cs.id,
+                                      teacherId: newTeacherId === "unassigned" ? null : newTeacherId
+                                    })
+                                 });
+                                 
+                                 if (!response.ok) throw new Error("Failed");
+                                 toast({ title: "Success", description: "Teacher updated" });
+                                 fetchAllocations(allocationClassId);
+                               } catch (e) {
+                                 toast({ title: "Error", description: "Failed to update teacher", variant: "destructive" });
+                               }
+                             }}
+                           >
+                             <SelectTrigger className="w-[200px] h-8">
+                               <SelectValue placeholder="Unassigned" />
+                             </SelectTrigger>
+                             <SelectContent>
+                               <SelectItem value="unassigned">Unassigned</SelectItem>
+                               {teachers.map(t => (
+                                 <SelectItem key={t.id} value={t.id}>{t.fullName}</SelectItem>
+                               ))}
+                             </SelectContent>
+                           </Select>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-red-500 hover:text-red-700"
+                            onClick={() => handleRemoveAllocation(cs.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="timetable" className="space-y-4 mt-4">
           <TimetableManagement />
         </TabsContent>
@@ -739,21 +1189,21 @@ export default function AcademicManagement() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Grade (e.g., A)</Label>
-                        <Input required value={scaleForm.grade} onChange={e => setScaleForm({...scaleForm, grade: e.target.value})} />
+                        <Input required value={scaleForm.grade} onChange={e => setScaleForm({ ...scaleForm, grade: e.target.value })} />
                       </div>
                       <div className="space-y-2">
                         <Label>Min %</Label>
-                        <Input type="number" required value={scaleForm.min_percentage} onChange={e => setScaleForm({...scaleForm, min_percentage: parseInt(e.target.value)})} />
+                        <Input type="number" required value={scaleForm.min_percentage} onChange={e => setScaleForm({ ...scaleForm, min_percentage: parseInt(e.target.value) })} />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Max %</Label>
-                        <Input type="number" required value={scaleForm.max_percentage} onChange={e => setScaleForm({...scaleForm, max_percentage: parseInt(e.target.value)})} />
+                        <Input type="number" required value={scaleForm.max_percentage} onChange={e => setScaleForm({ ...scaleForm, max_percentage: parseInt(e.target.value) })} />
                       </div>
                       <div className="space-y-2">
                         <Label>Description</Label>
-                        <Input value={scaleForm.description} onChange={e => setScaleForm({...scaleForm, description: e.target.value})} />
+                        <Input value={scaleForm.description} onChange={e => setScaleForm({ ...scaleForm, description: e.target.value })} />
                       </div>
                     </div>
                     <DialogFooter>
@@ -787,7 +1237,7 @@ export default function AcademicManagement() {
                           }}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" className="text-red-500" onClick={() => handleDeleteScale(scale.id)}>
+                          <Button variant="ghost" size="sm" className="text-red-500" onClick={() => setConfirmState({ type: 'scale', id: scale.id })}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -827,7 +1277,7 @@ export default function AcademicManagement() {
                   <form onSubmit={(e) => handleWeightSubmit(e, false)} className="space-y-4">
                     <div className="space-y-2">
                       <Label>Assessment Type</Label>
-                      <Select value={weightForm.assessment_type} onValueChange={v => setWeightForm({...weightForm, assessment_type: v})}>
+                      <Select value={weightForm.assessment_type} onValueChange={v => setWeightForm({ ...weightForm, assessment_type: v })}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select Type" />
                         </SelectTrigger>
@@ -842,7 +1292,7 @@ export default function AcademicManagement() {
                     </div>
                     <div className="space-y-2">
                       <Label>Weight Percentage (%)</Label>
-                      <Input type="number" required value={weightForm.weight_percentage} onChange={e => setWeightForm({...weightForm, weight_percentage: parseInt(e.target.value)})} />
+                      <Input type="number" required value={weightForm.weight_percentage} onChange={e => setWeightForm({ ...weightForm, weight_percentage: parseInt(e.target.value) })} />
                     </div>
                     <DialogFooter>
                       <Button type="submit">Save</Button>
@@ -873,7 +1323,7 @@ export default function AcademicManagement() {
                           }}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" className="text-red-500" onClick={() => handleDeleteWeight(weight.id)}>
+                          <Button variant="ghost" size="sm" className="text-red-500" onClick={() => setConfirmState({ type: 'weight', id: weight.id })}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -907,21 +1357,24 @@ export default function AcademicManagement() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Class</Label>
-                    <Select value={calcForm.classId} onValueChange={v => setCalcForm({...calcForm, classId: v})}>
+                    <Select value={calcForm.classId} onValueChange={v => setCalcForm({ ...calcForm, classId: v })}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select Class" />
                       </SelectTrigger>
                       <SelectContent>
-                        {classes.map(c => (
-                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                        ))}
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-2">
+                          <SelectItem value="all" className="w-full justify-center">All Classes</SelectItem>
+                          {classes.map(c => (
+                            <SelectItem key={c.id} value={c.id} className="w-full justify-center">{c.name}</SelectItem>
+                          ))}
+                        </div>
                       </SelectContent>
                     </Select>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label>Subject (Optional)</Label>
-                    <Select value={calcForm.subjectId} onValueChange={v => setCalcForm({...calcForm, subjectId: v})}>
+                    <Select value={calcForm.subjectId} onValueChange={v => setCalcForm({ ...calcForm, subjectId: v })}>
                       <SelectTrigger>
                         <SelectValue placeholder="All Subjects" />
                       </SelectTrigger>
@@ -937,17 +1390,17 @@ export default function AcademicManagement() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Term</Label>
-                      <Input value={calcForm.term} onChange={e => setCalcForm({...calcForm, term: e.target.value})} placeholder="e.g. Term 1" />
+                      <Input value={calcForm.term} onChange={e => setCalcForm({ ...calcForm, term: e.target.value })} placeholder="e.g. Term 1" />
                     </div>
                     <div className="space-y-2">
                       <Label>Academic Year</Label>
-                      <Input value={calcForm.academicYear} onChange={e => setCalcForm({...calcForm, academicYear: e.target.value})} placeholder="e.g. 2024" />
+                      <Input value={calcForm.academicYear} onChange={e => setCalcForm({ ...calcForm, academicYear: e.target.value })} placeholder="e.g. 2024" />
                     </div>
                   </div>
 
-                  <Button 
-                    onClick={handleCalculateGrades} 
-                    disabled={isCalculating || !calcForm.classId || !calcForm.term || !calcForm.academicYear}
+                  <Button
+                    onClick={handleCalculateGrades}
+                    disabled={isCalculating || !calcForm.term || !calcForm.academicYear}
                     className="w-full"
                   >
                     {isCalculating ? (
@@ -956,9 +1409,167 @@ export default function AcademicManagement() {
                         Calculating...
                       </>
                     ) : (
-                      'Calculate & Publish Grades'
+                      'Calculate Grades'
                     )}
                   </Button>
+
+                  {/* Readiness Report Button */}
+                  <Button
+                    variant="outline"
+                    className="w-full border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950"
+                    onClick={handleReadinessReport}
+                    disabled={isLoadingReadiness || !calcForm.term || !calcForm.academicYear}
+                  >
+                    {isLoadingReadiness ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <ClipboardList className="mr-2 h-4 w-4" />
+                    )}
+                    Check Readiness Report
+                  </Button>
+
+                  {/* Readiness Report Dialog */}
+                  <Dialog open={isReadinessReportOpen} onOpenChange={setIsReadinessReportOpen}>
+                    <DialogContent className="sm:max-w-[750px] max-h-[85vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-amber-600">
+                          <AlertTriangle className="h-5 w-5" />
+                          Readiness Report — Unpublished Grades
+                        </DialogTitle>
+                        <DialogDescription>
+                          The following student grades have been entered by teachers but are <strong>not yet published</strong>.
+                          Grades cannot be calculated until all entries are published.
+                        </DialogDescription>
+                      </DialogHeader>
+
+                      <div className="py-4">
+                        {unpublishedGrades.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center p-8 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
+                            <div className="h-12 w-12 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mb-3">
+                              <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </div>
+                            <p className="font-semibold text-green-700 dark:text-green-400">All Grades Published!</p>
+                            <p className="text-sm text-green-600 dark:text-green-500 mt-1">All teachers have published their grades. You can proceed to calculate.</p>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-2 mb-3 p-3 bg-amber-50 dark:bg-amber-950 rounded-lg border border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-300">
+                              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                              <span><strong>{unpublishedGrades.length}</strong> unpublished grade record(s) found. Notify teachers to publish their grades before calculating.</span>
+                            </div>
+                            <div className="border rounded-md overflow-hidden">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow className="bg-slate-50 dark:bg-slate-800">
+                                    <TableHead>Student</TableHead>
+                                    <TableHead>Class</TableHead>
+                                    <TableHead>Subject</TableHead>
+                                    <TableHead>Code</TableHead>
+                                    <TableHead>Teacher</TableHead>
+                                    <TableHead>Status</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {unpublishedGrades.map((g: any, i: number) => (
+                                    <TableRow key={i}>
+                                      <TableCell className="font-medium">{g.studentName}</TableCell>
+                                      <TableCell className="text-muted-foreground text-sm">{g.className}</TableCell>
+                                      <TableCell>{g.subjectName}</TableCell>
+                                      <TableCell className="text-muted-foreground text-sm">{g.subjectCode}</TableCell>
+                                      <TableCell className="text-muted-foreground text-sm">{g.teacherName || '—'}</TableCell>
+                                      <TableCell>
+                                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${g.status === 'Not Entered' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
+                                          g.status === 'Draft' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' :
+                                            'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
+                                          }`}>
+                                          {g.status || 'Not Entered'}
+                                        </span>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+
+                  <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+                    <h3 className="font-semibold mb-2">Publish Results</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Review subject status and publish final grades to the student dashboard.
+                    </p>
+                    <Dialog open={isPublishModalOpen} onOpenChange={setIsPublishModalOpen}>
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          disabled={!calcForm.term || !calcForm.academicYear}
+                        >
+                          Review & Publish Results
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
+                        <DialogHeader>
+                          <DialogTitle>Publish Results</DialogTitle>
+                          <DialogDescription>
+                            Check if all subjects are submitted before publishing to students.
+                          </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="py-4 space-y-4">
+                          <div className="flex gap-2">
+                            <Button variant="outline" onClick={handleCheckStatus} disabled={isCheckingStatus}>
+                              {isCheckingStatus ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                              Check Status
+                            </Button>
+                            <Button
+                              onClick={initiatePublish}
+                              disabled={isActionLoading || gradeStatus.length === 0}
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              {isPublishing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                              Publish to Dashboard
+                            </Button>
+                          </div>
+
+                          {gradeStatus.length > 0 && (
+                            <div className="border rounded-md">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Subject</TableHead>
+                                    <TableHead>Teacher</TableHead>
+                                    <TableHead>Status</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {gradeStatus.map(s => (
+                                    <TableRow key={s.id}>
+                                      <TableCell>{s.name}</TableCell>
+                                      <TableCell className="text-muted-foreground">{s.teacher}</TableCell>
+                                      <TableCell>
+                                        <span className={`px-2 py-1 rounded text-xs font-medium ${s.status === 'Published' ? 'bg-green-100 text-green-800' :
+                                          s.status === 'Submitted' ? 'bg-blue-100 text-blue-800' :
+                                            'bg-yellow-100 text-yellow-800'
+                                          }`}>
+                                          {s.status}
+                                        </span>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          )}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                 </div>
 
                 <div className="bg-slate-50 dark:bg-slate-900 p-6 rounded-lg border border-slate-200 dark:border-slate-800">
@@ -976,6 +1587,10 @@ export default function AcademicManagement() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="printer" className="space-y-4 mt-4">
+          <ResultPrinter />
+        </TabsContent>
       </Tabs>
 
       {/* Edit Dialogs */}
@@ -988,21 +1603,21 @@ export default function AcademicManagement() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Grade</Label>
-                <Input required value={scaleForm.grade} onChange={e => setScaleForm({...scaleForm, grade: e.target.value})} />
+                <Input required value={scaleForm.grade} onChange={e => setScaleForm({ ...scaleForm, grade: e.target.value })} />
               </div>
               <div className="space-y-2">
                 <Label>Min %</Label>
-                <Input type="number" required value={scaleForm.min_percentage} onChange={e => setScaleForm({...scaleForm, min_percentage: parseInt(e.target.value)})} />
+                <Input type="number" required value={scaleForm.min_percentage} onChange={e => setScaleForm({ ...scaleForm, min_percentage: parseInt(e.target.value) })} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Max %</Label>
-                <Input type="number" required value={scaleForm.max_percentage} onChange={e => setScaleForm({...scaleForm, max_percentage: parseInt(e.target.value)})} />
+                <Input type="number" required value={scaleForm.max_percentage} onChange={e => setScaleForm({ ...scaleForm, max_percentage: parseInt(e.target.value) })} />
               </div>
               <div className="space-y-2">
                 <Label>Description</Label>
-                <Input value={scaleForm.description} onChange={e => setScaleForm({...scaleForm, description: e.target.value})} />
+                <Input value={scaleForm.description} onChange={e => setScaleForm({ ...scaleForm, description: e.target.value })} />
               </div>
             </div>
             <DialogFooter>
@@ -1020,7 +1635,7 @@ export default function AcademicManagement() {
           <form onSubmit={(e) => handleWeightSubmit(e, true)} className="space-y-4">
             <div className="space-y-2">
               <Label>Assessment Type</Label>
-              <Select value={weightForm.assessment_type} onValueChange={v => setWeightForm({...weightForm, assessment_type: v})}>
+              <Select value={weightForm.assessment_type} onValueChange={v => setWeightForm({ ...weightForm, assessment_type: v })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select Type" />
                 </SelectTrigger>
@@ -1035,7 +1650,7 @@ export default function AcademicManagement() {
             </div>
             <div className="space-y-2">
               <Label>Weight Percentage (%)</Label>
-              <Input type="number" required value={weightForm.weight_percentage} onChange={e => setWeightForm({...weightForm, weight_percentage: parseInt(e.target.value)})} />
+              <Input type="number" required value={weightForm.weight_percentage} onChange={e => setWeightForm({ ...weightForm, weight_percentage: parseInt(e.target.value) })} />
             </div>
             <DialogFooter>
               <Button type="submit">Update</Button>
@@ -1050,29 +1665,29 @@ export default function AcademicManagement() {
             <DialogTitle>Edit Class</DialogTitle>
           </DialogHeader>
           <form onSubmit={(e) => handleClassSubmit(e, true)} className="space-y-4">
-             <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Class Name</Label>
-                <Input required value={classForm.name} onChange={e => setClassForm({...classForm, name: e.target.value})} />
+                <Input required value={classForm.name} onChange={e => setClassForm({ ...classForm, name: e.target.value })} />
               </div>
               <div className="space-y-2">
                 <Label>Level</Label>
-                <Input required value={classForm.level} onChange={e => setClassForm({...classForm, level: e.target.value})} />
+                <Input required value={classForm.level} onChange={e => setClassForm({ ...classForm, level: e.target.value })} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Room</Label>
-                <Input value={classForm.room} onChange={e => setClassForm({...classForm, room: e.target.value})} />
+                <Input value={classForm.room} onChange={e => setClassForm({ ...classForm, room: e.target.value })} />
               </div>
               <div className="space-y-2">
                 <Label>Capacity</Label>
-                <Input type="number" required value={classForm.capacity} onChange={e => setClassForm({...classForm, capacity: parseInt(e.target.value)})} />
+                <Input type="number" required value={classForm.capacity} onChange={e => setClassForm({ ...classForm, capacity: parseInt(e.target.value) })} />
               </div>
             </div>
             <div className="space-y-2">
               <Label>Class Teacher</Label>
-              <Select value={classForm.classTeacherId} onValueChange={v => setClassForm({...classForm, classTeacherId: v})}>
+              <Select value={classForm.classTeacherId} onValueChange={v => setClassForm({ ...classForm, classTeacherId: v })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select teacher" />
                 </SelectTrigger>
@@ -1099,20 +1714,20 @@ export default function AcademicManagement() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Subject Name</Label>
-                <Input required value={subjectForm.name} onChange={e => setSubjectForm({...subjectForm, name: e.target.value})} />
+                <Input required value={subjectForm.name} onChange={e => setSubjectForm({ ...subjectForm, name: e.target.value })} />
               </div>
               <div className="space-y-2">
                 <Label>Code</Label>
-                <Input value={subjectForm.code} onChange={e => setSubjectForm({...subjectForm, code: e.target.value})} />
+                <Input value={subjectForm.code} onChange={e => setSubjectForm({ ...subjectForm, code: e.target.value })} />
               </div>
             </div>
             <div className="space-y-2">
               <Label>Department</Label>
-              <Input value={subjectForm.department} onChange={e => setSubjectForm({...subjectForm, department: e.target.value})} />
+              <Input value={subjectForm.department} onChange={e => setSubjectForm({ ...subjectForm, department: e.target.value })} />
             </div>
             <div className="space-y-2">
               <Label>Head of Department</Label>
-              <Select value={subjectForm.headTeacherId} onValueChange={v => setSubjectForm({...subjectForm, headTeacherId: v})}>
+              <Select value={subjectForm.headTeacherId} onValueChange={v => setSubjectForm({ ...subjectForm, headTeacherId: v })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select teacher" />
                 </SelectTrigger>
@@ -1138,8 +1753,8 @@ export default function AcademicManagement() {
           </DialogHeader>
           <div className="py-4 space-y-4">
             <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="select-all" 
+              <Checkbox
+                id="select-all"
                 checked={selectedClassSubjects.length === subjects.length && subjects.length > 0}
                 onCheckedChange={(checked) => {
                   if (checked) {
@@ -1156,8 +1771,8 @@ export default function AcademicManagement() {
             <div className="grid grid-cols-2 gap-4 max-h-[300px] overflow-y-auto">
               {subjects.map((subject) => (
                 <div key={subject.id} className="flex items-center space-x-2">
-                  <Checkbox 
-                    id={`subject-${subject.id}`} 
+                  <Checkbox
+                    id={`subject-${subject.id}`}
                     checked={selectedClassSubjects.includes(subject.id)}
                     onCheckedChange={(checked) => {
                       if (checked) {
@@ -1167,8 +1782,8 @@ export default function AcademicManagement() {
                       }
                     }}
                   />
-                  <label 
-                    htmlFor={`subject-${subject.id}`} 
+                  <label
+                    htmlFor={`subject-${subject.id}`}
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
                     {subject.name} ({subject.code})
@@ -1183,6 +1798,16 @@ export default function AcademicManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={!!confirmState.type}
+        onOpenChange={(open) => !open && setConfirmState({ type: null })}
+        title={confirmState.title || `Delete ${confirmState.type}?`}
+        description={confirmState.message || `Are you sure you want to delete this ${confirmState.type}? This action cannot be undone.`}
+        confirmLabel={confirmState.type === 'publish' ? 'Publish Results' : `Delete ${confirmState.type}`}
+        variant={confirmState.type === 'publish' ? 'warning' : 'danger'}
+        loading={isActionLoading}
+        onConfirm={handleConfirm}
+      />
     </div>
   );
 }

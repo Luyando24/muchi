@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Bell, 
-  Menu, 
-  X, 
-  Search, 
-  LogOut, 
-  User, 
-  Settings, 
+import {
+  Bell,
+  Menu,
+  X,
+  Search,
+  LogOut,
+  User,
+  Settings,
   HelpCircle,
   ChevronDown,
   Loader2,
@@ -129,7 +129,7 @@ export default function SchoolAdminNavbar({
       });
 
       if (!response.ok) throw new Error('Failed to fetch notifications');
-      
+
       const data: Notification[] = await response.json();
       setNotifications(data);
       setUnreadCount(data.filter(n => !n.is_read).length);
@@ -195,7 +195,7 @@ export default function SchoolAdminNavbar({
       case 'dashboard': return 'Dashboard';
       case 'students': return 'Student Management';
       case 'teachers': return 'Teacher Management';
-      case 'academics': return 'Academic Management';
+      case 'academics': return 'Academics & Results';
       case 'finance': return 'Financial Overview';
       case 'reports': return 'Reports & Analytics';
       case 'calendar': return 'School Calendar';
@@ -245,94 +245,94 @@ export default function SchoolAdminNavbar({
                 <p className="text-xs text-slate-600 dark:text-slate-400">{displayUser.schoolName || 'Administration Portal'}</p>
               </div>
             </div>
-            
+
             {/* Breadcrumb */}
-             <div className="hidden md:flex items-center text-sm text-slate-500 ml-4 border-l pl-4 border-slate-200 dark:border-slate-700">
-                <span className="font-medium text-slate-900 dark:text-white capitalize">{activeTab}</span>
-             </div>
+            <div className="hidden md:flex items-center text-sm text-slate-500 ml-4 border-l pl-4 border-slate-200 dark:border-slate-700">
+              <span className="font-medium text-slate-900 dark:text-white capitalize">{activeTab}</span>
+            </div>
           </div>
 
           {/* Search Bar (Center) */}
           <div className="hidden md:flex flex-1 max-w-md mx-8">
-             <Popover open={isSearchOpen} onOpenChange={setIsSearchOpen}>
-                <PopoverTrigger asChild>
-                   <div className="relative w-full">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-                      <Input 
-                        type="search" 
-                        placeholder="Search students, teachers..." 
-                        className="w-full pl-9 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 focus-visible:ring-blue-500"
-                        value={searchQuery}
-                        onChange={(e) => handleSearch(e.target.value)}
-                      />
-                   </div>
-                </PopoverTrigger>
-                <PopoverContent className="w-[300px] md:w-[400px] p-0" align="start">
-                   <div className="p-4 border-b">
-                    <p className="text-sm font-medium text-muted-foreground">Search Results</p>
-                  </div>
-                  <div className="max-h-[300px] overflow-y-auto">
-                    {isSearching ? (
-                      <div className="p-4 flex justify-center">
-                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : (
-                      <>
-                        {searchResults.students.length === 0 && searchResults.teachers.length === 0 ? (
-                          <div className="p-4 text-center text-sm text-muted-foreground">
-                            No results found
-                          </div>
-                        ) : (
-                          <>
-                            {searchResults.students.length > 0 && (
-                              <div className="py-2">
-                                <h4 className="px-4 py-1 text-xs font-semibold text-muted-foreground uppercase">Students</h4>
-                                {searchResults.students.map(student => (
-                                  <div 
-                                    key={student.id} 
-                                    className="px-4 py-2 hover:bg-muted cursor-pointer flex justify-between items-center"
-                                    onClick={() => {
-                                      if (setActiveTab) setActiveTab('students');
-                                      setIsSearchOpen(false);
-                                    }}
-                                  >
-                                    <span className="text-sm font-medium">{student.full_name}</span>
-                                    <Badge variant="outline" className="text-xs">{student.grade}</Badge>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            {searchResults.teachers.length > 0 && (
-                              <div className="py-2">
-                                <h4 className="px-4 py-1 text-xs font-semibold text-muted-foreground uppercase">Teachers</h4>
-                                {searchResults.teachers.map(teacher => (
-                                  <div 
-                                    key={teacher.id} 
-                                    className="px-4 py-2 hover:bg-muted cursor-pointer flex justify-between items-center"
-                                    onClick={() => {
-                                      if (setActiveTab) setActiveTab('teachers');
-                                      setIsSearchOpen(false);
-                                    }}
-                                  >
-                                    <span className="text-sm font-medium">{teacher.full_name}</span>
-                                    <Badge variant="outline" className="text-xs">{teacher.subject}</Badge>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </PopoverContent>
-             </Popover>
+            <Popover open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+              <PopoverTrigger asChild>
+                <div className="relative w-full">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                  <Input
+                    type="search"
+                    placeholder="Search students, teachers..."
+                    className="w-full pl-9 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 focus-visible:ring-blue-500"
+                    value={searchQuery}
+                    onChange={(e) => handleSearch(e.target.value)}
+                  />
+                </div>
+              </PopoverTrigger>
+              <PopoverContent className="w-[300px] md:w-[400px] p-0" align="start">
+                <div className="p-4 border-b">
+                  <p className="text-sm font-medium text-muted-foreground">Search Results</p>
+                </div>
+                <div className="max-h-[300px] overflow-y-auto">
+                  {isSearching ? (
+                    <div className="p-4 flex justify-center">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : (
+                    <>
+                      {searchResults.students.length === 0 && searchResults.teachers.length === 0 ? (
+                        <div className="p-4 text-center text-sm text-muted-foreground">
+                          No results found
+                        </div>
+                      ) : (
+                        <>
+                          {searchResults.students.length > 0 && (
+                            <div className="py-2">
+                              <h4 className="px-4 py-1 text-xs font-semibold text-muted-foreground uppercase">Students</h4>
+                              {searchResults.students.map(student => (
+                                <div
+                                  key={student.id}
+                                  className="px-4 py-2 hover:bg-muted cursor-pointer flex justify-between items-center"
+                                  onClick={() => {
+                                    if (setActiveTab) setActiveTab('students');
+                                    setIsSearchOpen(false);
+                                  }}
+                                >
+                                  <span className="text-sm font-medium">{student.full_name}</span>
+                                  <Badge variant="outline" className="text-xs">{student.grade}</Badge>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {searchResults.teachers.length > 0 && (
+                            <div className="py-2">
+                              <h4 className="px-4 py-1 text-xs font-semibold text-muted-foreground uppercase">Teachers</h4>
+                              {searchResults.teachers.map(teacher => (
+                                <div
+                                  key={teacher.id}
+                                  className="px-4 py-2 hover:bg-muted cursor-pointer flex justify-between items-center"
+                                  onClick={() => {
+                                    if (setActiveTab) setActiveTab('teachers');
+                                    setIsSearchOpen(false);
+                                  }}
+                                >
+                                  <span className="text-sm font-medium">{teacher.full_name}</span>
+                                  <Badge variant="outline" className="text-xs">{teacher.subject}</Badge>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* User Menu */}
           <div className="flex items-center gap-2 sm:gap-4">
             <ThemeToggle />
-            
+
             {/* Notifications */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -344,58 +344,58 @@ export default function SchoolAdminNavbar({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80 max-h-[400px] overflow-y-auto">
-                  <DropdownMenuLabel className="flex justify-between items-center">
-                    <span>Notifications</span>
-                    {unreadCount > 0 && (
-                      <Badge variant="secondary" className="text-xs">{unreadCount} new</Badge>
-                    )}
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {isLoadingNotifications ? (
-                    <div className="p-4 flex justify-center">
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : notifications.length > 0 ? (
-                    <div className="grid gap-1">
-                      {notifications.map((notification) => (
-                        <DropdownMenuItem 
-                          key={notification.id} 
-                          className={cn(
-                            "cursor-pointer flex flex-col items-start gap-1 p-3",
-                            !notification.is_read ? "bg-muted/50" : ""
-                          )}
-                          onClick={() => markAsRead(notification.id)}
-                        >
-                          <div className="flex w-full items-start gap-2">
-                            {getNotificationIcon(notification.type)}
-                            <div className="flex-1 space-y-1">
-                              <p className={cn("text-sm font-medium leading-none", !notification.is_read && "font-bold")}>
-                                {notification.title}
-                              </p>
-                              <p className="text-xs text-muted-foreground line-clamp-2">
-                                {notification.message}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground">
-                                {new Date(notification.created_at).toLocaleString()}
-                              </p>
-                            </div>
-                            {!notification.is_read && (
-                              <div className="h-2 w-2 rounded-full bg-blue-600 mt-1" />
-                            )}
-                          </div>
-                        </DropdownMenuItem>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="p-8 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
-                      <Bell className="h-8 w-8 opacity-20" />
-                      <span>No new notifications</span>
-                    </div>
+                <DropdownMenuLabel className="flex justify-between items-center">
+                  <span>Notifications</span>
+                  {unreadCount > 0 && (
+                    <Badge variant="secondary" className="text-xs">{unreadCount} new</Badge>
                   )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem className="w-full text-center cursor-pointer justify-center text-primary font-medium">
-                    View all notifications
-                  </DropdownMenuItem>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {isLoadingNotifications ? (
+                  <div className="p-4 flex justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : notifications.length > 0 ? (
+                  <div className="grid gap-1">
+                    {notifications.map((notification) => (
+                      <DropdownMenuItem
+                        key={notification.id}
+                        className={cn(
+                          "cursor-pointer flex flex-col items-start gap-1 p-3",
+                          !notification.is_read ? "bg-muted/50" : ""
+                        )}
+                        onClick={() => markAsRead(notification.id)}
+                      >
+                        <div className="flex w-full items-start gap-2">
+                          {getNotificationIcon(notification.type)}
+                          <div className="flex-1 space-y-1">
+                            <p className={cn("text-sm font-medium leading-none", !notification.is_read && "font-bold")}>
+                              {notification.title}
+                            </p>
+                            <p className="text-xs text-muted-foreground line-clamp-2">
+                              {notification.message}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {new Date(notification.created_at).toLocaleString()}
+                            </p>
+                          </div>
+                          {!notification.is_read && (
+                            <div className="h-2 w-2 rounded-full bg-blue-600 mt-1" />
+                          )}
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-8 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
+                    <Bell className="h-8 w-8 opacity-20" />
+                    <span>No new notifications</span>
+                  </div>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="w-full text-center cursor-pointer justify-center text-primary font-medium">
+                  View all notifications
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -404,16 +404,16 @@ export default function SchoolAdminNavbar({
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="flex items-center gap-2 px-2 hover:bg-slate-100 dark:hover:bg-slate-800">
                   <Avatar className="h-8 w-8 border">
-                      <AvatarImage src={displayUser.profileImage} />
-                      <AvatarFallback>{displayUser.firstName[0]}{displayUser.lastName ? displayUser.lastName[0] : ''}</AvatarFallback>
+                    <AvatarImage src={displayUser.profileImage} />
+                    <AvatarFallback>{displayUser.firstName[0]}{displayUser.lastName ? displayUser.lastName[0] : ''}</AvatarFallback>
                   </Avatar>
                   <div className="hidden sm:block text-left">
-                      <p className="text-sm font-medium text-slate-900 dark:text-white leading-none">
-                        {displayUser.firstName} {displayUser.lastName}
-                      </p>
-                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                        {displayUser.role}
-                      </p>
+                    <p className="text-sm font-medium text-slate-900 dark:text-white leading-none">
+                      {displayUser.firstName} {displayUser.lastName}
+                    </p>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                      {displayUser.role}
+                    </p>
                   </div>
                   <ChevronDown className="h-4 w-4 text-slate-500 hidden sm:block" />
                 </Button>

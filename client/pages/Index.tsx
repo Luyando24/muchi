@@ -18,9 +18,9 @@ export default function Index() {
             <div>
               <span className="text-2xl font-bold">MUCHI</span>
               <p className="text-xs text-muted-foreground">School Management Information System</p>
-          </div>
+            </div>
           </Link>
-          
+
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-8 text-base font-medium">
             <a href="#features" className="text-muted-foreground hover:text-primary transition-colors">Features</a>
@@ -28,39 +28,24 @@ export default function Index() {
             <a href="#testimonials" className="text-muted-foreground hover:text-primary transition-colors">Testimonials</a>
             <a href="#faq" className="text-muted-foreground hover:text-primary transition-colors">FAQ</a>
             <a href="#contact" className="text-muted-foreground hover:text-primary transition-colors">Contact</a>
-            
+
             <div className="flex items-center gap-2">
-              <Button asChild variant="outline" className="rounded-full font-medium">
-                <Link to="/system-admin">System Admin</Link>
-              </Button>
               <Button asChild variant="default" className="rounded-full font-medium">
                 <Link to="/login">Get Started</Link>
               </Button>
               <ThemeToggle />
             </div>
           </nav>
-          
+
           {/* Mobile Navigation */}
           <div className="flex items-center gap-2 md:hidden">
             <ThemeToggle />
-            <Button asChild variant="outline" size="sm" className="rounded-full">
-              <Link to="/teacher-portal">Teacher</Link>
-            </Button>
-            <Button asChild variant="outline" size="sm" className="rounded-full">
-              <Link to="/school-admin">Admin</Link>
-            </Button>
-            <Button asChild variant="outline" size="sm" className="rounded-full">
-              <Link to="/system-admin">SysAdmin</Link>
-            </Button>
-            <Button asChild variant="default" size="sm" className="rounded-full">
-              <Link to="/student-portal">Student</Link>
-            </Button>
             <Button variant="ghost" onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2">
               <Menu className="h-6 w-6" />
             </Button>
           </div>
         </div>
-        
+
         {isMenuOpen && (
           <div className="md:hidden bg-background border-t">
             <nav className="flex flex-col gap-4 p-4">
@@ -69,9 +54,6 @@ export default function Index() {
               <a href="#testimonials" className="text-muted-foreground hover:text-primary transition-colors py-2">Testimonials</a>
               <a href="#faq" className="text-muted-foreground hover:text-primary transition-colors py-2">FAQ</a>
               <a href="#contact" className="text-muted-foreground hover:text-primary transition-colors py-2">Contact</a>
-              <Button asChild variant="outline" className="mt-2 font-medium">
-                <Link to="/system-admin">System Admin</Link>
-              </Button>
               <Button asChild variant="default" className="mt-2 font-medium">
                 <Link to="/login">Get Started</Link>
               </Button>
@@ -81,24 +63,24 @@ export default function Index() {
       </header>
 
       <section id="hero" className="relative bg-cover bg-center bg-no-repeat" style={{ backgroundImage: "url('/images/classroom.jpg')" }}>
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-900/70 via-purple-900/50 to-green-900/30 backdrop-blur-sm"></div>
-          <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-black/20"></div>
-          <div className="container mx-auto relative min-h-[70vh] sm:min-h-[78vh] flex items-center justify-center px-4 z-10">
-            <div className="text-center text-white max-w-4xl animate-fade-in">
-              <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold leading-tight tracking-tighter bg-gradient-to-r from-white via-blue-100 to-green-100 bg-clip-text text-transparent drop-shadow-2xl">
-                Transform Your School Management
-              </h1>
-              <p className="mt-6 text-lg sm:text-xl text-gray-100 drop-shadow-lg font-medium">
-                MUCHI provides a comprehensive digital platform for schools to streamline student information, academic management, attendance tracking, and financial operations - all in one secure system.
-              </p>
-              <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
-                <Button size="lg" className="text-lg px-8 py-6 rounded-full bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all">
-                  <Link to="/login" className="flex items-center gap-2">Get Started <ArrowRight className="ml-2" /></Link>
-                </Button>
-                <Button size="lg" variant="outline" className="text-lg px-8 py-6 rounded-full bg-white/10 hover:bg-white/20 text-white border-white/30 shadow-lg hover:shadow-xl transition-all">
-                  <a href="#features" className="flex items-center gap-2">Features <FileText className="ml-2" /></a>
-                </Button>
-              </div>
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-900/70 via-purple-900/50 to-green-900/30 backdrop-blur-sm"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-black/20"></div>
+        <div className="container mx-auto relative min-h-[70vh] sm:min-h-[78vh] flex items-center justify-center px-4 z-10">
+          <div className="text-center text-white max-w-4xl animate-fade-in">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold leading-tight tracking-tighter bg-gradient-to-r from-white via-blue-100 to-green-100 bg-clip-text text-transparent drop-shadow-2xl">
+              Transform Your School Management
+            </h1>
+            <p className="mt-6 text-lg sm:text-xl text-gray-100 drop-shadow-lg font-medium">
+              MUCHI provides a comprehensive digital platform for schools to streamline student information, academic management, attendance tracking, and financial operations - all in one secure system.
+            </p>
+            <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
+              <Button size="lg" className="text-lg px-8 py-6 rounded-full bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all">
+                <Link to="/login" className="flex items-center gap-2">Get Started <ArrowRight className="ml-2" /></Link>
+              </Button>
+              <Button size="lg" variant="outline" className="text-lg px-8 py-6 rounded-full bg-white/10 hover:bg-white/20 text-white border-white/30 shadow-lg hover:shadow-xl transition-all">
+                <a href="#features" className="flex items-center gap-2">Features <FileText className="ml-2" /></a>
+              </Button>
+            </div>
 
           </div>
         </div>
@@ -180,53 +162,53 @@ export default function Index() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {/* Benefit 1 */}
-              <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden">
-                <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z"></path><path d="m9 12 2 2 4-4"></path></svg>
-                </div>
-                <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Time-Saving Automation</h3>
-                <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Reduce administrative workload by up to 75% with automated attendance, grading, and reporting systems.</p>
+            <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden">
+              <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z"></path><path d="m9 12 2 2 4-4"></path></svg>
               </div>
+              <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Time-Saving Automation</h3>
+              <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Reduce administrative workload by up to 75% with automated attendance, grading, and reporting systems.</p>
+            </div>
             {/* Benefit 2 */}
-              <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden">
-                <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8"><path d="M20 7h-9"></path><path d="M14 17H5"></path><circle cx="17" cy="17" r="3"></circle><circle cx="7" cy="7" r="3"></circle></svg>
-                </div>
-                <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Seamless Integration</h3>
-                <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Easily connects with existing school systems and government reporting requirements including EMIS.</p>
+            <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden">
+              <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8"><path d="M20 7h-9"></path><path d="M14 17H5"></path><circle cx="17" cy="17" r="3"></circle><circle cx="7" cy="7" r="3"></circle></svg>
               </div>
+              <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Seamless Integration</h3>
+              <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Easily connects with existing school systems and government reporting requirements including EMIS.</p>
+            </div>
             {/* Benefit 3 */}
-              <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden">
-                <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8"><path d="M2 9V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"></path><path d="M2 13h10"></path><path d="m9 16 3-3-3-3"></path></svg>
-                </div>
-                <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Data-Driven Insights</h3>
-                <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Make informed decisions with comprehensive analytics and reporting on student performance and school operations.</p>
+            <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden">
+              <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8"><path d="M2 9V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"></path><path d="M2 13h10"></path><path d="m9 16 3-3-3-3"></path></svg>
               </div>
+              <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Data-Driven Insights</h3>
+              <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Make informed decisions with comprehensive analytics and reporting on student performance and school operations.</p>
+            </div>
             {/* Benefit 4 */}
-              <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden">
-                <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"></path><path d="m14.5 9-5 5"></path><path d="m9.5 9 5 5"></path></svg>
-                </div>
-                <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Enhanced Security</h3>
-                <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Protect sensitive student data with enterprise-grade security features and role-based access controls.</p>
+            <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden">
+              <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"></path><path d="m14.5 9-5 5"></path><path d="m9.5 9 5 5"></path></svg>
               </div>
+              <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Enhanced Security</h3>
+              <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Protect sensitive student data with enterprise-grade security features and role-based access controls.</p>
+            </div>
             {/* Benefit 5 */}
-              <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden">
-                <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                </div>
-                <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Parent Engagement</h3>
-                <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Improve communication between schools and families with dedicated parent portals and real-time updates.</p>
+            <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden">
+              <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
               </div>
+              <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Parent Engagement</h3>
+              <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Improve communication between schools and families with dedicated parent portals and real-time updates.</p>
+            </div>
             {/* Benefit 6 */}
-              <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden">
-                <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8"><path d="M12 16c3.314 0 6-2.686 6-6s-2.686-6-6-6-6 2.686-6 6 2.686 6 6 6z"></path><path d="M12 16v6"></path><path d="M12 22h6"></path><path d="M18 16a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2"></path></svg>
-                </div>
-                <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Scalable Solution</h3>
-                <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Grows with your institution from a single school to a multi-campus network without performance degradation.</p>
+            <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden">
+              <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8"><path d="M12 16c3.314 0 6-2.686 6-6s-2.686-6-6-6-6 2.686-6 6 2.686 6 6 6z"></path><path d="M12 16v6"></path><path d="M12 22h6"></path><path d="M18 16a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2"></path></svg>
               </div>
+              <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Scalable Solution</h3>
+              <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Grows with your institution from a single school to a multi-campus network without performance degradation.</p>
+            </div>
           </div>
         </div>
       </section>
@@ -238,50 +220,50 @@ export default function Index() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-8">
             {/* Category 1 */}
-              <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2">
-                <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
-                  <UserCheck className="h-8 w-8 group-hover:scale-110 transition-transform duration-300" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Student Records</h3>
-                <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Comprehensive student information management with academic history tracking.</p>
-
+            <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2">
+              <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
+                <UserCheck className="h-8 w-8 group-hover:scale-110 transition-transform duration-300" />
               </div>
+              <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Student Records</h3>
+              <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Comprehensive student information management with academic history tracking.</p>
+
+            </div>
             {/* Category 2 */}
-              <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2">
-                <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
-                  <Users className="h-8 w-8 group-hover:scale-110 transition-transform duration-300" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Staff Management</h3>
-                <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Track teacher qualifications, assignments, and performance evaluations.</p>
-
+            <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2">
+              <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
+                <Users className="h-8 w-8 group-hover:scale-110 transition-transform duration-300" />
               </div>
+              <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Staff Management</h3>
+              <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Track teacher qualifications, assignments, and performance evaluations.</p>
+
+            </div>
             {/* Category 3 */}
-              <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2">
-                <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
-                  <Users className="h-8 w-8 group-hover:scale-110 transition-transform duration-300" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Parent Portal</h3>
-                <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Engage parents with real-time access to student progress, attendance, and school communications.</p>
-
+            <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2">
+              <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
+                <Users className="h-8 w-8 group-hover:scale-110 transition-transform duration-300" />
               </div>
+              <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Parent Portal</h3>
+              <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Engage parents with real-time access to student progress, attendance, and school communications.</p>
+
+            </div>
             {/* Category 4 */}
-              <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2">
-                <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
-                  <BarChart3 className="h-8 w-8 group-hover:scale-110 transition-transform duration-300" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">EMIS Integration</h3>
-                <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Export data to Education Management Information System for Ministry compliance.</p>
-
+            <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2">
+              <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
+                <BarChart3 className="h-8 w-8 group-hover:scale-110 transition-transform duration-300" />
               </div>
+              <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">EMIS Integration</h3>
+              <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Export data to Education Management Information System for Ministry compliance.</p>
+
+            </div>
             {/* Category 5 */}
-              <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2">
-                <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
-                  <DollarSign className="h-8 w-8 group-hover:scale-110 transition-transform duration-300" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Finance Management</h3>
-                <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Track school fees, manage budgets, and generate financial reports.</p>
-
+            <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2">
+              <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
+                <DollarSign className="h-8 w-8 group-hover:scale-110 transition-transform duration-300" />
               </div>
+              <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors duration-300">Finance Management</h3>
+              <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-300">Track school fees, manage budgets, and generate financial reports.</p>
+
+            </div>
             {/* Category 6 */}
             <div className="group relative text-center p-6 rounded-2xl border bg-card hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2">
               <div className="flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 text-primary mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-300">
@@ -325,7 +307,7 @@ export default function Index() {
               </div>
               <p className="text-sm italic">"MUCHI has revolutionized how we manage student data at our school in Lusaka. What used to take our staff hours now takes minutes. The parent portal has also dramatically improved our communication with families across Zambia."</p>
             </div>
-            
+
             {/* Testimonial 2 */}
             <div className="bg-card p-6 rounded-2xl border shadow-sm hover:shadow-md transition-all duration-300">
               <div className="flex items-center mb-4">
@@ -348,7 +330,7 @@ export default function Index() {
               </div>
               <p className="text-sm italic">"The Ministry of Education integration saved us countless hours of manual data entry. Implementation was smooth, and the support team was there every step of the way. I highly recommend MUCHI to any school in the Copperbelt Province."</p>
             </div>
-            
+
             {/* Testimonial 3 */}
             <div className="bg-card p-6 rounded-2xl border shadow-sm hover:shadow-md transition-all duration-300">
               <div className="flex items-center mb-4">
@@ -395,7 +377,7 @@ export default function Index() {
                 </div>
               </div>
             </div>
-            
+
             {/* FAQ Item 2 */}
             <div className="rounded-lg border bg-card">
               <div className="p-4 cursor-pointer">
@@ -408,7 +390,7 @@ export default function Index() {
                 </div>
               </div>
             </div>
-            
+
             {/* FAQ Item 3 */}
             <div className="rounded-lg border bg-card">
               <div className="p-4 cursor-pointer">
@@ -421,7 +403,7 @@ export default function Index() {
                 </div>
               </div>
             </div>
-            
+
             {/* FAQ Item 4 */}
             <div className="rounded-lg border bg-card">
               <div className="p-4 cursor-pointer">
@@ -434,7 +416,7 @@ export default function Index() {
                 </div>
               </div>
             </div>
-            
+
             {/* FAQ Item 5 */}
             <div className="rounded-lg border bg-card">
               <div className="p-4 cursor-pointer">
@@ -585,7 +567,7 @@ export default function Index() {
       </footer>
 
 
-      
+
 
     </div>
   );

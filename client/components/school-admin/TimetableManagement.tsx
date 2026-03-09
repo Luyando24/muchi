@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Search, 
-  Plus, 
-  Trash2, 
+import {
+  Search,
+  Plus,
+  Trash2,
   Edit,
   Loader2,
   Clock,
@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 interface TimetableEntry {
   id: string;
@@ -75,6 +76,8 @@ export default function TimetableManagement() {
   const [selectedTerm, setSelectedTerm] = useState<string>('Term 1');
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
   const [isLoading, setIsLoading] = useState(true);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
 
   // Dialog State
@@ -111,9 +114,9 @@ export default function TimetableManagement() {
       // Fetch school settings first for defaults
       const settingsRes = await fetch('/api/school/settings', { headers });
       if (settingsRes.ok) {
-          const settings = await settingsRes.json();
-          setSelectedTerm(settings.current_term || 'Term 1');
-          setSelectedYear(settings.academic_year || new Date().getFullYear().toString());
+        const settings = await settingsRes.json();
+        setSelectedTerm(settings.current_term || 'Term 1');
+        setSelectedYear(settings.academic_year || new Date().getFullYear().toString());
       }
 
       const [classesRes, subjectsRes, teachersRes] = await Promise.all([
@@ -199,13 +202,14 @@ export default function TimetableManagement() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this entry?')) return;
+  const handleDelete = async () => {
+    if (!deleteTargetId) return;
+    setIsDeleting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/timetables/${id}`, {
+      const response = await fetch(`/api/school/timetables/${deleteTargetId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
@@ -213,9 +217,12 @@ export default function TimetableManagement() {
       if (!response.ok) throw new Error('Failed to delete entry');
 
       toast({ title: "Success", description: "Entry deleted successfully" });
+      setDeleteTargetId(null);
       fetchTimetable();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -250,8 +257,8 @@ export default function TimetableManagement() {
 
   // Helper to get entry for a specific slot
   const getEntry = (day: string, time: string) => {
-    return entries.find(e => 
-      e.day_of_week === day && 
+    return entries.find(e =>
+      e.day_of_week === day &&
       e.start_time.substring(0, 5) === time
     );
   };
@@ -297,7 +304,7 @@ export default function TimetableManagement() {
                   ))}
                 </SelectContent>
               </Select>
-              
+
               <Dialog open={isDialogOpen} onOpenChange={(open) => {
                 setIsDialogOpen(open);
                 if (!open) resetForm();
@@ -314,72 +321,72 @@ export default function TimetableManagement() {
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                      <Label>Day</Label>
-                      <Select value={formData.day_of_week} onValueChange={v => setFormData({...formData, day_of_week: v})}>
-                        <SelectTrigger className="text-black dark:text-white">
-                          <SelectValue className="text-black dark:text-white" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {DAYS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
+                        <Label>Day</Label>
+                        <Select value={formData.day_of_week} onValueChange={v => setFormData({ ...formData, day_of_week: v })}>
+                          <SelectTrigger className="text-black dark:text-white">
+                            <SelectValue className="text-black dark:text-white" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {DAYS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Time</Label>
+                        <Select value={formData.start_time} onValueChange={v => setFormData({ ...formData, start_time: v })}>
+                          <SelectTrigger className="text-black dark:text-white">
+                            <SelectValue className="text-black dark:text-white" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {TIMES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
+
                     <div className="space-y-2">
-                      <Label>Time</Label>
-                      <Select value={formData.start_time} onValueChange={v => setFormData({...formData, start_time: v})}>
+                      <Label>Class</Label>
+                      <Select value={formData.class_id} onValueChange={v => setFormData({ ...formData, class_id: v })}>
                         <SelectTrigger className="text-black dark:text-white">
-                          <SelectValue className="text-black dark:text-white" />
+                          <SelectValue className="text-black dark:text-white" placeholder="Select Class" />
                         </SelectTrigger>
                         <SelectContent>
-                          {TIMES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                          {classes.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
-                  </div>
 
-                  <div className="space-y-2">
-                    <Label>Class</Label>
-                    <Select value={formData.class_id} onValueChange={v => setFormData({...formData, class_id: v})}>
-                      <SelectTrigger className="text-black dark:text-white">
-                        <SelectValue className="text-black dark:text-white" placeholder="Select Class" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {classes.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                    <div className="space-y-2">
+                      <Label>Subject</Label>
+                      <Select value={formData.subject_id} onValueChange={v => setFormData({ ...formData, subject_id: v })}>
+                        <SelectTrigger className="text-black dark:text-white">
+                          <SelectValue className="text-black dark:text-white" placeholder="Select Subject" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {subjects.map(s => <SelectItem key={s.id} value={s.id}>{s.name} ({s.code})</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                  <div className="space-y-2">
-                    <Label>Subject</Label>
-                    <Select value={formData.subject_id} onValueChange={v => setFormData({...formData, subject_id: v})}>
-                      <SelectTrigger className="text-black dark:text-white">
-                        <SelectValue className="text-black dark:text-white" placeholder="Select Subject" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {subjects.map(s => <SelectItem key={s.id} value={s.id}>{s.name} ({s.code})</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Teacher (Optional)</Label>
-                    <Select value={formData.teacher_id} onValueChange={v => setFormData({...formData, teacher_id: v})}>
-                      <SelectTrigger className="text-black dark:text-white">
-                        <SelectValue className="text-black dark:text-white" placeholder="Select Teacher" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="null">No Teacher Assigned</SelectItem>
-                        {teachers.map(t => <SelectItem key={t.id} value={t.id}>{t.fullName}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                    <div className="space-y-2">
+                      <Label>Teacher (Optional)</Label>
+                      <Select value={formData.teacher_id} onValueChange={v => setFormData({ ...formData, teacher_id: v })}>
+                        <SelectTrigger className="text-black dark:text-white">
+                          <SelectValue className="text-black dark:text-white" placeholder="Select Teacher" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="null">No Teacher Assigned</SelectItem>
+                          {teachers.map(t => <SelectItem key={t.id} value={t.id}>{t.fullName}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
                     <div className="space-y-2">
                       <Label>Room (Optional)</Label>
-                      <Input 
-                        placeholder="e.g. Room 101" 
+                      <Input
+                        placeholder="e.g. Room 101"
                         value={formData.room}
-                        onChange={e => setFormData({...formData, room: e.target.value})}
+                        onChange={e => setFormData({ ...formData, room: e.target.value })}
                       />
                     </div>
 
@@ -426,7 +433,7 @@ export default function TimetableManagement() {
                         <Button variant="ghost" size="sm" onClick={() => openEditDialog(entry)}>
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-red-500" onClick={() => handleDelete(entry.id)}>
+                        <Button variant="ghost" size="sm" className="text-red-500" onClick={() => setDeleteTargetId(entry.id)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -472,18 +479,18 @@ export default function TimetableManagement() {
                                 <div className="font-semibold text-sm">{entry.subjects?.name}</div>
                                 <div className="text-xs text-slate-500">{entry.profiles?.full_name}</div>
                                 {entry.room && <div className="text-xs text-slate-400 mt-1">{entry.room}</div>}
-                                
+
                                 <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-white dark:bg-slate-900 rounded shadow-sm p-0.5">
                                   <button onClick={() => openEditDialog(entry)} className="p-1 hover:text-blue-600">
                                     <Edit className="h-3 w-3" />
                                   </button>
-                                  <button onClick={() => handleDelete(entry.id)} className="p-1 hover:text-red-600">
+                                  <button onClick={() => setDeleteTargetId(entry.id)} className="p-1 hover:text-red-600">
                                     <Trash2 className="h-3 w-3" />
                                   </button>
                                 </div>
                               </div>
                             ) : (
-                              <div 
+                              <div
                                 className="h-full min-h-[60px] rounded-md border border-dashed border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors flex items-center justify-center cursor-pointer opacity-0 hover:opacity-100"
                                 onClick={() => {
                                   resetForm();
@@ -510,6 +517,16 @@ export default function TimetableManagement() {
           )}
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={!!deleteTargetId}
+        onOpenChange={(open) => !open && setDeleteTargetId(null)}
+        title="Delete Timetable Entry?"
+        description="Are you sure you want to delete this timetable entry? This action cannot be undone."
+        confirmLabel="Delete Entry"
+        variant="danger"
+        loading={isDeleting}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

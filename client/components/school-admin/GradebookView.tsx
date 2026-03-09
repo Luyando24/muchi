@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Save, 
-  Send, 
-  Download, 
-  Loader2, 
+import {
+  Save,
+  Send,
+  Download,
+  Loader2,
   Search,
   Filter,
   CheckCircle2,
@@ -47,7 +47,7 @@ interface GradeEntry {
   percentage: number | '';
   grade: string;
   comments: string;
-  status: 'Draft' | 'Published';
+  status: 'Draft' | 'Submitted' | 'Published' | 'Absent';
   isDirty?: boolean;
 }
 
@@ -75,13 +75,13 @@ export default function GradebookView() {
   const [classes, setClasses] = useState<Class[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [gradingScales, setGradingScales] = useState<GradingScale[]>([]);
-  
+
   // Selection State
   const [selectedClass, setSelectedClass] = useState<string>('');
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [selectedTerm, setSelectedTerm] = useState<string>('');
   const [selectedYear, setSelectedYear] = useState<string>('');
-  
+
   // Data State
   const [students, setStudents] = useState<Student[]>([]);
   const [grades, setGrades] = useState<Record<string, GradeEntry>>({});
@@ -101,13 +101,13 @@ export default function GradebookView() {
         // Fetch school settings first for defaults
         const settingsRes = await fetch('/api/school/settings', { headers });
         if (settingsRes.ok) {
-            const settings = await settingsRes.json();
-            setSelectedTerm(settings.current_term || 'Term 1');
-            setSelectedYear(settings.academic_year || new Date().getFullYear().toString());
+          const settings = await settingsRes.json();
+          setSelectedTerm(settings.current_term || 'Term 1');
+          setSelectedYear(settings.academic_year || new Date().getFullYear().toString());
         } else {
-            // Fallback
-            setSelectedTerm('Term 1');
-            setSelectedYear(new Date().getFullYear().toString());
+          // Fallback
+          setSelectedTerm('Term 1');
+          setSelectedYear(new Date().getFullYear().toString());
         }
 
         const [classesRes, subjectsRes, scalesRes] = await Promise.all([
@@ -119,7 +119,7 @@ export default function GradebookView() {
         if (classesRes.ok) setClasses(await classesRes.json());
         if (subjectsRes.ok) setSubjects(await subjectsRes.json());
         if (scalesRes.ok) setGradingScales(await scalesRes.json());
-        
+
       } catch (error) {
         console.error('Error loading metadata:', error);
         toast({ title: "Error", description: "Failed to load classes or subjects", variant: "destructive" });
@@ -175,7 +175,7 @@ export default function GradebookView() {
 
       if (!autoSave) toast({ title: "Success", description: "Grades saved successfully" });
       setLastSaved(new Date());
-      
+
       // Mark as clean
       setGrades(prev => {
         const next = { ...prev };
@@ -210,7 +210,7 @@ export default function GradebookView() {
     setFetchingStudents(true);
     setStudents([]);
     setGrades({});
-    
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -222,7 +222,7 @@ export default function GradebookView() {
         const errData = await studentsRes.json();
         throw new Error(errData.message || 'Failed to fetch students');
       }
-      
+
       const loadedStudents = await studentsRes.json();
       setStudents(loadedStudents);
 
@@ -285,7 +285,7 @@ export default function GradebookView() {
   const handleGradeChange = (studentId: string, field: keyof GradeEntry, value: any) => {
     setGrades(prev => {
       const entry = { ...prev[studentId] };
-      
+
       if (field === 'percentage') {
         if (value === '') {
           entry.percentage = '';
@@ -301,7 +301,7 @@ export default function GradebookView() {
       } else {
         (entry as any)[field] = value;
       }
-      
+
       entry.isDirty = true;
       return { ...prev, [studentId]: entry };
     });
@@ -309,15 +309,15 @@ export default function GradebookView() {
 
 
 
-  const handlePublish = async () => {
-    if (!confirm("Are you sure you want to publish these grades? This will make them visible to students and parents.")) return;
+  const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
 
+  const handleSubmit = async () => {
     setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/results/publish', {
+      const response = await fetch('/api/school/results/submit', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -331,14 +331,15 @@ export default function GradebookView() {
         })
       });
 
-      if (!response.ok) throw new Error('Failed to publish results');
+      if (!response.ok) throw new Error('Failed to submit results');
 
       const data = await response.json();
-      toast({ title: "Success", description: `Published ${data.count} grades successfully` });
+      toast({ title: "Success", description: `Submitted ${data.count} grades successfully` });
+      setIsSubmitModalOpen(false);
       loadGradebookData(); // Reload to update status
 
     } catch (error: any) {
-      console.error('Publish error:', error);
+      console.error('Submit error:', error);
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
       setLoading(false);
@@ -359,9 +360,9 @@ export default function GradebookView() {
             {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
             Save Now
           </Button>
-          <Button onClick={handlePublish} disabled={loading || !selectedClass || !selectedSubject}>
+          <Button onClick={() => setIsSubmitModalOpen(true)} disabled={loading || !selectedClass || !selectedSubject}>
             <Send className="h-4 w-4 mr-2" />
-            Publish Results
+            Submit Results
           </Button>
         </div>
       </div>
@@ -429,6 +430,29 @@ export default function GradebookView() {
         </CardContent>
       </Card>
 
+      {/* Confirmation Dialog for Submitting Results */}
+      <Dialog open={isSubmitModalOpen} onOpenChange={setIsSubmitModalOpen}>
+        <DialogContent>
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 text-amber-600">
+              <AlertCircle className="h-6 w-6" />
+              <h3 className="font-semibold text-lg text-slate-900 dark:text-white">Submit Results?</h3>
+            </div>
+            <p className="text-slate-600 dark:text-slate-400">
+              Are you sure you want to submit these grades? This will send them to the school administration for review and calculation.
+            </p>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={() => setIsSubmitModalOpen(false)}>Cancel</Button>
+              <Button onClick={handleSubmit} disabled={loading}>
+                {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+                Confirm Submission
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+
       {selectedClass && selectedSubject ? (
         <Card>
           <CardContent className="p-0">
@@ -465,9 +489,9 @@ export default function GradebookView() {
                           <div className="text-xs text-muted-foreground">{student.studentNumber}</div>
                         </TableCell>
                         <TableCell>
-                          <Input 
-                            type="number" 
-                            min="0" 
+                          <Input
+                            type="number"
+                            min="0"
                             max="100"
                             className="w-24"
                             value={entry.percentage}
@@ -480,20 +504,32 @@ export default function GradebookView() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Input 
-                            placeholder="Add comments..." 
+                          <Input
+                            placeholder="Add comments..."
                             value={entry.comments}
                             onChange={(e) => handleGradeChange(student.id, 'comments', e.target.value)}
                           />
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            {entry.status === 'Published' ? (
-                              <Badge variant="default" className="bg-green-600 hover:bg-green-700">Published</Badge>
-                            ) : (
-                              <Badge variant="outline">Draft</Badge>
-                            )}
-                            {entry.isDirty && <span className="text-xs text-amber-500 italic">Unsaved</span>}
+                          <div className="flex flex-col gap-1 items-start">
+                            {(() => {
+                              // If it's dirty, or blank but not saved, show Draft.
+                              let displayStatus = entry.status;
+                              if (entry.isDirty) displayStatus = 'Draft';
+                              else if (displayStatus !== 'Published' && displayStatus !== 'Submitted' && entry.percentage === '') displayStatus = 'Absent';
+
+                              switch (displayStatus) {
+                                case 'Published':
+                                  return <Badge variant="default" className="bg-green-600 hover:bg-green-700">Published</Badge>;
+                                case 'Submitted':
+                                  return <Badge variant="default" className="bg-blue-600 hover:bg-blue-700">Submitted</Badge>;
+                                case 'Absent':
+                                  return <Badge variant="destructive">Absent</Badge>;
+                                default:
+                                  return <Badge variant="outline">Draft</Badge>;
+                              }
+                            })()}
+                            {entry.isDirty && <span className="text-xs text-amber-500 italic">Unsaved edits</span>}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -504,7 +540,7 @@ export default function GradebookView() {
                               </Button>
                             </DialogTrigger>
                             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                              <ReportCardPreview 
+                              <ReportCardPreview
                                 studentId={student.id}
                                 term={selectedTerm}
                                 academicYear={selectedYear}

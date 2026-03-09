@@ -51,6 +51,8 @@ export interface School {
   address?: string;
   website?: string;
   logo_url?: string;
+  signature_url?: string;
+  seal_url?: string;
 }
 
 // --- Student Types ---

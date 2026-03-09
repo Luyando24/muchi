@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  DollarSign, 
-  TrendingUp, 
-  TrendingDown, 
-  CreditCard, 
-  Download, 
-  Plus, 
-  Search, 
-  Filter, 
-  MoreVertical, 
-  Edit, 
+import {
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  CreditCard,
+  Download,
+  Plus,
+  Search,
+  Filter,
+  MoreVertical,
+  Edit,
   Trash2,
   Loader2
 } from 'lucide-react';
@@ -38,6 +38,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { FinanceRecord, FinanceStats } from '@shared/api';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 export default function FinanceManagement() {
   const [transactions, setTransactions] = useState<FinanceRecord[]>([]);
@@ -46,6 +47,8 @@ export default function FinanceManagement() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [currentTransaction, setCurrentTransaction] = useState<FinanceRecord | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -120,10 +123,10 @@ export default function FinanceManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const url = currentTransaction 
+      const url = currentTransaction
         ? `/api/school/finance/${currentTransaction.id}`
         : '/api/school/finance';
-      
+
       const method = currentTransaction ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
@@ -173,33 +176,27 @@ export default function FinanceManagement() {
     setIsEditOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this transaction?')) return;
-
+  const handleDelete = async () => {
+    if (!deleteTargetId) return;
+    setIsDeleting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/finance/${id}`, {
+      const response = await fetch(`/api/school/finance/${deleteTargetId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
-        }
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
       if (!response.ok) throw new Error('Failed to delete transaction');
 
-      toast({
-        title: "Success",
-        description: "Transaction deleted successfully",
-      });
+      toast({ title: "Success", description: "Transaction deleted successfully" });
+      setDeleteTargetId(null);
       fetchFinanceData();
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -233,9 +230,9 @@ export default function FinanceManagement() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="type">Type</Label>
-                    <Select 
-                      name="type" 
-                      value={formData.type} 
+                    <Select
+                      name="type"
+                      value={formData.type}
                       onValueChange={(val) => handleSelectChange('type', val)}
                     >
                       <SelectTrigger>
@@ -249,22 +246,22 @@ export default function FinanceManagement() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="date">Date</Label>
-                    <Input 
-                      id="date" 
-                      name="date" 
-                      type="date" 
-                      value={formData.date} 
-                      onChange={handleInputChange} 
-                      required 
+                    <Input
+                      id="date"
+                      name="date"
+                      type="date"
+                      value={formData.date}
+                      onChange={handleInputChange}
+                      required
                     />
                   </div>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="category">Category</Label>
-                  <Select 
-                    name="category" 
-                    value={formData.category} 
+                  <Select
+                    name="category"
+                    value={formData.category}
                     onValueChange={(val) => handleSelectChange('category', val)}
                   >
                     <SelectTrigger>
@@ -286,27 +283,27 @@ export default function FinanceManagement() {
 
                 <div className="space-y-2">
                   <Label htmlFor="amount">Amount (ZK)</Label>
-                  <Input 
-                    id="amount" 
-                    name="amount" 
-                    type="number" 
-                    step="0.01" 
-                    placeholder="0.00" 
-                    value={formData.amount} 
-                    onChange={handleInputChange} 
-                    required 
+                  <Input
+                    id="amount"
+                    name="amount"
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={formData.amount}
+                    onChange={handleInputChange}
+                    required
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="description">Description</Label>
-                  <Input 
-                    id="description" 
-                    name="description" 
-                    placeholder="Transaction details..." 
-                    value={formData.description} 
-                    onChange={handleInputChange} 
-                    required 
+                  <Input
+                    id="description"
+                    name="description"
+                    placeholder="Transaction details..."
+                    value={formData.description}
+                    onChange={handleInputChange}
+                    required
                   />
                 </div>
 
@@ -317,19 +314,19 @@ export default function FinanceManagement() {
               </form>
             </DialogContent>
           </Dialog>
-          
-           <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+
+          <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Edit Transaction</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
-                 <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="edit-type">Type</Label>
-                    <Select 
-                      name="type" 
-                      value={formData.type} 
+                    <Select
+                      name="type"
+                      value={formData.type}
                       onValueChange={(val) => handleSelectChange('type', val)}
                     >
                       <SelectTrigger>
@@ -343,22 +340,22 @@ export default function FinanceManagement() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="edit-date">Date</Label>
-                    <Input 
-                      id="edit-date" 
-                      name="date" 
-                      type="date" 
-                      value={formData.date} 
-                      onChange={handleInputChange} 
-                      required 
+                    <Input
+                      id="edit-date"
+                      name="date"
+                      type="date"
+                      value={formData.date}
+                      onChange={handleInputChange}
+                      required
                     />
                   </div>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="edit-category">Category</Label>
-                   <Select 
-                    name="category" 
-                    value={formData.category} 
+                  <Select
+                    name="category"
+                    value={formData.category}
                     onValueChange={(val) => handleSelectChange('category', val)}
                   >
                     <SelectTrigger>
@@ -380,25 +377,25 @@ export default function FinanceManagement() {
 
                 <div className="space-y-2">
                   <Label htmlFor="edit-amount">Amount (ZK)</Label>
-                  <Input 
-                    id="edit-amount" 
-                    name="amount" 
-                    type="number" 
-                    step="0.01" 
-                    value={formData.amount} 
-                    onChange={handleInputChange} 
-                    required 
+                  <Input
+                    id="edit-amount"
+                    name="amount"
+                    type="number"
+                    step="0.01"
+                    value={formData.amount}
+                    onChange={handleInputChange}
+                    required
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="edit-description">Description</Label>
-                  <Input 
-                    id="edit-description" 
-                    name="description" 
-                    value={formData.description} 
-                    onChange={handleInputChange} 
-                    required 
+                  <Input
+                    id="edit-description"
+                    name="description"
+                    value={formData.description}
+                    onChange={handleInputChange}
+                    required
                   />
                 </div>
 
@@ -422,7 +419,7 @@ export default function FinanceManagement() {
                 ZK {stats?.totalRevenue.toLocaleString() || '0'}
               </h3>
               <p className="text-xs text-green-500 flex items-center mt-1">
-                <TrendingUp className="h-3 w-3 mr-1" /> 
+                <TrendingUp className="h-3 w-3 mr-1" />
                 {stats?.monthlyRevenue ? `+ZK ${stats.monthlyRevenue.toLocaleString()} this month` : 'No data'}
               </p>
             </div>
@@ -507,7 +504,7 @@ export default function FinanceManagement() {
                       <TableCell className="font-medium">{trx.description}</TableCell>
                       <TableCell>{trx.category}</TableCell>
                       <TableCell>
-                        <Badge variant={trx.type === 'income' ? 'outline' : 'secondary'} 
+                        <Badge variant={trx.type === 'income' ? 'outline' : 'secondary'}
                           className={trx.type === 'income' ? 'text-green-600 border-green-200 bg-green-50' : 'text-red-600 border-red-200 bg-red-50'}>
                           {trx.type.charAt(0).toUpperCase() + trx.type.slice(1)}
                         </Badge>
@@ -521,7 +518,7 @@ export default function FinanceManagement() {
                           <Button variant="ghost" size="icon" onClick={() => handleEditClick(trx)}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(trx.id)}>
+                          <Button variant="ghost" size="icon" onClick={() => setDeleteTargetId(trx.id)}>
                             <Trash2 className="h-4 w-4 text-red-500" />
                           </Button>
                         </div>
@@ -534,6 +531,16 @@ export default function FinanceManagement() {
           </div>
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={!!deleteTargetId}
+        onOpenChange={(open) => !open && setDeleteTargetId(null)}
+        title="Delete Transaction?"
+        description="Are you sure you want to delete this financial transaction? This action cannot be undone."
+        confirmLabel="Delete Transaction"
+        variant="danger"
+        loading={isDeleting}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

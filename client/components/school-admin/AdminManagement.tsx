@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Users, 
-  Plus, 
-  Search, 
-  MoreVertical, 
-  Trash2, 
+import {
+  Users,
+  Plus,
+  Search,
+  MoreVertical,
+  Trash2,
   Loader2,
   ShieldAlert
 } from 'lucide-react';
@@ -44,6 +44,7 @@ import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 // Schema for creating a school admin
 const adminSchema = z.object({
@@ -65,6 +66,8 @@ export default function AdminManagement() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof adminSchema>>({
@@ -94,7 +97,7 @@ export default function AdminManagement() {
       });
 
       if (!response.ok) throw new Error('Failed to fetch admins');
-      
+
       const data = await response.json();
       setAdmins(data);
     } catch (error: any) {
@@ -146,18 +149,16 @@ export default function AdminManagement() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to remove this admin? This action cannot be undone.")) return;
-
+  const handleDelete = async () => {
+    if (!deleteTargetId) return;
+    setIsDeleting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/admins/${id}`, {
+      const response = await fetch(`/api/school/admins/${deleteTargetId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
-        }
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
       if (!response.ok) {
@@ -165,23 +166,18 @@ export default function AdminManagement() {
         throw new Error(errorData.message || 'Failed to delete admin');
       }
 
-      toast({
-        title: "Success",
-        description: "Admin removed successfully.",
-      });
-
+      toast({ title: "Success", description: "Admin removed successfully." });
+      setDeleteTargetId(null);
       fetchAdmins();
     } catch (error: any) {
       console.error('Error deleting admin:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to delete admin.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message || "Failed to delete admin.", variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
-  const filteredAdmins = admins.filter(admin => 
+  const filteredAdmins = admins.filter(admin =>
     admin.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     admin.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -207,7 +203,7 @@ export default function AdminManagement() {
                 Create a new administrator account for your school dashboard.
               </DialogDescription>
             </DialogHeader>
-            
+
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField
@@ -223,7 +219,7 @@ export default function AdminManagement() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="email"
@@ -329,9 +325,9 @@ export default function AdminManagement() {
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               className="text-red-600 focus:text-red-600 cursor-pointer"
-                              onClick={() => handleDelete(admin.id)}
+                              onClick={() => setDeleteTargetId(admin.id)}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
                               Remove Access
@@ -347,6 +343,16 @@ export default function AdminManagement() {
           </div>
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={!!deleteTargetId}
+        onOpenChange={(open) => !open && setDeleteTargetId(null)}
+        title="Remove Admin Access?"
+        description="Are you sure you want to remove this administrator? They will lose access to the school dashboard. This action cannot be undone."
+        confirmLabel="Remove Admin"
+        variant="danger"
+        loading={isDeleting}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }
