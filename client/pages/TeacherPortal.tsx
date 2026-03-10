@@ -279,16 +279,12 @@ export default function TeacherPortal() {
       const subjectsData = await fetchWithAuth('/api/teacher/subjects');
       setSubjects(subjectsData);
 
-      // 5. Submissions
-      try {
-        const submissionsData = await fetchWithAuth('/api/teacher/submissions'); // Note: Endpoint might need implementation or fix if not exists
-        // Wait, I didn't implement GET /api/teacher/submissions globally, only for specific assignment.
-        // Let's implement a quick fix or just use empty array for now if it fails.
-        // Actually, I can implement it in the backend or just skip it.
-        // For now, let's skip global submissions fetch or try-catch it.
-        // setSubmissions(submissionsData); 
-      } catch (e) {
-        // console.error('Failed to fetch submissions', e);
+      // PRE-FETCH: Students for all classes to ensure offline attendance works
+      if (classesData && classesData.length > 0) {
+        console.log(`[Offline] Pre-fetching students for ${classesData.length} classes...`);
+        for (const cls of classesData) {
+          fetchWithAuth(`/api/teacher/classes/${cls.id}/students`).catch(() => {});
+        }
       }
 
     } catch (error) {

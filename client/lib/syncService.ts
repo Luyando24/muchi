@@ -17,24 +17,28 @@ export const syncFetch = async (url: string, options: SyncOptions = {}) => {
   if (method === 'GET') {
     const cacheKey = options.cacheKey || url;
 
-    if (isOnline()) {
-      try {
-        const response = await fetch(url, options);
-        if (response.ok) {
-          const data = await response.json();
-          await db.cache.put({ url: cacheKey, data, timestamp: Date.now() });
-          return data;
-        }
-      } catch (error) {
-        console.warn('Network error, falling back to cache...', error);
+    // IF OFFLINE: IMMEDIATELY RETURN CACHE
+    if (!isOnline()) {
+      const cached = await db.cache.get(cacheKey);
+      if (cached) {
+        console.log('OFFLINE: Serving from cache:', cacheKey);
+        return cached.data;
       }
+      throw new Error('OFFLINE: No connection and no cached data available.');
     }
 
-    // Fallback to cache if offline or network failed
-    const cached = await db.cache.get(cacheKey);
-    if (cached) {
-      console.log('Serving from cache:', cacheKey);
-      return cached.data;
+    // IF ONLINE: FETCH AND UPDATE CACHE
+    try {
+      const response = await fetch(url, options);
+      if (response.ok) {
+        const data = await response.json();
+        await db.cache.put({ url: cacheKey, data, timestamp: Date.now() });
+        return data;
+      }
+    } catch (error) {
+      console.warn('Network error, falling back to cache...', error);
+      const cached = await db.cache.get(cacheKey);
+      if (cached) return cached.data;
     }
 
     throw new Error('No connection and no cached data available.');

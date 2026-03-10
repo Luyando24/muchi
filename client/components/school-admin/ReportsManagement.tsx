@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
+import { syncFetch } from '@/lib/syncService';
 import {
   BarChart,
   Bar,
@@ -124,14 +125,13 @@ export default function ReportsManagement() {
       if (selectedTerm) queryParams.append('term', selectedTerm);
       if (selectedYear) queryParams.append('academic_year', selectedYear);
 
-      const response = await fetch(`/api/school/reports/live-stats?${queryParams.toString()}`, {
+      const data = await syncFetch(`/api/school/reports/live-stats?${queryParams.toString()}`, {
         headers: {
           'Authorization': `Bearer ${session.access_token}`
-        }
+        },
+        cacheKey: `reports-live-stats-${selectedTerm}-${selectedYear}`
       });
 
-      if (!response.ok) throw new Error('Failed to fetch live stats');
-      const data = await response.json();
       setLiveStats(data);
     } catch (error: any) {
       console.error('Live Stats Error:', error);
