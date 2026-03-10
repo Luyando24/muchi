@@ -279,11 +279,13 @@ export default function TeacherPortal() {
       const subjectsData = await fetchWithAuth('/api/teacher/subjects');
       setSubjects(subjectsData);
 
-      // PRE-FETCH: Students for all classes to ensure offline attendance works
+      // PRE-FETCH: Students and current attendance for all classes to ensure offline attendance works
       if (classesData && classesData.length > 0) {
-        console.log(`[Offline] Pre-fetching students for ${classesData.length} classes...`);
+        console.log(`[Offline] Pre-fetching roster & attendance for ${classesData.length} classes...`);
+        const today = new Date().toISOString().split('T')[0];
         for (const cls of classesData) {
           fetchWithAuth(`/api/teacher/classes/${cls.id}/students`).catch(() => {});
+          fetchWithAuth(`/api/teacher/attendance/${cls.id}/${today}`).catch(() => {});
         }
       }
 
@@ -497,7 +499,7 @@ export default function TeacherPortal() {
         remarks: data.remarks
       }));
 
-      await fetchWithAuth('/api/teacher/attendance', {
+      const result = await fetchWithAuth('/api/teacher/attendance', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -509,7 +511,9 @@ export default function TeacherPortal() {
         })
       });
 
-      toast({ title: "Success", description: "Attendance saved successfully!" });
+      if (!result.offline) {
+        toast({ title: "Success", description: "Attendance saved successfully!" });
+      }
     } catch (error: any) {
       console.error("Error saving attendance:", error);
       toast({
