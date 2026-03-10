@@ -45,6 +45,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { syncFetch } from '@/lib/syncService';
 
 interface Teacher {
   id: string;
@@ -88,13 +89,11 @@ export default function TeacherManagement() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
-        const res = await fetch('/api/school/subjects', {
-          headers: { 'Authorization': `Bearer ${session.access_token}` }
+        const data = await syncFetch('/api/school/subjects', {
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+          cacheKey: 'school-subjects-list'
         });
-        if (res.ok) {
-          const data = await res.json();
-          setAvailableSubjects(data.map((s: any) => ({ label: s.name, value: s.name })));
-        }
+        setAvailableSubjects(data.map((s: any) => ({ label: s.name, value: s.name })));
       } catch (e) {
         console.error('Error fetching subjects:', e);
       }
@@ -108,15 +107,13 @@ export default function TeacherManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/teachers', {
+      const data = await syncFetch('/api/school/teachers', {
         headers: {
           'Authorization': `Bearer ${session.access_token}`
-        }
+        },
+        cacheKey: 'school-teachers-list'
       });
 
-      if (!response.ok) throw new Error('Failed to fetch teachers');
-
-      const data = await response.json();
       setTeachers(data);
     } catch (error) {
       console.error('Error fetching teachers:', error);
@@ -164,7 +161,7 @@ export default function TeacherManagement() {
 
       const subjectsArray = formData.subjects;
 
-      const response = await fetch('/api/school/create-teacher', {
+      const result = await syncFetch('/api/school/create-teacher', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -181,15 +178,18 @@ export default function TeacherManagement() {
         })
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to register teacher');
+      if (result.offline) {
+        toast({
+          title: "Offline Mode",
+          description: "Teacher registration queued and will sync when you are back online.",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Teacher registered successfully",
+        });
       }
 
-      toast({
-        title: "Success",
-        description: "Teacher registered successfully",
-      });
       setIsRegisterOpen(false);
       resetForm();
       fetchTeachers();

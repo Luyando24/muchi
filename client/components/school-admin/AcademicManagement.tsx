@@ -48,6 +48,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { syncFetch } from '@/lib/syncService';
 
 interface Teacher {
   id: string;
@@ -159,28 +160,27 @@ export default function AcademicManagement() {
 
       const headers = { 'Authorization': `Bearer ${session.access_token}` };
 
-      const [subjectsRes, classesRes, teachersRes, scalesRes, weightsRes, settingsRes] = await Promise.all([
-        fetch('/api/school/subjects', { headers }),
-        fetch('/api/school/classes', { headers }),
-        fetch('/api/school/teachers', { headers }),
-        fetch('/api/school/grading-scales', { headers }),
-        fetch('/api/school/grading-weights', { headers }),
-        fetch('/api/school/settings', { headers })
+      const [subjectsData, classesData, teachersData, scalesData, weightsData, settingsData] = await Promise.all([
+        syncFetch('/api/school/subjects', { headers, cacheKey: 'school-subjects-list' }),
+        syncFetch('/api/school/classes', { headers, cacheKey: 'school-classes-list' }),
+        syncFetch('/api/school/teachers', { headers, cacheKey: 'school-teachers-list' }),
+        syncFetch('/api/school/grading-scales', { headers, cacheKey: 'school-grading-scales' }),
+        syncFetch('/api/school/grading-weights', { headers, cacheKey: 'school-grading-weights' }),
+        syncFetch('/api/school/settings', { headers, cacheKey: 'school-settings' })
       ]);
 
-      if (subjectsRes.ok) setSubjects(await subjectsRes.json());
-      if (classesRes.ok) setClasses(await classesRes.json());
-      if (teachersRes.ok) setTeachers(await teachersRes.json());
-      if (scalesRes.ok) setGradingScales(await scalesRes.json());
-      if (weightsRes.ok) setGradingWeights(await weightsRes.json());
+      setSubjects(subjectsData);
+      setClasses(classesData);
+      setTeachers(teachersData);
+      setGradingScales(scalesData);
+      setGradingWeights(weightsData);
 
-      if (settingsRes.ok) {
-        const settings = await settingsRes.json();
-        setSchoolSettings(settings);
+      if (settingsData) {
+        setSchoolSettings(settingsData);
         setCalcForm(prev => ({
           ...prev,
-          term: settings.current_term || 'Term 1',
-          academicYear: settings.academic_year || new Date().getFullYear().toString()
+          term: settingsData.current_term || 'Term 1',
+          academicYear: settingsData.academic_year || new Date().getFullYear().toString()
         }));
       }
 
@@ -203,13 +203,12 @@ export default function AcademicManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
       
-      const res = await fetch(`/api/school/classes/${classId}/subjects`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      const data = await syncFetch(`/api/school/classes/${classId}/subjects`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        cacheKey: `class-subjects-${classId}`
       });
       
-      if (res.ok) {
-        setClassSubjects(await res.json());
-      }
+      setClassSubjects(data);
     } catch (error) {
       console.error('Error fetching allocations:', error);
       toast({ title: "Error", description: "Failed to load class subjects", variant: "destructive" });
@@ -293,7 +292,7 @@ export default function AcademicManagement() {
       const url = isEdit ? `/api/school/subjects/${subjectForm.id}` : '/api/school/subjects';
       const method = isEdit ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const result = await syncFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -302,9 +301,12 @@ export default function AcademicManagement() {
         body: JSON.stringify(subjectForm)
       });
 
-      if (!response.ok) throw new Error('Failed to save subject');
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Subject changes queued for sync." });
+      } else {
+        toast({ title: "Success", description: `Subject ${isEdit ? 'updated' : 'created'} successfully` });
+      }
 
-      toast({ title: "Success", description: `Subject ${isEdit ? 'updated' : 'created'} successfully` });
       setIsAddSubjectOpen(false);
       setIsEditSubjectOpen(false);
       setSubjectForm({ id: '', name: '', department: '', headTeacherId: '', code: '' });
@@ -348,7 +350,7 @@ export default function AcademicManagement() {
       const url = isEdit ? `/api/school/classes/${classForm.id}` : '/api/school/classes';
       const method = isEdit ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const result = await syncFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -357,9 +359,12 @@ export default function AcademicManagement() {
         body: JSON.stringify(classForm)
       });
 
-      if (!response.ok) throw new Error('Failed to save class');
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Class changes queued for sync." });
+      } else {
+        toast({ title: "Success", description: `Class ${isEdit ? 'updated' : 'created'} successfully` });
+      }
 
-      toast({ title: "Success", description: `Class ${isEdit ? 'updated' : 'created'} successfully` });
       setIsAddClassOpen(false);
       setIsEditClassOpen(false);
       setClassForm({ id: '', name: '', level: '', room: '', capacity: 40, classTeacherId: '' });
