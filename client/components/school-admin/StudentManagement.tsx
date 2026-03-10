@@ -200,12 +200,15 @@ export default function StudentManagement() {
   };
 
   const handleEditClick = (student: Student) => {
+    // Try to find the class ID from the class name for the dropdown
+    const classObj = classes.find(c => c.name === student.grade);
+    
     setCurrentStudent(student);
     setFormData({
       firstName: student.firstName,
       lastName: student.lastName,
       email: student.email,
-      grade: student.grade,
+      grade: classObj ? classObj.id : student.grade,
       gender: student.gender,
       guardian: student.guardian,
       password: '',
@@ -364,20 +367,20 @@ export default function StudentManagement() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="grade">Grade/Class</Label>
-                    <Select name="grade" onValueChange={(val) => handleSelectChange('grade', val)}>
+                    <Select value={formData.grade} onValueChange={(val) => handleSelectChange('grade', val)}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select grade" />
                       </SelectTrigger>
                       <SelectContent>
                         {classes.map((cls) => (
-                          <SelectItem key={cls.id} value={cls.name}>{cls.name}</SelectItem>
+                          <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="gender">Gender</Label>
-                    <Select name="gender" onValueChange={(val) => handleSelectChange('gender', val)}>
+                    <Select value={formData.gender} onValueChange={(val) => handleSelectChange('gender', val)}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select gender" />
                       </SelectTrigger>
@@ -534,20 +537,20 @@ export default function StudentManagement() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="edit-grade">Grade/Class</Label>
-                <Select name="grade" value={formData.grade} onValueChange={(val) => handleSelectChange('grade', val)}>
+                <Select value={formData.grade} onValueChange={(val) => handleSelectChange('grade', val)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select grade" />
                   </SelectTrigger>
                   <SelectContent>
                     {classes.map((cls) => (
-                      <SelectItem key={cls.id} value={cls.name}>{cls.name}</SelectItem>
+                      <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-gender">Gender</Label>
-                <Select name="gender" value={formData.gender} onValueChange={(val) => handleSelectChange('gender', val)}>
+                <Select value={formData.gender} onValueChange={(val) => handleSelectChange('gender', val)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select gender" />
                   </SelectTrigger>

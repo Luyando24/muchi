@@ -459,19 +459,29 @@ async function generateUniqueStudentNumber(): Promise<string> {
 router.post('/create-student', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
-  const { email, password, name, grade, guardian, gender } = req.body;
+  const { email, password, name, grade: classId, guardian, gender } = req.body;
 
   try {
     // 1. Generate Student Number
     const studentNumber = await generateUniqueStudentNumber();
 
-    // 2. Determine Email to use
-    // If email is provided, use it. Otherwise generate a dummy email.
+    // 2. Get Class Name (for the profiles.grade column fallback)
+    let className = 'Unassigned';
+    if (classId) {
+      const { data: classData } = await supabaseAdmin
+        .from('classes')
+        .select('name')
+        .eq('id', classId)
+        .single();
+      if (classData) className = classData.name;
+    }
+
+    // 3. Determine Email to use
     const emailToUse = email && email.trim() !== ''
       ? email
       : `${studentNumber}@student.muchi.app`;
 
-    // 3. Create Auth User
+    // 4. Create Auth User
     const { data: user, error: userError } = await supabaseAdmin.auth.admin.createUser({
       email: emailToUse,
       password,
@@ -485,21 +495,39 @@ router.post('/create-student', requireSchoolRole(['school_admin']), async (req: 
 
     if (userError) throw userError;
 
-    // 4. Update Profile with extra details including student_number
+    // 5. Update Profile with extra details (Use UPSERT to handle race condition with trigger)
     if (user.user) {
       const { error: profileError } = await supabaseAdmin
         .from('profiles')
-        .update({
-          grade,
+        .upsert({
+          id: user.user.id,
+          school_id: schoolId,
+          full_name: name,
+          role: 'student',
+          grade: className,
           guardian_name: guardian,
           gender,
           student_number: studentNumber,
           enrollment_status: 'Active',
-          fees_status: 'Pending'
-        })
-        .eq('id', user.user.id);
+          fees_status: 'Pending',
+          updated_at: new Date().toISOString()
+        });
 
       if (profileError) console.error('Error updating student profile:', profileError);
+
+      // 6. Create Enrollment Record
+      if (classId) {
+        const { error: enrollError } = await supabaseAdmin
+          .from('enrollments')
+          .insert({
+            student_id: user.user.id,
+            class_id: classId,
+            academic_year: new Date().getFullYear().toString(),
+            status: 'Active'
+          });
+        
+        if (enrollError) console.error('Error creating enrollment:', enrollError);
+      }
     }
 
     res.status(201).json({
@@ -551,29 +579,47 @@ router.post('/students/bulk', requireSchoolRole(['school_admin']), async (req: R
 
       if (userError) throw userError;
 
+      // 3. Update Profile with extra details (Use UPSERT to handle race condition)
       if (user.user) {
-        // Check if profile exists (created by trigger) or needs creation/update
-        // The trigger usually creates the profile on auth.users insert.
-        // We update it with specific student fields.
         const { error: profileError } = await supabaseAdmin
           .from('profiles')
-          .update({
+          .upsert({
+            id: user.user.id,
+            school_id: schoolId,
+            full_name: student.name,
+            role: 'student',
             grade: student.grade,
             guardian_name: student.guardian,
             gender: student.gender,
             student_number: studentNumber,
             enrollment_status: 'Active',
-            fees_status: 'Pending'
-          })
-          .eq('id', user.user.id);
+            fees_status: 'Pending',
+            updated_at: new Date().toISOString()
+          });
 
-        if (profileError) {
-          console.error(`Profile update error for ${student.name}:`, profileError);
-          // If update fails, we might want to log it but not necessarily delete the user 
-          // as the user exists. But for consistency, maybe we should.
-          // For now, just log.
-          throw profileError;
+        if (profileError) throw profileError;
+
+        // 4. Handle Enrollment (Try to find class by name)
+        if (student.grade) {
+          const { data: classData } = await supabaseAdmin
+            .from('classes')
+            .select('id')
+            .eq('school_id', schoolId)
+            .ilike('name', student.grade)
+            .maybeSingle();
+          
+          if (classData) {
+            await supabaseAdmin
+              .from('enrollments')
+              .upsert({
+                student_id: user.user.id,
+                class_id: classData.id,
+                academic_year: new Date().getFullYear().toString(),
+                status: 'Active'
+              }, { onConflict: 'student_id, academic_year' });
+          }
         }
+        
         importedCount++;
       }
     } catch (error: any) {
@@ -600,7 +646,7 @@ router.put('/students/:id', requireSchoolRole(['school_admin']), async (req: Req
   const {
     firstName,
     lastName,
-    grade,
+    grade: classId,
     gender,
     guardian,
     status,
@@ -625,12 +671,27 @@ router.put('/students/:id', requireSchoolRole(['school_admin']), async (req: Req
       return res.status(404).json({ message: 'Student not found in this school' });
     }
 
-    // 2. Update Profile
+    // 2. Get Class Name (fallback)
+    let className = 'Unassigned';
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(classId);
+    
+    if (isUuid) {
+      const { data: classData } = await supabaseAdmin
+        .from('classes')
+        .select('name')
+        .eq('id', classId)
+        .single();
+      if (classData) className = classData.name;
+    } else {
+      className = classId;
+    }
+
+    // 3. Update Profile
     const { error: updateError } = await supabaseAdmin
       .from('profiles')
       .update({
         full_name: `${firstName} ${lastName}`,
-        grade,
+        grade: className,
         gender,
         guardian_name: guardian,
         enrollment_status: status,
@@ -644,7 +705,20 @@ router.put('/students/:id', requireSchoolRole(['school_admin']), async (req: Req
 
     if (updateError) throw updateError;
 
-    // 3. Update Email if provided (requires auth admin)
+    // 4. Update Enrollment if classId is a UUID
+    if (isUuid) {
+      // Upsert enrollment for current year
+      await supabaseAdmin
+        .from('enrollments')
+        .upsert({
+          student_id: id,
+          class_id: classId,
+          academic_year: new Date().getFullYear().toString(),
+          status: 'Active'
+        }, { onConflict: 'student_id, academic_year' });
+    }
+
+    // 5. Update Email if provided (requires auth admin)
     if (email) {
       if (typeof id === 'string') {
         const { error: emailError } = await supabaseAdmin.auth.admin.updateUserById(id, { email });
