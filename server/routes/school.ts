@@ -586,7 +586,8 @@ router.post('/students/bulk', requireSchoolRole(['school_admin']), async (req: R
     message: 'Bulk import completed',
     importedCount,
     total: students.length,
-    errors
+    errors,
+    success: errors.length === 0
   });
 });
 
