@@ -13,7 +13,14 @@ import {
   MoreHorizontal,
   Download,
   Edit,
-  Plus
+  Plus,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  CheckCircle,
+  AlertCircle,
+  BrainCircuit,
+  Lightbulb
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -48,6 +55,7 @@ import ReportCardPreview from './ReportCardPreview';
 interface StudentDetailsViewProps {
   studentId: string;
   onBack: () => void;
+  userRole?: 'school_admin' | 'teacher' | 'student';
 }
 
 interface StudentDetails {
@@ -96,7 +104,7 @@ interface StudentDetails {
   };
 }
 
-export default function StudentDetailsView({ studentId, onBack }: StudentDetailsViewProps) {
+export default function StudentDetailsView({ studentId, onBack, userRole = 'school_admin' }: StudentDetailsViewProps) {
   const [student, setStudent] = useState<StudentDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [classes, setClasses] = useState<any[]>([]);
@@ -335,6 +343,66 @@ export default function StudentDetailsView({ studentId, onBack }: StudentDetails
 
   const { profile, academics, attendance } = student;
 
+  // Intelligent Analysis Logic
+  const grades = academics.grades || [];
+  const averagePercentage = grades.length > 0 
+    ? Math.round(grades.reduce((acc, g) => acc + (g.percentage || 0), 0) / grades.length) 
+    : 0;
+
+  // Performance Trend
+  const terms = Array.from(new Set(grades.map(g => g.term))).sort();
+  const latestTerm = terms[terms.length - 1];
+  const prevTerm = terms[terms.length - 2];
+
+  const latestAvg = latestTerm ? Math.round(grades.filter(g => g.term === latestTerm).reduce((acc, g) => acc + (g.percentage || 0), 0) / grades.filter(g => g.term === latestTerm).length) : 0;
+  const prevAvg = prevTerm ? Math.round(grades.filter(g => g.term === prevTerm).reduce((acc, g) => acc + (g.percentage || 0), 0) / grades.filter(g => g.term === prevTerm).length) : 0;
+
+  const trendValue = prevAvg ? latestAvg - prevAvg : 0;
+  const trend = trendValue > 0 ? 'Improving' : trendValue < 0 ? 'Declining' : 'Stable';
+
+  // Strengths and Weaknesses
+  const sortedGrades = [...grades].sort((a, b) => (b.percentage || 0) - (a.percentage || 0));
+  const strengths = sortedGrades.filter(g => g.percentage >= 75).slice(0, 3);
+  const weaknesses = sortedGrades.filter(g => g.percentage < 50).slice(0, 3);
+
+  // Recommendations Logic
+  const recommendations = [];
+  if (attendance.rate < 85) {
+    recommendations.push({
+      type: 'Attendance',
+      message: 'Improve attendance to ensure consistent learning. Missing classes impacts overall performance.',
+      priority: 'High'
+    });
+  }
+  if (weaknesses.length > 0) {
+    recommendations.push({
+      type: 'Academic',
+      message: `Consider extra tutoring or practice in ${weaknesses.map(w => w.subjects?.name).join(', ')}.`,
+      priority: 'Medium'
+    });
+  }
+  if (trend === 'Declining') {
+    recommendations.push({
+      type: 'Performance',
+      message: 'Recent grades show a downward trend. Schedule a meeting with parents to discuss academic support.',
+      priority: 'High'
+    });
+  }
+  if (strengths.length > 0 && averagePercentage > 80) {
+    recommendations.push({
+      type: 'Encouragement',
+      message: 'Excellent overall performance. Encourage participation in advanced academic clubs or competitions.',
+      priority: 'Low'
+    });
+  }
+  if (recommendations.length === 0) {
+    recommendations.push({
+      type: 'General',
+      message: 'Maintain current study habits and continue participating actively in all subjects.',
+      priority: 'Low'
+    });
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header */}
@@ -360,10 +428,12 @@ export default function StudentDetailsView({ studentId, onBack }: StudentDetails
           </div>
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="outline" onClick={() => setIsEditProfileOpen(true)}>
-            <Edit className="mr-2 h-4 w-4" />
-            Edit Profile
-          </Button>
+          {userRole === 'school_admin' && (
+            <Button variant="outline" onClick={() => setIsEditProfileOpen(true)}>
+              <Edit className="mr-2 h-4 w-4" />
+              Edit Profile
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setIsReportCardOpen(true)}>
             <Download className="mr-2 h-4 w-4" />
             View Report Card
@@ -434,10 +504,14 @@ export default function StudentDetailsView({ studentId, onBack }: StudentDetails
         {/* Right Column - Tabs */}
         <div className="md:col-span-2">
           <Tabs defaultValue="academics" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="academics">Academics</TabsTrigger>
               <TabsTrigger value="attendance">Attendance</TabsTrigger>
               <TabsTrigger value="finance">Finance</TabsTrigger>
+              <TabsTrigger value="analysis" className="flex items-center gap-1.5">
+                <BrainCircuit className="h-3.5 w-3.5" />
+                Analysis
+              </TabsTrigger>
             </TabsList>
 
             {/* Academics Tab */}
@@ -447,7 +521,9 @@ export default function StudentDetailsView({ studentId, onBack }: StudentDetails
                   <CardHeader className="pb-2">
                     <div className="flex justify-between items-center">
                       <CardTitle className="text-sm font-medium text-muted-foreground">Current Class</CardTitle>
-                      <Button variant="ghost" size="sm" onClick={() => setIsEnrollOpen(true)}><Edit className="h-3 w-3" /></Button>
+                      {userRole === 'school_admin' && (
+                        <Button variant="ghost" size="sm" onClick={() => setIsEnrollOpen(true)}><Edit className="h-3 w-3" /></Button>
+                      )}
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -582,7 +658,9 @@ export default function StudentDetailsView({ studentId, onBack }: StudentDetails
                 <CardHeader>
                   <div className="flex justify-between items-center">
                     <CardTitle>Financial Status</CardTitle>
-                    <Button size="sm" onClick={() => setIsFinanceOpen(true)}><Edit className="mr-2 h-4 w-4" /> Update Status</Button>
+                    {userRole === 'school_admin' && (
+                      <Button size="sm" onClick={() => setIsFinanceOpen(true)}><Edit className="mr-2 h-4 w-4" /> Update Status</Button>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -604,6 +682,89 @@ export default function StudentDetailsView({ studentId, onBack }: StudentDetails
                   </div>
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            {/* Analysis Tab */}
+            <TabsContent value="analysis" className="space-y-6 mt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-indigo-600" />
+                      Performance Overview
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-sm text-muted-foreground font-medium uppercase tracking-wider">Overall Average</p>
+                        <p className="text-4xl font-black">{averagePercentage}%</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-muted-foreground font-medium uppercase tracking-wider">Trend</p>
+                        <div className={`flex items-center gap-1.5 font-bold ${
+                          trend === 'Improving' ? 'text-green-600' : 
+                          trend === 'Declining' ? 'text-red-600' : 'text-slate-600'
+                        }`}>
+                          {trend === 'Improving' ? <TrendingUp className="h-4 w-4" /> : 
+                           trend === 'Declining' ? <TrendingDown className="h-4 w-4" /> : 
+                           <Minus className="h-4 w-4" />}
+                          {trend}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Academic Strengths</p>
+                        <div className="flex flex-wrap gap-2">
+                          {strengths.length > 0 ? strengths.map((s, i) => (
+                            <Badge key={i} className="bg-green-100 text-green-700 hover:bg-green-100 border-green-200">
+                              {s.subjects?.name} ({s.percentage}%)
+                            </Badge>
+                          )) : <p className="text-sm text-slate-500 italic">None identified yet.</p>}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Needs Improvement</p>
+                        <div className="flex flex-wrap gap-2">
+                          {weaknesses.length > 0 ? weaknesses.map((w, i) => (
+                            <Badge key={i} className="bg-red-100 text-red-700 hover:bg-red-100 border-red-200">
+                              {w.subjects?.name} ({w.percentage}%)
+                            </Badge>
+                          )) : <p className="text-sm text-slate-500 italic">None identified yet.</p>}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-indigo-50/30 border-indigo-100">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Lightbulb className="h-5 w-5 text-yellow-600" />
+                      Smart Recommendations
+                    </CardTitle>
+                    <CardDescription>AI-generated insights based on academic performance and attendance.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {recommendations.map((rec, i) => (
+                      <div key={i} className="flex gap-4 p-4 bg-white rounded-xl shadow-sm border border-slate-100">
+                        <div className={`mt-1 h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
+                          rec.priority === 'High' ? 'bg-red-100 text-red-600' :
+                          rec.priority === 'Medium' ? 'bg-yellow-100 text-yellow-600' : 'bg-green-100 text-green-600'
+                        }`}>
+                          {rec.priority === 'High' ? <AlertCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-sm font-bold text-slate-900">{rec.type} Advice</p>
+                          <p className="text-sm text-slate-600 leading-relaxed">{rec.message}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              </div>
             </TabsContent>
           </Tabs>
         </div>

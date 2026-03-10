@@ -9,7 +9,9 @@ import {
     FileCheck,
     CheckCircle2,
     AlertCircle,
-    Eye
+    Eye,
+    Settings,
+    PlusCircle
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -59,6 +61,7 @@ export default function ResultPrinter() {
     const [batchData, setBatchData] = useState<any[]>([]);
     const [previewData, setPreviewData] = useState<any | null>(null);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+    const [printMode, setPrintMode] = useState<'pdf' | 'hardcopy'>('hardcopy');
 
     const [filters, setFilters] = useState({
         classId: '',
@@ -157,9 +160,15 @@ export default function ResultPrinter() {
 
             setBatchData(data);
 
+            // Set document title for PDF filename
+            const originalTitle = document.title;
+            const safeTerm = filters.term.replace(/\s+/g, '_');
+            document.title = `${selectedClassName}_${safeTerm}_${filters.academicYear}_Reports`;
+
             // Allow DOM to update before printing
             setTimeout(() => {
                 window.print();
+                document.title = originalTitle;
                 setIsPrinting(false);
             }, 500);
 
@@ -184,9 +193,16 @@ export default function ResultPrinter() {
             const data = await response.json();
             setBatchData([data]);
 
+            // Set document title for PDF filename
+            const originalTitle = document.title;
+            const studentName = (data.student.name || 'Student').replace(/\s+/g, '_');
+            const safeTerm = filters.term.replace(/\s+/g, '_');
+            document.title = `${studentName}_${safeTerm}_${filters.academicYear}_Report`;
+
             // Allow DOM to update and images to load before printing
             setTimeout(() => {
                 window.print();
+                document.title = originalTitle;
                 setIsPrinting(false);
             }, 2000);
 
@@ -215,6 +231,15 @@ export default function ResultPrinter() {
         }
     };
 
+    const handleOpenPrinterSettings = () => {
+        // Only works on Windows if the browser allows it (usually does via ms-settings protocol)
+        window.open('ms-settings:printers');
+        toast({
+            title: "System Settings",
+            description: "Opening Windows Printer & Scanner settings. Add your printer there if it's missing.",
+        });
+    };
+
     if (isLoading) {
         return <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
     }
@@ -231,74 +256,127 @@ export default function ResultPrinter() {
                     </h2>
                     <p className="text-slate-600 dark:text-slate-400">Print student report cards individually or in bulk.</p>
                 </div>
-                <Button
-                    onClick={handleBulkPrint}
-                    disabled={isPrinting || !filters.classId}
-                    className="bg-blue-600 hover:bg-blue-700"
-                >
-                    {isPrinting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Printer className="h-4 w-4 mr-2" />}
-                    Bulk Print Entire Class
-                </Button>
+                <div className="flex gap-2">
+                    <Button
+                        variant="outline"
+                        onClick={handleOpenPrinterSettings}
+                        className="border-slate-200"
+                    >
+                        <PlusCircle className="h-4 w-4 mr-2" />
+                        Add/Manage Printer
+                    </Button>
+                    <Button
+                        onClick={handleBulkPrint}
+                        disabled={isPrinting || !filters.classId}
+                        className="bg-blue-600 hover:bg-blue-700"
+                    >
+                        {isPrinting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Printer className="h-4 w-4 mr-2" />}
+                        Bulk Print {printMode === 'hardcopy' ? 'Hardcopies' : 'PDFs'}
+                    </Button>
+                </div>
             </div>
 
-            <Card className="print:hidden">
-                <CardHeader>
-                    <CardTitle className="text-sm font-medium">Filter Results</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div className="space-y-2">
-                            <label className="text-xs font-medium text-slate-500 uppercase">Class</label>
-                            <Select
-                                value={filters.classId}
-                                onValueChange={(val) => setFilters(prev => ({ ...prev, classId: val }))}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select Class" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {classes.map(c => (
-                                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 print:hidden">
+                <Card className="lg:col-span-2">
+                    <CardHeader>
+                        <CardTitle className="text-sm font-medium">Filter Results</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-slate-500 uppercase">Class</label>
+                                <Select
+                                    value={filters.classId}
+                                    onValueChange={(val) => setFilters(prev => ({ ...prev, classId: val }))}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select Class" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {classes.map(c => (
+                                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
 
-                        <div className="space-y-2">
-                            <label className="text-xs font-medium text-slate-500 uppercase">Term</label>
-                            <Select
-                                value={filters.term}
-                                onValueChange={(val) => setFilters(prev => ({ ...prev, term: val }))}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select Term" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="Term 1">Term 1</SelectItem>
-                                    <SelectItem value="Term 2">Term 2</SelectItem>
-                                    <SelectItem value="Term 3">Term 3</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-slate-500 uppercase">Term</label>
+                                <Select
+                                    value={filters.term}
+                                    onValueChange={(val) => setFilters(prev => ({ ...prev, term: val }))}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select Term" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Term 1">Term 1</SelectItem>
+                                        <SelectItem value="Term 2">Term 2</SelectItem>
+                                        <SelectItem value="Term 3">Term 3</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
 
-                        <div className="space-y-2">
-                            <label className="text-xs font-medium text-slate-500 uppercase">Academic Year</label>
-                            <Input
-                                value={filters.academicYear}
-                                onChange={(e) => setFilters(prev => ({ ...prev, academicYear: e.target.value }))}
-                                placeholder="2024"
-                            />
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-slate-500 uppercase">Academic Year</label>
+                                <Input
+                                    value={filters.academicYear}
+                                    onChange={(e) => setFilters(prev => ({ ...prev, academicYear: e.target.value }))}
+                                    placeholder="2024"
+                                />
+                            </div>
                         </div>
-
-                        <div className="flex items-end">
-                            <Button variant="outline" className="w-full" onClick={() => fetchStudents()}>
+                        <div className="flex items-center justify-between mt-6 pt-6 border-t border-slate-100">
+                            <p className="text-xs text-slate-500 italic">Showing students in {selectedClassName || 'selected class'}</p>
+                            <Button variant="outline" size="sm" onClick={() => fetchStudents()}>
                                 <Filter className="h-4 w-4 mr-2" />
                                 Refresh List
                             </Button>
                         </div>
-                    </div>
-                </CardContent>
-            </Card>
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-slate-50/50 border-dashed border-2 border-slate-200">
+                    <CardHeader>
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                            <Settings className="h-4 w-4" />
+                            Printer Setup
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="flex flex-col gap-2">
+                            <Button
+                                variant={printMode === 'hardcopy' ? 'default' : 'outline'}
+                                className="w-full justify-start"
+                                onClick={() => setPrintMode('hardcopy')}
+                            >
+                                <Printer className="h-4 w-4 mr-2" />
+                                Print Hardcopies
+                            </Button>
+                            <Button
+                                variant={printMode === 'pdf' ? 'default' : 'outline'}
+                                className="w-full justify-start"
+                                onClick={() => setPrintMode('pdf')}
+                            >
+                                <Download className="h-4 w-4 mr-2" />
+                                Save as Digital PDF
+                            </Button>
+                        </div>
+                        <div className="p-3 bg-white rounded-lg border border-slate-100 shadow-sm text-[11px] text-slate-600 space-y-2">
+                            <p className="font-bold uppercase text-[9px] text-slate-400 tracking-widest">Helpful Tip</p>
+                            <p>For hardcopies, ensure your printer is powered on and connected via USB or Wi-Fi. In the print dialog, select your printer name from the <b>Destination</b> list.</p>
+                            <Button
+                                variant="link"
+                                size="sm"
+                                className="h-auto p-0 text-blue-600 font-bold"
+                                onClick={handleOpenPrinterSettings}
+                            >
+                                Not seeing your printer? Add it here.
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
 
             <Card className="print:hidden">
                 <CardContent className="p-0">
@@ -337,9 +415,10 @@ export default function ResultPrinter() {
                                                 size="sm"
                                                 onClick={() => handleIndividualPrint(student.id)}
                                                 disabled={isPrinting}
+                                                className="text-slate-600 hover:text-slate-900"
                                             >
-                                                <Printer className="h-4 w-4 mr-2" />
-                                                Print
+                                                {printMode === 'hardcopy' ? <Printer className="h-4 w-4 mr-2" /> : <Download className="h-4 w-4 mr-2" />}
+                                                {printMode === 'hardcopy' ? 'Print' : 'PDF'}
                                             </Button>
                                         </TableCell>
                                     </TableRow>

@@ -11,7 +11,8 @@ import {
   MoreVertical,
   Edit,
   Trash2,
-  Loader2
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,7 @@ import { supabase } from '@/lib/supabase';
 import { FinanceRecord, FinanceStats } from '@shared/api';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { syncFetch } from '@/lib/syncService';
+import { isOnline } from '@/lib/offline';
 
 export default function FinanceManagement() {
   const [transactions, setTransactions] = useState<FinanceRecord[]>([]);
@@ -121,11 +123,24 @@ export default function FinanceManagement() {
 
     } catch (error: any) {
       console.error('Error fetching finance data:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load financial data.",
-        variant: "destructive",
-      });
+      
+      const isOfflineError = error.message?.includes('No connection and no cached data available');
+      
+      if (isOfflineError) {
+        toast({
+          title: "Offline Mode",
+          description: "No cached data found for this term. Please connect to sync.",
+          variant: "warning",
+        });
+        setTransactions([]);
+        setStats(null);
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load financial data.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsLoading(false);
     }

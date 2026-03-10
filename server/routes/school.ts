@@ -181,6 +181,14 @@ router.get('/dashboard', requireSchoolRole(['school_admin', 'teacher']), async (
 
     console.log(`[Dashboard] Counts - Students: ${studentCount}, Teachers: ${teacherCount}, Classes: ${classes.count || 0}`);
 
+    // Fetch latest announcements
+    const { data: announcements } = await supabaseAdmin
+      .from('announcements')
+      .select('*')
+      .eq('school_id', schoolId)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
     // 4. Calculate Attendance Rate (Today)
     const today = new Date().toISOString().split('T')[0];
     let attendanceRateValue = "0%";
@@ -213,18 +221,41 @@ router.get('/dashboard', requireSchoolRole(['school_admin', 'teacher']), async (
       attendanceRateValue = "--"; // No data for today
     }
 
+    // 5. Calculate Revenue (Current Term/Year)
+    // First get current term/year from settings
+    const { data: settings } = await supabaseAdmin
+      .from('school_settings')
+      .select('current_term, academic_year')
+      .eq('school_id', schoolId)
+      .maybeSingle();
+
+    let totalRevenueValue = 0;
+    if (settings) {
+      const { data: revenueData } = await supabaseAdmin
+        .from('finance_records')
+        .select('amount')
+        .eq('school_id', schoolId)
+        .eq('type', 'income')
+        .eq('term', settings.current_term)
+        .eq('academic_year', settings.academic_year);
+      
+      if (revenueData) {
+        totalRevenueValue = revenueData.reduce((sum, r) => sum + Number(r.amount), 0);
+      }
+    }
+
     // Construct response matching SchoolDashboardStats interface
     const responseData = {
       overview: {
         totalStudents: { value: studentCount, trend: "+5%", status: "up" },
         totalTeachers: { value: teacherCount, trend: "+0%", status: "up" },
-        revenue: { value: "K0", trend: "+0%", status: "up" },
+        revenue: { value: `K${totalRevenueValue.toLocaleString()}`, trend: "+0%", status: "up" },
         attendanceRate: { value: attendanceRateValue, trend: attendanceTrend, status: attendanceRateValue === "--" || parseInt(attendanceRateValue) >= 90 ? "up" : "down" }
       },
       recentActivities: [],
       financialSummary: [],
       pendingApprovals: [],
-      announcements: []
+      announcements: announcements || []
     };
 
     console.log('Sending dashboard data:', JSON.stringify(responseData, null, 2));
@@ -976,7 +1007,7 @@ router.post('/grades/batch', requireSchoolRole(['school_admin', 'teacher']), asy
 
 // POST /api/school/results/submit
 // Teachers submit their grades to the admin
-router.post('/results/submit', requireSchoolRole(['teacher']), async (req: Request, res: Response) => {
+router.post('/results/submit', requireSchoolRole(['school_admin', 'teacher']), async (req: Request, res: Response) => {
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
   const { term, academicYear, classId, subjectId } = req.body;
@@ -992,7 +1023,8 @@ router.post('/results/submit', requireSchoolRole(['teacher']), async (req: Reque
       .eq('school_id', schoolId)
       .eq('term', term)
       .eq('academic_year', academicYear)
-      .eq('subject_id', subjectId);
+      .eq('subject_id', subjectId)
+      .select('id', { count: 'exact' }); // Get count of updated records
 
     if (classId && classId !== 'all') {
       const { data: enrollments } = await supabaseAdmin
@@ -1009,11 +1041,11 @@ router.post('/results/submit', requireSchoolRole(['teacher']), async (req: Reque
       }
     }
 
-    const { error, count } = await query;
+    const { data, error, count } = await query;
 
     if (error) throw error;
 
-    res.json({ message: 'Results submitted to admin successfully', count, status: 'Submitted' });
+    res.json({ message: 'Results submitted to admin successfully', count: count || data?.length || 0, status: 'Submitted' });
   } catch (error: any) {
     console.error('Submit Results Error:', error);
     res.status(500).json({ message: error.message });
@@ -1878,7 +1910,7 @@ router.get('/subjects', requireSchoolRole(['school_admin', 'teacher']), async (r
   try {
     let query = supabaseAdmin
       .from('subjects')
-      .select('*, head:head_teacher_id(full_name)')
+      .select('*, head:profiles!head_teacher_id(full_name)')
       .eq('school_id', schoolId)
       .order('name', { ascending: true });
 
@@ -2471,44 +2503,6 @@ router.get('/finance/stats', requireSchoolRole(['school_admin', 'teacher']), asy
   }
 });
 
-    let totalRevenue = 0;
-    let totalExpenses = 0;
-    let monthlyRevenue = 0;
-    let monthlyExpenses = 0;
-
-    const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
-
-    records.forEach((record: any) => {
-      const amount = Number(record.amount);
-      const recordDate = new Date(record.date);
-
-      if (record.type === 'income') {
-        totalRevenue += amount;
-        if (recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear) {
-          monthlyRevenue += amount;
-        }
-      } else {
-        totalExpenses += amount;
-        if (recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear) {
-          monthlyExpenses += amount;
-        }
-      }
-    });
-
-    res.json({
-      totalRevenue,
-      totalExpenses,
-      netIncome: totalRevenue - totalExpenses,
-      monthlyRevenue,
-      monthlyExpenses
-    });
-  } catch (error: any) {
-    console.error('Get Finance Stats Error:', error);
-    res.status(500).json({ message: error.message });
-  }
-});
-
 // --- REPORTS ENDPOINTS ---
 
 // GET /api/school/reports
@@ -2761,8 +2755,11 @@ router.get('/reports/live-stats', requireSchoolRole(['school_admin']), async (re
     // 4. Financial Summary
     let financeQuery = supabaseAdmin
       .from('finance_records')
-      .select('amount, type, category, date')
+      .select('amount, type, category, date, term, academic_year')
       .eq('school_id', schoolId);
+
+    if (term) financeQuery = financeQuery.eq('term', term);
+    if (academic_year) financeQuery = financeQuery.eq('academic_year', academic_year);
 
     const { data: finance } = await financeQuery;
 
@@ -2804,7 +2801,7 @@ router.get('/reports/live-stats', requireSchoolRole(['school_admin']), async (re
         totalStaff,
         totalTeachers: teachers.length,
         attendanceRate: attendance?.length ? Math.round((present / attendance.length) * 100) : 0,
-        averageGrade: grades?.length ? Math.round(grades.reduce((sum, g) => sum + (g.percentage || 0), 0) / grades.length) : 0,
+        averageGrade: filteredGrades.length ? Math.round(filteredGrades.reduce((sum, g) => sum + (g.percentage || 0), 0) / filteredGrades.length) : 0,
         netBalance: totalIncome - totalExpense
       },
       demographics: [
@@ -2843,6 +2840,78 @@ router.get('/reports/live-stats', requireSchoolRole(['school_admin']), async (re
 
   } catch (error: any) {
     console.error('Live Stats Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// --- ANNOUNCEMENT ENDPOINTS ---
+
+// GET /api/school/announcements
+router.get('/announcements', requireSchoolRole(['school_admin', 'teacher', 'student']), async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const schoolId = profile.school_id;
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('announcements')
+      .select('*')
+      .eq('school_id', schoolId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    console.error('Get Announcements Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/school/announcements
+router.post('/announcements', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const schoolId = profile.school_id;
+  const user = (req as any).user;
+  const { title, content, priority } = req.body;
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('announcements')
+      .insert({
+        school_id: schoolId,
+        title,
+        content,
+        author: profile.full_name || user.email,
+        date: new Date().toISOString().split('T')[0],
+        priority: priority || 'Normal'
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (error: any) {
+    console.error('Create Announcement Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE /api/school/announcements/:id
+router.delete('/announcements/:id', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const schoolId = profile.school_id;
+  const { id } = req.params;
+
+  try {
+    const { error } = await supabaseAdmin
+      .from('announcements')
+      .delete()
+      .eq('id', id)
+      .eq('school_id', schoolId);
+
+    if (error) throw error;
+    res.json({ message: 'Announcement deleted successfully' });
+  } catch (error: any) {
+    console.error('Delete Announcement Error:', error);
     res.status(500).json({ message: error.message });
   }
 });

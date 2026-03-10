@@ -23,6 +23,7 @@ import ReportsManagement from '@/components/school-admin/ReportsManagement';
 import CalendarManagement from '@/components/school-admin/CalendarManagement';
 import SchoolSettings from '@/components/school-admin/SchoolSettings';
 import SchoolAdminNavbar from '@/components/school-admin/SchoolAdminNavbar';
+import { syncFetch } from '@/lib/syncService';
 import LicenseAccessDenied from '@/components/common/LicenseAccessDenied';
 import { useToast } from "@/components/ui/use-toast";
 
@@ -43,34 +44,65 @@ export default function SchoolAdminPortal() {
   const [isLoadingLicense, setIsLoadingLicense] = useState(true);
   const navigate = useNavigate();
 
-  // Check license on mount
+  // Check license and pre-fetch critical data for offline use
   useEffect(() => {
-    const checkLicense = async () => {
+    const initializePortal = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
 
-        // Use dashboard endpoint as a lightweight check (it returns 403 if invalid)
-        // Alternatively, we could create a dedicated /api/school/status endpoint
+        const headers = { Authorization: `Bearer ${session.access_token}` };
+
+        // 1. License Check (HEAD request)
         const response = await fetch('/api/school/dashboard', {
-          method: 'HEAD', // Use HEAD to minimize data transfer
-          headers: {
-            Authorization: `Bearer ${session.access_token}`
-          }
+          method: 'HEAD',
+          headers
         });
 
         if (response.status === 403) {
-          setLicenseError("Your school license has expired or is invalid. Please contact the system administrator.");
+          setLicenseError("Your school license has expired or is invalid.");
         }
+
+        // 2. Pre-fetch School Settings (Foundation for all other data)
+        const settings = await syncFetch('/api/school/settings', { 
+          headers, 
+          cacheKey: 'school-settings' 
+        });
+
+        // 3. If settings available, pre-fetch current term finance data
+        if (settings) {
+          const term = settings.current_term || 'Term 1';
+          const year = settings.academic_year || new Date().getFullYear().toString();
+          
+          console.log(`[Offline] Pre-fetching Finance data for ${term} ${year}...`);
+          
+          syncFetch(`/api/school/finance?term=${term}&academic_year=${year}`, { 
+            headers, 
+            cacheKey: `school-finance-transactions-${term}-${year}` 
+          }).catch(() => {});
+          
+          syncFetch(`/api/school/finance/stats?term=${term}&academic_year=${year}`, { 
+            headers, 
+            cacheKey: `school-finance-stats-${term}-${year}` 
+          }).catch(() => {});
+        }
+
+        // 4. Pre-fetch Teachers & Subjects for Offline Management
+        console.log('[Offline] Pre-fetching Management Data...');
+        syncFetch('/api/school/teachers', { headers, cacheKey: 'school-teachers-list' }).catch(() => {});
+        syncFetch('/api/school/subjects', { headers, cacheKey: 'school-subjects-list' }).catch(() => {});
+        syncFetch('/api/school/students', { headers, cacheKey: 'school-students-list' }).catch(() => {});
+        syncFetch('/api/school/classes', { headers, cacheKey: 'school-classes-list' }).catch(() => {});
+        syncFetch('/api/school/calendar', { headers, cacheKey: 'school-calendar-events' }).catch(() => {});
+
       } catch (error) {
-        console.error("License check failed:", error);
-        // Don't block on network error, let components handle specific failures
+        console.error("Portal initialization failed:", error);
       } finally {
         setIsLoadingLicense(false);
       }
     };
 
-    checkLicense();
+    initializePortal();
   }, []);
 
   const handleLogout = async () => {

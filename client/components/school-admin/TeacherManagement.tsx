@@ -94,8 +94,11 @@ export default function TeacherManagement() {
           cacheKey: 'school-subjects-list'
         });
         setAvailableSubjects(data.map((s: any) => ({ label: s.name, value: s.name })));
-      } catch (e) {
+      } catch (e: any) {
         console.error('Error fetching subjects:', e);
+        if (e.message?.includes('No connection and no cached data available')) {
+          setAvailableSubjects([]);
+        }
       }
     };
     fetchSubjects();
@@ -115,13 +118,25 @@ export default function TeacherManagement() {
       });
 
       setTeachers(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching teachers:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load teachers list",
-        variant: "destructive",
-      });
+      
+      const isOfflineError = error.message?.includes('No connection and no cached data available');
+      
+      if (isOfflineError) {
+        toast({
+          title: "Offline Mode",
+          description: "No cached teacher data available. Please connect to sync.",
+          variant: "warning",
+        });
+        setTeachers([]);
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load teachers list",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsLoading(false);
     }

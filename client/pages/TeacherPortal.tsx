@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import StudentDetailsView from '@/components/school-admin/StudentDetailsView';
 import {
   BookOpen,
   Calendar,
@@ -159,6 +160,7 @@ export default function TeacherPortal() {
   const [selectedClassId, setSelectedClassId] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [students, setStudents] = useState<Student[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [attendanceState, setAttendanceState] = useState<{ [key: string]: { status: string, remarks: string } }>({});
   const [attendanceSearchQuery, setAttendanceSearchQuery] = useState("");
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
@@ -862,70 +864,86 @@ export default function TeacherPortal() {
 
             {/* Students Tab */}
             <TabsContent value="students" className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Students Directory</h2>
-                <div className="flex gap-2 items-center">
-                  <Label>Class:</Label>
-                  <Select value={selectedClassId} onValueChange={setSelectedClassId}>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Select Class" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {classes.map((cls) => (
-                        <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              {selectedStudentId ? (
+                <StudentDetailsView 
+                  studentId={selectedStudentId} 
+                  onBack={() => setSelectedStudentId(null)} 
+                  userRole="teacher"
+                />
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Students Directory</h2>
+                    <div className="flex gap-2 items-center">
+                      <Label>Class:</Label>
+                      <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+                        <SelectTrigger className="w-[180px]">
+                          <SelectValue placeholder="Select Class" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {classes.map((cls) => (
+                            <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Class List: {classes.find(c => c.id === selectedClassId)?.name || 'Select a Class'}</CardTitle>
-                  <CardDescription>{students.length} Students Enrolled</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Student ID</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {students.length > 0 ? (
-                        students.map((student) => (
-                          <TableRow key={student.id}>
-                            <TableCell className="font-medium">
-                              <div className="flex items-center gap-2">
-                                <Avatar className="h-8 w-8">
-                                  <AvatarFallback>{student.name?.[0] || 'S'}</AvatarFallback>
-                                </Avatar>
-                                {student.name}
-                              </div>
-                            </TableCell>
-                            <TableCell>{student.studentId}</TableCell>
-                            <TableCell>
-                              <Badge className="bg-green-500">Active</Badge>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button variant="ghost" size="sm">View Profile</Button>
-                            </TableCell>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Class List: {classes.find(c => c.id === selectedClassId)?.name || 'Select a Class'}</CardTitle>
+                      <CardDescription>{students.length} Students Enrolled</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Student ID</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={4} className="text-center py-4 text-slate-500">
-                            {selectedClassId ? 'No students found in this class' : 'Please select a class to view students'}
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
+                        </TableHeader>
+                        <TableBody>
+                          {students.length > 0 ? (
+                            students.map((student) => (
+                              <TableRow key={student.id}>
+                                <TableCell className="font-medium">
+                                  <div className="flex items-center gap-2">
+                                    <Avatar className="h-8 w-8">
+                                      <AvatarFallback>{student.name?.[0] || 'S'}</AvatarFallback>
+                                    </Avatar>
+                                    {student.name}
+                                  </div>
+                                </TableCell>
+                                <TableCell>{student.studentId}</TableCell>
+                                <TableCell>
+                                  <Badge className="bg-green-500">Active</Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => setSelectedStudentId(student.id)}
+                                  >
+                                    View Profile
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          ) : (
+                            <TableRow>
+                              <TableCell colSpan={4} className="text-center py-4 text-slate-500">
+                                {selectedClassId ? 'No students found in this class' : 'Please select a class to view students'}
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
             </TabsContent>
 
             {/* Timetable Tab */}

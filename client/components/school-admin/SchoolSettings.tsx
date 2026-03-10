@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
+import { syncFetch } from '@/lib/syncService';
 import ThemeToggle from '@/components/navigation/ThemeToggle';
 import { School } from '@shared/api';
 
@@ -48,14 +49,13 @@ export default function SchoolSettings() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/settings', {
+      const data = await syncFetch('/api/school/settings', {
         headers: {
           'Authorization': `Bearer ${session.access_token}`
-        }
+        },
+        cacheKey: 'school-settings'
       });
 
-      if (!response.ok) throw new Error('Failed to fetch settings');
-      const data = await response.json();
       setSchool(data);
       setFormData({
         name: data.name || '',
@@ -71,11 +71,22 @@ export default function SchoolSettings() {
       });
     } catch (error: any) {
       console.error('Error fetching settings:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load school settings.",
-        variant: "destructive",
-      });
+      
+      const isOfflineError = error.message?.includes('No connection and no cached data available');
+      
+      if (isOfflineError) {
+        toast({
+          title: "Offline Mode",
+          description: "No cached school settings available. Please connect to sync.",
+          variant: "warning",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load school settings.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsLoading(false);
     }

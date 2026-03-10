@@ -34,6 +34,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
+import { syncFetch } from '@/lib/syncService';
 import { CalendarEvent } from '@shared/api';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
@@ -61,22 +62,33 @@ export default function CalendarManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/calendar', {
+      const data = await syncFetch('/api/school/calendar', {
         headers: {
           'Authorization': `Bearer ${session.access_token}`
-        }
+        },
+        cacheKey: 'school-calendar-events'
       });
 
-      if (!response.ok) throw new Error('Failed to fetch events');
-      const data = await response.json();
       setEvents(data);
     } catch (error: any) {
       console.error('Error fetching events:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load calendar events.",
-        variant: "destructive",
-      });
+      
+      const isOfflineError = error.message?.includes('No connection and no cached data available');
+      
+      if (isOfflineError) {
+        toast({
+          title: "Offline Mode",
+          description: "No cached calendar data available. Please connect to sync.",
+          variant: "warning",
+        });
+        setEvents([]);
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load calendar events.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsLoading(false);
     }

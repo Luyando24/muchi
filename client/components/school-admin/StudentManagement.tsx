@@ -46,6 +46,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { syncFetch } from '@/lib/syncService';
 
 interface Student {
   id: string;
@@ -99,31 +100,38 @@ export default function StudentManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const [studentsRes, classesRes] = await Promise.all([
-        fetch('/api/school/students', {
-          headers: { 'Authorization': `Bearer ${session.access_token}` }
+      const [studentsData, classesData] = await Promise.all([
+        syncFetch('/api/school/students', {
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+          cacheKey: 'school-students-list'
         }),
-        fetch('/api/school/classes', {
-          headers: { 'Authorization': `Bearer ${session.access_token}` }
+        syncFetch('/api/school/classes', {
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+          cacheKey: 'school-classes-list'
         })
       ]);
 
-      if (!studentsRes.ok) throw new Error('Failed to fetch students');
-
-      const studentsData = await studentsRes.json();
       setStudents(studentsData);
-
-      if (classesRes.ok) {
-        const classesData = await classesRes.json();
-        setClasses(classesData);
-      }
-    } catch (error) {
+      setClasses(classesData);
+    } catch (error: any) {
       console.error('Error fetching data:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load students data",
-        variant: "destructive",
-      });
+      
+      const isOfflineError = error.message?.includes('No connection and no cached data available');
+      
+      if (isOfflineError) {
+        toast({
+          title: "Offline Mode",
+          description: "No cached student data available. Please connect to sync.",
+          variant: "warning",
+        });
+        setStudents([]);
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load students data",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsLoading(false);
     }
