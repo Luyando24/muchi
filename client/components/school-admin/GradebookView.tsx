@@ -33,6 +33,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
+import { syncFetch } from '@/lib/syncService';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import ReportCardPreview from './ReportCardPreview';
 
@@ -99,9 +100,12 @@ export default function GradebookView() {
         const headers = { 'Authorization': `Bearer ${session.access_token}` };
 
         // Fetch school settings first for defaults
-        const settingsRes = await fetch('/api/school/settings', { headers });
-        if (settingsRes.ok) {
-          const settings = await settingsRes.json();
+        const settings = await syncFetch('/api/school/settings', { 
+          headers,
+          cacheKey: 'school-settings'
+        });
+        
+        if (settings) {
           setSelectedTerm(settings.current_term || 'Term 1');
           setSelectedYear(settings.academic_year || new Date().getFullYear().toString());
         } else {
@@ -110,19 +114,19 @@ export default function GradebookView() {
           setSelectedYear(new Date().getFullYear().toString());
         }
 
-        const [classesRes, subjectsRes, scalesRes] = await Promise.all([
-          fetch('/api/school/classes', { headers }),
-          fetch('/api/school/subjects', { headers }),
-          fetch('/api/school/grading-scales', { headers })
+        const [classesData, subjectsData, scalesData] = await Promise.all([
+          syncFetch('/api/school/classes', { headers, cacheKey: 'school-classes-list' }),
+          syncFetch('/api/school/subjects', { headers, cacheKey: 'school-subjects-list' }),
+          syncFetch('/api/school/grading-scales', { headers, cacheKey: 'school-grading-scales' })
         ]);
 
-        if (classesRes.ok) setClasses(await classesRes.json());
-        if (subjectsRes.ok) setSubjects(await subjectsRes.json());
-        if (scalesRes.ok) setGradingScales(await scalesRes.json());
+        if (classesData) setClasses(classesData);
+        if (subjectsData) setSubjects(subjectsData);
+        if (scalesData) setGradingScales(scalesData);
 
       } catch (error) {
         console.error('Error loading metadata:', error);
-        toast({ title: "Error", description: "Failed to load classes or subjects", variant: "destructive" });
+        toast({ title: "Error", description: "Failed to load metadata", variant: "destructive" });
       }
     };
     loadMetadata();
@@ -162,7 +166,7 @@ export default function GradebookView() {
         }))
       };
 
-      const response = await fetch('/api/school/grades/batch', {
+      const result = await syncFetch('/api/school/grades/batch', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -171,9 +175,17 @@ export default function GradebookView() {
         body: JSON.stringify(payload)
       });
 
-      if (!response.ok) throw new Error('Failed to save grades');
+      if (result.offline) {
+        if (!autoSave) {
+          toast({ 
+            title: "Offline Mode", 
+            description: "Changes queued and will sync when online." 
+          });
+        }
+      } else if (!autoSave) {
+        toast({ title: "Success", description: "Grades saved successfully" });
+      }
 
-      if (!autoSave) toast({ title: "Success", description: "Grades saved successfully" });
       setLastSaved(new Date());
 
       // Mark as clean
@@ -217,57 +229,63 @@ export default function GradebookView() {
       const headers = { 'Authorization': `Bearer ${session.access_token}` };
 
       // 1. Fetch Students in Class via API
-      const studentsRes = await fetch(`/api/school/classes/${selectedClass}/students?year=${selectedYear}`, { headers });
-      if (!studentsRes.ok) {
-        const errData = await studentsRes.json();
-        throw new Error(errData.message || 'Failed to fetch students');
-      }
+      const loadedStudents = await syncFetch(`/api/school/classes/${selectedClass}/students?year=${selectedYear}`, { 
+        headers,
+        cacheKey: `school-class-students-${selectedClass}-${selectedYear}`
+      });
 
-      const loadedStudents = await studentsRes.json();
+      if (!loadedStudents) throw new Error('Failed to fetch students');
       setStudents(loadedStudents);
 
-      // 2. Fetch Existing Grades
-      const { data: gradesData, error: gradesError } = await supabase
-        .from('student_grades')
-        .select('*')
-        .eq('subject_id', selectedSubject)
-        .eq('term', selectedTerm)
-        .eq('academic_year', selectedYear)
-        .in('student_id', loadedStudents.map(s => s.id));
-
-      if (gradesError) throw gradesError;
+      // 2. Fetch Existing Grades via new API endpoint for better offline support
+      const studentIdsStr = loadedStudents.map((s: any) => s.id).join(',');
+      const gradesData = await syncFetch(`/api/school/grades/batch?subjectId=${selectedSubject}&term=${encodeURIComponent(selectedTerm)}&academicYear=${selectedYear}&studentIds=${studentIdsStr}`, {
+        headers,
+        cacheKey: `school-gradebook-${selectedClass}-${selectedSubject}-${selectedTerm}-${selectedYear}`
+      });
 
       const gradesMap: Record<string, GradeEntry> = {};
-      gradesData.forEach((g: any) => {
-        gradesMap[g.student_id] = {
-          studentId: g.student_id,
-          percentage: g.percentage,
-          grade: g.grade,
-          comments: g.comments || '',
-          status: g.status || 'Draft',
+      
+      // Initialize with empty entries for all students
+      loadedStudents.forEach((s: any) => {
+        gradesMap[s.id] = {
+          studentId: s.id,
+          percentage: '',
+          grade: '-',
+          comments: '',
+          status: 'Draft',
           isDirty: false
         };
       });
 
-      // Initialize missing grades
-      loadedStudents.forEach(s => {
-        if (!gradesMap[s.id]) {
-          gradesMap[s.id] = {
-            studentId: s.id,
-            percentage: '',
-            grade: '-',
-            comments: '',
-            status: 'Draft',
-            isDirty: false // Not dirty until edited
+      // Fill in actual grades if they exist
+      if (gradesData && Array.isArray(gradesData)) {
+        gradesData.forEach((g: any) => {
+          gradesMap[g.student_id] = {
+            studentId: g.student_id,
+            percentage: g.percentage,
+            grade: g.grade,
+            comments: g.comments || '',
+            status: g.status || 'Draft',
+            isDirty: false
           };
-        }
-      });
-
+        });
+      }
+      
       setGrades(gradesMap);
 
     } catch (error: any) {
-      console.error('Error loading gradebook:', error);
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      console.error('Error loading gradebook data:', error);
+      
+      if (error.message?.includes('No connection and no cached data available')) {
+        toast({ 
+          title: "Offline Mode", 
+          description: "No cached data for this selection. Please connect to load.",
+          variant: "warning" 
+        });
+      } else {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      }
     } finally {
       setFetchingStudents(false);
     }
@@ -317,7 +335,7 @@ export default function GradebookView() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/results/submit', {
+      const result = await syncFetch('/api/school/results/submit', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -331,10 +349,15 @@ export default function GradebookView() {
         })
       });
 
-      if (!response.ok) throw new Error('Failed to submit results');
+      if (result.offline) {
+        toast({ 
+          title: "Offline Mode", 
+          description: "Submission queued and will sync when online." 
+        });
+      } else {
+        toast({ title: "Success", description: `Submitted ${result.count} grades successfully` });
+      }
 
-      const data = await response.json();
-      toast({ title: "Success", description: `Submitted ${data.count} grades successfully` });
       setIsSubmitModalOpen(false);
       loadGradebookData(); // Reload to update status
 

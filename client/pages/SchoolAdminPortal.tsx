@@ -94,6 +94,7 @@ export default function SchoolAdminPortal() {
         syncFetch('/api/school/students', { headers, cacheKey: 'school-students-list' }).catch(() => {});
         syncFetch('/api/school/classes', { headers, cacheKey: 'school-classes-list' }).catch(() => {});
         syncFetch('/api/school/calendar', { headers, cacheKey: 'school-calendar-events' }).catch(() => {});
+        syncFetch('/api/school/grading-scales', { headers, cacheKey: 'school-grading-scales' }).catch(() => {});
 
       } catch (error) {
         console.error("Portal initialization failed:", error);

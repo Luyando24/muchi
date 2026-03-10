@@ -959,6 +959,37 @@ router.post('/students/:id/grades', requireSchoolRole(['school_admin', 'teacher'
   }
 });
 
+// GET /api/school/grades/batch
+// Fetch grades for multiple students
+router.get('/grades/batch', requireSchoolRole(['school_admin', 'teacher']), async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const schoolId = profile.school_id;
+  const { subjectId, term, academicYear, studentIds } = req.query;
+
+  if (!subjectId || !term || !academicYear || !studentIds) {
+    return res.status(400).json({ message: 'Missing required parameters' });
+  }
+
+  const idsArray = (studentIds as string).split(',');
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('student_grades')
+      .select('*')
+      .eq('school_id', schoolId)
+      .eq('subject_id', subjectId)
+      .eq('term', term)
+      .eq('academic_year', academicYear)
+      .in('student_id', idsArray);
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    console.error('Get Batch Grades Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // POST /api/school/grades/batch
 // Batch add or update grades
 router.post('/grades/batch', requireSchoolRole(['school_admin', 'teacher']), async (req: Request, res: Response) => {
