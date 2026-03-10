@@ -57,6 +57,8 @@ import ThemeToggle from '@/components/navigation/ThemeToggle';
 import { useToast } from "@/components/ui/use-toast";
 import GradebookView from '@/components/school-admin/GradebookView';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { OfflineIndicator } from '@/components/navigation/OfflineIndicator';
+import { syncFetch, offlineQuery } from '@/lib/syncService';
 
 // Interfaces
 interface Stats {
@@ -201,11 +203,14 @@ export default function TeacherPortal() {
       setUser(user);
 
       // Fetch Profile
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*, schools(*)')
-        .eq('id', user.id)
-        .single();
+      const { data: profile } = await offlineQuery(
+        supabase
+          .from('profiles')
+          .select('*, schools(*)')
+          .eq('id', user.id)
+          .single(),
+        `profile:${user.id}`
+      );
 
       setProfile(profile);
 
@@ -222,7 +227,7 @@ export default function TeacherPortal() {
     }
   };
 
-  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+  const fetchWithAuth = async (url: string, options: any = {}) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('No session');
 
@@ -232,12 +237,16 @@ export default function TeacherPortal() {
       ...options.headers,
     };
 
-    const response = await fetch(url, { ...options, headers });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Fetch failed');
+    const result = await syncFetch(url, { ...options, headers });
+    
+    if (result.offline) {
+      toast({
+        title: "Offline Mode",
+        description: "Your changes have been saved locally and will sync when you are back online.",
+      });
     }
-    return response.json();
+    
+    return result;
   };
 
   const fetchDashboardData = async () => {
@@ -601,6 +610,7 @@ export default function TeacherPortal() {
 
             {/* User Menu */}
             <div className="flex items-center gap-2 sm:gap-4">
+              <OfflineIndicator />
               {/* Notifications */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -1400,12 +1410,35 @@ export default function TeacherPortal() {
                                 </Button>
                               </div>
 
-                              <Input
-                                placeholder="Remarks (optional)"
-                                className="h-8 text-xs"
-                                value={state.remarks}
-                                onChange={(e) => handleAttendanceChange(student.id, 'remarks', e.target.value)}
-                              />
+                              {state.status !== 'present' && (
+                                <div className="flex gap-2">
+                                  <div className="flex-1">
+                                    <Input
+                                      placeholder="Remarks (optional)"
+                                      className="h-8 text-xs"
+                                      value={state.remarks}
+                                      onChange={(e) => handleAttendanceChange(student.id, 'remarks', e.target.value)}
+                                    />
+                                  </div>
+                                  <Select
+                                    onValueChange={(value) => handleAttendanceChange(student.id, 'remarks', value)}
+                                  >
+                                    <SelectTrigger className="h-8 w-[110px] text-xs">
+                                      <SelectValue placeholder="Reasons" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="The student was sick" className="text-xs">Sick</SelectItem>
+                                      <SelectItem value="Family emergency" className="text-xs">Emergency</SelectItem>
+                                      <SelectItem value="Travel / Out of town" className="text-xs">Travel</SelectItem>
+                                      <SelectItem value="Hospital appointment" className="text-xs">Medical</SelectItem>
+                                      <SelectItem value="Sports / Competition" className="text-xs">Sports</SelectItem>
+                                      <SelectItem value="Bereavement" className="text-xs">Bereavement</SelectItem>
+                                      <SelectItem value="School event" className="text-xs">Event</SelectItem>
+                                      <SelectItem value="Traffic / Transportation" className="text-xs">Traffic</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
                             </div>
                           </CardContent>
                         </Card>

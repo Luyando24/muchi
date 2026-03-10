@@ -2488,6 +2488,236 @@ router.delete('/reports/:id', requireSchoolRole(['school_admin']), async (req: R
   }
 });
 
+// GET /api/school/reports/live-stats
+router.get('/reports/live-stats', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const schoolId = profile.school_id;
+  const { term, academic_year } = req.query;
+
+  try {
+    // 1. Student & Staff Stats
+    const { data: schoolProfiles } = await supabaseAdmin
+      .from('profiles')
+      .select('role, gender, enrollment_status')
+      .eq('school_id', schoolId);
+
+    const students = schoolProfiles?.filter(p => p.role === 'student') || [];
+    const staff = schoolProfiles?.filter(p => p.role === 'teacher' || p.role === 'staff') || [];
+    const totalStudents = students.length;
+    const totalStaff = staff.length;
+
+    const maleStudents = students.filter(s => s.gender?.toLowerCase() === 'male').length;
+    const femaleStudents = students.filter(s => s.gender?.toLowerCase() === 'female').length;
+    const otherGender = totalStudents - maleStudents - femaleStudents;
+
+    // 2. Attendance Summary
+    let attendanceQuery = supabaseAdmin
+      .from('attendance')
+      .select('status')
+      .eq('school_id', schoolId);
+    
+    if (term) attendanceQuery = attendanceQuery.eq('term', term);
+    if (academic_year) attendanceQuery = attendanceQuery.eq('academic_year', academic_year);
+
+    const { data: attendance } = await attendanceQuery;
+    
+    const present = attendance?.filter(a => a.status === 'present').length || 0;
+    const absent = attendance?.filter(a => a.status === 'absent').length || 0;
+    const late = attendance?.filter(a => a.status === 'late').length || 0;
+
+    // 3. Academic Performance
+    let gradesQuery = supabaseAdmin
+      .from('student_grades')
+      .select(`
+        percentage,
+        student_id,
+        term,
+        academic_year,
+        profiles!student_id(full_name, grade),
+        subjects(name, department)
+      `)
+      .eq('school_id', schoolId);
+
+    // If term/year are provided, we'll try to match them, but we'll also fetch a bit more 
+    // to handle casing issues in memory if needed.
+    const { data: grades, error: gradesError } = await gradesQuery;
+    
+    if (gradesError) {
+      console.error('[LiveStats] Grades Error:', gradesError);
+    }
+
+    // Filter in memory for more robust matching (case-insensitive)
+    const filteredGrades = grades?.filter(g => {
+      const termMatch = !term || String(g.term).toLowerCase() === String(term).toLowerCase();
+      const yearMatch = !academic_year || String(g.academic_year).toLowerCase() === String(academic_year).toLowerCase();
+      return termMatch && yearMatch;
+    }) || [];
+
+    console.log(`[LiveStats] Found ${grades?.length || 0} total, ${filteredGrades.length} filtered for Term: ${term}, Year: ${academic_year}`);
+
+    // Group grades by class and department
+    const classData: any = {};
+    const subjectData: any = {};
+    const departmentData: any = {};
+    const studentPerformance: any = {};
+
+    filteredGrades.forEach((g: any) => {
+      // 1. Group by Class
+      const className = g.profiles?.grade || 'Unassigned';
+      if (!classData[className]) classData[className] = { total: 0, count: 0 };
+      classData[className].total += (g.percentage || 0);
+      classData[className].count += 1;
+
+      // 2. Group by Subject
+      const subjectName = g.subjects?.name || 'Unknown';
+      if (!subjectData[subjectName]) subjectData[subjectName] = { total: 0, count: 0 };
+      subjectData[subjectName].total += (g.percentage || 0);
+      subjectData[subjectName].count += 1;
+
+      // 3. Group by Department
+      const deptName = g.subjects?.department || 'General';
+      if (!departmentData[deptName]) departmentData[deptName] = { total: 0, count: 0 };
+      departmentData[deptName].total += (g.percentage || 0);
+      departmentData[deptName].count += 1;
+
+      // 4. Group by Student
+      const studentId = g.student_id;
+      if (studentId) {
+        if (!studentPerformance[studentId]) {
+          const profile = g.profiles;
+          // Robust name selection: full_name > name metadata > Unknown Student
+          const displayName = profile?.full_name || 'Unknown Student';
+          
+          studentPerformance[studentId] = { 
+            id: studentId,
+            name: displayName, 
+            class: profile?.grade || 'Unassigned',
+            total: 0, 
+            count: 0 
+          };
+        }
+        studentPerformance[studentId].total += (g.percentage || 0);
+        studentPerformance[studentId].count += 1;
+      }
+    });
+
+    const studentStats = Object.values(studentPerformance)
+      .map((s: any) => ({
+        ...s,
+        average: Math.round(s.total / s.count)
+      }))
+      .sort((a: any, b: any) => b.average - a.average);
+
+    // Only include students with a minimum of 70% as average score
+    const topStudents = studentStats.filter(s => s.average >= 70).slice(0, 10);
+    const lowStudents = [...studentStats].reverse().slice(0, 10);
+    
+    console.log(`[LiveStats] Top Students (>=70%): ${topStudents.length}, Low Students: ${lowStudents.length}`);
+
+    const performanceByClass = Object.entries(classData).map(([name, stats]: any) => ({
+      name,
+      average: Math.round(stats.total / stats.count)
+    })).sort((a, b) => a.name.localeCompare(b.name));
+
+    const performanceBySubject = Object.entries(subjectData).map(([name, stats]: any) => ({
+      name,
+      average: Math.round(stats.total / stats.count)
+    })).sort((a, b) => b.average - a.average).slice(0, 10);
+
+    const performanceByDept = Object.entries(departmentData).map(([name, stats]: any) => ({
+      name,
+      average: Math.round(stats.total / stats.count)
+    })).sort((a, b) => b.average - a.average);
+
+    // 4. Financial Summary
+    let financeQuery = supabaseAdmin
+      .from('finance_records')
+      .select('amount, type, category, date')
+      .eq('school_id', schoolId);
+
+    const { data: finance } = await financeQuery;
+
+    const incomeRecords = finance?.filter(f => f.type === 'income') || [];
+    const expenseRecords = finance?.filter(f => f.type === 'expense') || [];
+
+    const totalIncome = incomeRecords.reduce((sum, f) => sum + (f.amount || 0), 0);
+    const totalExpense = expenseRecords.reduce((sum, f) => sum + (f.amount || 0), 0);
+
+    const incomeByCategory: any = {};
+    incomeRecords.forEach(r => {
+      incomeByCategory[r.category] = (incomeByCategory[r.category] || 0) + (r.amount || 0);
+    });
+
+    const expenseByCategory: any = {};
+    expenseRecords.forEach(r => {
+      expenseByCategory[r.category] = (expenseByCategory[r.category] || 0) + (r.amount || 0);
+    });
+
+    // 5. Staff Metrics
+    const teachers = staff.filter(s => s.role === 'teacher');
+    const nonTeaching = staff.filter(s => s.role !== 'teacher');
+    
+    const { data: teacherProfiles } = await supabaseAdmin
+      .from('profiles')
+      .select('department')
+      .eq('school_id', schoolId)
+      .eq('role', 'teacher');
+
+    const teacherDepts: any = {};
+    teacherProfiles?.forEach(p => {
+      const dept = p.department || 'General';
+      teacherDepts[dept] = (teacherDepts[dept] || 0) + 1;
+    });
+
+    res.json({
+      summary: {
+        totalStudents,
+        totalStaff,
+        totalTeachers: teachers.length,
+        attendanceRate: attendance?.length ? Math.round((present / attendance.length) * 100) : 0,
+        averageGrade: grades?.length ? Math.round(grades.reduce((sum, g) => sum + (g.percentage || 0), 0) / grades.length) : 0,
+        netBalance: totalIncome - totalExpense
+      },
+      demographics: [
+        { name: 'Male', value: maleStudents },
+        { name: 'Female', value: femaleStudents },
+        { name: 'Other', value: otherGender }
+      ],
+      attendance: [
+        { name: 'Present', value: present },
+        { name: 'Absent', value: absent },
+        { name: 'Late', value: late }
+      ],
+      performance: {
+        byClass: performanceByClass,
+        bySubject: performanceBySubject,
+        byDepartment: performanceByDept,
+        topStudents,
+        lowStudents
+      },
+      finance: {
+        overview: [
+          { name: 'Income', amount: totalIncome },
+          { name: 'Expense', amount: totalExpense }
+        ],
+        incomeBreakdown: Object.entries(incomeByCategory).map(([name, value]) => ({ name, value })),
+        expenseBreakdown: Object.entries(expenseByCategory).map(([name, value]) => ({ name, value }))
+      },
+      staff: {
+        distribution: [
+          { name: 'Teaching', value: teachers.length },
+          { name: 'Non-Teaching', value: nonTeaching.length }
+        ],
+        departments: Object.entries(teacherDepts).map(([name, value]) => ({ name, value }))
+      }
+    });
+
+  } catch (error: any) {
+    console.error('Live Stats Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // --- CALENDAR ENDPOINTS ---
 
 // GET /api/school/calendar

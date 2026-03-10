@@ -198,6 +198,117 @@ router.get('/assignments', requireStudent, async (req: Request, res: Response) =
   }
 });
 
+// GET /api/student/:id/portal-data
+// Consolidated endpoint for student portal
+router.get('/:id/portal-data', requireStudent, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const profile = (req as any).profile;
+
+  // Security check: Ensure student is accessing their own data
+  if (profile.id !== id) {
+    return res.status(403).json({ message: 'Forbidden: You can only access your own data' });
+  }
+
+  const schoolId = profile.school_id;
+
+  try {
+    // 1. Fetch School Details
+    const { data: school } = await supabaseAdmin
+      .from('schools')
+      .select('name, logo_url, seal_url, signature_url, address, email, phone, website')
+      .eq('id', schoolId)
+      .single();
+
+    // 2. Fetch Student Class & Details
+    const { data: enrollment } = await supabaseAdmin
+      .from('enrollments')
+      .select('class_id, classes(name)')
+      .eq('student_id', id)
+      .eq('status', 'Active')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const className = enrollment?.classes?.name || 'Not Assigned';
+
+    // 3. Fetch Grading Scale
+    const { data: gradingScale } = await supabaseAdmin
+      .from('grading_scales')
+      .select('*')
+      .eq('school_id', schoolId);
+
+    // 4. Fetch Student Grades (All history)
+    const { data: grades } = await supabaseAdmin
+      .from('student_grades')
+      .select(`
+        *,
+        subjects(id, name, code, department)
+      `)
+      .eq('student_id', id)
+      .order('academic_year', { ascending: false })
+      .order('term', { ascending: false });
+
+    // 5. Group Grades by Term
+    const resultsMap = new Map();
+
+    if (grades) {
+      grades.forEach((grade: any) => {
+        const key = `${grade.academic_year}-T${grade.term}`;
+        if (!resultsMap.has(key)) {
+          resultsMap.set(key, {
+            term: grade.term,
+            academicYear: grade.academic_year,
+            grades: []
+          });
+        }
+        resultsMap.get(key).grades.push(grade);
+      });
+    }
+
+    // Calculate averages for each term
+    const results = Array.from(resultsMap.values()).map(termResult => {
+      const total = termResult.grades.reduce((sum: number, g: any) => sum + (g.percentage || 0), 0);
+      const avg = termResult.grades.length > 0 ? (total / termResult.grades.length).toFixed(1) : 0;
+      return {
+        ...termResult,
+        average: avg
+      };
+    });
+
+    // 6. Fetch Attendance
+    const { data: attendance } = await supabaseAdmin
+      .from('attendance')
+      .select('date, status, remarks')
+      .eq('student_id', id)
+      .order('date', { ascending: false });
+
+    // Ensure profile data is normalized before sending
+    // Database returns snake_case, frontend expects camelCase or snake_case
+    // We'll provide both to be safe
+    const normalizedStudent = {
+      ...profile,
+      firstName: profile.first_name || profile.firstName,
+      lastName: profile.last_name || profile.lastName,
+      studentNumber: profile.student_number || profile.studentNumber,
+      avatarUrl: profile.avatar_url || profile.avatarUrl,
+      class: className
+    };
+
+    res.json({
+      student: normalizedStudent,
+      school,
+      gradingScale,
+      results,
+      attendance: attendance || []
+    });
+
+  } catch (error: any) {
+    console.error('Portal Data Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+
 // POST /api/student/assignments/:id/submit
 router.post('/assignments/:id/submit', requireStudent, async (req: Request, res: Response) => {
   const profile = (req as any).profile;

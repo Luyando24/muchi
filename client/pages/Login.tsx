@@ -111,7 +111,7 @@ export default function Login() {
             navigate("/teacher-portal");
             break;
           case "student":
-            navigate("/student-portal");
+            navigate(`/student-portal/${data.session.user.id}`);
             break;
           default:
             navigate("/");

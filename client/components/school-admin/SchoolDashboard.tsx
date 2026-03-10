@@ -31,6 +31,7 @@ import { SchoolDashboardStats, Announcement } from '@shared/api';
 import LicenseAccessDenied from '@/components/common/LicenseAccessDenied';
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { syncFetch } from '@/lib/syncService';
 
 export default function SchoolDashboard() {
   const [data, setData] = useState<SchoolDashboardStats | null>(null);
@@ -50,21 +51,12 @@ export default function SchoolDashboard() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No session found");
 
-      const response = await fetch('/api/school/dashboard', {
+      const result = await syncFetch('/api/school/dashboard', {
         headers: {
           Authorization: `Bearer ${session.access_token}`
         }
       });
 
-      if (response.status === 403) {
-        throw new Error('Your school license has expired or is invalid. Please contact the system administrator.');
-      }
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch dashboard data');
-      }
-
-      const result = await response.json();
       setData(result);
     } catch (err: any) {
       console.error('Error fetching dashboard data:', err);
@@ -97,7 +89,7 @@ export default function SchoolDashboard() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No session found");
 
-      const response = await fetch('/api/school/announcements', {
+      const result = await syncFetch('/api/school/announcements', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -106,12 +98,17 @@ export default function SchoolDashboard() {
         body: JSON.stringify(newAnnouncement)
       });
 
-      if (!response.ok) throw new Error('Failed to create announcement');
-
-      toast({
-        title: "Success",
-        description: "Announcement posted successfully"
-      });
+      if (result.offline) {
+        toast({
+          title: "Offline Mode",
+          description: "Announcement queued and will be posted when you are back online.",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Announcement posted successfully",
+        });
+      }
 
       setIsAnnouncementOpen(false);
       setNewAnnouncement({ title: '', content: '' });
@@ -134,14 +131,25 @@ export default function SchoolDashboard() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No session found");
 
-      const response = await fetch(`/api/school/announcements/${deleteAnnouncementId}`, {
+      const result = await syncFetch(`/api/school/announcements/${deleteAnnouncementId}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${session.access_token}` }
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
       });
 
-      if (!response.ok) throw new Error('Failed to delete announcement');
+      if (result.offline) {
+        toast({
+          title: "Offline Mode",
+          description: "Deletion queued and will be processed when you are back online.",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Announcement deleted successfully",
+        });
+      }
 
-      toast({ title: "Success", description: "Announcement deleted successfully" });
       setDeleteAnnouncementId(null);
       fetchDashboardData();
     } catch (err: any) {

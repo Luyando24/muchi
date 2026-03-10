@@ -39,6 +39,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Notification } from '@shared/api';
 import { useToast } from "@/components/ui/use-toast";
+import { OfflineIndicator } from '@/components/navigation/OfflineIndicator';
 
 interface SchoolAdminNavbarProps {
   isSidebarOpen: boolean;
@@ -331,6 +332,7 @@ export default function SchoolAdminNavbar({
 
           {/* User Menu */}
           <div className="flex items-center gap-2 sm:gap-4">
+            <OfflineIndicator />
             <ThemeToggle />
 
             {/* Notifications */}
