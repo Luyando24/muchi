@@ -133,16 +133,16 @@ export default function ReportsManagement() {
       });
 
       setLiveStats(data);
-    } catch (error: any) {
-      console.error('Live Stats Error:', error);
+    } catch (error) {
+      console.error('Error fetching stats:', error);
       toast({
         title: "Error",
-        description: "Could not load real-time report data",
-        variant: "destructive"
+        description: "Failed to fetch live statistics",
+        variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
       setIsRefreshing(false);
+      setIsLoading(false);
     }
   };
 

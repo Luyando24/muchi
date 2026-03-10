@@ -39,6 +39,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { FinanceRecord, FinanceStats } from '@shared/api';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { syncFetch } from '@/lib/syncService';
 
 export default function FinanceManagement() {
   const [transactions, setTransactions] = useState<FinanceRecord[]>([]);
@@ -49,6 +50,9 @@ export default function FinanceManagement() {
   const [currentTransaction, setCurrentTransaction] = useState<FinanceRecord | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [selectedTerm, setSelectedTerm] = useState<string>("");
+  const [selectedYear, setSelectedYear] = useState<string>("");
+  const [schoolSettings, setSchoolSettings] = useState<any>(null);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -56,7 +60,9 @@ export default function FinanceManagement() {
     type: 'income' as 'income' | 'expense',
     category: '',
     amount: '',
-    date: new Date().toISOString().split('T')[0]
+    date: new Date().toISOString().split('T')[0],
+    term: '',
+    academicYear: ''
   });
 
   const fetchFinanceData = async () => {
@@ -69,23 +75,55 @@ export default function FinanceManagement() {
         'Authorization': `Bearer ${session.access_token}`
       };
 
-      // Fetch transactions
-      const trxResponse = await fetch('/api/school/finance', { headers });
-      if (!trxResponse.ok) throw new Error('Failed to fetch transactions');
-      const trxData = await trxResponse.json();
+      // 1. Fetch settings if not already set to get active term/year
+      let currentTerm = selectedTerm;
+      let currentYear = selectedYear;
+
+      if (!schoolSettings) {
+        const settings = await syncFetch('/api/school/settings', { headers, cacheKey: 'school-settings' });
+        if (settings) {
+          setSchoolSettings(settings);
+          if (!selectedTerm) {
+            currentTerm = settings.current_term || 'Term 1';
+            setSelectedTerm(currentTerm);
+          }
+          if (!selectedYear) {
+            currentYear = settings.academic_year || new Date().getFullYear().toString();
+            setSelectedYear(currentYear);
+          }
+          
+          // Also update formData defaults
+          setFormData(prev => ({
+            ...prev,
+            term: currentTerm,
+            academicYear: currentYear
+          }));
+        }
+      }
+
+      const queryParams = new URLSearchParams();
+      if (currentTerm) queryParams.append('term', currentTerm);
+      if (currentYear) queryParams.append('academic_year', currentYear);
+
+      // Fetch transactions using syncFetch
+      const trxData = await syncFetch(`/api/school/finance?${queryParams.toString()}`, { 
+        headers,
+        cacheKey: `school-finance-transactions-${currentTerm}-${currentYear}`
+      });
       setTransactions(trxData);
 
-      // Fetch stats
-      const statsResponse = await fetch('/api/school/finance/stats', { headers });
-      if (!statsResponse.ok) throw new Error('Failed to fetch stats');
-      const statsData = await statsResponse.json();
+      // Fetch stats using syncFetch
+      const statsData = await syncFetch(`/api/school/finance/stats?${queryParams.toString()}`, { 
+        headers,
+        cacheKey: `school-finance-stats-${currentTerm}-${currentYear}`
+      });
       setStats(statsData);
 
     } catch (error: any) {
       console.error('Error fetching finance data:', error);
       toast({
         title: "Error",
-        description: "Failed to load financial data. Ensure database tables are created.",
+        description: "Failed to load financial data.",
         variant: "destructive",
       });
     } finally {
@@ -95,7 +133,7 @@ export default function FinanceManagement() {
 
   useEffect(() => {
     fetchFinanceData();
-  }, []);
+  }, [selectedTerm, selectedYear]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -112,7 +150,9 @@ export default function FinanceManagement() {
       type: 'income',
       category: '',
       amount: '',
-      date: new Date().toISOString().split('T')[0]
+      date: new Date().toISOString().split('T')[0],
+      term: selectedTerm || (schoolSettings?.current_term || 'Term 1'),
+      academicYear: selectedYear || (schoolSettings?.academic_year || new Date().getFullYear().toString())
     });
     setCurrentTransaction(null);
   };
@@ -129,7 +169,7 @@ export default function FinanceManagement() {
 
       const method = currentTransaction ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const result = await syncFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -141,15 +181,17 @@ export default function FinanceManagement() {
         })
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to save transaction');
+      if (result.offline) {
+        toast({
+          title: "Offline Mode",
+          description: "Transaction queued and will sync when you are back online.",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: `Transaction ${currentTransaction ? 'updated' : 'recorded'} successfully`,
+        });
       }
-
-      toast({
-        title: "Success",
-        description: `Transaction ${currentTransaction ? 'updated' : 'recorded'} successfully`,
-      });
 
       setIsAddOpen(false);
       setIsEditOpen(false);
@@ -171,7 +213,9 @@ export default function FinanceManagement() {
       type: record.type,
       category: record.category,
       amount: record.amount.toString(),
-      date: record.date
+      date: record.date,
+      term: record.term || selectedTerm,
+      academicYear: record.academic_year || selectedYear
     });
     setIsEditOpen(true);
   };
@@ -183,14 +227,20 @@ export default function FinanceManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/finance/${deleteTargetId}`, {
+      const result = await syncFetch(`/api/school/finance/${deleteTargetId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
-      if (!response.ok) throw new Error('Failed to delete transaction');
+      if (result.offline) {
+        toast({
+          title: "Offline Mode",
+          description: "Deletion queued and will sync when you are back online.",
+        });
+      } else {
+        toast({ title: "Success", description: "Transaction deleted successfully" });
+      }
 
-      toast({ title: "Success", description: "Transaction deleted successfully" });
       setDeleteTargetId(null);
       fetchFinanceData();
     } catch (error: any) {
@@ -202,11 +252,51 @@ export default function FinanceManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Financial Overview</h2>
           <p className="text-slate-600 dark:text-slate-400">Track income, expenses, and fee collection.</p>
         </div>
+        
+        <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-800 p-2 rounded-xl border shadow-sm">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-slate-400" />
+            <Select value={selectedTerm} onValueChange={setSelectedTerm}>
+              <SelectTrigger className="w-[130px] h-9 border-none focus:ring-0 shadow-none">
+                <SelectValue placeholder="Term" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Term 1">Term 1</SelectItem>
+                <SelectItem value="Term 2">Term 2</SelectItem>
+                <SelectItem value="Term 3">Term 3</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700" />
+          
+          <Select value={selectedYear} onValueChange={setSelectedYear}>
+            <SelectTrigger className="w-[110px] h-9 border-none focus:ring-0 shadow-none">
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent>
+              {[2024, 2025, 2026, 2027].map(year => (
+                <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-9 w-9 rounded-full" 
+            onClick={fetchFinanceData}
+            disabled={isLoading}
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+
         <div className="flex gap-2">
           <Button variant="outline">
             <Download className="h-4 w-4 mr-2" />
@@ -257,6 +347,43 @@ export default function FinanceManagement() {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="term">Term</Label>
+                    <Select
+                      name="term"
+                      value={formData.term}
+                      onValueChange={(val) => handleSelectChange('term', val)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Term" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Term 1">Term 1</SelectItem>
+                        <SelectItem value="Term 2">Term 2</SelectItem>
+                        <SelectItem value="Term 3">Term 3</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="academicYear">Year</Label>
+                    <Select
+                      name="academicYear"
+                      value={formData.academicYear}
+                      onValueChange={(val) => handleSelectChange('academicYear', val)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[2024, 2025, 2026, 2027].map(year => (
+                          <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="category">Category</Label>
                   <Select
@@ -272,6 +399,9 @@ export default function FinanceManagement() {
                       <SelectItem value="Uniforms">Uniforms</SelectItem>
                       <SelectItem value="Books">Books</SelectItem>
                       <SelectItem value="Donations">Donations</SelectItem>
+                      <SelectItem value="CDF">CDF</SelectItem>
+                      <SelectItem value="Software Subscription">Software Subscription</SelectItem>
+                      <SelectItem value="School Feeding Program">School Feeding Program</SelectItem>
                       <SelectItem value="Salaries">Salaries</SelectItem>
                       <SelectItem value="Maintenance">Maintenance</SelectItem>
                       <SelectItem value="Utilities">Utilities</SelectItem>
@@ -351,6 +481,43 @@ export default function FinanceManagement() {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-term">Term</Label>
+                    <Select
+                      name="term"
+                      value={formData.term}
+                      onValueChange={(val) => handleSelectChange('term', val)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Term" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Term 1">Term 1</SelectItem>
+                        <SelectItem value="Term 2">Term 2</SelectItem>
+                        <SelectItem value="Term 3">Term 3</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-academicYear">Year</Label>
+                    <Select
+                      name="academicYear"
+                      value={formData.academicYear}
+                      onValueChange={(val) => handleSelectChange('academicYear', val)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[2024, 2025, 2026, 2027].map(year => (
+                          <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="edit-category">Category</Label>
                   <Select
@@ -366,6 +533,9 @@ export default function FinanceManagement() {
                       <SelectItem value="Uniforms">Uniforms</SelectItem>
                       <SelectItem value="Books">Books</SelectItem>
                       <SelectItem value="Donations">Donations</SelectItem>
+                      <SelectItem value="CDF">CDF</SelectItem>
+                      <SelectItem value="Software Subscription">Software Subscription</SelectItem>
+                      <SelectItem value="School Feeding Program">School Feeding Program</SelectItem>
                       <SelectItem value="Salaries">Salaries</SelectItem>
                       <SelectItem value="Maintenance">Maintenance</SelectItem>
                       <SelectItem value="Utilities">Utilities</SelectItem>

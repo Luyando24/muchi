@@ -2309,13 +2309,19 @@ router.delete('/classes/:id/subjects/:subjectId', requireSchoolRole(['school_adm
 router.get('/finance', requireSchoolRole(['school_admin', 'teacher']), async (req: Request, res: Response) => {
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
+  const { term, academic_year } = req.query;
 
   try {
-    const { data: records, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('finance_records')
       .select('*')
       .eq('school_id', schoolId)
       .order('date', { ascending: false });
+
+    if (term) query = query.eq('term', term);
+    if (academic_year) query = query.eq('academic_year', academic_year);
+
+    const { data: records, error } = await query;
 
     if (error) throw error;
     res.json(records);
@@ -2329,7 +2335,7 @@ router.get('/finance', requireSchoolRole(['school_admin', 'teacher']), async (re
 router.post('/finance', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
-  const { category, amount, type, description, date } = req.body;
+  const { category, amount, type, description, date, term, academicYear } = req.body;
 
   try {
     const { data, error } = await supabaseAdmin
@@ -2340,7 +2346,9 @@ router.post('/finance', requireSchoolRole(['school_admin']), async (req: Request
         amount,
         type,
         description,
-        date: date || new Date().toISOString().split('T')[0]
+        date: date || new Date().toISOString().split('T')[0],
+        term,
+        academic_year: academicYear
       })
       .select()
       .single();
@@ -2358,7 +2366,7 @@ router.put('/finance/:id', requireSchoolRole(['school_admin']), async (req: Requ
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
   const { id } = req.params;
-  const { category, amount, type, description, date } = req.body;
+  const { category, amount, type, description, date, term, academicYear } = req.body;
 
   try {
     const { data, error } = await supabaseAdmin
@@ -2368,7 +2376,9 @@ router.put('/finance/:id', requireSchoolRole(['school_admin']), async (req: Requ
         amount,
         type,
         description,
-        date
+        date,
+        term,
+        academic_year: academicYear
       })
       .eq('id', id)
       .eq('school_id', schoolId)
@@ -2408,14 +2418,58 @@ router.delete('/finance/:id', requireSchoolRole(['school_admin']), async (req: R
 router.get('/finance/stats', requireSchoolRole(['school_admin', 'teacher']), async (req: Request, res: Response) => {
   const profile = (req as any).profile;
   const schoolId = profile.school_id;
+  const { term, academic_year } = req.query;
 
   try {
-    const { data: records, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('finance_records')
       .select('amount, type, date')
       .eq('school_id', schoolId);
 
+    if (term) query = query.eq('term', term);
+    if (academic_year) query = query.eq('academic_year', academic_year);
+
+    const { data: records, error } = await query;
+
     if (error) throw error;
+
+    let totalRevenue = 0;
+    let totalExpenses = 0;
+    let monthlyRevenue = 0;
+    let monthlyExpenses = 0;
+
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+
+    records.forEach((record: any) => {
+      const amount = Number(record.amount);
+      const recordDate = new Date(record.date);
+
+      if (record.type === 'income') {
+        totalRevenue += amount;
+        if (recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear) {
+          monthlyRevenue += amount;
+        }
+      } else {
+        totalExpenses += amount;
+        if (recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear) {
+          monthlyExpenses += amount;
+        }
+      }
+    });
+
+    res.json({
+      totalRevenue,
+      totalExpenses,
+      netIncome: totalRevenue - totalExpenses,
+      monthlyRevenue,
+      monthlyExpenses
+    });
+  } catch (error: any) {
+    console.error('Get Finance Stats Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
 
     let totalRevenue = 0;
     let totalExpenses = 0;

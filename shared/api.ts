@@ -147,6 +147,8 @@ export interface FinanceRecord {
   type: 'income' | 'expense';
   description: string;
   date: string;
+  term?: string;
+  academic_year?: string;
   created_at?: string;
   // status: 'Completed' | 'Pending'; // Not in current DB schema, can be added later
 }
