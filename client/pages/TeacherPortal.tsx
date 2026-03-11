@@ -16,6 +16,7 @@ import {
   GraduationCap,
   Users,
   Home,
+  Megaphone,
   Settings,
   LogOut,
   Menu,
@@ -46,6 +47,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -108,6 +110,25 @@ interface SchoolSettings {
   current_term: string;
 }
 
+interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  author: string;
+  date: string;
+  priority?: 'High' | 'Normal' | 'Low';
+}
+
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'success' | 'error';
+  is_read: boolean;
+  created_at: string;
+  link?: string;
+}
+
 interface Submission {
   id: string;
   student_id: string;
@@ -154,6 +175,8 @@ export default function TeacherPortal() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
 
   // Attendance & Students State
@@ -167,6 +190,12 @@ export default function TeacherPortal() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
+
+  // Search State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<{ students: any[] }>({ students: [] });
+  const [isSearching, setIsSearching] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   // New Assignment Form State
   const [newAssignment, setNewAssignment] = useState({
@@ -263,23 +292,55 @@ export default function TeacherPortal() {
       }
 
       // 1. Stats
-      const statsData = await fetchWithAuth('/api/teacher/dashboard-stats');
-      setStats(statsData);
+      try {
+        const statsData = await fetchWithAuth('/api/teacher/dashboard-stats');
+        setStats(statsData);
+      } catch (e) {
+        console.error('Failed to fetch stats', e);
+      }
 
       // 2. Classes
-      const classesData = await fetchWithAuth('/api/teacher/classes');
-      setClasses(classesData);
-      if (classesData.length > 0 && !selectedClassId) {
-        setSelectedClassId(classesData[0].id);
+      let classesData = [];
+      try {
+        classesData = await fetchWithAuth('/api/teacher/classes');
+        setClasses(classesData);
+        if (classesData.length > 0 && !selectedClassId) {
+          setSelectedClassId(classesData[0].id);
+        }
+      } catch (e) {
+        console.error('Failed to fetch classes', e);
       }
 
       // 3. Assignments
-      const assignmentsData = await fetchWithAuth('/api/teacher/assignments');
-      setAssignments(assignmentsData);
+      try {
+        const assignmentsData = await fetchWithAuth('/api/teacher/assignments');
+        setAssignments(assignmentsData);
+      } catch (e) {
+        console.error('Failed to fetch assignments', e);
+      }
 
       // 4. Subjects
-      const subjectsData = await fetchWithAuth('/api/teacher/subjects');
-      setSubjects(subjectsData);
+      try {
+        const subjectsData = await fetchWithAuth('/api/teacher/subjects');
+        setSubjects(subjectsData);
+      } catch (e) {
+        console.error('Failed to fetch subjects', e);
+      }
+
+      // 5. Announcements & Notifications
+      try {
+        const announcementsData = await fetchWithAuth('/api/school/announcements');
+        setAnnouncements(announcementsData || []);
+      } catch (e) {
+        console.error('Failed to fetch announcements', e);
+      }
+
+      try {
+        const notificationsData = await fetchWithAuth('/api/school/notifications');
+        setNotifications(notificationsData || []);
+      } catch (e) {
+        console.error('Failed to fetch notifications', e);
+      }
 
       // PRE-FETCH: Students and current attendance for all classes to ensure offline attendance works
       if (classesData && classesData.length > 0) {
@@ -292,7 +353,7 @@ export default function TeacherPortal() {
       }
 
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      console.error('Error in fetchDashboardData:', error);
     } finally {
       setLoading(false);
     }
@@ -538,11 +599,64 @@ export default function TeacherPortal() {
     }
   };
 
+  const handleSearch = async (query: string) => {
+    setSearchQuery(query);
+    if (query.length < 2) {
+      setSearchResults({ students: [] });
+      setIsSearchOpen(false);
+      return;
+    }
+
+    setIsSearchOpen(true);
+    setIsSearching(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/school/search?q=${encodeURIComponent(query)}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSearchResults(data);
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const combinedNotifications = [
+    ...announcements.map(a => ({
+      id: a.id,
+      title: a.title,
+      content: a.content,
+      type: 'announcement',
+      priority: a.priority,
+      date: a.date,
+      author: a.author,
+      timestamp: new Date(a.date).getTime()
+    })),
+    ...notifications.map(n => ({
+      id: n.id,
+      title: n.title,
+      content: n.message,
+      type: 'notification',
+      priority: n.type === 'error' || n.type === 'warning' ? 'High' : 'Normal',
+      date: new Date(n.created_at).toLocaleDateString(),
+      author: 'System',
+      timestamp: new Date(n.created_at).getTime()
+    }))
+  ].sort((a, b) => b.timestamp - a.timestamp);
+
   const sidebarItems = [
     { id: "dashboard", label: "Dashboard", icon: Home },
     { id: "classes", label: "My Classes", icon: BookOpen },
     { id: "students", label: "Students", icon: Users },
-    { id: "grading", label: "Assignments", icon: PenTool },
     { id: "gradebook", label: "Gradebook", icon: BookOpen },
     { id: "timetable", label: "Timetable", icon: Calendar },
     { id: "attendance", label: "Attendance", icon: ClipboardCheck },
@@ -600,14 +714,64 @@ export default function TeacherPortal() {
 
             {/* Search Bar (Center) */}
             <div className="hidden md:flex flex-1 max-w-md mx-8">
-              <div className="relative w-full">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-                <Input
-                  type="search"
-                  placeholder="Search students, classes, assignments..."
-                  className="w-full pl-9 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 focus-visible:ring-blue-500"
-                />
-              </div>
+              <Popover open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+                <PopoverTrigger asChild>
+                  <div className="relative w-full">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                    <Input
+                      type="search"
+                      placeholder="Search students..."
+                      className="w-full pl-9 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 focus-visible:ring-blue-500"
+                      value={searchQuery}
+                      onChange={(e) => handleSearch(e.target.value)}
+                    />
+                  </div>
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] p-0" align="start">
+                  <div className="p-4 border-b">
+                    <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Search Results</p>
+                  </div>
+                  <div className="max-h-[300px] overflow-y-auto">
+                    {isSearching ? (
+                      <div className="p-4 flex justify-center">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : (
+                      <>
+                        {searchResults.students.length === 0 ? (
+                          <div className="p-4 text-center text-sm text-muted-foreground">
+                            No students found
+                          </div>
+                        ) : (
+                          <div className="py-2">
+                            <h4 className="px-4 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Students</h4>
+                            {searchResults.students.map(student => (
+                              <div
+                                key={student.id}
+                                className="px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer flex justify-between items-center group transition-colors"
+                                onClick={() => {
+                                  setSelectedStudentId(student.id);
+                                  setActiveTab('students');
+                                  setIsSearchOpen(false);
+                                  setSearchQuery('');
+                                }}
+                              >
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors">
+                                    {student.full_name}
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 uppercase font-medium">Grade {student.grade || 'N/A'}</span>
+                                </div>
+                                <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-blue-500 transition-colors" />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
 
             {/* User Menu */}
@@ -618,33 +782,66 @@ export default function TeacherPortal() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm" className="relative">
                     <Bell className="h-5 w-5" />
-                    <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-800" />
+                    {combinedNotifications.length > 0 && (
+                      <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-800" />
+                    )}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-80">
-                  <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+                  <DropdownMenuLabel className="flex items-center justify-between">
+                    <span>Notifications</span>
+                    {combinedNotifications.length > 0 && (
+                      <Badge variant="secondary" className="text-[10px]">{combinedNotifications.length} New</Badge>
+                    )}
+                  </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  {/* Mock Notifications */}
-                  <div className="max-h-64 overflow-y-auto">
-                    <DropdownMenuItem className="cursor-pointer">
-                      <div className="flex flex-col gap-1">
-                        <p className="text-sm font-medium">New Assignment Submission</p>
-                        <p className="text-xs text-slate-500">John Doe submitted "Physics Homework"</p>
-                        <p className="text-xs text-slate-400 mt-1">2 mins ago</p>
+                  <div className="max-h-80 overflow-y-auto">
+                    {combinedNotifications.length > 0 ? (
+                      combinedNotifications.map((item) => (
+                        <React.Fragment key={item.id}>
+                          <DropdownMenuItem 
+                            className="cursor-pointer p-4 focus:bg-slate-50 dark:focus:bg-slate-800/50"
+                            onClick={() => setActiveTab('dashboard')}
+                          >
+                            <div className="flex gap-3 items-start">
+                              <div className={`p-2 rounded-full mt-0.5 ${
+                                item.priority === 'High' ? 'bg-red-100 text-red-600' : 
+                                item.type === 'announcement' ? 'bg-blue-100 text-blue-600' :
+                                'bg-slate-100 text-slate-600'
+                              }`}>
+                                {item.type === 'announcement' ? <Megaphone className="h-3.5 w-3.5" /> : <Bell className="h-3.5 w-3.5" />}
+                              </div>
+                              <div className="flex flex-col gap-1 overflow-hidden">
+                                <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                                  {item.title}
+                                </p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                                  {item.content}
+                                </p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{item.date}</span>
+                                  <span className="text-[10px] text-slate-300">•</span>
+                                  <span className="text-[10px] text-slate-400 font-medium truncate">By {item.author}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator className="last:hidden" />
+                        </React.Fragment>
+                      ))
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                        <Bell className="h-8 w-8 text-slate-200 mb-2" />
+                        <p className="text-sm text-slate-500 italic">No new notifications</p>
                       </div>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem className="cursor-pointer">
-                      <div className="flex flex-col gap-1">
-                        <p className="text-sm font-medium">Staff Meeting Reminder</p>
-                        <p className="text-xs text-slate-500">Meeting starts in 1 hour in Room 101</p>
-                        <p className="text-xs text-slate-400 mt-1">1 hour ago</p>
-                      </div>
-                    </DropdownMenuItem>
+                    )}
                   </div>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem className="justify-center text-blue-600 cursor-pointer">
-                    View all notifications
+                  <DropdownMenuItem 
+                    onClick={() => setActiveTab('dashboard')}
+                    className="justify-center text-blue-600 font-bold text-xs cursor-pointer py-3 hover:bg-blue-50 dark:hover:bg-blue-900/10"
+                  >
+                    View School Announcements
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -741,81 +938,70 @@ export default function TeacherPortal() {
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             {/* Dashboard Tab */}
             <TabsContent value="dashboard" className="space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">
                     Good Morning, {(profile?.first_name || profile?.last_name) ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : (profile?.full_name || user?.email || 'Teacher')}!
                   </h2>
-                  <p className="text-slate-600 dark:text-slate-400">
+                  <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 mt-1">
                     Here's what's happening in your classes today.
                   </p>
                 </div>
-                <Button onClick={() => {
-                  setActiveTab("grading");
-                  setIsCreateAssignmentOpen(true);
-                  setEditingAssignmentId(null);
-                  setNewAssignment({
-                    title: '',
-                    description: '',
-                    class_id: '',
-                    subject_id: '',
-                    due_date: '',
-                    type: 'homework',
-                    category: 'Homework',
-                    assignment_number: 1
-                  });
-                }}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Assignment
+                <Button 
+                  onClick={() => setActiveTab("attendance")}
+                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 h-11 sm:h-10 text-base sm:text-sm font-bold shadow-md"
+                >
+                  <ClipboardCheck className="h-5 w-5 sm:h-4 sm:w-4 mr-2" />
+                  Mark Attendance
                 </Button>
               </div>
 
               {/* Quick Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-slate-600 dark:text-slate-400">Total Students</p>
-                        <p className="text-2xl font-bold text-slate-900 dark:text-white">{stats.totalStudents}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                <Card className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-5 sm:p-6">
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Total Students</p>
+                        <Users className="h-5 w-5 text-blue-600" />
                       </div>
-                      <Users className="h-8 w-8 text-blue-600" />
+                      <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">{stats.totalStudents}</p>
                     </div>
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-slate-600 dark:text-slate-400">Classes Today</p>
-                        <p className="text-2xl font-bold text-slate-900 dark:text-white">{stats.classesToday}</p>
+                <Card className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-5 sm:p-6">
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Classes Today</p>
+                        <BookOpen className="h-5 w-5 text-green-600" />
                       </div>
-                      <BookOpen className="h-8 w-8 text-green-600" />
+                      <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">{stats.classesToday}</p>
                     </div>
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-slate-600 dark:text-slate-400">Pending Grading</p>
-                        <p className="text-2xl font-bold text-slate-900 dark:text-white">{stats.pendingGrading}</p>
+                <Card className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-5 sm:p-6">
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Pending Grading</p>
+                        <PenTool className="h-5 w-5 text-orange-600" />
                       </div>
-                      <PenTool className="h-8 w-8 text-orange-600" />
+                      <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">{stats.pendingGrading}</p>
                     </div>
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-slate-600 dark:text-slate-400">Avg. Attendance</p>
-                        <p className="text-2xl font-bold text-slate-900 dark:text-white">{stats.averageAttendance}%</p>
+                <Card className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-5 sm:p-6">
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Avg. Attendance</p>
+                        <TrendingUp className="h-5 w-5 text-purple-600" />
                       </div>
-                      <TrendingUp className="h-8 w-8 text-purple-600" />
+                      <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">{stats.averageAttendance}%</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -823,40 +1009,101 @@ export default function TeacherPortal() {
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* My Classes Summary */}
-                <Card>
+                <Card className="hover:shadow-md transition-shadow">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Calendar className="h-5 w-5" />
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Calendar className="h-5 w-5 text-blue-600" />
                       My Classes
                     </CardTitle>
                     <CardDescription>You have {classes.length} classes assigned</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="space-y-3">
                     {classes.map((cls, index) => (
-                      <div key={index} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700 rounded-lg border-l-4 border-blue-500">
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <h3 className="font-bold text-slate-900 dark:text-white">{cls.name}</h3>
-                            <Badge variant="outline" className="bg-white dark:bg-slate-800">{cls.grade_level}</Badge>
-                          </div>
+                      <div key={index} className="flex flex-col gap-2 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-bold text-slate-900 dark:text-white">{cls.name}</h3>
+                          <Badge variant="outline" className="bg-white dark:bg-slate-900 font-bold text-[10px] uppercase tracking-wider px-2 py-0">
+                            {cls.grade_level}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                          <Users className="h-3 w-3" />
+                          <span>{cls.student_count || 0} Students enrolled</span>
                         </div>
                       </div>
                     ))}
-                    <Button variant="ghost" className="w-full text-blue-600" onClick={() => setActiveTab('classes')}>View All Classes</Button>
+                    <Button 
+                      variant="ghost" 
+                      className="w-full text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/10 font-bold text-sm" 
+                      onClick={() => setActiveTab('classes')}
+                    >
+                      View All Classes
+                      <ChevronRight className="ml-1 h-4 w-4" />
+                    </Button>
                   </CardContent>
                 </Card>
 
-                {/* Recent Submissions Placeholder */}
-                <Card>
+                {/* Recent Activity */}
+                <Card className="hover:shadow-md transition-shadow">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <FileText className="h-5 w-5" />
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <TrendingUp className="h-5 w-5 text-indigo-600" />
                       Recent Activity
                     </CardTitle>
                     <CardDescription>Latest updates from your classes</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <p className="text-sm text-slate-500 text-center py-4">No recent activity to show.</p>
+                  <CardContent className="flex flex-col items-center justify-center py-10 space-y-3">
+                    <div className="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                      <Clock className="h-6 w-6 text-slate-400" />
+                    </div>
+                    <p className="text-sm text-slate-500 text-center italic">No recent activity to show.</p>
+                  </CardContent>
+                </Card>
+
+                {/* Announcements Section */}
+                <Card className="hover:shadow-md transition-shadow lg:col-span-2">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Megaphone className="h-5 w-5 text-blue-600" />
+                      School Announcements
+                    </CardTitle>
+                    <CardDescription>Stay updated with the latest school news</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {announcements && announcements.length > 0 ? (
+                      <div className="space-y-4">
+                        {announcements.map((announcement) => (
+                          <div key={announcement.id} className="flex items-start gap-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
+                            <div className={`p-2 rounded-full mt-1 ${
+                              announcement.priority === 'High' ? 'bg-red-100 text-red-600' : 
+                              announcement.priority === 'Low' ? 'bg-slate-100 text-slate-600' : 
+                              'bg-blue-100 text-blue-600'
+                            }`}>
+                              <Megaphone className="h-4 w-4" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex justify-between items-start">
+                                <h4 className="font-bold text-slate-900 dark:text-white">{announcement.title}</h4>
+                                <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-tighter">
+                                  {announcement.date}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{announcement.content}</p>
+                              <div className="flex items-center gap-2 mt-2 text-[10px] text-slate-400 font-bold uppercase">
+                                <span>Posted by: {announcement.author}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                        <div className="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                          <Megaphone className="h-6 w-6 text-slate-400" />
+                        </div>
+                        <p className="text-sm text-slate-500 text-center italic">No announcements at this time.</p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -1302,24 +1549,28 @@ export default function TeacherPortal() {
 
             {/* Attendance Tab */}
             <TabsContent value="attendance" className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Daily Attendance</h2>
-                  <p className="text-slate-600 dark:text-slate-400">Mark and view student attendance.</p>
-                </div>
-                <div className="flex gap-2">
-                  <Button onClick={saveAttendance} disabled={savingAttendance}>
-                    {savingAttendance ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+              <div className="sticky top-[-24px] z-20 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-sm pb-4 pt-2 -mt-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">Daily Attendance</h2>
+                    <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 mt-1">Mark and view student attendance.</p>
+                  </div>
+                  <Button 
+                    onClick={saveAttendance} 
+                    disabled={savingAttendance}
+                    className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 h-11 sm:h-10 text-base sm:text-sm font-bold shadow-lg"
+                  >
+                    {savingAttendance ? <Loader2 className="h-5 w-5 sm:h-4 sm:w-4 animate-spin mr-2" /> : <CheckCircle className="h-5 w-5 sm:h-4 sm:w-4 mr-2" />}
                     Save Attendance
                   </Button>
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-4 bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 items-end">
-                <div className="w-full sm:w-[200px]">
-                  <Label className="text-sm font-medium mb-1.5 block">Select Class</Label>
+              <div className="flex flex-col sm:flex-row gap-4 bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="w-full sm:w-[180px]">
+                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 block">Select Class</Label>
                   <Select value={selectedClassId} onValueChange={setSelectedClassId}>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-11 sm:h-10">
                       <SelectValue placeholder="Select Class" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1329,26 +1580,26 @@ export default function TeacherPortal() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="w-full sm:w-[200px]">
-                  <Label className="text-sm font-medium mb-1.5 block">Date</Label>
+                <div className="w-full sm:w-[180px]">
+                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 block">Date</Label>
                   <div className="relative">
-                    <Calendar className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                    <Calendar className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
                     <Input
                       type="date"
-                      className="pl-9"
+                      className="pl-10 h-11 sm:h-10"
                       value={selectedDate}
                       onChange={(e) => setSelectedDate(e.target.value)}
                     />
                   </div>
                 </div>
                 <div className="flex-1 w-full">
-                  <Label className="text-sm font-medium mb-1.5 block">Search Student</Label>
+                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 block">Search Student</Label>
                   <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                    <Search className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
                     <Input
                       type="text"
                       placeholder="Search by name or number..."
-                      className="pl-9"
+                      className="pl-10 h-11 sm:h-10"
                       value={attendanceSearchQuery}
                       onChange={(e) => setAttendanceSearchQuery(e.target.value)}
                     />
@@ -1372,28 +1623,38 @@ export default function TeacherPortal() {
                               state.status === 'present' ? 'border-green-500 bg-green-50 dark:bg-green-900/10' :
                                 'border-slate-200 dark:border-slate-700'
                           }`}>
-                          <CardContent className="p-4">
-                            <div className="flex items-start justify-between mb-4">
+                          <CardContent className="p-4 sm:p-5">
+                            <div className="flex items-center justify-between mb-5">
                               <div className="flex items-center gap-3">
-                                <Avatar className="h-10 w-10">
-                                  <AvatarFallback>{student.name?.[0] || 'S'}</AvatarFallback>
+                                <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-white dark:border-slate-800 shadow-sm">
+                                  <AvatarFallback className="bg-slate-100 dark:bg-slate-800 font-bold text-slate-600 dark:text-slate-300">
+                                    {student.name?.[0] || 'S'}
+                                  </AvatarFallback>
                                 </Avatar>
-                                <div>
-                                  <p className="font-medium text-slate-900 dark:text-white line-clamp-1">{student.name}</p>
-                                  <p className="text-xs text-slate-500 font-mono">{student.studentId}</p>
+                                <div className="space-y-0.5">
+                                  <p className="font-bold text-slate-900 dark:text-white line-clamp-1">{student.name}</p>
+                                  <p className="text-[10px] text-slate-500 font-mono tracking-tighter">{student.studentId}</p>
                                 </div>
                               </div>
-                              <Badge variant={state.status === 'present' ? 'default' : state.status === 'absent' ? 'destructive' : 'secondary'}>
-                                {state.status.charAt(0).toUpperCase() + state.status.slice(1)}
+                              <Badge 
+                                className={`font-black text-[10px] uppercase tracking-widest px-2 py-0.5 ${
+                                  state.status === 'present' ? 'bg-green-100 text-green-700 hover:bg-green-100 border-green-200' : 
+                                  state.status === 'absent' ? 'bg-red-100 text-red-700 hover:bg-red-100 border-red-200' : 
+                                  state.status === 'late' ? 'bg-orange-100 text-orange-700 hover:bg-orange-100 border-orange-200' : 
+                                  'bg-slate-100 text-slate-700 hover:bg-slate-100 border-slate-200'
+                                }`}
+                                variant="outline"
+                              >
+                                {state.status}
                               </Badge>
                             </div>
 
-                            <div className="space-y-3">
+                            <div className="space-y-4">
                               <div className="grid grid-cols-4 gap-2">
                                 <Button
                                   variant={state.status === 'present' ? 'default' : 'outline'}
                                   size="sm"
-                                  className={`w-full ${state.status === 'present' ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                                  className={`h-11 sm:h-9 w-full font-black text-sm ${state.status === 'present' ? 'bg-green-600 hover:bg-green-700 shadow-md shadow-green-200 dark:shadow-none' : 'border-slate-200'}`}
                                   onClick={() => handleAttendanceChange(student.id, 'status', 'present')}
                                   title="Present"
                                 >
@@ -1402,7 +1663,7 @@ export default function TeacherPortal() {
                                 <Button
                                   variant={state.status === 'absent' ? 'destructive' : 'outline'}
                                   size="sm"
-                                  className="w-full"
+                                  className={`h-11 sm:h-9 w-full font-black text-sm ${state.status === 'absent' ? 'bg-red-600 hover:bg-red-700 shadow-md shadow-red-200 dark:shadow-none' : 'border-slate-200'}`}
                                   onClick={() => handleAttendanceChange(student.id, 'status', 'absent')}
                                   title="Absent"
                                 >
@@ -1411,7 +1672,7 @@ export default function TeacherPortal() {
                                 <Button
                                   variant={state.status === 'late' ? 'secondary' : 'outline'}
                                   size="sm"
-                                  className={`w-full ${state.status === 'late' ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' : ''}`}
+                                  className={`h-11 sm:h-9 w-full font-black text-sm ${state.status === 'late' ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-md shadow-orange-200 dark:shadow-none' : 'border-slate-200'}`}
                                   onClick={() => handleAttendanceChange(student.id, 'status', 'late')}
                                   title="Late"
                                 >
@@ -1420,7 +1681,7 @@ export default function TeacherPortal() {
                                 <Button
                                   variant={state.status === 'excused' ? 'secondary' : 'outline'}
                                   size="sm"
-                                  className={`w-full ${state.status === 'excused' ? 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200' : ''}`}
+                                  className={`h-11 sm:h-9 w-full font-black text-sm ${state.status === 'excused' ? 'bg-slate-600 text-white hover:bg-slate-700 shadow-md shadow-slate-200 dark:shadow-none' : 'border-slate-200'}`}
                                   onClick={() => handleAttendanceChange(student.id, 'status', 'excused')}
                                   title="Excused"
                                 >
@@ -1429,32 +1690,34 @@ export default function TeacherPortal() {
                               </div>
 
                               {state.status !== 'present' && (
-                                <div className="flex gap-2">
-                                  <div className="flex-1">
-                                    <Input
-                                      placeholder="Remarks (optional)"
-                                      className="h-8 text-xs"
-                                      value={state.remarks}
-                                      onChange={(e) => handleAttendanceChange(student.id, 'remarks', e.target.value)}
-                                    />
+                                <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                                  <div className="flex gap-2">
+                                    <div className="flex-1">
+                                      <Input
+                                        placeholder="Add remarks..."
+                                        className="h-10 text-xs bg-white/50 dark:bg-slate-900/50"
+                                        value={state.remarks}
+                                        onChange={(e) => handleAttendanceChange(student.id, 'remarks', e.target.value)}
+                                      />
+                                    </div>
+                                    <Select
+                                      onValueChange={(value) => handleAttendanceChange(student.id, 'remarks', value)}
+                                    >
+                                      <SelectTrigger className="h-10 w-[120px] text-xs bg-white/50 dark:bg-slate-900/50">
+                                        <SelectValue placeholder="Reasons" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="The student was sick" className="text-xs">Sick</SelectItem>
+                                        <SelectItem value="Family emergency" className="text-xs">Emergency</SelectItem>
+                                        <SelectItem value="Travel / Out of town" className="text-xs">Travel</SelectItem>
+                                        <SelectItem value="Hospital appointment" className="text-xs">Medical</SelectItem>
+                                        <SelectItem value="Sports / Competition" className="text-xs">Sports</SelectItem>
+                                        <SelectItem value="Bereavement" className="text-xs">Bereavement</SelectItem>
+                                        <SelectItem value="School event" className="text-xs">Event</SelectItem>
+                                        <SelectItem value="Traffic / Transportation" className="text-xs">Traffic</SelectItem>
+                                      </SelectContent>
+                                    </Select>
                                   </div>
-                                  <Select
-                                    onValueChange={(value) => handleAttendanceChange(student.id, 'remarks', value)}
-                                  >
-                                    <SelectTrigger className="h-8 w-[110px] text-xs">
-                                      <SelectValue placeholder="Reasons" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="The student was sick" className="text-xs">Sick</SelectItem>
-                                      <SelectItem value="Family emergency" className="text-xs">Emergency</SelectItem>
-                                      <SelectItem value="Travel / Out of town" className="text-xs">Travel</SelectItem>
-                                      <SelectItem value="Hospital appointment" className="text-xs">Medical</SelectItem>
-                                      <SelectItem value="Sports / Competition" className="text-xs">Sports</SelectItem>
-                                      <SelectItem value="Bereavement" className="text-xs">Bereavement</SelectItem>
-                                      <SelectItem value="School event" className="text-xs">Event</SelectItem>
-                                      <SelectItem value="Traffic / Transportation" className="text-xs">Traffic</SelectItem>
-                                    </SelectContent>
-                                  </Select>
                                 </div>
                               )}
                             </div>
@@ -1620,6 +1883,36 @@ export default function TeacherPortal() {
         loading={isDeleting}
         onConfirm={handleDeleteAssignment}
       />
+
+      {/* Mobile Bottom Navigation */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-40 px-2 py-2 safe-area-bottom shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+        <div className="flex justify-around items-center">
+          {[
+            sidebarItems.find(i => i.id === 'dashboard'),
+            sidebarItems.find(i => i.id === 'classes'),
+            sidebarItems.find(i => i.id === 'gradebook'),
+            sidebarItems.find(i => i.id === 'attendance'),
+            sidebarItems.find(i => i.id === 'profile')
+          ].map((item) => {
+            if (!item) return null;
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`flex flex-col items-center justify-center p-2 rounded-lg transition-all duration-200 min-w-[64px] ${
+                  activeTab === item.id 
+                    ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20" 
+                    : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                }`}
+              >
+                <Icon className={`h-5 w-5 mb-1 ${activeTab === item.id ? "scale-110" : "scale-100"} transition-transform`} />
+                <span className="text-[10px] font-medium truncate max-w-full">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import {
   LayoutDashboard,
   Users,
+  UserPlus,
   GraduationCap,
   Building2,
   Calendar,
@@ -22,6 +23,7 @@ import FinanceManagement from '@/components/school-admin/FinanceManagement';
 import ReportsManagement from '@/components/school-admin/ReportsManagement';
 import CalendarManagement from '@/components/school-admin/CalendarManagement';
 import SchoolSettings from '@/components/school-admin/SchoolSettings';
+import ApplicationsView from '@/components/school-admin/ApplicationsView';
 import SchoolAdminNavbar from '@/components/school-admin/SchoolAdminNavbar';
 import { syncFetch } from '@/lib/syncService';
 import LicenseAccessDenied from '@/components/common/LicenseAccessDenied';
@@ -39,6 +41,8 @@ const adminData = {
 
 export default function SchoolAdminPortal() {
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [licenseError, setLicenseError] = useState<string | null>(null);
   const [isLoadingLicense, setIsLoadingLicense] = useState(true);
@@ -118,8 +122,9 @@ export default function SchoolAdminPortal() {
 
   const sidebarItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "students", label: "Students", icon: GraduationCap },
-    { id: "teachers", label: "Teachers", icon: Users },
+    { id: "applications", label: "Applications", icon: UserPlus },
+    { id: "students", label: "Students", icon: Users },
+    { id: "teachers", label: "Teachers", icon: GraduationCap },
     { id: "academics", label: "Academics & Results", icon: Building2 },
     { id: "gradebook", label: "Gradebook", icon: GraduationCap },
     { id: "finance", label: "Finance", icon: CreditCard },
@@ -147,6 +152,8 @@ export default function SchoolAdminPortal() {
         setIsSidebarOpen={setIsSidebarOpen}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        onSelectStudent={setSelectedStudentId}
+        onSelectTeacher={setSelectedTeacherId}
         onLogout={handleLogout}
       />
 
@@ -195,54 +202,95 @@ export default function SchoolAdminPortal() {
         )}
 
         {/* Main Content */}
-        <main className="flex-1 p-6 overflow-y-auto h-[calc(100vh-64px)]">
+        <main className="flex-1 p-4 sm:p-6 overflow-y-auto h-[calc(100vh-64px)] pb-24 lg:pb-6">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             {/* Dashboard Tab */}
-            <TabsContent value="dashboard" className="space-y-6">
+            <TabsContent value="dashboard" className="space-y-6 m-0">
               <SchoolDashboard />
             </TabsContent>
 
+            {/* Applications Tab */}
+            <TabsContent value="applications" className="space-y-6 m-0">
+              <ApplicationsView />
+            </TabsContent>
+
             {/* Students Tab */}
-            <TabsContent value="students" className="space-y-6">
-              <StudentManagement />
+            <TabsContent value="students" className="space-y-6 m-0">
+              <StudentManagement 
+                initialViewId={selectedStudentId} 
+                onClearViewId={() => setSelectedStudentId(null)} 
+              />
             </TabsContent>
 
             {/* Teachers Tab */}
-            <TabsContent value="teachers" className="space-y-6">
-              <TeacherManagement />
+            <TabsContent value="teachers" className="space-y-6 m-0">
+              <TeacherManagement 
+                initialViewId={selectedTeacherId} 
+                onClearViewId={() => setSelectedTeacherId(null)} 
+              />
             </TabsContent>
 
             {/* Academics Tab */}
-            <TabsContent value="academics" className="space-y-6">
+            <TabsContent value="academics" className="space-y-6 m-0">
               <AcademicManagement />
             </TabsContent>
 
             {/* Gradebook Tab */}
-            <TabsContent value="gradebook" className="space-y-6">
+            <TabsContent value="gradebook" className="space-y-6 m-0">
               <GradebookView />
             </TabsContent>
 
             {/* Finance Tab */}
-            <TabsContent value="finance" className="space-y-6">
+            <TabsContent value="finance" className="space-y-6 m-0">
               <FinanceManagement />
             </TabsContent>
 
             {/* Reports Tab */}
-            <TabsContent value="reports" className="space-y-6">
+            <TabsContent value="reports" className="space-y-6 m-0">
               <ReportsManagement />
             </TabsContent>
 
             {/* Calendar Tab */}
-            <TabsContent value="calendar" className="space-y-6">
+            <TabsContent value="calendar" className="space-y-6 m-0">
               <CalendarManagement />
             </TabsContent>
 
             {/* Settings Tab */}
-            <TabsContent value="settings" className="space-y-6">
+            <TabsContent value="settings" className="space-y-6 m-0">
               <SchoolSettings />
             </TabsContent>
           </Tabs>
         </main>
+      </div>
+
+      {/* Mobile Bottom Navigation */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-40 px-2 py-2 safe-area-bottom shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+        <div className="flex justify-around items-center">
+          {[
+            sidebarItems.find(i => i.id === 'dashboard'),
+            sidebarItems.find(i => i.id === 'students'),
+            sidebarItems.find(i => i.id === 'academics'),
+            sidebarItems.find(i => i.id === 'finance'),
+            sidebarItems.find(i => i.id === 'settings')
+          ].map((item) => {
+            if (!item) return null;
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`flex flex-col items-center justify-center p-2 rounded-lg transition-all duration-200 min-w-[64px] ${
+                  activeTab === item.id 
+                    ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20" 
+                    : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                }`}
+              >
+                <Icon className={`h-5 w-5 mb-1 ${activeTab === item.id ? "scale-110" : "scale-100"} transition-transform`} />
+                <span className="text-[10px] font-medium truncate max-w-full">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

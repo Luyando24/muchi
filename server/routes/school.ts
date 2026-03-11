@@ -71,6 +71,52 @@ router.post('/public-register', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/school/public-apply
+router.post('/public-apply', async (req: Request, res: Response) => {
+  const { name, email, phone, grade, schoolSlug, previousSchool, guardianName, guardianPhone } = req.body;
+
+  if (!name || !email || !grade || !schoolSlug) {
+    return res.status(400).json({ message: 'Missing required fields' });
+  }
+
+  try {
+    // 1. Get School ID from Slug
+    const { data: school, error: schoolError } = await supabaseAdmin
+      .from('schools')
+      .select('id')
+      .eq('slug', schoolSlug)
+      .single();
+
+    if (schoolError || !school) {
+      return res.status(404).json({ message: 'School not found' });
+    }
+
+    // 2. Create Application
+    const { data, error: applicationError } = await supabaseAdmin
+      .from('student_applications')
+      .insert({
+        school_id: school.id,
+        full_name: name,
+        email,
+        phone_number: phone,
+        grade_level: grade,
+        previous_school: previousSchool,
+        guardian_name: guardianName,
+        guardian_phone: guardianPhone,
+        status: 'pending'
+      })
+      .select()
+      .single();
+
+    if (applicationError) throw applicationError;
+
+    res.status(201).json({ message: 'Application submitted successfully', application: data });
+  } catch (error: any) {
+    console.error('Application Error:', error);
+    res.status(500).json({ message: 'Internal Server Error: ' + error.message });
+  }
+});
+
 // GET /api/school/public-events
 router.get('/public-events', async (req: Request, res: Response) => {
   const { schoolSlug } = req.query;
@@ -189,46 +235,39 @@ router.get('/dashboard', requireSchoolRole(['school_admin', 'teacher']), async (
       .order('created_at', { ascending: false })
       .limit(5);
 
-    // 4. Calculate Attendance Rate (Today)
-    const today = new Date().toISOString().split('T')[0];
-    let attendanceRateValue = "0%";
-    let attendanceTrend = "+0%";
-
-    // Get total attendance records for today (to check if any taken)
-    const { count: totalAttendanceToday } = await supabaseAdmin
-      .from('attendance')
-      .select('id', { count: 'exact', head: true })
-      .eq('school_id', schoolId)
-      .eq('date', today);
-
-    if (totalAttendanceToday && totalAttendanceToday > 0) {
-      // Get present count
-      const { count: presentCount } = await supabaseAdmin
-        .from('attendance')
-        .select('id', { count: 'exact', head: true })
-        .eq('school_id', schoolId)
-        .eq('date', today)
-        .eq('status', 'present');
-
-      // Calculate against submitted attendance for accurate daily rate
-      const rate = Math.round(((presentCount || 0) / totalAttendanceToday) * 100);
-      attendanceRateValue = `${rate}%`;
-
-      // Simple trend logic
-      if (rate >= 95) attendanceTrend = "+2%";
-      else if (rate < 80) attendanceTrend = "-5%";
-    } else {
-      attendanceRateValue = "--"; // No data for today
-    }
-
-    // 5. Calculate Revenue (Current Term/Year)
-    // First get current term/year from settings
+    // 4. Get current term/year from settings first (needed for Attendance and Revenue)
     const { data: settings } = await supabaseAdmin
       .from('school_settings')
       .select('current_term, academic_year')
       .eq('school_id', schoolId)
       .maybeSingle();
 
+    const currentTerm = settings?.current_term || 'Term 1';
+    const currentYear = settings?.academic_year || new Date().getFullYear().toString();
+
+    // 5. Calculate Attendance Rate (Term-wide for "real data" as in reports)
+    let attendanceRateValue = "--";
+    let attendanceTrend = "+0%";
+
+    const { data: attendance } = await supabaseAdmin
+      .from('attendance')
+      .select('status')
+      .eq('school_id', schoolId)
+      .eq('term', currentTerm)
+      .eq('academic_year', currentYear);
+
+    if (attendance && attendance.length > 0) {
+      const presentCount = attendance.filter(a => a.status === 'present').length;
+      const rate = Math.round((presentCount / attendance.length) * 100);
+      attendanceRateValue = `${rate}%`;
+
+      // Trend logic (relative to a 90% benchmark or previous month could be better, 
+      // but keeping it simple to match dashboard design)
+      if (rate >= 90) attendanceTrend = "+2%";
+      else if (rate < 80) attendanceTrend = "-3%";
+    }
+
+    // 6. Calculate Revenue (Current Term/Year)
     let totalRevenueValue = 0;
     if (settings) {
       const { data: revenueData } = await supabaseAdmin
@@ -236,13 +275,74 @@ router.get('/dashboard', requireSchoolRole(['school_admin', 'teacher']), async (
         .select('amount')
         .eq('school_id', schoolId)
         .eq('type', 'income')
-        .eq('term', settings.current_term)
-        .eq('academic_year', settings.academic_year);
+        .eq('term', currentTerm)
+        .eq('academic_year', currentYear);
       
       if (revenueData) {
         totalRevenueValue = revenueData.reduce((sum, r) => sum + Number(r.amount), 0);
       }
     }
+
+    // 7. Academic Performance (Last 3 terms)
+    const { data: academicData } = await supabaseAdmin
+      .from('student_grades')
+      .select('term, percentage')
+      .eq('school_id', schoolId)
+      .order('term', { ascending: true });
+    
+    const performanceMap: Record<string, { sum: number, count: number }> = {};
+    academicData?.forEach(g => {
+      if (!performanceMap[g.term]) performanceMap[g.term] = { sum: 0, count: 0 };
+      performanceMap[g.term].sum += Number(g.percentage || 0);
+      performanceMap[g.term].count++;
+    });
+    
+    const academicPerformance = Object.entries(performanceMap).map(([term, stats]) => ({
+      term,
+      average: Math.round(stats.sum / stats.count)
+    })).slice(-3);
+
+    // 8. Enrollment Distribution (By Grade)
+    const { data: studentsByGrade } = await supabaseAdmin
+      .from('profiles')
+      .select('grade')
+      .eq('school_id', schoolId)
+      .eq('role', 'student');
+    
+    const gradeMap: Record<string, number> = {};
+    studentsByGrade?.forEach(s => {
+      const g = s.grade || 'Unassigned';
+      gradeMap[g] = (gradeMap[g] || 0) + 1;
+    });
+    
+    const enrollmentDistribution = Object.entries(gradeMap).map(([grade, count]) => ({
+      grade,
+      count
+    })).sort((a, b) => a.grade.localeCompare(b.grade));
+
+    // 9. Finance Trends (Last 6 months)
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    
+    const { data: financeRecords } = await supabaseAdmin
+      .from('finance_records')
+      .select('amount, type, date')
+      .eq('school_id', schoolId)
+      .gte('date', sixMonthsAgo.toISOString().split('T')[0]);
+    
+    const monthlyFinance: Record<string, { income: number, expense: number }> = {};
+    financeRecords?.forEach(r => {
+      const month = new Date(r.date).toLocaleString('default', { month: 'short' });
+      if (!monthlyFinance[month]) monthlyFinance[month] = { income: 0, expense: 0 };
+      if (r.type === 'income') monthlyFinance[month].income += Number(r.amount);
+      else monthlyFinance[month].expense += Number(r.amount);
+    });
+    
+    const financeTrends = Object.entries(monthlyFinance).map(([month, data]) => ({
+      month,
+      income: data.income,
+      expense: data.expense
+    }));
 
     // Construct response matching SchoolDashboardStats interface
     const responseData = {
@@ -255,7 +355,10 @@ router.get('/dashboard', requireSchoolRole(['school_admin', 'teacher']), async (
       recentActivities: [],
       financialSummary: [],
       pendingApprovals: [],
-      announcements: announcements || []
+      announcements: announcements || [],
+      academicPerformance,
+      enrollmentDistribution,
+      financeTrends
     };
 
     console.log('Sending dashboard data:', JSON.stringify(responseData, null, 2));
@@ -761,6 +864,152 @@ router.put('/students/:id', requireSchoolRole(['school_admin']), async (req: Req
   } catch (error: any) {
     console.error('Update Student Error:', error);
     res.status(500).json({ message: error.message });
+  }
+});
+
+// --- APPLICATION MANAGEMENT ENDPOINTS ---
+
+// GET /api/school/applications
+router.get('/applications', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const schoolId = profile.school_id || profile.schools?.id;
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('student_applications')
+      .select('*')
+      .eq('school_id', schoolId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error: any) {
+    console.error('Get Applications Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// PUT /api/school/applications/:id
+router.put('/applications/:id', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const schoolId = profile.school_id || profile.schools?.id;
+  const { id } = req.params;
+  const { status } = req.body;
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('student_applications')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('school_id', schoolId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    console.error('Update Application Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/school/applications/:id/approve-enroll
+router.post('/applications/:id/approve-enroll', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const schoolId = profile.school_id || profile.schools?.id;
+  const { id } = req.params;
+  const { classId, academicYear, password } = req.body;
+
+  if (!classId || !academicYear || !password) {
+    return res.status(400).json({ message: 'Class, Academic Year, and temporary Password are required' });
+  }
+
+  try {
+    // 1. Get Application
+    const { data: application, error: appError } = await supabaseAdmin
+      .from('student_applications')
+      .select('*')
+      .eq('id', id)
+      .eq('school_id', schoolId)
+      .single();
+
+    if (appError || !application) {
+      return res.status(404).json({ message: 'Application not found' });
+    }
+
+    // 2. Create Auth User
+    const studentEmail = application.email.toLowerCase().trim();
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: studentEmail,
+      password,
+      email_confirm: true,
+      user_metadata: { 
+        full_name: application.full_name,
+        role: 'student',
+        school_id: schoolId
+      }
+    });
+
+    if (authError) throw authError;
+
+    // 3. Create or Update Profile
+    const studentNumber = await generateUniqueStudentNumber();
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .upsert({
+        id: authData.user.id,
+        role: 'student',
+        school_id: schoolId,
+        full_name: application.full_name,
+        email: studentEmail,
+        phone_number: application.phone_number,
+        guardian_name: application.guardian_name,
+        guardian_contact: application.guardian_phone,
+        grade: application.grade_level,
+        student_number: studentNumber,
+        enrollment_status: 'Active'
+      }, { onConflict: 'id' });
+
+    if (profileError) {
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      throw profileError;
+    }
+
+    // 4. Create Enrollment
+    const { error: enrollError } = await supabaseAdmin
+      .from('enrollments')
+      .insert({
+        school_id: schoolId,
+        student_id: authData.user.id,
+        class_id: classId,
+        academic_year: academicYear,
+        status: 'Active'
+      });
+
+    if (enrollError) throw enrollError;
+
+    // 5. Update Application Status
+    const { error: statusError } = await supabaseAdmin
+      .from('student_applications')
+      .update({ status: 'approved', updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('school_id', schoolId);
+
+    if (statusError) {
+      console.error('Failed to update application status:', statusError);
+      // We still return success since the student was created and enrolled, 
+      // but the application record might need manual update.
+    }
+
+    res.status(200).json({ 
+      message: 'Student approved and enrolled successfully', 
+      studentId: authData.user.id,
+      email: application.email,
+      studentNumber
+    });
+  } catch (error: any) {
+    console.error('Approve Enrollment Error:', error);
+    res.status(400).json({ message: error.message });
   }
 });
 
@@ -2880,7 +3129,14 @@ router.get('/reports/live-stats', requireSchoolRole(['school_admin']), async (re
 // GET /api/school/announcements
 router.get('/announcements', requireSchoolRole(['school_admin', 'teacher', 'student']), async (req: Request, res: Response) => {
   const profile = (req as any).profile;
-  const schoolId = profile.school_id;
+  const schoolId = profile.school_id || profile.schools?.id;
+
+  if (!schoolId) {
+    console.warn(`[Announcements] No school ID found for user ${profile?.id}`);
+    return res.json([]);
+  }
+
+  console.log(`[Announcements] Fetching for School ID: ${schoolId}, User: ${profile.id}, Role: ${profile.role}`);
 
   try {
     const { data, error } = await supabaseAdmin
@@ -2889,8 +3145,13 @@ router.get('/announcements', requireSchoolRole(['school_admin', 'teacher', 'stud
       .eq('school_id', schoolId)
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
-    res.json(data);
+    if (error) {
+      console.error('[Announcements] DB Error:', error);
+      throw error;
+    }
+    
+    console.log(`[Announcements] Found ${data?.length || 0} announcements`);
+    res.json(data || []);
   } catch (error: any) {
     console.error('Get Announcements Error:', error);
     res.status(500).json({ message: error.message });
@@ -2900,9 +3161,13 @@ router.get('/announcements', requireSchoolRole(['school_admin', 'teacher', 'stud
 // POST /api/school/announcements
 router.post('/announcements', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
   const profile = (req as any).profile;
-  const schoolId = profile.school_id;
+  const schoolId = profile.school_id || profile.schools?.id;
   const user = (req as any).user;
   const { title, content, priority } = req.body;
+
+  if (!schoolId) {
+    return res.status(400).json({ message: 'School ID not found in profile' });
+  }
 
   try {
     const { data, error } = await supabaseAdmin
@@ -2929,8 +3194,12 @@ router.post('/announcements', requireSchoolRole(['school_admin']), async (req: R
 // DELETE /api/school/announcements/:id
 router.delete('/announcements/:id', requireSchoolRole(['school_admin']), async (req: Request, res: Response) => {
   const profile = (req as any).profile;
-  const schoolId = profile.school_id;
+  const schoolId = profile.school_id || profile.schools?.id;
   const { id } = req.params;
+
+  if (!schoolId) {
+    return res.status(400).json({ message: 'School ID not found in profile' });
+  }
 
   try {
     const { error } = await supabaseAdmin

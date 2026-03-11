@@ -67,7 +67,7 @@ interface Class {
   name: string;
 }
 
-export default function StudentManagement() {
+export default function StudentManagement({ initialViewId, onClearViewId }: { initialViewId?: string | null, onClearViewId?: () => void }) {
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -76,10 +76,21 @@ export default function StudentManagement() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [currentStudent, setCurrentStudent] = useState<Student | null>(null);
-  const [viewStudentId, setViewStudentId] = useState<string | null>(null);
+  const [viewStudentId, setViewStudentId] = useState<string | null>(initialViewId || null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (initialViewId) {
+      setViewStudentId(initialViewId);
+    }
+  }, [initialViewId]);
+
+  const handleBackFromDetails = () => {
+    setViewStudentId(null);
+    if (onClearViewId) onClearViewId();
+  };
 
   // Form states
   const [formData, setFormData] = useState({
@@ -308,7 +319,7 @@ export default function StudentManagement() {
   );
 
   if (viewStudentId) {
-    return <StudentDetailsView studentId={viewStudentId} onBack={() => setViewStudentId(null)} />;
+    return <StudentDetailsView studentId={viewStudentId} onBack={handleBackFromDetails} userRole="school_admin" />;
   }
 
   return (

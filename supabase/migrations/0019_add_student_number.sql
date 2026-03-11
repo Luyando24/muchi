@@ -10,14 +10,14 @@ CREATE OR REPLACE FUNCTION get_email_by_student_number(p_student_number TEXT)
 RETURNS TEXT
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, auth
 AS $$
 DECLARE
     v_email TEXT;
 BEGIN
     SELECT au.email
     INTO v_email
-    FROM profiles p
+    FROM public.profiles p
     JOIN auth.users au ON p.id = au.id
     WHERE p.student_number = p_student_number;
     

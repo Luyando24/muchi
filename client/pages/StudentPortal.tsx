@@ -11,6 +11,7 @@ import {
   User, 
   Settings, 
   Bell, 
+  Megaphone,
   LogOut, 
   ChevronRight,
   TrendingUp,
@@ -65,6 +66,7 @@ export default function StudentPortal() {
   const [student, setStudent] = useState<any>(null);
   const [gradesData, setGradesData] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [announcements, setAnnouncements] = useState<any[]>([]);
   const [printingTerm, setPrintingTerm] = useState<any>(null);
   const reportRef = useRef<HTMLDivElement>(null);
 
@@ -115,33 +117,48 @@ export default function StudentPortal() {
       setStudent(normalizedProfile);
 
       // Fetch grades and related data using syncFetch
-      const data = await syncFetch(`/api/student/${studentId}/portal-data`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` },
-        cacheKey: `student-portal-data:${studentId}`
-      });
-      
-      if (data) {
-        setGradesData(data);
+      try {
+        const data = await syncFetch(`/api/student/${studentId}/portal-data`, {
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+          cacheKey: `student-portal-data:${studentId}`
+        });
         
-        // Re-apply student data from the portal-data response if available,
-        // as it might be fresher or more complete (e.g. includes class name)
-        if (data.student) {
-           const fullName = data.student.full_name || '';
-           const nameParts = fullName.split(' ');
-           const fallbackFirstName = nameParts[0] || '';
-           const fallbackLastName = nameParts.slice(1).join(' ') || '';
+        if (data) {
+          setGradesData(data);
+          
+          // Re-apply student data from the portal-data response if available,
+          // as it might be fresher or more complete (e.g. includes class name)
+          if (data.student) {
+            const fullName = data.student.full_name || '';
+            const nameParts = fullName.split(' ');
+            const fallbackFirstName = nameParts[0] || '';
+            const fallbackLastName = nameParts.slice(1).join(' ') || '';
 
-           const enhancedProfile = {
-             ...normalizedProfile,
-             ...data.student,
-             // Ensure these fields persist if missing in data.student
-             firstName: data.student.first_name || data.student.firstName || normalizedProfile.firstName || fallbackFirstName,
-             lastName: data.student.last_name || data.student.lastName || normalizedProfile.lastName || fallbackLastName,
-             studentNumber: data.student.student_number || data.student.studentNumber || normalizedProfile.studentNumber,
-             avatarUrl: data.student.avatar_url || data.student.avatarUrl || normalizedProfile.avatarUrl,
-           };
-           setStudent(enhancedProfile);
+            const enhancedProfile = {
+              ...normalizedProfile,
+              ...data.student,
+              // Ensure these fields persist if missing in data.student
+              firstName: data.student.first_name || data.student.firstName || normalizedProfile.firstName || fallbackFirstName,
+              lastName: data.student.last_name || data.student.lastName || normalizedProfile.lastName || fallbackLastName,
+              studentNumber: data.student.student_number || data.student.studentNumber || normalizedProfile.studentNumber,
+              avatarUrl: data.student.avatar_url || data.student.avatarUrl || normalizedProfile.avatarUrl,
+            };
+            setStudent(enhancedProfile);
+          }
         }
+      } catch (e) {
+        console.error('Failed to fetch portal data', e);
+      }
+
+      // Fetch announcements
+      try {
+        const announcementsData = await syncFetch('/api/school/announcements', {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          cacheKey: `school-announcements:${profile.school_id || 'all'}`
+        });
+        setAnnouncements(announcementsData || []);
+      } catch (e) {
+        console.error('Failed to fetch announcements', e);
       }
 
     } catch (error: any) {
@@ -311,48 +328,69 @@ export default function StudentPortal() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-6 pb-24 lg:pb-6 overflow-y-auto">
-          {/* Header */}
-          <header className="flex justify-between items-center mb-8">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-                Welcome back, {student?.firstName || "Student"}
-              </h1>
-              <p className="text-slate-500 dark:text-slate-400">
-                {currentResult ? `${String(currentResult.term).toLowerCase().includes('term') ? '' : 'Term '}${currentResult.term} • ${currentResult.academicYear}` : 'No active term'}
-              </p>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              <OfflineIndicator />
-              <Button variant="outline" size="icon" className="relative">
-                <Bell className="h-5 w-5" />
-                <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full" />
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage src={student?.avatarUrl} />
-                      <AvatarFallback className="bg-blue-100 text-blue-600 font-bold">
-                        {student?.firstName?.[0] || 'S'}{student?.lastName?.[0] || ''}
-                      </AvatarFallback>
-                    </Avatar>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setActiveTab('profile')}>Profile</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setActiveTab('settings')}>Settings</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem className="text-red-600" onClick={handleLogout}>Sign out</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+        <main className="flex-1 overflow-y-auto">
+          {/* Top Navigation Bar */}
+          <header className="sticky top-0 z-30 w-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 py-3 sm:px-6">
+            <div className="flex justify-between items-center max-w-7xl mx-auto">
+              <div className="flex flex-col">
+                <h1 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">
+                  {student?.firstName || "Student"}
+                </h1>
+                <p className="text-[10px] sm:text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  {currentResult ? `${String(currentResult.term).toLowerCase().includes('term') ? '' : 'Term '}${currentResult.term} • ${currentResult.academicYear}` : 'No active term'}
+                </p>
+              </div>
+              
+              <div className="flex items-center gap-2 sm:gap-4">
+                <div className="hidden xs:block">
+                  <OfflineIndicator />
+                </div>
+                
+                <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                  <Bell className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                  <span className="absolute top-2.5 right-2.5 h-2 w-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900" />
+                </Button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="relative h-9 w-9 sm:h-10 sm:w-10 rounded-full ring-2 ring-blue-50 dark:ring-blue-900/20 p-0 overflow-hidden">
+                      <Avatar className="h-full w-full">
+                        <AvatarImage src={student?.avatarUrl} />
+                        <AvatarFallback className="bg-blue-600 text-white text-xs sm:text-sm font-black">
+                          {student?.firstName?.[0] || 'S'}{student?.lastName?.[0] || ''}
+                        </AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56 mt-2">
+                    <DropdownMenuLabel className="font-normal">
+                      <div className="flex flex-col space-y-1">
+                        <p className="text-sm font-bold leading-none">{student?.firstName} {student?.lastName}</p>
+                        <p className="text-xs leading-none text-muted-foreground">{student?.studentNumber}</p>
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setActiveTab('profile')} className="cursor-pointer">
+                      <User className="mr-2 h-4 w-4" />
+                      <span>Profile</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setActiveTab('settings')} className="cursor-pointer">
+                      <Settings className="mr-2 h-4 w-4" />
+                      <span>Settings</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="text-red-600 focus:text-red-600 cursor-pointer" onClick={handleLogout}>
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>Sign out</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
           </header>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <div className="p-4 sm:p-6 pb-24 lg:pb-6 max-w-7xl mx-auto">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsContent value="dashboard" className="space-y-6 m-0">
               {/* Stats Overview */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -509,18 +547,65 @@ export default function StudentPortal() {
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* Announcements Section */}
+                <Card className="col-span-1 lg:col-span-2 hover:shadow-md transition-shadow">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Megaphone className="h-5 w-5 text-blue-600" />
+                      School Announcements
+                    </CardTitle>
+                    <CardDescription>Stay updated with the latest school news</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {announcements && announcements.length > 0 ? (
+                      <div className="space-y-4">
+                        {announcements.map((announcement) => (
+                          <div key={announcement.id} className="flex items-start gap-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
+                            <div className={`p-2 rounded-full mt-1 ${
+                              announcement.priority === 'High' ? 'bg-red-100 text-red-600' : 
+                              announcement.priority === 'Low' ? 'bg-slate-100 text-slate-600' : 
+                              'bg-blue-100 text-blue-600'
+                            }`}>
+                              <Megaphone className="h-4 w-4" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex justify-between items-start">
+                                <h4 className="font-bold text-slate-900 dark:text-white">{announcement.title}</h4>
+                                <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-tighter">
+                                  {announcement.date}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">{announcement.content}</p>
+                              <div className="flex items-center gap-2 mt-2 text-[10px] text-slate-400 font-bold uppercase">
+                                <span>Posted by: {announcement.author}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                        <div className="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                          <Megaphone className="h-6 w-6 text-slate-400" />
+                        </div>
+                        <p className="text-sm text-slate-500 text-center italic">No announcements at this time.</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             </TabsContent>
 
             <TabsContent value="grades" className="space-y-6 m-0">
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                 <div>
                   <h2 className="text-xl font-bold text-slate-900 dark:text-white">Results & Reports</h2>
-                  <p className="text-slate-500 dark:text-slate-400">View detailed breakdown of your academic performance</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">View detailed breakdown of your academic performance</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                   <Select defaultValue={currentResult?.term}>
-                    <SelectTrigger className="w-[180px]">
+                    <SelectTrigger className="w-full sm:w-[180px]">
                       <SelectValue placeholder="Select Term" />
                     </SelectTrigger>
                     <SelectContent>
@@ -532,12 +617,11 @@ export default function StudentPortal() {
                     </SelectContent>
                   </Select>
 
-                  {/* Download Button */}
                   <Button
                     variant="outline"
                     onClick={() => currentResult && handlePrint(currentResult)}
                     disabled={!currentResult}
-                    title="Download as PDF"
+                    className="w-full sm:w-auto"
                   >
                     <Download className="h-4 w-4 mr-2" />
                     Download PDF
@@ -545,51 +629,55 @@ export default function StudentPortal() {
                 </div>
               </div>
 
-              <Card>
+              <Card className="border-none sm:border shadow-none sm:shadow-sm">
                 <CardContent className="p-0">
-                  <div className="rounded-md border border-slate-200 dark:border-slate-700 overflow-hidden">
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                     <Table>
-                      <TableHeader className="bg-slate-50 dark:bg-slate-800">
-                        <TableRow>
-                          <TableHead className="font-semibold">Subject</TableHead>
-                          <TableHead className="font-semibold text-center w-[100px] hidden md:table-cell">Code</TableHead>
-                          <TableHead className="font-semibold text-center w-[100px]">Score</TableHead>
-                          <TableHead className="font-semibold text-center w-[80px]">Grade</TableHead>
-                          <TableHead className="font-semibold text-center hidden lg:table-cell">Standard</TableHead>
+                      <TableHeader className="bg-slate-50/80 dark:bg-slate-800/80 backdrop-blur-sm">
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="font-bold text-slate-900 dark:text-slate-100 py-4">Subject</TableHead>
+                          <TableHead className="font-bold text-slate-900 dark:text-slate-100 text-center w-[80px] sm:w-[100px] py-4">Score</TableHead>
+                          <TableHead className="font-bold text-slate-900 dark:text-slate-100 text-center w-[70px] sm:w-[80px] py-4">Grade</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {currentGrades.map((grade: any) => (
-                          <TableRow key={grade.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
-                            <TableCell className="font-medium text-slate-900 dark:text-white">
-                              {grade.subjects?.name}
-                            </TableCell>
-                            <TableCell className="text-center text-muted-foreground text-sm hidden md:table-cell">
-                              {grade.subjects?.code}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col items-center justify-center gap-1">
-                                <span className="font-bold">{grade.percentage}%</span>
-                                <Progress
-                                  value={grade.percentage}
-                                  className={`h-1.5 w-16 hidden sm:block ${getGradeColor(grade.grade)}`}
-                                />
+                          <TableRow key={grade.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                            <TableCell className="py-4">
+                              <div className="space-y-1">
+                                <p className="font-bold text-slate-900 dark:text-white leading-none">
+                                  {grade.subjects?.name}
+                                </p>
+                                <p className="text-[10px] sm:text-xs font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                                  {grade.grade === 'ABSENT' ? 'NOT RECORDED' : getStandardFromScale(grade.percentage)}
+                                </p>
                               </div>
                             </TableCell>
-                            <TableCell className="text-center">
-                              <Badge variant="outline" className={`${getGradeColor(grade.grade).replace('bg-', 'text-')} border-current font-bold`}>
-                                {grade.grade}
-                              </Badge>
+                            <TableCell className="py-4">
+                              <div className="flex flex-col items-center justify-center gap-1.5">
+                                <span className="font-black text-slate-900 dark:text-white">{grade.percentage}%</span>
+                                <div className="w-12 sm:w-16 h-1 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden hidden xs:block">
+                                  <div 
+                                    className={`h-full ${getGradeColor(grade.grade)}`} 
+                                    style={{ width: `${grade.percentage}%` }}
+                                  />
+                                </div>
+                              </div>
                             </TableCell>
-                            <TableCell className="text-center text-sm font-medium text-slate-600 dark:text-slate-400 hidden lg:table-cell uppercase tracking-wider">
-                                {grade.grade === 'ABSENT' ? (
-                                    <span className="text-muted-foreground italic">NOT RECORDED</span>
-                                ) : (
-                                    getStandardFromScale(grade.percentage)
-                                )}
+                            <TableCell className="text-center py-4">
+                              <div className={`inline-flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 font-black text-sm ${getGradeColor(grade.grade).replace('bg-', 'text-')} ${getGradeColor(grade.grade).replace('bg-', 'border-').replace('-600', '-200').replace('-500', '-200')}`}>
+                                {grade.grade}
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
+                        {currentGrades.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={3} className="text-center py-12 text-slate-500 italic">
+                              No results found for this term.
+                            </TableCell>
+                          </TableRow>
+                        )}
                       </TableBody>
                     </Table>
                   </div>
@@ -906,6 +994,7 @@ export default function StudentPortal() {
                </div>
             </TabsContent>
           </Tabs>
+          </div>
         </main>
       </div>
 

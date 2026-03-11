@@ -46,6 +46,8 @@ interface SchoolAdminNavbarProps {
   setIsSidebarOpen: (isOpen: boolean) => void;
   activeTab: string;
   setActiveTab?: (tab: string) => void;
+  onSelectStudent?: (id: string | null) => void;
+  onSelectTeacher?: (id: string | null) => void;
   onLogout: () => void;
 }
 
@@ -54,6 +56,8 @@ export default function SchoolAdminNavbar({
   setIsSidebarOpen,
   activeTab,
   setActiveTab,
+  onSelectStudent,
+  onSelectTeacher,
   onLogout
 }: SchoolAdminNavbarProps) {
   const [user, setUser] = useState<{
@@ -224,26 +228,30 @@ export default function SchoolAdminNavbar({
   };
 
   return (
-    <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-50">
-      <div className="px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+    <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 sticky top-0 z-50 overflow-hidden">
+      <div className="px-2 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16 sm:h-20">
           {/* Logo and School Name */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <Button
               variant="ghost"
-              size="sm"
-              className="lg:hidden"
+              size="icon"
+              className="lg:hidden h-9 w-9"
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             >
               {isSidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </Button>
-            <div className="flex items-center gap-3">
-              <GraduationCap className="h-8 w-8 text-blue-600" />
-              <div className="hidden md:block">
-                <h1 className="text-lg font-bold text-slate-900 dark:text-white">
-                  MUCHI School Admin
+            <div className="hidden sm:flex items-center gap-2 sm:gap-3">
+              <div className="bg-blue-600 p-1.5 rounded-lg shadow-sm">
+                <GraduationCap className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+              </div>
+              <div className="flex flex-col">
+                <h1 className="text-sm sm:text-lg font-black text-slate-900 dark:text-white leading-tight">
+                  MUCHI Admin
                 </h1>
-                <p className="text-xs text-slate-600 dark:text-slate-400">{displayUser.schoolName || 'Administration Portal'}</p>
+                <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider line-clamp-1 max-w-[120px] sm:max-w-none">
+                  {displayUser.schoolName || 'Portal'}
+                </p>
               </div>
             </div>
 
@@ -294,7 +302,9 @@ export default function SchoolAdminNavbar({
                                   className="px-4 py-2 hover:bg-muted cursor-pointer flex justify-between items-center"
                                   onClick={() => {
                                     if (setActiveTab) setActiveTab('students');
+                                    if (onSelectStudent) onSelectStudent(student.id);
                                     setIsSearchOpen(false);
+                                    setSearchQuery('');
                                   }}
                                 >
                                   <span className="text-sm font-medium">{student.full_name}</span>
@@ -312,7 +322,9 @@ export default function SchoolAdminNavbar({
                                   className="px-4 py-2 hover:bg-muted cursor-pointer flex justify-between items-center"
                                   onClick={() => {
                                     if (setActiveTab) setActiveTab('teachers');
+                                    if (onSelectTeacher) onSelectTeacher(teacher.id);
                                     setIsSearchOpen(false);
+                                    setSearchQuery('');
                                   }}
                                 >
                                   <span className="text-sm font-medium">{teacher.full_name}</span>
@@ -331,9 +343,14 @@ export default function SchoolAdminNavbar({
           </div>
 
           {/* User Menu */}
-          <div className="flex items-center gap-2 sm:gap-4">
-            <OfflineIndicator />
-            <ThemeToggle />
+          <div className="flex items-center gap-1 sm:gap-4">
+            <div className="hidden sm:block">
+              <OfflineIndicator />
+            </div>
+            
+            <div className="hidden sm:block">
+              <ThemeToggle />
+            </div>
 
             {/* Notifications */}
             <DropdownMenu>
@@ -431,6 +448,13 @@ export default function SchoolAdminNavbar({
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
                 </DropdownMenuItem>
+                <div className="sm:hidden px-2 py-1.5 flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-800 rounded-sm">
+                  <div className="flex items-center">
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span className="text-sm">Dark Mode</span>
+                  </div>
+                  <ThemeToggle />
+                </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onLogout} className="text-red-600 focus:text-red-600">
                   <LogOut className="mr-2 h-4 w-4" />

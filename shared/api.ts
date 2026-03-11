@@ -136,6 +136,19 @@ export interface SchoolDashboardStats {
     status: string;
   }[];
   announcements: Announcement[];
+  academicPerformance: {
+    term: string;
+    average: number;
+  }[];
+  enrollmentDistribution: {
+    grade: string;
+    count: number;
+  }[];
+  financeTrends: {
+    month: string;
+    income: number;
+    expense: number;
+  }[];
 }
 
 // --- Finance Types ---

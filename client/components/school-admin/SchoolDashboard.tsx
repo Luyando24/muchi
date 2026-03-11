@@ -33,6 +33,26 @@ import { cn } from "@/lib/utils";
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { syncFetch } from '@/lib/syncService';
 
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  AreaChart,
+  Area
+} from 'recharts';
+
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+
 export default function SchoolDashboard() {
   const [data, setData] = useState<SchoolDashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -222,28 +242,28 @@ export default function SchoolDashboard() {
     return <div className="p-4 text-red-500">Error: Invalid data structure received from server.</div>;
   }
 
-  const { overview, recentActivities, financialSummary, pendingApprovals, announcements } = data;
+  const { overview, recentActivities, financialSummary, pendingApprovals, announcements, academicPerformance, enrollmentDistribution, financeTrends } = data;
 
   return (
     <div className="space-y-6 pb-10">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
+          <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">
             Admin Dashboard
           </h2>
-          <p className="text-slate-600 dark:text-slate-400">
+          <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 mt-1">
             Overview of school performance and daily operations
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button variant="outline" className="w-full sm:w-auto h-11 sm:h-10 text-base sm:text-sm font-bold shadow-sm">
             <Download className="h-4 w-4 mr-2" />
             Export Report
           </Button>
 
           <Dialog open={isAnnouncementOpen} onOpenChange={setIsAnnouncementOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 h-11 sm:h-10 text-base sm:text-sm font-bold shadow-md">
                 <Megaphone className="h-4 w-4 mr-2" />
                 New Announcement
               </Button>
@@ -287,260 +307,269 @@ export default function SchoolDashboard() {
       </div>
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         {/* Students */}
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Total Students</p>
-                <h3 className="text-2xl font-bold mt-2">{overview.totalStudents.value}</h3>
+        <Card className="hover:shadow-md transition-shadow border-l-4 border-l-blue-500">
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex flex-col gap-2">
+              <div className="flex justify-between items-center">
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Total Students</p>
+                <div className={`p-1.5 rounded-full ${overview.totalStudents.status === 'up' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                  {overview.totalStudents.status === 'up' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                </div>
               </div>
-              <div className={`p-2 rounded-full ${overview.totalStudents.status === 'up' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                {overview.totalStudents.status === 'up' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+              <div className="flex items-end justify-between">
+                <h3 className="text-2xl sm:text-3xl font-black">{overview.totalStudents.value}</h3>
+                <span className={`text-xs font-bold ${overview.totalStudents.status === 'up' ? 'text-green-600' : 'text-red-600'}`}>
+                  {overview.totalStudents.trend}
+                </span>
               </div>
-            </div>
-            <div className="mt-4 flex items-center text-sm">
-              <span className={overview.totalStudents.status === 'up' ? 'text-green-600' : 'text-red-600'}>
-                {overview.totalStudents.trend}
-              </span>
-              <span className="text-slate-500 ml-2">from last month</span>
             </div>
           </CardContent>
         </Card>
 
         {/* Teachers */}
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Total Teachers</p>
-                <h3 className="text-2xl font-bold mt-2">{overview.totalTeachers.value}</h3>
+        <Card className="hover:shadow-md transition-shadow border-l-4 border-l-green-500">
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex flex-col gap-2">
+              <div className="flex justify-between items-center">
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Total Teachers</p>
+                <div className={`p-1.5 rounded-full ${overview.totalTeachers.status === 'up' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                  {overview.totalTeachers.status === 'up' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                </div>
               </div>
-              <div className={`p-2 rounded-full ${overview.totalTeachers.status === 'up' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                {overview.totalTeachers.status === 'up' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+              <div className="flex items-end justify-between">
+                <h3 className="text-2xl sm:text-3xl font-black">{overview.totalTeachers.value}</h3>
+                <span className={`text-xs font-bold ${overview.totalTeachers.status === 'up' ? 'text-green-600' : 'text-red-600'}`}>
+                  {overview.totalTeachers.trend}
+                </span>
               </div>
-            </div>
-            <div className="mt-4 flex items-center text-sm">
-              <span className={overview.totalTeachers.status === 'up' ? 'text-green-600' : 'text-red-600'}>
-                {overview.totalTeachers.trend}
-              </span>
-              <span className="text-slate-500 ml-2">from last month</span>
             </div>
           </CardContent>
         </Card>
 
         {/* Revenue */}
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Total Revenue</p>
-                <h3 className="text-2xl font-bold mt-2">{overview.revenue.value}</h3>
+        <Card className="hover:shadow-md transition-shadow border-l-4 border-l-orange-500">
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex flex-col gap-2">
+              <div className="flex justify-between items-center">
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Total Revenue</p>
+                <div className={`p-1.5 rounded-full ${overview.revenue.status === 'up' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                  {overview.revenue.status === 'up' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                </div>
               </div>
-              <div className={`p-2 rounded-full ${overview.revenue.status === 'up' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                {overview.revenue.status === 'up' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+              <div className="flex items-end justify-between">
+                <h3 className="text-2xl sm:text-3xl font-black">{overview.revenue.value}</h3>
+                <span className={`text-xs font-bold ${overview.revenue.status === 'up' ? 'text-green-600' : 'text-red-600'}`}>
+                  {overview.revenue.trend}
+                </span>
               </div>
-            </div>
-            <div className="mt-4 flex items-center text-sm">
-              <span className={overview.revenue.status === 'up' ? 'text-green-600' : 'text-red-600'}>
-                {overview.revenue.trend}
-              </span>
-              <span className="text-slate-500 ml-2">from last term</span>
             </div>
           </CardContent>
         </Card>
 
         {/* Attendance */}
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Attendance Rate</p>
-                <h3 className="text-2xl font-bold mt-2">{overview.attendanceRate.value}</h3>
+        <Card className="hover:shadow-md transition-shadow border-l-4 border-l-purple-500">
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex flex-col gap-2">
+              <div className="flex justify-between items-center">
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Attendance Rate</p>
+                <div className={`p-1.5 rounded-full ${overview.attendanceRate.status === 'up' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                  {overview.attendanceRate.status === 'up' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                </div>
               </div>
-              <div className={`p-2 rounded-full ${overview.attendanceRate.status === 'up' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                {overview.attendanceRate.status === 'up' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+              <div className="flex items-end justify-between">
+                <h3 className="text-2xl sm:text-3xl font-black">{overview.attendanceRate.value}</h3>
+                <span className={`text-xs font-bold ${overview.attendanceRate.status === 'up' ? 'text-green-600' : 'text-red-600'}`}>
+                  {overview.attendanceRate.trend}
+                </span>
               </div>
-            </div>
-            <div className="mt-4 flex items-center text-sm">
-              <span className={overview.attendanceRate.status === 'up' ? 'text-green-600' : 'text-red-600'}>
-                {overview.attendanceRate.trend}
-              </span>
-              <span className="text-slate-500 ml-2">daily average</span>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Announcements - New Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Academic Performance Chart */}
         <Card className="col-span-1 lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Academic Performance</CardTitle>
+            <CardDescription>Term-by-term average grades</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={academicPerformance}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="term" axisLine={false} tickLine={false} />
+                <YAxis axisLine={false} tickLine={false} domain={[0, 100]} />
+                <Tooltip 
+                  cursor={{fill: '#f8fafc'}}
+                  contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                />
+                <Bar dataKey="average" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={40} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Enrollment Distribution */}
+        <Card className="col-span-1">
+          <CardHeader>
+            <CardTitle>Enrollment by Grade</CardTitle>
+            <CardDescription>Student distribution</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[300px] flex flex-col justify-center">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={enrollmentDistribution}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="count"
+                  nameKey="grade"
+                >
+                  {enrollmentDistribution.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend layout="horizontal" verticalAlign="bottom" align="center" />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Finance Trends */}
+        <Card className="col-span-1 lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Financial Trends</CardTitle>
+            <CardDescription>Monthly income vs expenses</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={financeTrends}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} />
+                <YAxis axisLine={false} tickLine={false} />
+                <Tooltip cursor={{fill: '#f8fafc'}} />
+                <Legend verticalAlign="top" align="right" height={36}/>
+                <Bar dataKey="income" fill="#10b981" radius={[4, 4, 0, 0]} name="Income" />
+                <Bar dataKey="expense" fill="#ef4444" radius={[4, 4, 0, 0]} name="Expense" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Announcements */}
+        <Card className="col-span-1">
           <CardHeader>
             <div className="flex justify-between items-center">
               <div>
                 <CardTitle>Announcements</CardTitle>
-                <CardDescription>Latest updates for the school community</CardDescription>
+                <CardDescription>Latest updates</CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent>
             {announcements && announcements.length > 0 ? (
-              <div className="space-y-4">
+              <div className="space-y-4 max-h-[230px] overflow-y-auto pr-2">
                 {announcements.map((announcement) => (
                   <div key={announcement.id} className="flex items-start justify-between border-b pb-4 last:border-0 last:pb-0">
-                    <div className="flex gap-4">
-                      <div className="p-2 bg-blue-100 rounded-full h-fit">
-                        <Megaphone className="h-4 w-4 text-blue-600" />
+                    <div className="flex gap-3">
+                      <div className="p-1.5 bg-blue-100 rounded-full h-fit mt-1">
+                        <Megaphone className="h-3 w-3 text-blue-600" />
                       </div>
                       <div>
-                        <h4 className="font-semibold text-slate-900">{announcement.title}</h4>
-                        <p className="text-sm text-slate-600 mt-1">{announcement.content}</p>
-                        <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
-                          <span>{announcement.author}</span>
-                          <span>•</span>
-                          <span>{announcement.date}</span>
-                        </div>
+                        <h4 className="text-sm font-bold text-slate-900 line-clamp-1">{announcement.title}</h4>
+                        <p className="text-xs text-slate-600 mt-1 line-clamp-2">{announcement.content}</p>
+                        <p className="text-[10px] text-slate-400 mt-1 font-medium">{announcement.date}</p>
                       </div>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => setDeleteAnnouncementId(announcement.id as string)}>
-                      <Trash2 className="h-4 w-4 text-slate-400 hover:text-red-600" />
-                    </Button>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-slate-500">
+              <div className="text-center py-10 text-slate-500 italic text-sm">
                 No active announcements
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Financial Overview */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Financial Overview</CardTitle>
-            <CardDescription>Income distribution by category</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {financialSummary.map((item, index) => (
-                <div key={index} className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium leading-none">{item.category}</p>
-                    <p className="text-sm text-slate-500 text-muted-foreground">
-                      {item.percentage}% of total income
-                    </p>
-                  </div>
-                  <div className="font-medium">
-                    K{item.amount.toLocaleString()}
-                  </div>
-                </div>
-              ))}
-              <div className="mt-4 pt-4 border-t">
-                <div className="flex justify-between font-bold">
-                  <span>Total</span>
-                  <span>
-                    K{financialSummary.reduce((acc, curr) => acc + curr.amount, 0).toLocaleString()}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Recent Activities */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Activities</CardTitle>
-            <CardDescription>Latest system events and logs</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-8">
-              {recentActivities.map((activity) => (
-                <div key={activity.id} className="flex items-center">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium leading-none">
-                      {activity.action}
-                    </p>
-                    <p className="text-sm text-slate-500 text-muted-foreground">
-                      {activity.user} • {activity.time}
-                    </p>
-                  </div>
-                  <div className="ml-auto font-medium text-xs text-slate-500 capitalize">
-                    {activity.type}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <Button variant="ghost" className="w-full mt-4 text-xs font-bold text-blue-600 uppercase tracking-widest" onClick={() => setIsAnnouncementOpen(true)}>
+              Post Announcement
+            </Button>
           </CardContent>
         </Card>
 
         {/* Pending Approvals */}
-        <Card className="col-span-1 lg:col-span-2">
+        <Card className="col-span-1 lg:col-span-3">
           <CardHeader>
             <CardTitle>Pending Approvals</CardTitle>
             <CardDescription>Requests requiring your attention</CardDescription>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Applicant</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pendingApprovals.length > 0 ? (
-                  pendingApprovals.map((approval) => (
-                    <TableRow key={approval.id}>
-                      <TableCell className="font-medium">{approval.type}</TableCell>
-                      <TableCell>{approval.applicant}</TableCell>
-                      <TableCell>{approval.department}</TableCell>
-                      <TableCell>{approval.date}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
-                          {approval.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                            onClick={() => handleUpdateApproval(approval.id, 'Approved')}
-                          >
-                            <CheckCircle className="h-4 w-4 mr-1" />
-                            Approve
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => handleUpdateApproval(approval.id, 'Rejected')}
-                          >
-                            <XCircle className="h-4 w-4 mr-1" />
-                            Reject
-                          </Button>
-                        </div>
+          <CardContent className="p-0 sm:p-6">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="min-w-[120px]">Type</TableHead>
+                    <TableHead className="min-w-[150px]">Applicant</TableHead>
+                    <TableHead className="hidden md:table-cell">Department</TableHead>
+                    <TableHead className="hidden sm:table-cell">Date</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pendingApprovals.length > 0 ? (
+                    pendingApprovals.map((approval) => (
+                      <TableRow key={approval.id}>
+                        <TableCell className="font-medium">{approval.type}</TableCell>
+                        <TableCell>{approval.applicant}</TableCell>
+                        <TableCell className="hidden md:table-cell">{approval.department}</TableCell>
+                        <TableCell className="hidden sm:table-cell">{approval.date}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200 text-[10px] uppercase font-bold">
+                            {approval.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1 sm:gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-green-600 hover:text-green-700 hover:bg-green-50 h-8 w-8 sm:h-auto sm:w-auto p-0 sm:px-3 sm:py-2"
+                              onClick={() => handleUpdateApproval(approval.id, 'Approved')}
+                              title="Approve"
+                            >
+                              <CheckCircle className="h-4 w-4 sm:mr-1" />
+                              <span className="hidden sm:inline">Approve</span>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8 w-8 sm:h-auto sm:w-auto p-0 sm:px-3 sm:py-2"
+                              onClick={() => handleUpdateApproval(approval.id, 'Rejected')}
+                              title="Reject"
+                            >
+                              <XCircle className="h-4 w-4 sm:mr-1" />
+                              <span className="hidden sm:inline">Reject</span>
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-slate-500 italic">
+                        No pending approvals
                       </TableCell>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-4 text-slate-500">
-                      No pending approvals
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       </div>

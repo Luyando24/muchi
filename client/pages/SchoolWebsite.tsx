@@ -17,14 +17,17 @@ export default function SchoolWebsite() {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Registration State
+  // Application State
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    password: '',
+    phone: '',
     grade: '',
+    previousSchool: '',
+    guardianName: '',
+    guardianPhone: '',
   });
-  const [registering, setRegistering] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     // Fetch school details by slug
@@ -65,12 +68,12 @@ export default function SchoolWebsite() {
     fetchEvents();
   }, [slug]);
 
-  const handleRegister = async (e: React.FormEvent) => {
+  const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
-    setRegistering(true);
+    setSubmitting(true);
 
     try {
-      const response = await fetch('/api/school/public-register', {
+      const response = await fetch('/api/school/public-apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -83,13 +86,16 @@ export default function SchoolWebsite() {
 
       if (response.ok) {
         toast({
-          title: "Registration Successful",
-          description: "Welcome! You can now log in to the student portal.",
+          title: "Application Submitted",
+          description: "Thank you! Our admissions office will review your application and contact you soon.",
         });
-        setFormData({ name: '', email: '', password: '', grade: '' });
+        setFormData({ 
+          name: '', email: '', phone: '', grade: '', 
+          previousSchool: '', guardianName: '', guardianPhone: '' 
+        });
       } else {
         toast({
-          title: "Registration Failed",
+          title: "Application Failed",
           description: data.message || "Something went wrong.",
           variant: "destructive"
         });
@@ -101,7 +107,7 @@ export default function SchoolWebsite() {
         variant: "destructive"
       });
     } finally {
-      setRegistering(false);
+      setSubmitting(false);
     }
   };
 
@@ -366,7 +372,7 @@ export default function SchoolWebsite() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <form onSubmit={handleRegister} className="space-y-4">
+                  <form onSubmit={handleApply} className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="name">Full Name</Label>
                       <Input 
@@ -378,59 +384,93 @@ export default function SchoolWebsite() {
                         className="bg-slate-50"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email Address</Label>
-                      <Input 
-                        id="email" 
-                        type="email" 
-                        placeholder="student@example.com" 
-                        value={formData.email}
-                        onChange={(e) => setFormData({...formData, email: e.target.value})}
-                        required
-                        className="bg-slate-50"
-                      />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email Address</Label>
+                        <Input 
+                          id="email" 
+                          type="email" 
+                          placeholder="student@example.com" 
+                          value={formData.email}
+                          onChange={(e) => setFormData({...formData, email: e.target.value})}
+                          required
+                          className="bg-slate-50"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="phone">Phone Number</Label>
+                        <Input 
+                          id="phone" 
+                          placeholder="+260..." 
+                          value={formData.phone}
+                          onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                          className="bg-slate-50"
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="grade">Applying For Grade</Label>
-                      <select 
-                        id="grade"
-                        className="flex h-10 w-full rounded-md border border-input bg-slate-50 px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                        value={formData.grade}
-                        onChange={(e) => setFormData({...formData, grade: e.target.value})}
-                        required
-                      >
-                        <option value="">Select Grade</option>
-                        <option value="Grade 8">Grade 8</option>
-                        <option value="Grade 9">Grade 9</option>
-                        <option value="Grade 10">Grade 10</option>
-                        <option value="Grade 11">Grade 11</option>
-                        <option value="Grade 12">Grade 12</option>
-                      </select>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="grade">Applying For Grade</Label>
+                        <select 
+                          id="grade"
+                          className="flex h-10 w-full rounded-md border border-input bg-slate-50 px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                          value={formData.grade}
+                          onChange={(e) => setFormData({...formData, grade: e.target.value})}
+                          required
+                        >
+                          <option value="">Select Grade</option>
+                          <option value="Grade 8">Grade 8</option>
+                          <option value="Grade 9">Grade 9</option>
+                          <option value="Grade 10">Grade 10</option>
+                          <option value="Grade 11">Grade 11</option>
+                          <option value="Grade 12">Grade 12</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="prevSchool">Previous School</Label>
+                        <Input 
+                          id="prevSchool" 
+                          placeholder="Name of previous school" 
+                          value={formData.previousSchool}
+                          onChange={(e) => setFormData({...formData, previousSchool: e.target.value})}
+                          className="bg-slate-50"
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="password">Create Password</Label>
-                      <Input 
-                        id="password" 
-                        type="password" 
-                        placeholder="••••••••" 
-                        value={formData.password}
-                        onChange={(e) => setFormData({...formData, password: e.target.value})}
-                        required
-                        className="bg-slate-50"
-                      />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="guardian">Guardian Name</Label>
+                        <Input 
+                          id="guardian" 
+                          placeholder="Parent/Guardian Name" 
+                          value={formData.guardianName}
+                          onChange={(e) => setFormData({...formData, guardianName: e.target.value})}
+                          className="bg-slate-50"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="guardianPhone">Guardian Phone</Label>
+                        <Input 
+                          id="guardianPhone" 
+                          placeholder="Guardian's contact" 
+                          value={formData.guardianPhone}
+                          onChange={(e) => setFormData({...formData, guardianPhone: e.target.value})}
+                          className="bg-slate-50"
+                        />
+                      </div>
                     </div>
-                    <Button type="submit" className="w-full" size="lg" disabled={registering}>
-                      {registering ? (
+                    <Button type="submit" className="w-full" size="lg" disabled={submitting}>
+                      {submitting ? (
                         <>
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                          Registering...
+                          Submitting...
                         </>
                       ) : (
                         "Submit Application"
                       )}
                     </Button>
                     <p className="text-xs text-center text-slate-500 mt-4">
-                      By registering, you agree to our Terms of Service and Privacy Policy.
+                      By applying, you agree to our Terms of Service and Privacy Policy.
                     </p>
                   </form>
                 </CardContent>

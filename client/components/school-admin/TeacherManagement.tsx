@@ -59,18 +59,29 @@ interface Teacher {
   joinDate: string;
 }
 
-export default function TeacherManagement() {
+export default function TeacherManagement({ initialViewId, onClearViewId }: { initialViewId?: string | null, onClearViewId?: () => void }) {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [currentTeacher, setCurrentTeacher] = useState<Teacher | null>(null);
-  const [viewTeacherId, setViewTeacherId] = useState<string | null>(null);
+  const [viewTeacherId, setViewTeacherId] = useState<string | null>(initialViewId || null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
   const [availableSubjects, setAvailableSubjects] = useState<Option[]>([]);
+
+  useEffect(() => {
+    if (initialViewId) {
+      setViewTeacherId(initialViewId);
+    }
+  }, [initialViewId]);
+
+  const handleBackFromDetails = () => {
+    setViewTeacherId(null);
+    if (onClearViewId) onClearViewId();
+  };
 
   // Form states
   const [formData, setFormData] = useState({
@@ -314,7 +325,7 @@ export default function TeacherManagement() {
   );
 
   if (viewTeacherId) {
-    return <TeacherDetailsView teacherId={viewTeacherId} onBack={() => setViewTeacherId(null)} />;
+    return <TeacherDetailsView teacherId={viewTeacherId} onBack={handleBackFromDetails} />;
   }
 
   return (
