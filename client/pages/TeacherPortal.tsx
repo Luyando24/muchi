@@ -727,7 +727,12 @@ export default function TeacherPortal() {
                     />
                   </div>
                 </PopoverTrigger>
-                <PopoverContent className="w-[400px] p-0" align="start">
+                <PopoverContent 
+                  className="w-[400px] p-0" 
+                  align="start"
+                  onOpenAutoFocus={(e) => e.preventDefault()}
+                  onCloseAutoFocus={(e) => e.preventDefault()}
+                >
                   <div className="p-4 border-b">
                     <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Search Results</p>
                   </div>

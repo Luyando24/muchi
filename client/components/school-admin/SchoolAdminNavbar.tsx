@@ -276,7 +276,12 @@ export default function SchoolAdminNavbar({
                   />
                 </div>
               </PopoverTrigger>
-              <PopoverContent className="w-[300px] md:w-[400px] p-0" align="start">
+              <PopoverContent 
+                className="w-[300px] md:w-[400px] p-0" 
+                align="start"
+                onOpenAutoFocus={(e) => e.preventDefault()}
+                onCloseAutoFocus={(e) => e.preventDefault()}
+              >
                 <div className="p-4 border-b">
                   <p className="text-sm font-medium text-muted-foreground">Search Results</p>
                 </div>
