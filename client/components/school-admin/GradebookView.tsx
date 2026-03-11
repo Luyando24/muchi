@@ -370,33 +370,37 @@ export default function GradebookView() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Gradebook</h2>
-          <p className="text-slate-600 dark:text-slate-400">Enter and manage student grades.</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Gradebook</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-400">Enter and manage student grades.</p>
         </div>
-        <div className="flex gap-2 items-center">
-          {saving && <span className="text-sm text-muted-foreground animate-pulse">Saving...</span>}
-          {!saving && lastSaved && <span className="text-xs text-muted-foreground">Saved {lastSaved.toLocaleTimeString()}</span>}
-          <Button variant="outline" onClick={() => handleSaveAll(false)} disabled={loading || saving}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-            Save Now
-          </Button>
-          <Button onClick={() => setIsSubmitModalOpen(true)} disabled={loading || !selectedClass || !selectedSubject}>
-            <Send className="h-4 w-4 mr-2" />
-            Submit Results
-          </Button>
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+          <div className="flex items-center justify-between sm:justify-end gap-2 px-1">
+            {saving && <span className="text-[10px] sm:text-sm text-muted-foreground animate-pulse">Saving...</span>}
+            {!saving && lastSaved && <span className="text-[10px] sm:text-xs text-muted-foreground">Saved {lastSaved.toLocaleTimeString()}</span>}
+          </div>
+          <div className="grid grid-cols-2 sm:flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => handleSaveAll(false)} disabled={loading || saving} className="w-full sm:w-auto">
+              {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+              Save Now
+            </Button>
+            <Button size="sm" onClick={() => setIsSubmitModalOpen(true)} disabled={loading || !selectedClass || !selectedSubject} className="w-full sm:w-auto">
+              <Send className="h-4 w-4 mr-2" />
+              Submit Results
+            </Button>
+          </div>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Filters</CardTitle>
-          <CardDescription>Select class and subject to enter grades.</CardDescription>
+      <Card className="shadow-sm">
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="text-lg">Filters</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">Select class and subject to enter grades.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div className="space-y-2">
               <Label>Academic Year</Label>
               <Select value={selectedYear} onValueChange={setSelectedYear}>
@@ -477,105 +481,113 @@ export default function GradebookView() {
 
 
       {selectedClass && selectedSubject ? (
-        <Card>
+        <Card className="shadow-sm overflow-hidden">
           <CardContent className="p-0">
             {fetchingStudents ? (
               <div className="p-8 flex justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
             ) : students.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[200px]">Student Name</TableHead>
-                    <TableHead>Percentage (%)</TableHead>
-                    <TableHead>Grade</TableHead>
-                    <TableHead className="w-[300px]">Comments</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[100px]">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {students.map(student => {
-                    const entry: GradeEntry = grades[student.id] || {
-                      studentId: student.id,
-                      percentage: '',
-                      grade: '-',
-                      comments: '',
-                      status: 'Draft',
-                      isDirty: false
-                    };
-                    return (
-                      <TableRow key={student.id}>
-                        <TableCell>
-                          <div className="font-medium">{student.fullName}</div>
-                          <div className="text-xs text-muted-foreground">{student.studentNumber}</div>
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            min="0"
-                            max="100"
-                            className="w-24"
-                            value={entry.percentage}
-                            onChange={(e) => handleGradeChange(student.id, 'percentage', e.target.value)}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={entry.grade === 'F' || entry.grade === '9' ? 'destructive' : 'secondary'}>
-                            {entry.grade}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            placeholder="Add comments..."
-                            value={entry.comments}
-                            onChange={(e) => handleGradeChange(student.id, 'comments', e.target.value)}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1 items-start">
-                            {(() => {
-                              // If it's dirty, or blank but not saved, show Draft.
-                              let displayStatus = entry.status;
-                              if (entry.isDirty) displayStatus = 'Draft';
-                              else if (displayStatus !== 'Published' && displayStatus !== 'Submitted' && entry.percentage === '') displayStatus = 'Absent';
-
-                              switch (displayStatus) {
-                                case 'Published':
-                                  return <Badge variant="default" className="bg-green-600 hover:bg-green-700">Published</Badge>;
-                                case 'Submitted':
-                                  return <Badge variant="default" className="bg-blue-600 hover:bg-blue-700">Submitted</Badge>;
-                                case 'Absent':
-                                  return <Badge variant="destructive">Absent</Badge>;
-                                default:
-                                  return <Badge variant="outline">Draft</Badge>;
-                              }
-                            })()}
-                            {entry.isDirty && <span className="text-xs text-amber-500 italic">Unsaved edits</span>}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                              <ReportCardPreview
-                                studentId={student.id}
-                                term={selectedTerm}
-                                academicYear={selectedYear}
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[180px] sm:w-[200px] text-xs font-bold uppercase tracking-wider">Student Name</TableHead>
+                      <TableHead className="text-xs font-bold uppercase tracking-wider whitespace-nowrap">Percentage (%)</TableHead>
+                      <TableHead className="text-xs font-bold uppercase tracking-wider whitespace-nowrap">Grade</TableHead>
+                      <TableHead className="min-w-[200px] sm:w-[300px] text-xs font-bold uppercase tracking-wider">Comments</TableHead>
+                      <TableHead className="text-xs font-bold uppercase tracking-wider">Status</TableHead>
+                      <TableHead className="w-[80px] sm:w-[100px] text-right text-xs font-bold uppercase tracking-wider">View</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {students.map(student => {
+                      const entry: GradeEntry = grades[student.id] || {
+                        studentId: student.id,
+                        percentage: '',
+                        grade: '-',
+                        comments: '',
+                        status: 'Draft',
+                        isDirty: false
+                      };
+                      return (
+                        <TableRow key={student.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
+                          <TableCell className="py-3 sm:py-4">
+                            <div className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">{student.fullName}</div>
+                            <div className="text-[10px] sm:text-xs text-muted-foreground font-mono uppercase tracking-tight">{student.studentNumber}</div>
+                          </TableCell>
+                          <TableCell className="py-3 sm:py-4">
+                            <div className="relative max-w-[80px] sm:max-w-[100px]">
+                              <Input
+                                type="number"
+                                min="0"
+                                max="100"
+                                className="h-9 text-center font-bold focus:ring-2 focus:ring-blue-500/20"
+                                value={entry.percentage}
+                                onChange={(e) => handleGradeChange(student.id, 'percentage', e.target.value)}
                               />
-                            </DialogContent>
-                          </Dialog>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-3 sm:py-4">
+                            <Badge 
+                              variant={entry.grade === 'F' || entry.grade === '9' ? 'destructive' : 'secondary'}
+                              className="font-bold min-w-[30px] justify-center"
+                            >
+                              {entry.grade}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="py-3 sm:py-4">
+                            <Input
+                              placeholder="Add comments..."
+                              className="h-9 text-xs sm:text-sm bg-slate-50/50 focus:bg-white"
+                              value={entry.comments}
+                              onChange={(e) => handleGradeChange(student.id, 'comments', e.target.value)}
+                            />
+                          </TableCell>
+                          <TableCell className="py-3 sm:py-4">
+                            <div className="flex flex-col gap-1 items-start">
+                              {(() => {
+                                // If it's dirty, or blank but not saved, show Draft.
+                                let displayStatus = entry.status;
+                                if (entry.isDirty) displayStatus = 'Draft';
+                                else if (displayStatus !== 'Published' && displayStatus !== 'Submitted' && entry.percentage === '') displayStatus = 'Absent';
+
+                                switch (displayStatus) {
+                                  case 'Published':
+                                    return <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-[10px] h-5">Published</Badge>;
+                                  case 'Submitted':
+                                    return <Badge variant="default" className="bg-blue-600 hover:bg-blue-700 text-[10px] h-5">Submitted</Badge>;
+                                  case 'Absent':
+                                    return <Badge variant="destructive" className="text-[10px] h-5">Absent</Badge>;
+                                  default:
+                                    return <Badge variant="outline" className="text-[10px] h-5">Draft</Badge>;
+                                }
+                              })()}
+                              {entry.isDirty && <span className="text-[10px] text-amber-500 font-medium italic animate-pulse">Unsaved</span>}
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-3 sm:py-4 text-right">
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-blue-50 dark:hover:bg-blue-900/20">
+                                  <Eye className="h-4 w-4 text-blue-600" />
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 sm:p-6">
+                                <ReportCardPreview
+                                  studentId={student.id}
+                                  term={selectedTerm}
+                                  academicYear={selectedYear}
+                                />
+                              </DialogContent>
+                            </Dialog>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             ) : (
               <div className="p-8 text-center text-muted-foreground">
                 No students found in this class.

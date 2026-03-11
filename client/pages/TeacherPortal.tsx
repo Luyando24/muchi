@@ -196,6 +196,7 @@ export default function TeacherPortal() {
   const [searchResults, setSearchResults] = useState<{ students: any[] }>({ students: [] });
   const [isSearching, setIsSearching] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
 
   // New Assignment Form State
   const [newAssignment, setNewAssignment] = useState({
@@ -677,111 +678,178 @@ export default function TeacherPortal() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
       {/* Header */}
       <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-50">
-        <div className="px-4 sm:px-6 lg:px-8">
+        <div className="px-3 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo and School Name */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               <Button
                 variant="ghost"
-                size="sm"
-                className="lg:hidden"
+                size="icon"
+                className="lg:hidden h-9 w-9"
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               >
                 {isSidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </Button>
-              <div className="flex items-center gap-3">
-                <GraduationCap className="h-8 w-8 text-blue-600" />
-                <div className="hidden md:block">
-                  <h1 className="text-lg font-bold text-slate-900 dark:text-white">
-                    MUCHI Teacher Portal
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="bg-blue-600 p-1.5 rounded-lg">
+                  <GraduationCap className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                </div>
+                <div className="hidden sm:block">
+                  <h1 className="text-sm sm:text-lg font-bold text-slate-900 dark:text-white leading-tight">
+                    MUCHI Teacher
                   </h1>
                   <div className="flex items-center gap-2">
-                    <p className="text-xs text-slate-600 dark:text-slate-400">{profile?.schools?.name || 'School Name'}</p>
+                    <p className="text-[10px] sm:text-xs text-slate-600 dark:text-slate-400 truncate max-w-[120px]">{profile?.schools?.name || 'School Name'}</p>
                     {schoolSettings && (
-                      <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal">
-                        {schoolSettings.academic_year} | {schoolSettings.current_term}
+                      <Badge variant="outline" className="hidden lg:flex text-[10px] h-4 px-1 font-normal border-slate-200">
+                        {schoolSettings.academic_year}
                       </Badge>
                     )}
                   </div>
                 </div>
               </div>
-
-              {/* Breadcrumb */}
-              <div className="hidden md:flex items-center text-sm text-slate-500 ml-4 border-l pl-4 border-slate-200 dark:border-slate-700">
-                <span className="font-medium text-slate-900 dark:text-white capitalize">{activeTab}</span>
-              </div>
             </div>
 
-            {/* Search Bar (Center) */}
-            <div className="hidden md:flex flex-1 max-w-md mx-8">
-              <Popover open={isSearchOpen} onOpenChange={setIsSearchOpen}>
-                <PopoverTrigger asChild>
-                  <div className="relative w-full">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-                    <Input
-                      type="search"
-                      placeholder="Search students..."
-                      className="w-full pl-9 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 focus-visible:ring-blue-500"
-                      value={searchQuery}
-                      onChange={(e) => handleSearch(e.target.value)}
-                    />
-                  </div>
-                </PopoverTrigger>
-                <PopoverContent 
-                  className="w-[400px] p-0" 
-                  align="start"
-                  onOpenAutoFocus={(e) => e.preventDefault()}
-                  onCloseAutoFocus={(e) => e.preventDefault()}
-                >
-                  <div className="p-4 border-b">
-                    <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Search Results</p>
-                  </div>
-                  <div className="max-h-[300px] overflow-y-auto">
+            {/* Mobile Search Input (Visible when search is active) */}
+            {isMobileSearchOpen ? (
+              <div className="flex-1 mx-2 sm:hidden relative">
+                <div className="flex items-center bg-slate-100 dark:bg-slate-900 rounded-full px-3 py-1.5 border border-slate-200 dark:border-slate-700">
+                  <Search className="h-4 w-4 text-slate-500 mr-2" />
+                  <Input
+                    autoFocus
+                    type="search"
+                    placeholder="Search students..."
+                    className="flex-1 h-7 border-none bg-transparent p-0 focus-visible:ring-0 text-sm"
+                    value={searchQuery}
+                    onChange={(e) => handleSearch(e.target.value)}
+                  />
+                  <Button variant="ghost" size="icon" className="h-6 w-6 ml-1" onClick={() => {setIsMobileSearchOpen(false); setSearchQuery('');}}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+                
+                {/* Mobile Search Results Dropdown */}
+                {searchQuery.length >= 2 && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 z-[60] max-h-[60vh] overflow-y-auto">
                     {isSearching ? (
                       <div className="p-4 flex justify-center">
-                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
                       </div>
                     ) : (
-                      <>
+                      <div className="py-2">
                         {searchResults.students.length === 0 ? (
-                          <div className="p-4 text-center text-sm text-muted-foreground">
-                            No students found
-                          </div>
+                          <div className="p-4 text-center text-sm text-slate-500 italic">No students found</div>
                         ) : (
-                          <div className="py-2">
-                            <h4 className="px-4 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Students</h4>
-                            {searchResults.students.map(student => (
-                              <div
-                                key={student.id}
-                                className="px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer flex justify-between items-center group transition-colors"
-                                onClick={() => {
-                                  setSelectedStudentId(student.id);
-                                  setActiveTab('students');
-                                  setIsSearchOpen(false);
-                                  setSearchQuery('');
-                                }}
-                              >
-                                <div className="flex flex-col">
-                                  <span className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors">
-                                    {student.full_name}
-                                  </span>
-                                  <span className="text-[10px] text-slate-500 uppercase font-medium">Grade {student.grade || 'N/A'}</span>
-                                </div>
-                                <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-blue-500 transition-colors" />
+                          searchResults.students.map(student => (
+                            <div
+                              key={student.id}
+                              className="px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 flex justify-between items-center border-b border-slate-50 dark:border-slate-700 last:border-0"
+                              onClick={() => {
+                                setSelectedStudentId(student.id);
+                                setActiveTab('students');
+                                setIsMobileSearchOpen(false);
+                                setSearchQuery('');
+                              }}
+                            >
+                              <div className="flex flex-col">
+                                <span className="text-sm font-bold text-slate-900 dark:text-white">{student.full_name}</span>
+                                <span className="text-[10px] text-slate-500 uppercase">Grade {student.grade || 'N/A'}</span>
                               </div>
-                            ))}
-                          </div>
+                              <ChevronRight className="h-4 w-4 text-slate-300" />
+                            </div>
+                          ))
                         )}
-                      </>
+                      </div>
                     )}
                   </div>
-                </PopoverContent>
-              </Popover>
-            </div>
+                )}
+              </div>
+            ) : (
+              <div className="hidden md:flex flex-1 max-w-md mx-8">
+                <Popover open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+                  <PopoverTrigger asChild>
+                    <div className="relative w-full">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                      <Input
+                        type="search"
+                        placeholder="Search students..."
+                        className="w-full pl-9 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 focus-visible:ring-blue-500"
+                        value={searchQuery}
+                        onChange={(e) => handleSearch(e.target.value)}
+                      />
+                    </div>
+                  </PopoverTrigger>
+                  <PopoverContent 
+                    className="w-[400px] p-0" 
+                    align="start"
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
+                    <div className="p-4 border-b">
+                      <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Search Results</p>
+                    </div>
+                    <div className="max-h-[300px] overflow-y-auto">
+                      {isSearching ? (
+                        <div className="p-4 flex justify-center">
+                          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        </div>
+                      ) : (
+                        <>
+                          {searchResults.students.length === 0 ? (
+                            <div className="p-4 text-center text-sm text-muted-foreground">
+                              No students found
+                            </div>
+                          ) : (
+                            <div className="py-2">
+                              <h4 className="px-4 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Students</h4>
+                              {searchResults.students.map(student => (
+                                <div
+                                  key={student.id}
+                                  className="px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer flex justify-between items-center group transition-colors"
+                                  onClick={() => {
+                                    setSelectedStudentId(student.id);
+                                    setActiveTab('students');
+                                    setIsSearchOpen(false);
+                                    setSearchQuery('');
+                                  }}
+                                >
+                                  <div className="flex flex-col">
+                                    <span className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors">
+                                      {student.full_name}
+                                    </span>
+                                    <span className="text-[10px] text-slate-500 uppercase font-medium">Grade {student.grade || 'N/A'}</span>
+                                  </div>
+                                  <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-blue-500 transition-colors" />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            )}
 
             {/* User Menu */}
-            <div className="flex items-center gap-2 sm:gap-4">
-              <OfflineIndicator />
+            <div className="flex items-center gap-1 sm:gap-4">
+              {/* Mobile Search Toggle */}
+              {!isMobileSearchOpen && (
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="md:hidden h-9 w-9 text-slate-500" 
+                  onClick={() => setIsMobileSearchOpen(true)}
+                >
+                  <Search className="h-5 w-5" />
+                </Button>
+              )}
+              
+              <div className="hidden sm:block">
+                <OfflineIndicator />
+              </div>
+              
               {/* Notifications */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
