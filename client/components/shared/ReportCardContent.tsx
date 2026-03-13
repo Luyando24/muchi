@@ -116,9 +116,10 @@ export const ReportCardContent = ({ data, term, academicYear, className = "" }: 
                 <Table>
                   <TableHeader className="border-b border-slate-900">
                     <TableRow className="hover:bg-transparent border-none h-12">
-                      <TableHead className="w-[50%] text-xs font-bold text-slate-900 uppercase tracking-widest pl-0">Subject</TableHead>
-                      <TableHead className="w-[25%] text-xs font-bold text-slate-900 uppercase tracking-widest text-center">Grade</TableHead>
-                      <TableHead className="w-[25%] text-xs font-bold text-slate-900 uppercase tracking-widest text-right pr-0">Standard</TableHead>
+                      <TableHead className="w-[40%] text-xs font-bold text-slate-900 uppercase tracking-widest pl-0">Subject</TableHead>
+                      <TableHead className="w-[20%] text-xs font-bold text-slate-900 uppercase tracking-widest text-center">Score %</TableHead>
+                      <TableHead className="w-[20%] text-xs font-bold text-slate-900 uppercase tracking-widest text-center">Grade</TableHead>
+                      <TableHead className="w-[20%] text-xs font-bold text-slate-900 uppercase tracking-widest text-right pr-0">Standard</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -173,6 +174,9 @@ export const ReportCardContent = ({ data, term, academicYear, className = "" }: 
                                       <span className="uppercase tracking-tight text-sm print:text-xs">{g.subjects?.name || 'Unknown Subject'}</span>
                                     </div>
                                   </TableCell>
+                                  <TableCell className="py-2 px-4 text-center font-bold text-slate-700 text-sm print:text-xs">
+                                    {isAbsent ? '-' : `${g.percentage}%`}
+                                  </TableCell>
                                   <TableCell className="py-2 px-4 text-center font-black text-slate-900 text-lg print:text-sm">
                                     {standardData.grade}
                                   </TableCell>
@@ -188,7 +192,7 @@ export const ReportCardContent = ({ data, term, academicYear, className = "" }: 
                             })
                           ) : (
                             <TableRow>
-                              <TableCell colSpan={3} className="text-center py-16">
+                              <TableCell colSpan={4} className="text-center py-16">
                                 <div className="flex flex-col items-center gap-2 text-slate-400">
                                   <p className="text-sm font-medium">No academic records found</p>
                                   <p className="text-xs opacity-70">Grades for this term have not been published yet.</p>
@@ -198,7 +202,7 @@ export const ReportCardContent = ({ data, term, academicYear, className = "" }: 
                           )}
                           {grades.length > 0 && (
                             <TableRow className="border-t border-slate-900 mt-8 print:mt-4 block">
-                              <TableCell colSpan={3} className="p-4 print:p-2 pl-0">
+                              <TableCell colSpan={4} className="p-4 print:p-2 pl-0">
                                 <div className="flex justify-between items-center text-xs font-bold text-slate-900 uppercase tracking-widest">
                                   <div>SUBJECTS RECORDED: {grades.length}</div>
                                   <div>SUBJECTS PASSED: {subjectsPassed}</div>

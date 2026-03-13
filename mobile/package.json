@@ -1,0 +1,47 @@
+{
+  "name": "mobile",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "main": "expo-router/entry",
+  "scripts": {
+    "dev": "expo start",
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@expo/metro-config": "~0.19.0",
+    "@expo/metro-runtime": "~4.0.1",
+    "@react-native-async-storage/async-storage": "1.23.1",
+    "@supabase/supabase-js": "^2.99.1",
+    "clsx": "^2.1.1",
+    "expo": "~52.0.49",
+    "expo-constants": "~17.0.8",
+    "expo-router": "~4.0.22",
+    "expo-status-bar": "~2.0.1",
+    "lucide-react-native": "^0.577.0",
+    "metro-config": "~0.81.5",
+    "metro-resolver": "~0.81.5",
+    "nativewind": "^4.2.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-native": "0.76.9",
+    "react-native-gesture-handler": "~2.20.2",
+    "react-native-reanimated": "~3.16.1",
+    "react-native-safe-area-context": "4.12.0",
+    "react-native-screens": "~4.4.0",
+    "react-native-svg": "15.8.0",
+    "react-native-url-polyfill": "^3.0.0",
+    "react-native-web": "~0.19.13",
+    "tailwind-merge": "^3.5.0"
+  },
+  "devDependencies": {
+    "@types/react": "~18.3.12",
+    "cross-env": "^7.0.3",
+    "tailwindcss": "^3.4.19",
+    "typescript": "~5.3.3"
+  },
+  "private": true
+}

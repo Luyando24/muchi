@@ -1,7 +1,6 @@
 {
   "name": "fusion-starter",
   "private": true,
-  "type": "module",
   "pkg": {
     "assets": [
       "dist/*"
