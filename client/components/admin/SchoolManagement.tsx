@@ -295,12 +295,19 @@ export default function SchoolManagement() {
     if (!deleteTargetId) return;
     setIsDeleting(true);
     try {
-      const { error } = await supabase
-        .from('schools')
-        .delete()
-        .eq('id', deleteTargetId);
+      const { data: { session } } = await supabase.auth.getSession();
 
-      if (error) throw error;
+      const response = await fetch(`/api/admin/schools/${deleteTargetId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`
+        }
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to delete school');
+      }
 
       toast({ title: "School deleted successfully" });
       setDeleteTargetId(null);
@@ -315,6 +322,7 @@ export default function SchoolManagement() {
       setIsDeleting(false);
     }
   };
+
 
   const openEditDialog = (school: School) => {
     setEditingSchool(school);

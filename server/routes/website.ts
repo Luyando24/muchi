@@ -4,6 +4,43 @@ import { requireSchoolRole } from "./school.js";
 
 const router = Router();
 
+// GET /api/school/public-website-content
+router.get(
+  "/public-website-content",
+  async (req: Request, res: Response) => {
+    const { schoolSlug } = req.query;
+
+    if (!schoolSlug) {
+      return res.status(400).json({ message: "schoolSlug is required" });
+    }
+
+    try {
+      // First get school ID from slug
+      const { data: school, error: schoolError } = await supabaseAdmin
+        .from("schools")
+        .select("id")
+        .eq("slug", schoolSlug)
+        .single();
+
+      if (schoolError || !school) {
+        return res.status(404).json({ message: "School not found" });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from("website_content")
+        .select("*")
+        .eq("school_id", school.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      res.json(data || {});
+    } catch (error: any) {
+      console.error("Get Public Website Content Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
 // --- WEBSITE CONTENT ENDPOINTS ---
 
 // GET /api/school/website-content
@@ -37,14 +74,38 @@ router.put(
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
-    const content = req.body;
+    const { 
+      hero_title, hero_subtitle, hero_image_url, 
+      about_text, contact_email, contact_phone, 
+      address, facebook_url, twitter_url, 
+      instagram_url, linkedin_url,
+      admissions_open, admissions_title,
+      admissions_text, apply_button_text,
+      admission_form_fields, admission_required_documents
+    } = req.body;
 
     try {
       const { data, error } = await supabaseAdmin
         .from("website_content")
         .upsert({
-          ...content,
           school_id: schoolId,
+          hero_title,
+          hero_subtitle,
+          hero_image_url,
+          about_text,
+          contact_email,
+          contact_phone,
+          address,
+          facebook_url,
+          twitter_url,
+          instagram_url,
+          linkedin_url,
+          admissions_open,
+          admissions_title,
+          admissions_text,
+          apply_button_text,
+          admission_form_fields,
+          admission_required_documents,
           updated_at: new Date().toISOString(),
         })
         .select()

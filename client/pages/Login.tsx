@@ -111,21 +111,22 @@ export default function Login() {
         });
 
         // Redirect based on role
-        switch (profile.role) {
-          case "system_admin":
-            navigate("/system-admin");
-            break;
-          case "school_admin":
+        if (["school_admin", "bursar", "registrar", "exam_officer", "academic_auditor", "accounts", "content_manager"].includes(profile.role)) {
             navigate("/school-admin");
-            break;
-          case "teacher":
-            navigate("/teacher-portal");
-            break;
-          case "student":
-            navigate(`/student-portal/${data.session.user.id}`);
-            break;
-          default:
-            navigate("/");
+        } else {
+            switch (profile.role) {
+            case "system_admin":
+                navigate("/system-admin");
+                break;
+            case "teacher":
+                navigate("/teacher-portal");
+                break;
+            case "student":
+                navigate(`/student-portal/${data.session.user.id}`);
+                break;
+            default:
+                navigate("/");
+            }
         }
       }
     } catch (error: any) {

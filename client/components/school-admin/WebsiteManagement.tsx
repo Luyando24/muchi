@@ -15,7 +15,19 @@ import {
   Linkedin,
   Mail,
   Phone,
-  MapPin
+  MapPin,
+  Settings,
+  List,
+  Upload,
+  X,
+  ArrowLeft,
+  Bold,
+  Italic,
+  Link as LinkIcon,
+  Heading1,
+  Heading2,
+  List as ListIcon,
+  ListOrdered
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -54,6 +66,23 @@ interface WebsiteContent {
   twitter_url?: string;
   instagram_url?: string;
   linkedin_url?: string;
+  admissions_open?: boolean;
+  admissions_title?: string;
+  admissions_text?: string;
+  apply_button_text?: string;
+  admission_form_fields?: Array<{
+    id: string;
+    name: string;
+    label: string;
+    type: 'text' | 'number' | 'date' | 'email' | 'tel';
+    required: boolean;
+  }>;
+  admission_required_documents?: Array<{
+    id: string;
+    name: string;
+    label: string;
+    required: boolean;
+  }>;
 }
 
 interface BlogPost {
@@ -80,8 +109,13 @@ export default function WebsiteManagement() {
   const { toast } = useToast();
 
   // Blog Post Editor State
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingPost, setEditingPost] = useState<Partial<BlogPost> | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const isEditorOpen = !!editingPost;
+  const setIsEditorOpen = (open: boolean) => {
+    if (!open) setEditingPost(null);
+  };
 
   useEffect(() => {
     fetchData();
@@ -157,7 +191,6 @@ export default function WebsiteManagement() {
       if (!res.ok) throw new Error('Failed to save post');
       
       toast({ title: "Success", description: `Post ${editingPost.id ? 'updated' : 'created'} successfully` });
-      setIsEditorOpen(false);
       setEditingPost(null);
       fetchData(); // Refresh list
     } catch (error: any) {
@@ -182,6 +215,79 @@ export default function WebsiteManagement() {
       toast({ title: "Success", description: "Post deleted" });
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+      const filePath = `blog-covers/${fileName}`;
+
+      const { data, error } = await supabase.storage
+        .from('school-assets')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (error) throw error;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('school-assets')
+        .getPublicUrl(data.path);
+
+      if (editingPost) {
+        setEditingPost({ ...editingPost, cover_image_url: publicUrl });
+      }
+      
+      toast({ title: "Success", description: "Image uploaded successfully" });
+    } catch (error: any) {
+      toast({ title: "Upload Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleHeroImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `hero_${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+      const filePath = `hero-images/${fileName}`;
+
+      const { data, error } = await supabase.storage
+        .from('school-assets')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (error) throw error;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('school-assets')
+        .getPublicUrl(data.path);
+
+      setContent({ ...content, hero_image_url: publicUrl });
+      toast({ title: "Success", description: "Hero image uploaded successfully" });
+    } catch (error: any) {
+      toast({ title: "Upload Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -225,36 +331,70 @@ export default function WebsiteManagement() {
                 <CardDescription>Content that appears at the top of your homepage.</CardDescription>
               </CardHeader>
               <CardContent className="pt-6 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="hero_title">Headline</Label>
-                    <Input 
-                      id="hero_title" 
-                      value={content.hero_title || ''} 
-                      onChange={e => setContent({...content, hero_title: e.target.value})}
-                      placeholder="e.g. Empowering Future Leaders"
-                      className="bg-white dark:bg-slate-800"
-                    />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <div className="md:col-span-2 lg:col-span-2 space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="hero_title">Headline</Label>
+                      <Input 
+                        id="hero_title" 
+                        value={content.hero_title || ''} 
+                        onChange={e => setContent({...content, hero_title: e.target.value})}
+                        placeholder="e.g. Empowering Future Leaders"
+                        className="bg-white dark:bg-slate-800 text-lg font-semibold h-12"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="hero_subtitle">Sub-headline</Label>
+                      <Textarea 
+                        id="hero_subtitle" 
+                        value={content.hero_subtitle || ''} 
+                        onChange={e => setContent({...content, hero_subtitle: e.target.value})}
+                        placeholder="e.g. Exceptional education for the modern world."
+                        className="bg-white dark:bg-slate-800 min-h-[100px]"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="hero_image_url">Hero Image URL</Label>
-                    <Input 
-                      id="hero_image_url" 
-                      value={content.hero_image_url || ''} 
-                      onChange={e => setContent({...content, hero_image_url: e.target.value})}
-                      placeholder="https://..."
-                      className="bg-white dark:bg-slate-800"
-                    />
-                  </div>
-                  <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="hero_subtitle">Sub-headline</Label>
-                    <Input 
-                      id="hero_subtitle" 
-                      value={content.hero_subtitle || ''} 
-                      onChange={e => setContent({...content, hero_subtitle: e.target.value})}
-                      placeholder="e.g. Exceptional education for the modern world."
-                      className="bg-white dark:bg-slate-800"
-                    />
+
+                  <div className="space-y-4">
+                    <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Hero Image</Label>
+                    <div className="space-y-3">
+                      <div className="aspect-video relative rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center overflow-hidden bg-white dark:bg-slate-800 group transition-all hover:border-primary/50">
+                        {content.hero_image_url ? (
+                          <>
+                            <img src={content.hero_image_url} alt="Hero Preview" className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity gap-2">
+                              <Button size="sm" variant="secondary" type="button" onClick={() => document.getElementById('hero-image-upload')?.click()}>Replace</Button>
+                              <Button size="sm" variant="destructive" type="button" onClick={() => setContent({...content, hero_image_url: ''})}>Remove</Button>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-center p-4">
+                            <div className="mx-auto w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mb-2">
+                              <ImageIcon className="h-5 w-5 text-slate-400" />
+                            </div>
+                            <p className="text-[10px] text-muted-foreground mb-4">Recommended: 1920x1080px</p>
+                            <Button size="sm" variant="outline" type="button" onClick={() => document.getElementById('hero-image-upload')?.click()} disabled={isUploading}>
+                              {isUploading ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : <Upload className="h-3 w-3 mr-2" />}
+                              Upload Hero Image
+                            </Button>
+                          </div>
+                        )}
+                        <Input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          id="hero-image-upload" 
+                          onChange={handleHeroImageUpload}
+                        />
+                      </div>
+                      <Input
+                        id="hero_image_url" 
+                        value={content.hero_image_url || ''} 
+                        onChange={e => setContent({...content, hero_image_url: e.target.value})}
+                        placeholder="Or paste image URL..."
+                        className="text-xs bg-white dark:bg-slate-800 h-8"
+                      />
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -320,6 +460,190 @@ export default function WebsiteManagement() {
             <Card className="md:col-span-2 border-none shadow-md">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
+                  <Settings className="h-5 w-5 text-orange-500" />
+                  Admissions Customization
+                </CardTitle>
+                <CardDescription>Configure the public application form and required information.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 rounded-lg border">
+                      <div className="space-y-0.5">
+                        <Label>Admissions Open</Label>
+                        <p className="text-xs text-muted-foreground">Toggle visibility of the application form.</p>
+                      </div>
+                      <Button 
+                        type="button"
+                        variant={content.admissions_open ? "default" : "outline"}
+                        onClick={() => setContent({...content, admissions_open: !content.admissions_open})}
+                      >
+                        {content.admissions_open ? "Open" : "Closed"}
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="adm_title">Form Title</Label>
+                      <Input 
+                        id="adm_title" 
+                        value={content.admissions_title || ''} 
+                        onChange={e => setContent({...content, admissions_title: e.target.value})}
+                        placeholder="Online Admission"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="adm_text">Form Description</Label>
+                      <Textarea 
+                        id="adm_text" 
+                        value={content.admissions_text || ''} 
+                        onChange={e => setContent({...content, admissions_text: e.target.value})}
+                        placeholder="Apply for the upcoming academic year."
+                        className="h-20"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="btn_text">Button Text</Label>
+                      <Input 
+                        id="btn_text" 
+                        value={content.apply_button_text || ''} 
+                        onChange={e => setContent({...content, apply_button_text: e.target.value})}
+                        placeholder="Apply Now"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label className="flex items-center gap-2 font-bold"><List className="h-4 w-4" /> Custom Form Fields</Label>
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            const fields = content.admission_form_fields || [];
+                            setContent({
+                              ...content, 
+                              admission_form_fields: [
+                                ...fields, 
+                                { id: Math.random().toString(36).substr(2, 9), name: '', label: '', type: 'text', required: true }
+                              ]
+                            });
+                          }}
+                        >
+                          <Plus className="h-3 w-3 mr-1" /> Add Field
+                        </Button>
+                      </div>
+                      <div className="space-y-3">
+                        {(content.admission_form_fields || []).map((field, idx) => (
+                          <div key={field.id} className="flex gap-2 items-start p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border">
+                            <div className="grid grid-cols-2 gap-2 flex-grow">
+                              <Input 
+                                placeholder="Label (e.g. Full Name)" 
+                                value={field.label}
+                                onChange={e => {
+                                  const fields = [...(content.admission_form_fields || [])];
+                                  fields[idx].label = e.target.value;
+                                  fields[idx].name = e.target.value.toLowerCase().replace(/\s+/g, '_');
+                                  setContent({...content, admission_form_fields: fields});
+                                }}
+                                className="h-8 text-xs"
+                              />
+                              <Select 
+                                value={field.type} 
+                                onValueChange={val => {
+                                  const fields = [...(content.admission_form_fields || [])];
+                                  fields[idx].type = val as any;
+                                  setContent({...content, admission_form_fields: fields});
+                                }}
+                              >
+                                <SelectTrigger className="h-8 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="text">Text</SelectItem>
+                                  <SelectItem value="number">Number</SelectItem>
+                                  <SelectItem value="date">Date</SelectItem>
+                                  <SelectItem value="email">Email</SelectItem>
+                                  <SelectItem value="tel">Phone</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <Button 
+                              type="button" 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 w-8 p-0 text-rose-500"
+                              onClick={() => {
+                                const fields = (content.admission_form_fields || []).filter((_, i) => i !== idx);
+                                setContent({...content, admission_form_fields: fields});
+                              }}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label className="flex items-center gap-2 font-bold"><Upload className="h-4 w-4" /> Required Documents</Label>
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            const docs = content.admission_required_documents || [];
+                            setContent({
+                              ...content, 
+                              admission_required_documents: [
+                                ...docs, 
+                                { id: Math.random().toString(36).substr(2, 9), name: '', label: '', required: true }
+                              ]
+                            });
+                          }}
+                        >
+                          <Plus className="h-3 w-3 mr-1" /> Add Doc
+                        </Button>
+                      </div>
+                      <div className="space-y-3">
+                        {(content.admission_required_documents || []).map((doc, idx) => (
+                          <div key={doc.id} className="flex gap-2 items-start p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border">
+                            <Input 
+                              placeholder="Doc Name (e.g. Birth Certificate)" 
+                              value={doc.label}
+                              onChange={e => {
+                                const docs = [...(content.admission_required_documents || [])];
+                                docs[idx].label = e.target.value;
+                                docs[idx].name = e.target.value.toLowerCase().replace(/\s+/g, '_');
+                                setContent({...content, admission_required_documents: docs});
+                              }}
+                              className="h-8 text-xs flex-grow"
+                            />
+                            <Button 
+                              type="button" 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 w-8 p-0 text-rose-500"
+                              onClick={() => {
+                                const docs = (content.admission_required_documents || []).filter((_, i) => i !== idx);
+                                setContent({...content, admission_required_documents: docs});
+                              }}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="md:col-span-2 border-none shadow-md">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
                   <Globe className="h-5 w-5 text-purple-500" />
                   Social Media Links
                 </CardTitle>
@@ -372,151 +696,207 @@ export default function WebsiteManagement() {
         </TabsContent>
 
         <TabsContent value="blog" className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h3 className="text-xl font-semibold">Blog Posts</h3>
-            <Button onClick={() => {
-              setEditingPost({ status: 'Draft' });
-              setIsEditorOpen(true);
-            }} className="shadow-md hover:shadow-lg transition-all">
-              <Plus className="h-4 w-4 mr-2" /> New Post
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {posts.length === 0 ? (
-              <Card className="col-span-full border-dashed p-12 text-center bg-slate-50 dark:bg-slate-900/50">
-                <div className="mx-auto w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-4">
-                  <FileText className="h-6 w-6 text-slate-400" />
+          {!editingPost ? (
+            <>
+              <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div>
+                  <h3 className="text-xl font-bold">Blog Posts</h3>
+                  <p className="text-sm text-muted-foreground">Manage and publish articles for your school.</p>
                 </div>
-                <h4 className="text-lg font-medium">No posts found</h4>
-                <p className="text-muted-foreground mb-6">Start by creating your first blog article.</p>
-                <Button variant="outline" onClick={() => setIsEditorOpen(true)}>Create First Post</Button>
-              </Card>
-            ) : (
-              posts.map(post => (
-                <Card key={post.id} className="group overflow-hidden border-none shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
-                  <div className="aspect-video relative overflow-hidden bg-slate-100 dark:bg-slate-800">
-                    {post.cover_image_url ? (
-                      <img src={post.cover_image_url} alt={post.title} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-slate-300">
-                        <ImageIcon className="h-10 w-10 opacity-20" />
-                      </div>
-                    )}
-                    <Badge className={`absolute top-3 right-3 shadow-sm ${post.status === 'Published' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-amber-500 hover:bg-amber-600'}`}>
-                      {post.status}
-                    </Badge>
-                  </div>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="line-clamp-1">{post.title}</CardTitle>
-                    <CardDescription className="flex items-center gap-2">
-                      {post.profiles?.full_name || 'Admin'} • {new Date(post.created_at).toLocaleDateString()}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="pb-4">
-                    <p className="text-sm text-muted-foreground line-clamp-2 italic mb-4">
-                      {post.excerpt || "No excerpt provided."}
-                    </p>
-                    <div className="flex justify-between gap-2 border-t pt-4">
-                      <Button variant="ghost" size="sm" onClick={() => {
-                        setEditingPost(post);
-                        setIsEditorOpen(true);
-                      }} className="hover:text-primary transition-colors">
-                        <Edit className="h-4 w-4 mr-2" /> Edit
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDeletePost(post.id)} className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20">
-                        <Trash2 className="h-4 w-4 mr-2" /> Delete
-                      </Button>
+                <Button onClick={() => setEditingPost({ status: 'Draft', content: '' })} className="shadow-md hover:shadow-lg transition-all">
+                  <Plus className="h-4 w-4 mr-2" /> New Post
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {posts.length === 0 ? (
+                  <Card className="col-span-full border-dashed p-12 text-center bg-slate-50 dark:bg-slate-900/50">
+                    <div className="mx-auto w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-4">
+                      <FileText className="h-6 w-6 text-slate-400" />
                     </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
+                    <h4 className="text-lg font-medium">No posts found</h4>
+                    <p className="text-muted-foreground mb-6">Start by creating your first blog article.</p>
+                    <Button variant="outline" onClick={() => setEditingPost({ status: 'Draft', content: '' })}>Create First Post</Button>
+                  </Card>
+                ) : (
+                  posts.map(post => (
+                    <Card key={post.id} className="group overflow-hidden border-none shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+                      <div className="aspect-video relative overflow-hidden bg-slate-100 dark:bg-slate-800">
+                        {post.cover_image_url ? (
+                          <img src={post.cover_image_url} alt={post.title} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                        ) : (
+                          <div className="flex items-center justify-center h-full text-slate-300">
+                            <ImageIcon className="h-10 w-10 opacity-20" />
+                          </div>
+                        )}
+                        <Badge className={`absolute top-3 right-3 shadow-sm ${post.status === 'Published' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-amber-500 hover:bg-amber-600'}`}>
+                          {post.status}
+                        </Badge>
+                      </div>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="line-clamp-1">{post.title}</CardTitle>
+                        <CardDescription className="flex items-center gap-2">
+                          {post.profiles?.full_name || 'Admin'} • {new Date(post.created_at).toLocaleDateString()}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="pb-4">
+                        <p className="text-sm text-muted-foreground line-clamp-2 italic mb-4">
+                          {post.excerpt || "No excerpt provided."}
+                        </p>
+                        <div className="flex justify-between gap-2 border-t pt-4">
+                          <Button variant="ghost" size="sm" onClick={() => setEditingPost(post)} className="hover:text-primary transition-colors">
+                            <Edit className="h-4 w-4 mr-2" /> Edit
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleDeletePost(post.id)} className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20">
+                            <Trash2 className="h-4 w-4 mr-2" /> Delete
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </>
+          ) : (
+            <Card className="border-none shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <CardHeader className="bg-slate-50 dark:bg-slate-900/50 border-b flex flex-row items-center justify-between space-y-0 py-4">
+                <div className="flex items-center gap-4">
+                  <Button variant="ghost" size="sm" onClick={() => setEditingPost(null)} className="h-8 w-8 p-0 rounded-full">
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                  <div>
+                    <CardTitle className="text-xl">{editingPost.id ? 'Edit Blog Post' : 'Create New Post'}</CardTitle>
+                    <CardDescription>Draft and customize your school's article.</CardDescription>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button variant="outline" onClick={() => setEditingPost(null)} disabled={isSaving}>Cancel</Button>
+                  <Button onClick={handlePostSave} disabled={isSaving} className="bg-primary hover:bg-primary/90">
+                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    {editingPost.id ? 'Update Changes' : 'Publish Article'}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  {/* Left Column: Post Details */}
+                  <div className="lg:col-span-2 space-y-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="post-title" className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Title</Label>
+                      <Input
+                        id="post-title"
+                        value={editingPost.title || ''}
+                        onChange={e => setEditingPost({...editingPost, title: e.target.value})}
+                        className="text-2xl font-bold h-14 bg-white dark:bg-slate-800"
+                        placeholder="Enter a compelling headline..."
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Article Content</Label>
+                        <div className="flex items-center gap-1 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 p-1">
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Bold" onClick={() => document.execCommand('bold')}><Bold className="h-3.5 w-3.5" /></Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Italic" onClick={() => document.execCommand('italic')}><Italic className="h-3.5 w-3.5" /></Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Heading 1" onClick={() => document.execCommand('formatBlock', false, 'H1')}><Heading1 className="h-3.5 w-3.5" /></Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Heading 2" onClick={() => document.execCommand('formatBlock', false, 'H2')}><Heading2 className="h-3.5 w-3.5" /></Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Bullet List" onClick={() => document.execCommand('insertUnorderedList')}><ListIcon className="h-3.5 w-3.5" /></Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Ordered List" onClick={() => document.execCommand('insertOrderedList')}><ListOrdered className="h-3.5 w-3.5" /></Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Link" onClick={() => {
+                            const url = prompt('Enter URL:');
+                            if (url) document.execCommand('createLink', false, url);
+                          }}><LinkIcon className="h-3.5 w-3.5" /></Button>
+                        </div>
+                      </div>
+                      <div 
+                        className="min-h-[500px] p-6 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus-within:border-primary transition-colors outline-none overflow-y-auto prose dark:prose-invert max-w-none"
+                        contentEditable
+                        onBlur={(e) => setEditingPost({...editingPost, content: e.currentTarget.innerHTML})}
+                        dangerouslySetInnerHTML={{ __html: editingPost.content || '' }}
+                      />
+                      <p className="text-[10px] text-muted-foreground italic mt-2">Press Ctrl+B for bold, Ctrl+I for italic. Use the toolbar for more options.</p>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Settings & Sidebar */}
+                  <div className="space-y-6">
+                    <Card className="bg-slate-50 dark:bg-slate-900 border-none shadow-inner p-4 space-y-6">
+                      <div className="space-y-4">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Status & Visibility</Label>
+                        <Select 
+                          value={editingPost.status} 
+                          onValueChange={(val: any) => setEditingPost({...editingPost, status: val})}
+                        >
+                          <SelectTrigger className="bg-white dark:bg-slate-800">
+                            <SelectValue placeholder="Select status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Draft">Draft</SelectItem>
+                            <SelectItem value="Published">Published</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-4">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Cover Image</Label>
+                        <div className="space-y-3">
+                          <div className="aspect-video relative rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center overflow-hidden bg-white dark:bg-slate-800 group transition-all hover:border-primary/50">
+                            {editingPost.cover_image_url ? (
+                              <>
+                                <img src={editingPost.cover_image_url} alt="Preview" className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity gap-2">
+                                  <Button size="sm" variant="secondary" onClick={() => document.getElementById('blog-image-upload')?.click()}>Replace</Button>
+                                  <Button size="sm" variant="destructive" onClick={() => setEditingPost({...editingPost, cover_image_url: ''})}>Remove</Button>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="text-center p-4">
+                                <div className="mx-auto w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mb-2">
+                                  <Upload className="h-5 w-5 text-slate-400" />
+                                </div>
+                                <p className="text-xs text-muted-foreground mb-4">Recomended size: 1200x630px</p>
+                                <Button size="sm" variant="outline" onClick={() => document.getElementById('blog-image-upload')?.click()} disabled={isUploading}>
+                                  {isUploading ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : <Upload className="h-3 w-3 mr-2" />}
+                                  Upload Image
+                                </Button>
+                              </div>
+                            )}
+                            <Input 
+                              type="file" 
+                              accept="image/*" 
+                              className="hidden" 
+                              id="blog-image-upload" 
+                              onChange={handleImageUpload}
+                            />
+                          </div>
+                          <Input
+                            id="post-image-url"
+                            value={editingPost.cover_image_url || ''}
+                            onChange={e => setEditingPost({...editingPost, cover_image_url: e.target.value})}
+                            className="text-xs bg-white dark:bg-slate-800"
+                            placeholder="Or paste external image URL..."
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="post-excerpt" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Excerpt</Label>
+                        <Textarea
+                          id="post-excerpt"
+                          value={editingPost.excerpt || ''}
+                          onChange={e => setEditingPost({...editingPost, excerpt: e.target.value})}
+                          className="text-sm bg-white dark:bg-slate-800 min-h-[100px] resize-none"
+                          placeholder="A brief summary of the article..."
+                        />
+                      </div>
+                    </Card>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
-
-      {/* Blog Editor Dialog */}
-      <Dialog open={isEditorOpen} onOpenChange={setIsEditorOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingPost?.id ? 'Edit Blog Post' : 'Create New Post'}</DialogTitle>
-            <DialogDescription>
-              Write and customize your school's blog article.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-6 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="post-title" className="text-right font-bold">Title</Label>
-              <Input
-                id="post-title"
-                value={editingPost?.title || ''}
-                onChange={e => setEditingPost({...editingPost, title: e.target.value})}
-                className="col-span-3"
-                placeholder="Enter article headline"
-              />
-            </div>
-
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="post-status" className="text-right font-bold">Status</Label>
-              <Select 
-                value={editingPost?.status} 
-                onValueChange={(val: any) => setEditingPost({...editingPost, status: val})}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Draft">Draft</SelectItem>
-                  <SelectItem value="Published">Published</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="post-image" className="text-right font-bold">Cover URL</Label>
-              <Input
-                id="post-image"
-                value={editingPost?.cover_image_url || ''}
-                onChange={e => setEditingPost({...editingPost, cover_image_url: e.target.value})}
-                className="col-span-3"
-                placeholder="Paste cover image link"
-              />
-            </div>
-
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="post-excerpt" className="text-right font-bold">Excerpt</Label>
-              <Input
-                id="post-excerpt"
-                value={editingPost?.excerpt || ''}
-                onChange={e => setEditingPost({...editingPost, excerpt: e.target.value})}
-                className="col-span-3"
-                placeholder="Short summary for the list view"
-              />
-            </div>
-
-            <div className="space-y-4">
-              <Label htmlFor="post-content" className="font-bold">Article Content</Label>
-              <Textarea
-                id="post-content"
-                value={editingPost?.content || ''}
-                onChange={e => setEditingPost({...editingPost, content: e.target.value})}
-                className="min-h-[300px] font-serif text-lg leading-relaxed p-6"
-                placeholder="Start writing your story here..."
-              />
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsEditorOpen(false)}>Cancel</Button>
-            <Button onClick={handlePostSave} disabled={isSaving}>
-              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {editingPost?.id ? 'Update Post' : 'Publish Post'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

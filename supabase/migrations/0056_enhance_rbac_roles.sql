@@ -1,4 +1,12 @@
 
+-- Update user_role enum
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'bursar';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'registrar';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'exam_officer';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'academic_auditor';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'accounts';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'content_manager';
+
 -- Update is_school_admin() to include new granular roles
 CREATE OR REPLACE FUNCTION is_school_admin()
 RETURNS BOOLEAN AS $$

@@ -8,11 +8,43 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { School, User, CalendarEvent } from '@shared/api';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
-import { GraduationCap, BookOpen, Users, Calendar, MapPin, Phone, Mail, Clock, Award, CheckCircle2, User as UserIcon, Globe } from 'lucide-react';
+import { GraduationCap, BookOpen, Users, Calendar, MapPin, Phone, Mail, Clock, Award, CheckCircle2, User as UserIcon, Globe, Facebook, Twitter, Instagram, Linkedin, FileText, Upload, Plus } from 'lucide-react';
+
+interface WebsiteContent {
+  hero_title?: string;
+  hero_subtitle?: string;
+  hero_image_url?: string;
+  about_text?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  address?: string;
+  facebook_url?: string;
+  twitter_url?: string;
+  instagram_url?: string;
+  linkedin_url?: string;
+  admissions_open?: boolean;
+  admissions_title?: string;
+  admissions_text?: string;
+  apply_button_text?: string;
+  admission_form_fields?: Array<{
+    id: string;
+    name: string;
+    label: string;
+    type: 'text' | 'number' | 'date' | 'email' | 'tel';
+    required: boolean;
+  }>;
+  admission_required_documents?: Array<{
+    id: string;
+    name: string;
+    label: string;
+    required: boolean;
+  }>;
+}
 
 export default function SchoolWebsite() {
   const { slug } = useParams<{ slug: string }>();
   const [school, setSchool] = useState<School | null>(null);
+  const [websiteContent, setWebsiteContent] = useState<WebsiteContent | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
@@ -26,6 +58,8 @@ export default function SchoolWebsite() {
     previousSchool: '',
     guardianName: '',
     guardianPhone: '',
+    dynamicFields: {} as Record<string, string>,
+    documents: {} as Record<string, File | null>
   });
   const [submitting, setSubmitting] = useState(false);
 
@@ -64,8 +98,21 @@ export default function SchoolWebsite() {
       }
     };
 
+    const fetchWebsiteContent = async () => {
+      try {
+        const res = await fetch(`/api/school/public-website-content?schoolSlug=${slug}`);
+        if (res.ok) {
+          const data = await res.json();
+          setWebsiteContent(data);
+        }
+      } catch (error) {
+        console.error('Error fetching website content:', error);
+      }
+    };
+
     fetchSchool();
     fetchEvents();
+    fetchWebsiteContent();
   }, [slug]);
 
   const handleApply = async (e: React.FormEvent) => {
@@ -73,11 +120,37 @@ export default function SchoolWebsite() {
     setSubmitting(true);
 
     try {
+      // 1. Upload documents first
+      const uploadedDocs: Record<string, string> = {};
+      const docEntries = Object.entries(formData.documents);
+      
+      for (const [docName, file] of docEntries) {
+        if (file) {
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+          const filePath = `applications/${slug}/${fileName}`;
+          
+          const { data, error } = await supabase.storage
+            .from('school-assets')
+            .upload(filePath, file);
+            
+          if (error) throw error;
+          
+          const { data: { publicUrl } } = supabase.storage
+            .from('school-assets')
+            .getPublicUrl(data.path);
+            
+          uploadedDocs[docName] = publicUrl;
+        }
+      }
+
+      // 2. Submit application
       const response = await fetch('/api/school/public-apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          documents: uploadedDocs,
           schoolSlug: slug
         }),
       });
@@ -91,7 +164,9 @@ export default function SchoolWebsite() {
         });
         setFormData({ 
           name: '', email: '', phone: '', grade: '', 
-          previousSchool: '', guardianName: '', guardianPhone: '' 
+          previousSchool: '', guardianName: '', guardianPhone: '',
+          dynamicFields: {},
+          documents: {}
         });
       } else {
         toast({
@@ -183,7 +258,7 @@ export default function SchoolWebsite() {
         <section className="relative bg-slate-900 text-white py-24 lg:py-32 overflow-hidden">
           <div className="absolute inset-0 z-0">
             <img 
-              src="/images/herobg.jpg" 
+              src={websiteContent?.hero_image_url || "/images/herobg.jpg"} 
               alt="School Campus" 
               className="w-full h-full object-cover opacity-20"
             />
@@ -191,20 +266,24 @@ export default function SchoolWebsite() {
           </div>
           
           <div className="container mx-auto px-4 relative z-10 text-center max-w-4xl mx-auto">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/20 text-primary-foreground text-sm font-medium mb-6 border border-primary/30">
-              <Award className="h-4 w-4" />
-              <span>Admissions Open for {new Date().getFullYear() + 1} Academic Year</span>
-            </div>
+            {websiteContent?.admissions_open !== false && (
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/20 text-primary-foreground text-sm font-medium mb-6 border border-primary/30">
+                <Award className="h-4 w-4" />
+                <span>{websiteContent?.admissions_title || "Admissions Open"} for {new Date().getFullYear() + 1} Academic Year</span>
+              </div>
+            )}
             <h2 className="text-4xl md:text-6xl font-bold mb-6 leading-tight">
-              Welcome to <span className="text-primary">{school.name}</span>
+              {websiteContent?.hero_title || `Welcome to ${school.name}`}
             </h2>
             <p className="text-xl text-slate-300 mb-10 max-w-2xl mx-auto leading-relaxed">
-              Empowering students to achieve academic excellence, character development, and lifelong success through innovative education.
+              {websiteContent?.hero_subtitle || "Empowering students to achieve academic excellence, character development, and lifelong success through innovative education."}
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button size="lg" className="bg-primary hover:bg-primary/90 min-w-[160px]" onClick={() => document.getElementById('admissions')?.scrollIntoView({ behavior: 'smooth' })}>
-                Apply Now
-              </Button>
+              {websiteContent?.admissions_open !== false && (
+                <Button size="lg" className="bg-primary hover:bg-primary/90 min-w-[160px]" onClick={() => document.getElementById('admissions')?.scrollIntoView({ behavior: 'smooth' })}>
+                  {websiteContent?.apply_button_text || "Apply Now"}
+                </Button>
+              )}
               <Button size="lg" variant="outline" className="bg-transparent text-white border-white hover:bg-white/10 min-w-[160px]" onClick={() => document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' })}>
                 Learn More
               </Button>
@@ -251,14 +330,16 @@ export default function SchoolWebsite() {
                   <h3 className="text-2xl font-bold text-slate-900">About Our School</h3>
                 </div>
                 <div className="prose prose-slate max-w-none text-slate-600 leading-relaxed">
-                  <p className="mb-4">
-                    {school.name} is a premier institution dedicated to fostering academic excellence and character development. 
-                    Established with a vision to nurture future leaders, we provide a holistic education that balances academic rigor with co-curricular activities.
-                  </p>
-                  <p>
-                    Our campus provides a safe and stimulating environment where every student is encouraged to explore their potential.
-                    With state-of-the-art facilities and a team of dedicated educators, we ensure that learning is an engaging and transformative experience.
-                  </p>
+                  <div dangerouslySetInnerHTML={{ __html: websiteContent?.about_text || `
+                    <p class="mb-4">
+                      ${school.name} is a premier institution dedicated to fostering academic excellence and character development. 
+                      Established with a vision to nurture future leaders, we provide a holistic education that balances academic rigor with co-curricular activities.
+                    </p>
+                    <p>
+                      Our campus provides a safe and stimulating environment where every student is encouraged to explore their potential.
+                      With state-of-the-art facilities and a team of dedicated educators, we ensure that learning is an engaging and transformative experience.
+                    </p>
+                  ` }} />
                   <div className="grid sm:grid-cols-2 gap-4 mt-8">
                     {['Modern Classrooms', 'Science Laboratories', 'Sports Complex', 'Digital Library', 'Art & Music Studios', 'Transport Facility'].map((feature) => (
                       <div key={feature} className="flex items-center gap-2">
@@ -325,28 +406,28 @@ export default function SchoolWebsite() {
                 <div className="grid md:grid-cols-2 gap-8">
                   <div className="space-y-4">
                     <div className="flex items-start gap-3">
+                      <Mail className="h-5 w-5 text-primary mt-1" />
+                      <div>
+                        <p className="font-medium text-slate-900">Email</p>
+                        <p className="text-slate-600">{websiteContent?.contact_email || school.email || `info@${school.slug || 'school'}.edu.zm`}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-3">
                       <MapPin className="h-5 w-5 text-primary mt-1" />
                       <div>
-                        <p className="font-medium text-slate-900">Address</p>
-                        <p className="text-slate-600">{school.address || "123 Education Lane, Knowledge City, ZM"}</p>
+                        <p className="font-medium text-slate-900">Location</p>
+                        <p className="text-slate-600">{websiteContent?.address || school.address || "123 Education Lane, Knowledge City, ZM"}</p>
                       </div>
                     </div>
                     <div className="flex items-start gap-3">
                       <Phone className="h-5 w-5 text-primary mt-1" />
                       <div>
                         <p className="font-medium text-slate-900">Phone</p>
-                        <p className="text-slate-600">{school.phone || "+260 97 000 0000"}</p>
+                        <p className="text-slate-600">{websiteContent?.contact_phone || school.phone || "+260 97 000 0000"}</p>
                       </div>
                     </div>
-                    <div className="flex items-start gap-3">
-                      <Mail className="h-5 w-5 text-primary mt-1" />
-                      <div>
-                        <p className="font-medium text-slate-900">Email</p>
-                        <p className="text-slate-600">{school.email || `info@${school.slug || 'school'}.edu.zm`}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
                     <div className="flex items-start gap-3">
                       <Clock className="h-5 w-5 text-primary mt-1" />
                       <div>
@@ -364,117 +445,129 @@ export default function SchoolWebsite() {
             {/* Right Column: Admissions & Events */}
             <div className="lg:col-span-1 space-y-8">
               {/* Admissions Form */}
-              <Card id="admissions" className="scroll-mt-24 shadow-lg border-t-4 border-t-primary sticky top-24">
-                <CardHeader>
-                  <CardTitle>Online Admission</CardTitle>
-                  <CardDescription>
-                    Apply for the {new Date().getFullYear() + 1} academic year.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleApply} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Full Name</Label>
-                      <Input 
-                        id="name" 
-                        placeholder="Student's Name" 
-                        value={formData.name}
-                        onChange={(e) => setFormData({...formData, name: e.target.value})}
-                        required
-                        className="bg-slate-50"
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {websiteContent?.admissions_open === false ? (
+                <Card id="admissions" className="scroll-mt-24 shadow-lg border-t-4 border-t-slate-300">
+                  <CardHeader className="text-center p-8">
+                    <Clock className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+                    <CardTitle>Admissions Closed</CardTitle>
+                    <CardDescription>
+                      Applications are currently closed. Please check back later or contact the admissions office for more information.
+                    </CardDescription>
+                  </CardHeader>
+                </Card>
+              ) : (
+                <Card id="admissions" className="scroll-mt-24 shadow-lg border-t-4 border-t-primary sticky top-24">
+                  <CardHeader>
+                    <CardTitle>{websiteContent?.admissions_title || "Online Admission"}</CardTitle>
+                    <CardDescription>
+                      {websiteContent?.admissions_text || `Apply for the ${new Date().getFullYear() + 1} academic year.`}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleApply} className="space-y-4">
+                      {/* Standard Fields */}
                       <div className="space-y-2">
-                        <Label htmlFor="email">Email Address</Label>
+                        <Label htmlFor="name">Full Name</Label>
                         <Input 
-                          id="email" 
-                          type="email" 
-                          placeholder="student@example.com" 
-                          value={formData.email}
-                          onChange={(e) => setFormData({...formData, email: e.target.value})}
+                          id="name" 
+                          placeholder="Student's Name" 
+                          value={formData.name}
+                          onChange={(e) => setFormData({...formData, name: e.target.value})}
                           required
                           className="bg-slate-50"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="phone">Phone Number</Label>
-                        <Input 
-                          id="phone" 
-                          placeholder="+260..." 
-                          value={formData.phone}
-                          onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                          className="bg-slate-50"
-                        />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="email">Email Address</Label>
+                          <Input 
+                            id="email" 
+                            type="email" 
+                            placeholder="student@example.com" 
+                            value={formData.email}
+                            onChange={(e) => setFormData({...formData, email: e.target.value})}
+                            required
+                            className="bg-slate-50"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="phone">Phone Number</Label>
+                          <Input 
+                            id="phone" 
+                            placeholder="+260..." 
+                            value={formData.phone}
+                            onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                            className="bg-slate-50"
+                          />
+                        </div>
                       </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="grade">Applying For Grade</Label>
-                        <select 
-                          id="grade"
-                          className="flex h-10 w-full rounded-md border border-input bg-slate-50 px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                          value={formData.grade}
-                          onChange={(e) => setFormData({...formData, grade: e.target.value})}
-                          required
-                        >
-                          <option value="">Select Grade</option>
-                          <option value="Grade 8">Grade 8</option>
-                          <option value="Grade 9">Grade 9</option>
-                          <option value="Grade 10">Grade 10</option>
-                          <option value="Grade 11">Grade 11</option>
-                          <option value="Grade 12">Grade 12</option>
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="prevSchool">Previous School</Label>
-                        <Input 
-                          id="prevSchool" 
-                          placeholder="Name of previous school" 
-                          value={formData.previousSchool}
-                          onChange={(e) => setFormData({...formData, previousSchool: e.target.value})}
-                          className="bg-slate-50"
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="guardian">Guardian Name</Label>
-                        <Input 
-                          id="guardian" 
-                          placeholder="Parent/Guardian Name" 
-                          value={formData.guardianName}
-                          onChange={(e) => setFormData({...formData, guardianName: e.target.value})}
-                          className="bg-slate-50"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="guardianPhone">Guardian Phone</Label>
-                        <Input 
-                          id="guardianPhone" 
-                          placeholder="Guardian's contact" 
-                          value={formData.guardianPhone}
-                          onChange={(e) => setFormData({...formData, guardianPhone: e.target.value})}
-                          className="bg-slate-50"
-                        />
-                      </div>
-                    </div>
-                    <Button type="submit" className="w-full" size="lg" disabled={submitting}>
-                      {submitting ? (
-                        <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                          Submitting...
-                        </>
-                      ) : (
-                        "Submit Application"
+
+                      {/* Dynamic Form Fields */}
+                      {(websiteContent?.admission_form_fields || []).map((field) => (
+                        <div key={field.id} className="space-y-2">
+                          <Label htmlFor={field.name}>{field.label} {field.required && <span className="text-rose-500">*</span>}</Label>
+                          <Input 
+                            id={field.name}
+                            type={field.type}
+                            placeholder={`Enter ${field.label.toLowerCase()}`}
+                            required={field.required}
+                            value={formData.dynamicFields[field.name] || ''}
+                            onChange={(e) => setFormData({
+                              ...formData, 
+                              dynamicFields: { ...formData.dynamicFields, [field.name]: e.target.value }
+                            })}
+                            className="bg-slate-50"
+                          />
+                        </div>
+                      ))}
+
+                      {/* Document Uploads */}
+                      {(websiteContent?.admission_required_documents || []).length > 0 && (
+                        <div className="space-y-4 pt-4 border-t">
+                          <Label className="flex items-center gap-2 font-bold mb-2">
+                            <Upload className="h-4 w-4" /> Required Documents
+                          </Label>
+                          <div className="grid gap-3">
+                            {(websiteContent?.admission_required_documents || []).map((doc) => (
+                              <div key={doc.id} className="space-y-1.5 p-3 rounded-lg border bg-slate-50">
+                                <Label htmlFor={`doc-${doc.id}`} className="text-xs font-medium">
+                                  {doc.label} {doc.required && <span className="text-rose-500">*</span>}
+                                </Label>
+                                <div className="flex items-center gap-2">
+                                  <Input 
+                                    id={`doc-${doc.id}`}
+                                    type="file"
+                                    required={doc.required}
+                                    onChange={(e) => setFormData({
+                                      ...formData,
+                                      documents: { ...formData.documents, [doc.name]: e.target.files?.[0] || null }
+                                    })}
+                                    className="h-8 text-[10px] file:text-[10px] file:px-2 file:h-6"
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
-                    </Button>
-                    <p className="text-xs text-center text-slate-500 mt-4">
-                      By applying, you agree to our Terms of Service and Privacy Policy.
-                    </p>
-                  </form>
-                </CardContent>
-              </Card>
+
+                      <Button type="submit" className="w-full" size="lg" disabled={submitting}>
+                        {submitting ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Submitting...
+                          </>
+                        ) : (
+                          websiteContent?.apply_button_text || "Submit Application"
+                        )}
+                      </Button>
+                      <p className="text-xs text-center text-slate-500 mt-4">
+                        By applying, you agree to our Terms of Service and Privacy Policy.
+                      </p>
+                    </form>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Events Section */}
               {events.length > 0 && (
@@ -512,8 +605,8 @@ export default function SchoolWebsite() {
                 </CardHeader>
                 <CardContent className="text-sm text-slate-600 space-y-2">
                   <p>For admissions inquiries, please contact our admissions office:</p>
-                  <p className="font-medium text-primary">{school.email || "admissions@school.edu"}</p>
-                  <p className="font-medium text-primary">{school.phone || "+260 97 000 0000"}</p>
+                  <p className="font-medium text-primary">{websiteContent?.contact_email || school.email || "admissions@school.edu"}</p>
+                  <p className="font-medium text-primary">{websiteContent?.contact_phone || school.phone || "+260 97 000 0000"}</p>
                 </CardContent>
               </Card>
             </div>
@@ -542,16 +635,26 @@ export default function SchoolWebsite() {
                 Dedicated to providing quality education and fostering an environment of academic excellence.
               </p>
               <div className="flex gap-4">
-                {/* Social Icons Placeholder */}
-                <div className="h-8 w-8 bg-slate-800 rounded-full flex items-center justify-center hover:bg-primary hover:text-white transition-colors cursor-pointer">
-                  <Globe className="h-4 w-4" />
-                </div>
-                <div className="h-8 w-8 bg-slate-800 rounded-full flex items-center justify-center hover:bg-primary hover:text-white transition-colors cursor-pointer">
-                  <Mail className="h-4 w-4" />
-                </div>
-                <div className="h-8 w-8 bg-slate-800 rounded-full flex items-center justify-center hover:bg-primary hover:text-white transition-colors cursor-pointer">
-                  <Phone className="h-4 w-4" />
-                </div>
+                {websiteContent?.facebook_url && (
+                  <a href={websiteContent.facebook_url} target="_blank" rel="noopener noreferrer" className="h-8 w-8 bg-slate-800 rounded-full flex items-center justify-center hover:bg-primary hover:text-white transition-colors cursor-pointer">
+                    <Facebook className="h-4 w-4" />
+                  </a>
+                )}
+                {websiteContent?.twitter_url && (
+                  <a href={websiteContent.twitter_url} target="_blank" rel="noopener noreferrer" className="h-8 w-8 bg-slate-800 rounded-full flex items-center justify-center hover:bg-primary hover:text-white transition-colors cursor-pointer">
+                    <Twitter className="h-4 w-4" />
+                  </a>
+                )}
+                {websiteContent?.instagram_url && (
+                  <a href={websiteContent.instagram_url} target="_blank" rel="noopener noreferrer" className="h-8 w-8 bg-slate-800 rounded-full flex items-center justify-center hover:bg-primary hover:text-white transition-colors cursor-pointer">
+                    <Instagram className="h-4 w-4" />
+                  </a>
+                )}
+                {websiteContent?.linkedin_url && (
+                  <a href={websiteContent.linkedin_url} target="_blank" rel="noopener noreferrer" className="h-8 w-8 bg-slate-800 rounded-full flex items-center justify-center hover:bg-primary hover:text-white transition-colors cursor-pointer">
+                    <Linkedin className="h-4 w-4" />
+                  </a>
+                )}
               </div>
             </div>
             <div>
@@ -566,9 +669,9 @@ export default function SchoolWebsite() {
             <div>
               <h4 className="text-white font-bold mb-4">Contact</h4>
               <ul className="space-y-2 text-sm">
-                <li>{school.address || "123 Education Lane, Knowledge City"}</li>
-                <li>{school.phone || "+260 97 000 0000"}</li>
-                <li>{school.email || "info@school.edu"}</li>
+                <li>{websiteContent?.address || school.address || "123 Education Lane, Knowledge City"}</li>
+                <li>{websiteContent?.contact_phone || school.phone || "+260 97 000 0000"}</li>
+                <li>{websiteContent?.contact_email || school.email || "info@school.edu"}</li>
               </ul>
             </div>
           </div>

@@ -103,6 +103,49 @@ router.post('/create-school', requireSystemAdmin, async (req: Request, res: Resp
   }
 });
 
+// DELETE /api/admin/schools/:id
+// Deletes a school and cascades to all associated data, including Auth users
+router.delete('/schools/:id', requireSystemAdmin, async (req: Request, res: Response) => {
+  const schoolId = req.params.id;
+
+  if (!schoolId) {
+    return res.status(400).json({ message: 'School ID is required' });
+  }
+
+  try {
+    // 1. Fetch all users associated with the school
+    const { data: profiles, error: profilesError } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('school_id', schoolId);
+
+    if (profilesError) throw profilesError;
+
+    // 2. Loop through and delete from Supabase Auth
+    // The `profiles` rows will be implicitly deleted if ON DELETE CASCADE were on the trigger,
+    // but the critical part is removing the Auth user so they aren't orphaned and can sign up again.
+    if (profiles && profiles.length > 0) {
+      for (const profile of profiles) {
+        await supabaseAdmin.auth.admin.deleteUser(profile.id);
+      }
+    }
+
+    // 3. Delete the school (Database cascades handle the rest of the tables)
+    const { error: deleteError } = await supabaseAdmin
+      .from('schools')
+      .delete()
+      .eq('id', schoolId);
+
+    if (deleteError) throw deleteError;
+
+    res.json({ message: 'School and all associated data deleted successfully' });
+  } catch (error: any) {
+    console.error('Delete School Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+
 // GET /api/admin/users
 // List all users with profiles and emails
 router.get('/users', requireSystemAdmin, async (req: Request, res: Response) => {

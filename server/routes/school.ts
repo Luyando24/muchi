@@ -117,6 +117,8 @@ router.post("/public-apply", async (req: Request, res: Response) => {
         previous_school: previousSchool,
         guardian_name: guardianName,
         guardian_phone: guardianPhone,
+        dynamic_fields: req.body.dynamicFields || {},
+        documents: req.body.documents || {},
         status: "pending",
       })
       .select()
@@ -475,7 +477,7 @@ router.get(
 // GET /api/school/students
 router.get(
   "/students",
-  requireSchoolRole(["school_admin", "teacher", "registrar"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -516,7 +518,7 @@ router.get(
 // GET /api/school/students/:id/details
 router.get(
   "/students/:id/details",
-  requireSchoolRole(["school_admin", "teacher", "registrar"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -724,7 +726,7 @@ async function generateUniqueStudentNumber(): Promise<string> {
 // POST /api/school/create-student
 router.post(
   "/create-student",
-  requireSchoolRole(["school_admin", "registrar"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -831,7 +833,7 @@ router.post(
 // POST /api/school/students/bulk
 router.post(
   "/students/bulk",
-  requireSchoolRole(["school_admin", "registrar"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -939,7 +941,7 @@ router.post(
 // Bulk import teachers from Excel data
 router.post(
   "/teachers/bulk",
-  requireSchoolRole(["school_admin", "registrar"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -1026,7 +1028,7 @@ router.post(
 // Update a student
 router.put(
   "/students/:id",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -1159,7 +1161,7 @@ router.get(
 // PUT /api/school/applications/:id
 router.put(
   "/applications/:id",
-  requireSchoolRole(["school_admin", "registrar"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id || profile.schools?.id;
@@ -1187,7 +1189,7 @@ router.put(
 // POST /api/school/applications/:id/approve-enroll
 router.post(
   "/applications/:id/approve-enroll",
-  requireSchoolRole(["school_admin", "registrar"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id || profile.schools?.id;
@@ -1300,7 +1302,7 @@ router.post(
 // Update finance status
 router.post(
   "/students/:id/finance",
-  requireSchoolRole(["school_admin", "registrar"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -1332,7 +1334,7 @@ router.post(
 // Enroll a student in a class
 router.post(
   "/students/:id/enroll",
-  requireSchoolRole(["school_admin", "registrar"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -1477,7 +1479,7 @@ async function calculateGrade(
 // Add or update a grade
 router.post(
   "/students/:id/grades",
-  requireSchoolRole(["school_admin", "teacher"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -1531,7 +1533,7 @@ router.post(
 // Fetch grades for multiple students
 router.get(
   "/grades/batch",
-  requireSchoolRole(["school_admin", "teacher", "exam_officer", "academic_auditor"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -1567,7 +1569,7 @@ router.get(
 // Batch add or update grades
 router.post(
   "/grades/batch",
-  requireSchoolRole(["school_admin", "teacher", "exam_officer"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -1624,7 +1626,7 @@ router.post(
 // Teachers submit their grades to the admin
 router.post(
   "/results/submit",
-  requireSchoolRole(["school_admin", "teacher", "exam_officer"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -1685,7 +1687,7 @@ router.post(
 // Publish results for a class/term (Admin)
 router.post(
   "/results/publish",
-  requireSchoolRole(["school_admin", "teacher", "exam_officer"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -1826,7 +1828,7 @@ router.post(
 // Check submission status for a class/term
 router.get(
   "/grades/status",
-  requireSchoolRole(["school_admin", "exam_officer", "academic_auditor"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -2006,7 +2008,7 @@ router.get(
 // Generate report card data
 router.get(
   "/results/report-card/:studentId",
-  requireSchoolRole(["school_admin", "teacher", "student", "exam_officer", "academic_auditor"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher", "student"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -2176,7 +2178,7 @@ router.get(
 // Generate batch report cards for a class
 router.get(
   "/results/batch-report-cards",
-  requireSchoolRole(["school_admin", "exam_officer", "academic_auditor"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -2313,7 +2315,7 @@ router.get(
 // Add attendance record
 router.post(
   "/students/:id/attendance",
-  requireSchoolRole(["school_admin", "teacher"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -2359,7 +2361,7 @@ router.post(
 // Delete (soft delete or hard delete) a student
 router.delete(
   "/students/:id",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -2401,7 +2403,7 @@ router.delete(
 // GET /api/school/teachers
 router.get(
   "/teachers",
-  requireSchoolRole(["school_admin", "registrar", "academic_auditor"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -2439,7 +2441,7 @@ router.get(
 // POST /api/school/create-teacher
 router.post(
   "/create-teacher",
-  requireSchoolRole(["school_admin", "registrar"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -2501,7 +2503,7 @@ router.post(
 // Get teacher details
 router.get(
   "/teachers/:id",
-  requireSchoolRole(["school_admin", "registrar", "academic_auditor"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -2560,7 +2562,7 @@ router.get(
 // Update teacher details
 router.put(
   "/teachers/:id",
-  requireSchoolRole(["school_admin", "registrar"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -2633,7 +2635,7 @@ router.put(
 // Soft delete teacher
 router.delete(
   "/teachers/:id",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -2669,7 +2671,7 @@ router.delete(
 // GET /api/school/departments
 router.get(
   "/departments",
-  requireSchoolRole(["school_admin", "teacher"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -2694,7 +2696,7 @@ router.get(
 // POST /api/school/departments
 router.post(
   "/departments",
-  requireSchoolRole(["school_admin", "teacher"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -2751,7 +2753,7 @@ router.post(
 // GET /api/school/subjects
 router.get(
   "/subjects",
-  requireSchoolRole(["school_admin", "teacher"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -2848,7 +2850,7 @@ router.get(
 // POST /api/school/subjects
 router.post(
   "/subjects",
-  requireSchoolRole(["school_admin", "registrar"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -2879,7 +2881,7 @@ router.post(
 // PUT /api/school/subjects/:id
 router.put(
   "/subjects/:id",
-  requireSchoolRole(["school_admin", "registrar"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -2913,7 +2915,7 @@ router.put(
 // DELETE /api/school/subjects/:id
 router.delete(
   "/subjects/:id",
-  requireSchoolRole(["school_admin", "registrar"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -2938,7 +2940,7 @@ router.delete(
 // GET /api/school/classes
 router.get(
   "/classes",
-  requireSchoolRole(["school_admin", "teacher"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -3005,7 +3007,7 @@ router.get(
 // GET /api/school/classes/:id/students
 router.get(
   "/classes/:id/students",
-  requireSchoolRole(["school_admin", "teacher"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -3044,7 +3046,7 @@ router.get(
 // POST /api/school/classes
 router.post(
   "/classes",
-  requireSchoolRole(["school_admin", "registrar"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -3076,7 +3078,7 @@ router.post(
 // PUT /api/school/classes/:id
 router.put(
   "/classes/:id",
-  requireSchoolRole(["school_admin", "registrar"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -3111,7 +3113,7 @@ router.put(
 // DELETE /api/school/classes/:id
 router.delete(
   "/classes/:id",
-  requireSchoolRole(["school_admin", "registrar"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -3136,7 +3138,7 @@ router.delete(
 // GET /api/school/classes/:id/subjects
 router.get(
   "/classes/:id/subjects",
-  requireSchoolRole(["school_admin", "teacher"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
@@ -3175,7 +3177,7 @@ router.get(
 // Assign or update a teacher for a subject in a class
 router.post(
   "/classes/:id/subjects/assign",
-  requireSchoolRole(["school_admin", "registrar"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const { id } = req.params;
     const { subjectId, teacherId } = req.body;
@@ -3230,7 +3232,7 @@ router.post(
 // DELETE /api/school/classes/:id/subjects/:subjectId
 router.delete(
   "/classes/:id/subjects/:subjectId",
-  requireSchoolRole(["school_admin", "registrar"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const { id, subjectId } = req.params;
     try {
@@ -3254,7 +3256,7 @@ router.delete(
 // GET /api/school/finance
 router.get(
   "/finance",
-  requireSchoolRole(["school_admin", "teacher", "bursar", "accounts", "academic_auditor"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -3284,7 +3286,7 @@ router.get(
 // POST /api/school/finance
 router.post(
   "/finance",
-  requireSchoolRole(["school_admin", "bursar", "accounts"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -3319,7 +3321,7 @@ router.post(
 // PUT /api/school/finance/:id
 router.put(
   "/finance/:id",
-  requireSchoolRole(["school_admin", "bursar", "accounts"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -3356,7 +3358,7 @@ router.put(
 // DELETE /api/school/finance/:id
 router.delete(
   "/finance/:id",
-  requireSchoolRole(["school_admin", "bursar", "accounts"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -3381,7 +3383,7 @@ router.delete(
 // GET /api/school/finance/stats
 router.get(
   "/finance/stats",
-  requireSchoolRole(["school_admin", "teacher", "bursar", "accounts", "academic_auditor"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -3450,7 +3452,7 @@ router.get(
 // GET /api/school/reports
 router.get(
   "/reports",
-  requireSchoolRole(["school_admin", "teacher"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -3504,7 +3506,7 @@ router.get(
 // POST /api/school/reports
 router.post(
   "/reports",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -3547,7 +3549,7 @@ router.post(
 // DELETE /api/school/reports/:id
 router.delete(
   "/reports/:id",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -3572,7 +3574,7 @@ router.delete(
 // GET /api/school/reports/live-stats
 router.get(
   "/reports/live-stats",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4060,7 +4062,7 @@ router.get(
 // GET /api/school/announcements
 router.get(
   "/announcements",
-  requireSchoolRole(["school_admin", "teacher", "student"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher", "student"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id || profile.schools?.id;
@@ -4100,7 +4102,7 @@ router.get(
 // POST /api/school/announcements
 router.post(
   "/announcements",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id || profile.schools?.id;
@@ -4139,7 +4141,7 @@ router.post(
 // DELETE /api/school/announcements/:id
 router.delete(
   "/announcements/:id",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id || profile.schools?.id;
@@ -4172,7 +4174,7 @@ router.delete(
 // GET /api/school/calendar
 router.get(
   "/calendar",
-  requireSchoolRole(["school_admin", "teacher", "student"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher", "student"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4196,7 +4198,7 @@ router.get(
 // POST /api/school/calendar
 router.post(
   "/calendar",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4231,7 +4233,7 @@ router.post(
 // PUT /api/school/calendar/:id
 router.put(
   "/calendar/:id",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4266,7 +4268,7 @@ router.put(
 // DELETE /api/school/calendar/:id
 router.delete(
   "/calendar/:id",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4293,7 +4295,7 @@ router.delete(
 // POST /api/school/upload-asset
 router.post(
   "/upload-asset",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4342,7 +4344,7 @@ router.post(
 // Allow teachers and students to read settings too (for academic year context)
 router.get(
   "/settings",
-  requireSchoolRole(["school_admin", "teacher", "student"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher", "student"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4366,7 +4368,7 @@ router.get(
 // PUT /api/school/settings
 router.put(
   "/settings",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4419,7 +4421,7 @@ router.put(
 // GET /api/school/notifications
 router.get(
   "/notifications",
-  requireSchoolRole(["school_admin", "teacher"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const user = (req as any).user;
 
@@ -4443,7 +4445,7 @@ router.get(
 // PUT /api/school/notifications/:id/read
 router.put(
   "/notifications/:id/read",
-  requireSchoolRole(["school_admin", "teacher"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { id } = req.params;
@@ -4469,7 +4471,7 @@ router.put(
 // GET /api/school/search
 router.get(
   "/search",
-  requireSchoolRole(["school_admin", "teacher"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4514,7 +4516,7 @@ router.get(
 // GET /api/school/grading-scales
 router.get(
   "/grading-scales",
-  requireSchoolRole(["school_admin", "teacher"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4538,7 +4540,7 @@ router.get(
 // POST /api/school/grading-scales
 router.post(
   "/grading-scales",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4569,7 +4571,7 @@ router.post(
 // PUT /api/school/grading-scales/:id
 router.put(
   "/grading-scales/:id",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4603,7 +4605,7 @@ router.put(
 // DELETE /api/school/grading-scales/:id
 router.delete(
   "/grading-scales/:id",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4628,7 +4630,7 @@ router.delete(
 // GET /api/school/grading-weights
 router.get(
   "/grading-weights",
-  requireSchoolRole(["school_admin", "teacher"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4652,7 +4654,7 @@ router.get(
 // POST /api/school/grading-weights
 router.post(
   "/grading-weights",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4681,7 +4683,7 @@ router.post(
 // PUT /api/school/grading-weights/:id
 router.put(
   "/grading-weights/:id",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4713,7 +4715,7 @@ router.put(
 // DELETE /api/school/grading-weights/:id
 router.delete(
   "/grading-weights/:id",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4739,7 +4741,7 @@ router.delete(
 // Get unpublished grades for readiness report
 router.get(
   "/grades/readiness",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4946,7 +4948,7 @@ router.get(
 // Calculate grades for a class/term
 router.post(
   "/grades/calculate",
-  requireSchoolRole(["school_admin", "teacher"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -5421,7 +5423,7 @@ router.post(
 // DELETE /api/school/grading-weights/:id
 router.delete(
   "/grading-weights/:id",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -5448,7 +5450,7 @@ router.delete(
 // GET /api/school/timetables
 router.get(
   "/timetables",
-  requireSchoolRole(["school_admin", "teacher", "student"]),
+  requireSchoolRole([...ADMIN_ROLES, "teacher", "student"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -5502,7 +5504,7 @@ router.get(
 // POST /api/school/timetables
 router.post(
   "/timetables",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -5588,7 +5590,7 @@ router.post(
 // PUT /api/school/timetables/:id
 router.put(
   "/timetables/:id",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -5637,7 +5639,7 @@ router.put(
 // DELETE /api/school/timetables/:id
 router.delete(
   "/timetables/:id",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -5708,7 +5710,7 @@ router.get(
 // POST /api/school/admins
 router.post(
   "/admins",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -5765,7 +5767,7 @@ router.post(
 // DELETE /api/school/admins/:id
 router.delete(
   "/admins/:id",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -5817,7 +5819,7 @@ router.delete(
 // POST /api/school/admins/:id/reset-password
 router.post(
   "/admins/:id/reset-password",
-  requireSchoolRole(["school_admin"]),
+  requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
