@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, ViewProps } from 'react-native';
-import { cn } from 'clsx';
+import { cn } from '../../lib/utils';
 
 interface CardProps extends ViewProps {
   className?: string;

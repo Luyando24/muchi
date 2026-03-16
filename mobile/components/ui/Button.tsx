@@ -6,7 +6,7 @@ interface ButtonProps {
   onPress: () => void;
   title: string;
   loading?: boolean;
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'destructive';
   className?: string;
   disabled?: boolean;
 }
@@ -24,6 +24,7 @@ export function Button({
     secondary: 'bg-secondary text-secondary-foreground',
     outline: 'border border-input bg-background text-foreground',
     ghost: 'bg-transparent text-foreground',
+    destructive: 'bg-destructive text-destructive-foreground',
   };
 
   return (
@@ -43,6 +44,7 @@ export function Button({
         <Text className={cn(
           'text-base font-semibold',
           variant === 'primary' && 'text-white',
+          variant === 'destructive' && 'text-white',
           variant === 'secondary' && 'text-secondary-foreground',
           variant === 'outline' && 'text-foreground',
           variant === 'ghost' && 'text-foreground',

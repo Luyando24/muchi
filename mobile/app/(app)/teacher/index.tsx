@@ -5,7 +5,8 @@ import { Input } from '../../../components/ui/Input';
 import { useAuth } from '../../../hooks/useAuth';
 import { supabase } from '../../../lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card';
-import { Search, User, BookOpen, GraduationCap } from 'lucide-react-native';
+import { Search, User, BookOpen, GraduationCap, ClipboardList } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 
 interface TeacherProfile {
   full_name: string;
@@ -21,6 +22,7 @@ interface StudentResult {
 
 export default function TeacherDashboard() {
   const { signOut, user } = useAuth();
+  const router = useRouter();
   const [profile, setProfile] = useState<TeacherProfile | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<StudentResult[]>([]);
@@ -74,7 +76,7 @@ export default function TeacherDashboard() {
   if (loading) {
     return (
       <View className="flex-1 justify-center items-center bg-background">
-        <ActivityIndicator size="large" color="#0000ff" />
+        <ActivityIndicator size="large" color="#4f46e5" />
       </View>
     );
   }
@@ -95,6 +97,17 @@ export default function TeacherDashboard() {
         </View>
 
         <View className="space-y-6">
+          {/* Quick Actions */}
+          <View className="flex-row gap-4 mb-2">
+            <TouchableOpacity 
+              className="flex-1 bg-indigo-600 p-4 rounded-xl flex-row items-center justify-center gap-2"
+              onPress={() => router.push('/(app)/teacher/mark-attendance')}
+            >
+              <ClipboardList size={20} color="white" />
+              <Text className="text-white font-bold">Attendance</Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Search Section */}
           <Card>
             <CardHeader>
@@ -125,7 +138,7 @@ export default function TeacherDashboard() {
                     <TouchableOpacity 
                       key={student.id}
                       className="flex-row justify-between items-center p-3 bg-muted/20 rounded-lg border border-border"
-                      onPress={() => {}} // TODO: Navigate to student details
+                      onPress={() => router.push(`/(app)/teacher/${student.id}`)}
                     >
                       <View>
                         <Text className="font-medium">{student.full_name}</Text>

@@ -27,7 +27,10 @@ import {
   Heading1,
   Heading2,
   List as ListIcon,
-  ListOrdered
+  ListOrdered,
+  Quote,
+  Code,
+  Eraser
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -111,6 +114,8 @@ export default function WebsiteManagement() {
   // Blog Post Editor State
   const [editingPost, setEditingPost] = useState<Partial<BlogPost> | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isPreview, setIsPreview] = useState(false);
+  const [isPreviewFormOpen, setIsPreviewFormOpen] = useState(false);
 
   const isEditorOpen = !!editingPost;
   const setIsEditorOpen = (open: boolean) => {
@@ -463,7 +468,29 @@ export default function WebsiteManagement() {
                   <Settings className="h-5 w-5 text-orange-500" />
                   Admissions Customization
                 </CardTitle>
-                <CardDescription>Configure the public application form and required information.</CardDescription>
+                <div className="flex gap-2">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      if(confirm('Are you sure you want to clear all custom fields and documents?')) {
+                        setContent({...content, admission_form_fields: [], admission_required_documents: []});
+                      }
+                    }}
+                    className="text-rose-500 hover:text-rose-600"
+                  >
+                    <Trash2 className="h-3 w-3 mr-2" /> Clear All
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="secondary" 
+                    size="sm"
+                    onClick={() => setIsPreviewFormOpen(true)}
+                  >
+                    <Eye className="h-3 w-3 mr-2" /> Preview Form
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -802,19 +829,55 @@ export default function WebsiteManagement() {
                           <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Heading 2" onClick={() => document.execCommand('formatBlock', false, 'H2')}><Heading2 className="h-3.5 w-3.5" /></Button>
                           <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Bullet List" onClick={() => document.execCommand('insertUnorderedList')}><ListIcon className="h-3.5 w-3.5" /></Button>
                           <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Ordered List" onClick={() => document.execCommand('insertOrderedList')}><ListOrdered className="h-3.5 w-3.5" /></Button>
+                          <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1" />
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Quote" onClick={() => document.execCommand('formatBlock', false, 'BLOCKQUOTE')}><Quote className="h-3.5 w-3.5" /></Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Code" onClick={() => document.execCommand('formatBlock', false, 'PRE')}><Code className="h-3.5 w-3.5" /></Button>
                           <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Link" onClick={() => {
                             const url = prompt('Enter URL:');
                             if (url) document.execCommand('createLink', false, url);
                           }}><LinkIcon className="h-3.5 w-3.5" /></Button>
+                          <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1" />
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-rose-500" title="Clear Formatting" onClick={() => document.execCommand('removeFormat')}><Eraser className="h-3.5 w-3.5" /></Button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button 
+                            variant={isPreview ? "default" : "outline"} 
+                            size="sm" 
+                            className="h-8"
+                            onClick={() => setIsPreview(!isPreview)}
+                          >
+                            {isPreview ? <Edit className="h-3 w-3 mr-2" /> : <Eye className="h-3 w-3 mr-2" />}
+                            {isPreview ? "Edit Mode" : "Preview"}
+                          </Button>
                         </div>
                       </div>
-                      <div 
-                        className="min-h-[500px] p-6 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus-within:border-primary transition-colors outline-none overflow-y-auto prose dark:prose-invert max-w-none"
-                        contentEditable
-                        onBlur={(e) => setEditingPost({...editingPost, content: e.currentTarget.innerHTML})}
-                        dangerouslySetInnerHTML={{ __html: editingPost.content || '' }}
-                      />
-                      <p className="text-[10px] text-muted-foreground italic mt-2">Press Ctrl+B for bold, Ctrl+I for italic. Use the toolbar for more options.</p>
+                      
+                      {isPreview ? (
+                        <div className="min-h-[500px] p-8 rounded-xl border-2 border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 prose dark:prose-invert max-w-none transition-all animate-in fade-in zoom-in-95 duration-300">
+                          <h1 className="text-4xl font-extrabold mb-4">{editingPost.title || 'Untitled Post'}</h1>
+                          {editingPost.cover_image_url && (
+                            <img src={editingPost.cover_image_url} alt="Cover" className="w-full aspect-video object-cover rounded-2xl mb-8 shadow-xl" />
+                          )}
+                          <div dangerouslySetInnerHTML={{ __html: editingPost.content || '<p className="text-muted-foreground italic">No content yet...</p>' }} />
+                        </div>
+                      ) : (
+                        <>
+                          <div 
+                            className="min-h-[500px] p-6 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus-within:border-primary transition-colors outline-none overflow-y-auto prose dark:prose-invert max-w-none"
+                            contentEditable
+                            onBlur={(e) => setEditingPost({...editingPost, content: e.currentTarget.innerHTML})}
+                            dangerouslySetInnerHTML={{ __html: editingPost.content || '' }}
+                          />
+                          <div className="flex justify-between items-center mt-2">
+                            <p className="text-[10px] text-muted-foreground italic">Press Ctrl+B for bold, Ctrl+I for italic. Use the toolbar for more options.</p>
+                            <div className="flex items-center gap-3">
+                              <span className="text-[10px] font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-muted-foreground">
+                                {editingPost.content?.replace(/<[^>]*>/g, '').length || 0} characters
+                              </span>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -897,6 +960,69 @@ export default function WebsiteManagement() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Admission Form Preview Dialog */}
+      <Dialog open={isPreviewFormOpen} onOpenChange={setIsPreviewFormOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{content.admissions_title || 'Online Admission'}</DialogTitle>
+            <DialogDescription>{content.admissions_text || 'Apply for our school.'}</DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 pt-4">
+            <Card className="border shadow-none">
+              <CardContent className="pt-6 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Standard Fields (Simulated) */}
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase text-muted-foreground">Student Name (Standard)</Label>
+                    <Input disabled placeholder="Full Legal Name" className="bg-slate-50" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase text-muted-foreground">Date of Birth (Standard)</Label>
+                    <Input disabled type="date" className="bg-slate-50" />
+                  </div>
+                </div>
+
+                {/* Custom Fields */}
+                {(content.admission_form_fields || []).map((field) => (
+                  <div key={field.id} className="space-y-2 animate-in fade-in slide-in-from-left-2 duration-300">
+                    <Label className="flex items-center gap-1">
+                      {field.label} {field.required && <span className="text-rose-500">*</span>}
+                    </Label>
+                    <Input 
+                      type={field.type} 
+                      placeholder={`Enter ${field.label.toLowerCase()}...`}
+                      className="bg-white border-primary/20"
+                    />
+                  </div>
+                ))}
+
+                {/* Document Uploads */}
+                {(content.admission_required_documents || []).length > 0 && (
+                  <div className="pt-4 space-y-4">
+                    <Label className="text-sm font-bold border-b pb-2 block">Required Documents</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {(content.admission_required_documents || []).map((doc) => (
+                        <div key={doc.id} className="p-3 border-2 border-dashed rounded-lg flex items-center justify-between text-sm bg-slate-50/50">
+                          <span className="flex items-center gap-2 italic uppercase text-[10px] font-bold text-slate-500">
+                            <Plus className="h-3 w-3" /> {doc.label}
+                          </span>
+                          <Badge variant="outline" className="text-[10px] bg-white">PDF/JPG</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            
+            <Button className="w-full h-12 text-lg shadow-lg shadow-primary/20" onClick={() => setIsPreviewFormOpen(false)}>
+              {content.apply_button_text || 'Apply Now'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

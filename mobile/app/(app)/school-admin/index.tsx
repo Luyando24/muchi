@@ -5,6 +5,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { supabase } from '../../../lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card';
 import { Users, GraduationCap, School, BookOpen, LogOut } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 
 interface DashboardStats {
   students: number;
@@ -20,6 +21,7 @@ interface AdminProfile {
 
 export default function SchoolAdminDashboard() {
   const { signOut, user } = useAuth();
+  const router = useRouter();
   const [profile, setProfile] = useState<AdminProfile | null>(null);
   const [stats, setStats] = useState<DashboardStats>({
     students: 0,
@@ -83,7 +85,7 @@ export default function SchoolAdminDashboard() {
   if (loading) {
     return (
       <View className="flex-1 justify-center items-center bg-background">
-        <ActivityIndicator size="large" color="#0000ff" />
+        <ActivityIndicator size="large" color="#4f46e5" />
       </View>
     );
   }
@@ -154,12 +156,12 @@ export default function SchoolAdminDashboard() {
                 <Button 
                   title="Manage Students" 
                   variant="outline"
-                  onPress={() => {}} // TODO: Navigate to student list
+                  onPress={() => router.push('/(app)/school-admin/students')} 
                 />
                 <Button 
                   title="Manage Teachers" 
                   variant="outline"
-                  onPress={() => {}} // TODO: Navigate to teacher list
+                  onPress={() => router.push('/(app)/school-admin/teachers')} 
                 />
                 <Button 
                   title="Class Schedule" 
