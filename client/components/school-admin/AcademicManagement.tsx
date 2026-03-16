@@ -12,6 +12,7 @@ import {
   Layers,
   Calendar,
   AlertTriangle,
+  CheckCircle2,
   ClipboardList,
   Printer
 } from 'lucide-react';
@@ -27,6 +28,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -99,6 +101,7 @@ export default function AcademicManagement() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [gradingScales, setGradingScales] = useState<GradingScale[]>([]);
   const [gradingWeights, setGradingWeights] = useState<GradingWeight[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
   const [schoolSettings, setSchoolSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
@@ -123,8 +126,9 @@ export default function AcademicManagement() {
   const [weightForm, setWeightForm] = useState({ id: '', assessment_type: '', weight_percentage: 0 });
 
   // Grade Calculation State
-  const [calcForm, setCalcForm] = useState({ classId: 'all', subjectId: 'all', term: '', academicYear: '' });
+  const [calcForm, setCalcForm] = useState({ classId: 'all', subjectId: 'all', term: '', examType: 'End of Term', academicYear: new Date().getFullYear().toString(), skipCalculation: true });
   const [isCalculating, setIsCalculating] = useState(false);
+  const [availableExamTypes, setAvailableExamTypes] = useState<string[]>(['Mid Term', 'End of Term']);
   const [gradeStatus, setGradeStatus] = useState<{ id: string, name: string, status: string, teacher: string }[]>([]);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -160,13 +164,14 @@ export default function AcademicManagement() {
 
       const headers = { 'Authorization': `Bearer ${session.access_token}` };
 
-      const [subjectsData, classesData, teachersData, scalesData, weightsData, settingsData] = await Promise.all([
+      const [subjectsData, classesData, teachersData, scalesData, weightsData, settingsData, departmentsData] = await Promise.all([
         syncFetch('/api/school/subjects', { headers, cacheKey: 'school-subjects-list' }),
         syncFetch('/api/school/classes', { headers, cacheKey: 'school-classes-list' }),
         syncFetch('/api/school/teachers', { headers, cacheKey: 'school-teachers-list' }),
         syncFetch('/api/school/grading-scales', { headers, cacheKey: 'school-grading-scales' }),
         syncFetch('/api/school/grading-weights', { headers, cacheKey: 'school-grading-weights' }),
-        syncFetch('/api/school/settings', { headers, cacheKey: 'school-settings' })
+        syncFetch('/api/school/settings', { headers, cacheKey: 'school-settings' }),
+        syncFetch('/api/school/departments', { headers, cacheKey: 'school-departments' })
       ]);
 
       setSubjects(subjectsData);
@@ -174,12 +179,20 @@ export default function AcademicManagement() {
       setTeachers(teachersData);
       setGradingScales(scalesData);
       setGradingWeights(weightsData);
+      setDepartments(departmentsData || []);
 
       if (settingsData) {
         setSchoolSettings(settingsData);
+        let examTypes = ['Mid Term', 'End of Term'];
+        if (settingsData.exam_types && settingsData.exam_types.length > 0) {
+          examTypes = settingsData.exam_types;
+        }
+        setAvailableExamTypes(examTypes);
+
         setCalcForm(prev => ({
           ...prev,
           term: settingsData.current_term || 'Term 1',
+          examType: examTypes[0],
           academicYear: settingsData.academic_year || new Date().getFullYear().toString()
         }));
       }
@@ -552,7 +565,7 @@ export default function AcademicManagement() {
 
   // Grade Calculation Handler
   const handleCalculateGrades = async () => {
-    if (!calcForm.classId || !calcForm.term || !calcForm.academicYear) {
+    if (!calcForm.classId || !calcForm.term || !calcForm.academicYear || !calcForm.examType) {
       toast({ title: "Error", description: "Please fill in all required fields", variant: "destructive" });
       return;
     }
@@ -562,17 +575,19 @@ export default function AcademicManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/calculate-grades', {
+      const response = await fetch('/api/school/grades/calculate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
         body: JSON.stringify({
-          classId: calcForm.classId,
+          classId: calcForm.classId === 'all' ? null : calcForm.classId,
           subjectId: calcForm.subjectId === 'all' ? null : calcForm.subjectId,
           term: calcForm.term,
-          academicYear: calcForm.academicYear
+          examType: calcForm.examType,
+          academicYear: calcForm.academicYear,
+          skipCalculation: calcForm.skipCalculation
         })
       });
 
@@ -608,8 +623,8 @@ export default function AcademicManagement() {
 
   // Readiness Report Handler — loads unpublished grades for admin visibility
   const handleReadinessReport = async () => {
-    if (!calcForm.term || !calcForm.academicYear) {
-      toast({ title: "Error", description: "Please select Term and Year first", variant: "destructive" });
+    if (!calcForm.term || !calcForm.academicYear || !calcForm.examType) {
+      toast({ title: "Error", description: "Please select Term, Exam Type and Year first", variant: "destructive" });
       return;
     }
 
@@ -622,10 +637,11 @@ export default function AcademicManagement() {
         classId: calcForm.classId,
         subjectId: calcForm.subjectId,
         term: calcForm.term,
+        examType: calcForm.examType,
         academicYear: calcForm.academicYear
       });
 
-      const response = await fetch(`/api/school/results/unpublished?${params}`, {
+      const response = await fetch(`/api/school/grades/readiness?${params}`, {
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
@@ -642,8 +658,8 @@ export default function AcademicManagement() {
   };
 
   const handleCheckStatus = async () => {
-    if (!calcForm.classId || !calcForm.term || !calcForm.academicYear) {
-      toast({ title: "Error", description: "Please select Class, Term and Year first", variant: "destructive" });
+    if (!calcForm.classId || !calcForm.term || !calcForm.academicYear || !calcForm.examType) {
+      toast({ title: "Error", description: "Please select Class, Term, Exam Type and Year first", variant: "destructive" });
       return;
     }
 
@@ -652,7 +668,7 @@ export default function AcademicManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/results/status?classId=${calcForm.classId}&subjectId=${calcForm.subjectId}&term=${calcForm.term}&academicYear=${calcForm.academicYear}`, {
+      const response = await fetch(`/api/school/grades/status?classId=${calcForm.classId === 'all' ? '' : calcForm.classId}&term=${encodeURIComponent(calcForm.term)}&examType=${encodeURIComponent(calcForm.examType)}&academicYear=${encodeURIComponent(calcForm.academicYear)}`, {
         headers: {
           'Authorization': `Bearer ${session.access_token}`
         }
@@ -670,7 +686,7 @@ export default function AcademicManagement() {
   };
 
   const handlePublishResults = async () => {
-    if (!calcForm.classId || !calcForm.term || !calcForm.academicYear) return;
+    if (!calcForm.classId || !calcForm.term || !calcForm.academicYear || !calcForm.examType) return;
 
     setIsActionLoading(true);
     try {
@@ -684,9 +700,10 @@ export default function AcademicManagement() {
           'Authorization': `Bearer ${session.access_token}`
         },
         body: JSON.stringify({
-          classId: calcForm.classId,
+          classId: calcForm.classId === 'all' ? null : calcForm.classId,
           subjectId: calcForm.subjectId === 'all' ? null : calcForm.subjectId,
           term: calcForm.term,
+          examType: calcForm.examType,
           academicYear: calcForm.academicYear
         })
       });
@@ -933,7 +950,49 @@ export default function AcademicManagement() {
                     </div>
                     <div className="space-y-2">
                       <Label>Department</Label>
-                      <Input placeholder="e.g. Science" value={subjectForm.department} onChange={e => setSubjectForm({ ...subjectForm, department: e.target.value })} />
+                      <div className="flex gap-2">
+                        <Select value={subjectForm.department} onValueChange={v => setSubjectForm({ ...subjectForm, department: v })}>
+                          <SelectTrigger className="flex-1">
+                            <SelectValue placeholder="Select department" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {departments.map((d: any) => (
+                              <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button 
+                          type="button" 
+                          variant="outline"
+                          title="Create New Department"
+                          onClick={async () => {
+                            const name = window.prompt("Enter new department name:");
+                            if (name && name.trim()) {
+                              try {
+                                const { data: { session } } = await supabase.auth.getSession();
+                                const res = await fetch('/api/school/departments', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}`},
+                                  body: JSON.stringify({ name: name.trim() })
+                                });
+                                if (res.ok) {
+                                  const newDept = await res.json();
+                                  setDepartments(prev => [...prev, newDept].sort((a,b) => a.name.localeCompare(b.name)));
+                                  setSubjectForm({ ...subjectForm, department: newDept.name });
+                                  toast({ title: "Success", description: "Department created" });
+                                } else {
+                                  const err = await res.json();
+                                  toast({ title: "Error", description: err.message, variant: "destructive" });
+                                }
+                              } catch(e: any) {
+                                toast({ title: "Error", description: "Failed to create department", variant: "destructive" });
+                              }
+                            }
+                          }}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <Label>Head of Department</Label>
@@ -1392,14 +1451,46 @@ export default function AcademicManagement() {
                     </Select>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label>Term</Label>
                       <Input value={calcForm.term} onChange={e => setCalcForm({ ...calcForm, term: e.target.value })} placeholder="e.g. Term 1" />
                     </div>
                     <div className="space-y-2">
+                      <Label>Assessment Type</Label>
+                      <Select value={calcForm.examType} onValueChange={v => setCalcForm({ ...calcForm, examType: v })}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select Type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableExamTypes.map(type => (
+                            <SelectItem key={type} value={type}>{type}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
                       <Label>Academic Year</Label>
                       <Input value={calcForm.academicYear} onChange={e => setCalcForm({ ...calcForm, academicYear: e.target.value })} placeholder="e.g. 2024" />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2 p-2 bg-slate-50 dark:bg-slate-900/50 rounded-md border border-slate-200 dark:border-slate-800">
+                    <Checkbox 
+                      id="skip-calc" 
+                      checked={calcForm.skipCalculation} 
+                      onCheckedChange={(checked) => setCalcForm({ ...calcForm, skipCalculation: !!checked })} 
+                    />
+                    <div className="grid gap-1.5 leading-none">
+                      <label
+                        htmlFor="skip-calc"
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                      >
+                        Use Direct Mark Entry (from Gradebook)
+                      </label>
+                      <p className="text-[10px] text-muted-foreground">
+                        Tick this to skip calculating from assignments and use the final percentages entered by teachers.
+                      </p>
                     </div>
                   </div>
 
@@ -1437,13 +1528,23 @@ export default function AcademicManagement() {
                   <Dialog open={isReadinessReportOpen} onOpenChange={setIsReadinessReportOpen}>
                     <DialogContent className="sm:max-w-[750px] max-h-[85vh] overflow-y-auto">
                       <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-amber-600">
-                          <AlertTriangle className="h-5 w-5" />
-                          Readiness Report — Unpublished Grades
+                        <DialogTitle className={cn("flex items-center gap-2", unpublishedGrades.length === 0 ? "text-green-600" : "text-amber-600")}>
+                          {unpublishedGrades.length === 0 ? (
+                            <CheckCircle2 className="h-5 w-5" />
+                          ) : (
+                            <AlertTriangle className="h-5 w-5" />
+                          )}
+                          Readiness Report — {unpublishedGrades.length === 0 ? "Ready for Calculation" : "Records Need Attention"}
                         </DialogTitle>
                         <DialogDescription>
-                          The following student grades have been entered by teachers but are <strong>not yet published</strong>.
-                          Grades cannot be calculated until all entries are published.
+                          {unpublishedGrades.length === 0 ? (
+                            "All required grade entries have been submitted or published. You are ready to proceed with calculations."
+                          ) : (
+                            <>
+                              The following student grades are <strong>Draft</strong> or <strong>Not Entered</strong>.
+                              Grades can only be calculated once all entries are either <strong>Submitted</strong> (by teachers) or <strong>Published</strong>.
+                            </>
+                          )}
                         </DialogDescription>
                       </DialogHeader>
 
@@ -1455,14 +1556,14 @@ export default function AcademicManagement() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                               </svg>
                             </div>
-                            <p className="font-semibold text-green-700 dark:text-green-400">All Grades Published!</p>
-                            <p className="text-sm text-green-600 dark:text-green-500 mt-1">All teachers have published their grades. You can proceed to calculate.</p>
+                            <p className="font-semibold text-green-700 dark:text-green-400">All Grades Ready!</p>
+                            <p className="text-sm text-green-600 dark:text-green-500 mt-1">All required grades have been submitted or published. You can proceed to calculate.</p>
                           </div>
                         ) : (
                           <>
                             <div className="flex items-center gap-2 mb-3 p-3 bg-amber-50 dark:bg-amber-950 rounded-lg border border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-300">
                               <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                              <span><strong>{unpublishedGrades.length}</strong> unpublished grade record(s) found. Notify teachers to publish their grades before calculating.</span>
+                              <span><strong>{unpublishedGrades.length}</strong> record(s) need attention. Teachers must <strong>Submit</strong> these grades before calculation can proceed.</span>
                             </div>
                             <div className="border rounded-md overflow-hidden">
                               <Table>
@@ -1538,7 +1639,7 @@ export default function AcademicManagement() {
                               className="bg-green-600 hover:bg-green-700"
                             >
                               {isPublishing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                              Publish to Dashboard
+                              Publish Results
                             </Button>
                           </div>
 
@@ -1728,7 +1829,49 @@ export default function AcademicManagement() {
             </div>
             <div className="space-y-2">
               <Label>Department</Label>
-              <Input value={subjectForm.department} onChange={e => setSubjectForm({ ...subjectForm, department: e.target.value })} />
+              <div className="flex gap-2">
+                <Select value={subjectForm.department} onValueChange={v => setSubjectForm({ ...subjectForm, department: v })}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments.map((d: any) => (
+                      <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button 
+                  type="button" 
+                  variant="outline"
+                  title="Create New Department"
+                  onClick={async () => {
+                    const name = window.prompt("Enter new department name:");
+                    if (name && name.trim()) {
+                      try {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        const res = await fetch('/api/school/departments', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}`},
+                          body: JSON.stringify({ name: name.trim() })
+                        });
+                        if (res.ok) {
+                          const newDept = await res.json();
+                          setDepartments(prev => [...prev, newDept].sort((a,b) => a.name.localeCompare(b.name)));
+                          setSubjectForm({ ...subjectForm, department: newDept.name });
+                          toast({ title: "Success", description: "Department created" });
+                        } else {
+                          const err = await res.json();
+                          toast({ title: "Error", description: err.message, variant: "destructive" });
+                        }
+                      } catch(e: any) {
+                        toast({ title: "Error", description: "Failed to create department", variant: "destructive" });
+                      }
+                    }
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Head of Department</Label>

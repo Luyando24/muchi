@@ -8,7 +8,8 @@ import {
   Shield,
   Bell,
   Palette,
-  Loader2
+  Loader2,
+  X // imported X for the tags
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,7 @@ export default function SchoolSettings() {
     name: '',
     academic_year: '',
     current_term: '',
+    exam_types: [] as string[],
     email: '',
     phone: '',
     address: '',
@@ -42,6 +44,8 @@ export default function SchoolSettings() {
     signature_url: '',
     seal_url: ''
   });
+
+  const [newExamType, setNewExamType] = useState('');
 
   const fetchSettings = async () => {
     setIsLoading(true);
@@ -61,6 +65,7 @@ export default function SchoolSettings() {
         name: data.name || '',
         academic_year: data.academic_year || '',
         current_term: data.current_term || '',
+        exam_types: data.exam_types || ['Mid Term', 'End of Term'],
         email: data.email || '',
         phone: data.phone || '',
         address: data.address || '',
@@ -78,7 +83,7 @@ export default function SchoolSettings() {
         toast({
           title: "Offline Mode",
           description: "No cached school settings available. Please connect to sync.",
-          variant: "warning",
+          variant: "destructive",
         });
       } else {
         toast({
@@ -99,6 +104,23 @@ export default function SchoolSettings() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const addExamType = () => {
+    if (newExamType.trim() && !formData.exam_types.includes(newExamType.trim())) {
+      setFormData(prev => ({
+        ...prev,
+        exam_types: [...prev.exam_types, newExamType.trim()]
+      }));
+      setNewExamType('');
+    }
+  };
+
+  const removeExamType = (typeToRemove: string) => {
+    setFormData(prev => ({
+      ...prev,
+      exam_types: prev.exam_types.filter(type => type !== typeToRemove)
+    }));
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -225,6 +247,48 @@ export default function SchoolSettings() {
                         onChange={handleInputChange}
                         placeholder="e.g. Term 1"
                       />
+                    </div>
+
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Assessment/Exam Types</Label>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {formData.exam_types.map((type, idx) => (
+                            <span 
+                              key={idx} 
+                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                            >
+                              {type}
+                              <button
+                                type="button"
+                                onClick={() => removeExamType(type)}
+                                className="text-indigo-500 hover:text-indigo-900 dark:hover:text-indigo-100 transition-colors"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </span>
+                          ))}
+                          {formData.exam_types.length === 0 && (
+                            <span className="text-sm text-slate-500 italic">No custom exam types defined</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            placeholder="e.g. Test 1, Mid-Term"
+                            value={newExamType}
+                            onChange={(e) => setNewExamType(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                addExamType();
+                              }
+                            }}
+                            className="max-w-xs"
+                          />
+                          <Button type="button" onClick={addExamType} variant="secondary">Add</Button>
+                        </div>
+                        <p className="text-xs text-slate-500">Press enter or click Add to create a new assessment type. These will be available when teachers enter grades.</p>
+                      </div>
                     </div>
 
                     <div className="space-y-2">

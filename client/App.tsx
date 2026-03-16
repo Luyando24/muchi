@@ -13,6 +13,7 @@ import Login from "./pages/Login";
 import SystemAdminLogin from "./pages/SystemAdminLogin";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import ForcePasswordReset from "./pages/ForcePasswordReset";
 import NotFound from "./pages/NotFound";
 import StudentPortal from "./pages/StudentPortal";
 import TeacherPortal from "./pages/TeacherPortal";
@@ -33,6 +34,7 @@ const App = () => {
             <Route path="/system-admin/login" element={<SystemAdminLogin />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/force-password-reset" element={<ForcePasswordReset />} />
             <Route path="/school/:slug" element={<SchoolWebsite />} />
             <Route path="/student-portal/:id/*" element={
               <ProtectedRoute allowedRoles={['student']}>
@@ -45,7 +47,7 @@ const App = () => {
               </ProtectedRoute>
             } />
             <Route path="/school-admin" element={
-              <ProtectedRoute allowedRoles={['school_admin']}>
+              <ProtectedRoute allowedRoles={['school_admin', 'bursar', 'registrar', 'exam_officer', 'academic_auditor', 'accounts', 'content_manager']}>
                 <SchoolAdminPortal />
               </ProtectedRoute>
             } />

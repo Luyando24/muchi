@@ -7,8 +7,18 @@ import {
   MoreVertical,
   Trash2,
   Loader2,
-  ShieldAlert
+  ShieldAlert,
+  Info,
+  ShieldCheck,
+  KeyRound
 } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -51,7 +61,17 @@ const adminSchema = z.object({
   full_name: z.string().min(2, "Full name is required"),
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
+  role: z.string().min(1, "Role is required"),
 });
+
+const ROLE_OPTIONS = [
+  { id: 'school_admin', name: 'School Admin', description: 'Full system access & user management.' },
+  { id: 'registrar', name: 'Registrar', description: 'Student & teacher records management.' },
+  { id: 'exam_officer', name: 'Exam Officer', description: 'Grades, assessments & report cards.' },
+  { id: 'accounts', name: 'Accounts / Bursar', description: 'Financial records & fee management.' },
+  { id: 'content_manager', name: 'Content Manager', description: 'Website content & blog publication.' },
+  { id: 'academic_auditor', name: 'Academic Auditor', description: 'View performance data & reports.' },
+];
 
 interface AdminProfile {
   id: string;
@@ -67,7 +87,10 @@ export default function AdminManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [resetTargetId, setResetTargetId] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof adminSchema>>({
@@ -76,6 +99,7 @@ export default function AdminManagement() {
       full_name: '',
       email: '',
       password: '',
+      role: 'school_admin',
     },
   });
 
@@ -177,6 +201,43 @@ export default function AdminManagement() {
     }
   };
 
+  const handleResetPassword = async () => {
+    if (!resetTargetId || !newPassword) return;
+    if (newPassword.length < 6) {
+      toast({ title: "Error", description: "Password must be at least 6 characters.", variant: "destructive" });
+      return;
+    }
+
+    setIsResetting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/school/admins/${resetTargetId}/reset-password`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}` 
+        },
+        body: JSON.stringify({ newPassword })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to reset password');
+      }
+
+      toast({ title: "Success", description: "Password reset successfully." });
+      setResetTargetId(null);
+      setNewPassword('');
+    } catch (error: any) {
+      console.error('Error resetting password:', error);
+      toast({ title: "Error", description: error.message || "Failed to reset password.", variant: "destructive" });
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   const filteredAdmins = admins.filter(admin =>
     admin.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     admin.email?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -247,7 +308,40 @@ export default function AdminManagement() {
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={form.control}
+                  name="role"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Role</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a role" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {ROLE_OPTIONS.map((role) => (
+                            <SelectItem key={role.id} value={role.id}>
+                              {role.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                   <div className="flex items-start gap-2">
+                     <Info className="h-4 w-4 text-indigo-500 mt-0.5 shrink-0" />
+                     <div className="text-xs text-slate-600 dark:text-slate-400">
+                       <p className="font-bold mb-1">Role Capabilities:</p>
+                       <p>{ROLE_OPTIONS.find(r => r.id === form.watch('role'))?.description}</p>
+                     </div>
+                   </div>
+                </div>
                 <DialogFooter>
                   <Button type="submit" disabled={form.formState.isSubmitting}>
                     {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -310,8 +404,14 @@ export default function AdminManagement() {
                       <TableCell>{admin.email}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <ShieldAlert className="h-4 w-4 text-primary" />
-                          <span className="capitalize">{admin.role.replace('_', ' ')}</span>
+                          {admin.role === 'school_admin' ? (
+                            <ShieldCheck className="h-4 w-4 text-indigo-600" />
+                          ) : (
+                            <ShieldAlert className="h-4 w-4 text-slate-500" />
+                          )}
+                          <span className="capitalize font-medium text-slate-700 dark:text-slate-300">
+                            {admin.role.replace('_', ' ')}
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
@@ -324,14 +424,25 @@ export default function AdminManagement() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-red-600 focus:text-red-600 cursor-pointer"
-                              onClick={() => setDeleteTargetId(admin.id)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Remove Access
-                            </DropdownMenuItem>
+                             <DropdownMenuSeparator />
+                             <DropdownMenuItem
+                               className="cursor-pointer"
+                               onClick={() => {
+                                 setResetTargetId(admin.id);
+                                 setNewPassword('');
+                               }}
+                             >
+                               <KeyRound className="mr-2 h-4 w-4" />
+                               Reset Password
+                             </DropdownMenuItem>
+                             <DropdownMenuSeparator />
+                             <DropdownMenuItem
+                               className="text-red-600 focus:text-red-600 cursor-pointer"
+                               onClick={() => setDeleteTargetId(admin.id)}
+                             >
+                               <Trash2 className="mr-2 h-4 w-4" />
+                               Remove Access
+                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -353,6 +464,37 @@ export default function AdminManagement() {
         loading={isDeleting}
         onConfirm={handleDelete}
       />
+
+       <Dialog open={!!resetTargetId} onOpenChange={(open) => !open && setResetTargetId(null)}>
+         <DialogContent>
+           <DialogHeader>
+             <DialogTitle>Reset Administrator Password</DialogTitle>
+             <DialogDescription>
+               Enter a new password for {admins.find(a => a.id === resetTargetId)?.full_name}.
+             </DialogDescription>
+           </DialogHeader>
+           <div className="space-y-4 py-4">
+             <div className="space-y-2">
+               <Label htmlFor="new-password">New Password</Label>
+               <Input
+                 id="new-password"
+                 type="password"
+                 placeholder="Enter 6+ characters"
+                 value={newPassword}
+                 onChange={(e) => setNewPassword(e.target.value)}
+                 autoFocus
+               />
+             </div>
+           </div>
+           <DialogFooter>
+             <Button variant="outline" onClick={() => setResetTargetId(null)}>Cancel</Button>
+             <Button onClick={handleResetPassword} disabled={isResetting}>
+               {isResetting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+               Update Password
+             </Button>
+           </DialogFooter>
+         </DialogContent>
+       </Dialog>
     </div>
   );
 }

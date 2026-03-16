@@ -10,6 +10,7 @@ import { adminRouter } from './routes/admin.js';
 import { schoolAdminRouter } from './routes/school.js';
 import { studentRouter } from './routes/student.js';
 import { teacherRouter } from './routes/teacher.js';
+import { websiteRouter } from './routes/website.js';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -27,6 +28,12 @@ app.use('/api/admin', adminRouter);
 app.use('/api/school', schoolAdminRouter);
 app.use('/api/student', studentRouter);
 app.use('/api/teacher', teacherRouter);
+app.use('/api/school', websiteRouter); // Merging into school namespace or separate? 
+// The requirement says "Add a new module to school admin portal", 
+// usually /api/school is for school admin portal. 
+// Let's use /api/school/website as a prefix or just add to /api/school.
+// Looking at the implementation of websiteRouter, it uses paths like /website-content.
+// So app.use('/api/school', websiteRouter) will result in /api/school/website-content. Perfect.
 
 // Basic health check route
 app.get('/api/ping', (req, res) => {

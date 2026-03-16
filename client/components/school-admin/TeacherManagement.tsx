@@ -9,9 +9,12 @@ import {
   Trash2,
   Edit,
   Loader2,
-  Eye
+  Eye,
+  EyeOff,
+  FileSpreadsheet
 } from 'lucide-react';
 import TeacherDetailsView from './TeacherDetailsView';
+import BulkTeacherImport from './BulkTeacherImport';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -64,13 +67,16 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
-  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [currentTeacher, setCurrentTeacher] = useState<Teacher | null>(null);
   const [viewTeacherId, setViewTeacherId] = useState<string | null>(initialViewId || null);
+  const [teacherViewMode, setTeacherViewMode] = useState<'view' | 'edit'>('view');
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
   const [availableSubjects, setAvailableSubjects] = useState<Option[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (initialViewId) {
@@ -88,9 +94,10 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
     firstName: '',
     lastName: '',
     email: '',
+    username: '',
     department: '',
     subjects: [] as string[],
-    password: '', // Only for registration
+    password: '12345678', // Default temporary password
     status: 'Active',
     joinDate: new Date().toISOString().split('T')[0]
   });
@@ -100,11 +107,17 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
-        const data = await syncFetch('/api/school/subjects', {
+        const subjectsData = await syncFetch('/api/school/subjects', {
           headers: { 'Authorization': `Bearer ${session.access_token}` },
           cacheKey: 'school-subjects-list'
         });
-        setAvailableSubjects(data.map((s: any) => ({ label: s.name, value: s.name })));
+        setAvailableSubjects(subjectsData.map((s: any) => ({ label: s.name, value: s.name })));
+
+        const departmentsData = await syncFetch('/api/school/departments', {
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+          cacheKey: 'school-departments'
+        });
+        setDepartments(departmentsData || []);
       } catch (e: any) {
         console.error('Error fetching subjects:', e);
         if (e.message?.includes('No connection and no cached data available')) {
@@ -138,7 +151,7 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
         toast({
           title: "Offline Mode",
           description: "No cached teacher data available. Please connect to sync.",
-          variant: "warning",
+          variant: "destructive" as any,
         });
         setTeachers([]);
       } else {
@@ -171,9 +184,10 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
       firstName: '',
       lastName: '',
       email: '',
+      username: '',
       department: '',
       subjects: [],
-      password: '',
+      password: '12345678',
       status: 'Active',
       joinDate: new Date().toISOString().split('T')[0]
     });
@@ -197,6 +211,7 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
           email: formData.email,
           password: formData.password,
           name: `${formData.firstName} ${formData.lastName}`,
+          username: formData.username,
           department: formData.department,
           subjects: subjectsArray,
           status: formData.status,
@@ -229,62 +244,10 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
   };
 
   const handleEditClick = (teacher: Teacher) => {
-    setCurrentTeacher(teacher);
-    setFormData({
-      firstName: teacher.firstName,
-      lastName: teacher.lastName,
-      email: teacher.email,
-      department: teacher.department,
-      subjects: teacher.subjects,
-      password: '',
-      status: teacher.status,
-      joinDate: teacher.joinDate ? new Date(teacher.joinDate).toISOString().split('T')[0] : ''
-    });
-    setIsEditOpen(true);
+    setViewTeacherId(teacher.id);
+    setTeacherViewMode('edit');
   };
 
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentTeacher) return;
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const subjectsArray = formData.subjects;
-
-      const response = await fetch(`/api/school/teachers/${currentTeacher.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          department: formData.department,
-          subjects: subjectsArray,
-          status: formData.status,
-          // joinDate is usually immutable or rarely changed, but we could add it if needed
-        })
-      });
-
-      if (!response.ok) throw new Error('Failed to update teacher');
-
-      toast({
-        title: "Success",
-        description: "Teacher updated successfully",
-      });
-      setIsEditOpen(false);
-      fetchTeachers();
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
 
   const handleDelete = async () => {
     if (!deleteTargetId) return;
@@ -325,7 +288,13 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
   );
 
   if (viewTeacherId) {
-    return <TeacherDetailsView teacherId={viewTeacherId} onBack={handleBackFromDetails} />;
+    return (
+      <TeacherDetailsView 
+        teacherId={viewTeacherId} 
+        onBack={handleBackFromDetails} 
+        initialMode={teacherViewMode}
+      />
+    );
   }
 
   return (
@@ -340,6 +309,21 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
             <Download className="h-4 w-4 mr-2" />
             Export List
           </Button>
+          <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Import Excel
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[800px]">
+              <BulkTeacherImport onImportSuccess={() => {
+                setIsImportOpen(false);
+                fetchTeachers();
+              }} />
+            </DialogContent>
+          </Dialog>
+
           <Dialog open={isRegisterOpen} onOpenChange={setIsRegisterOpen}>
             <DialogTrigger asChild>
               <Button onClick={resetForm}>
@@ -366,14 +350,43 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input id="email" name="email" type="email" value={formData.email} onChange={handleInputChange} required />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email Address</Label>
+                    <Input id="email" name="email" type="email" value={formData.email} onChange={handleInputChange} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="username">Username</Label>
+                    <Input id="username" name="username" type="text" value={formData.username} onChange={handleInputChange} />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="password">Temporary Password</Label>
-                  <Input id="password" name="password" type="password" value={formData.password} onChange={handleInputChange} required />
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      value={formData.password}
+                      onChange={handleInputChange}
+                      required
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4 text-slate-500" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-slate-500" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -384,12 +397,9 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
                         <SelectValue placeholder="Select Dept" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Science">Science</SelectItem>
-                        <SelectItem value="Mathematics">Mathematics</SelectItem>
-                        <SelectItem value="Languages">Languages</SelectItem>
-                        <SelectItem value="Humanities">Humanities</SelectItem>
-                        <SelectItem value="Arts">Arts</SelectItem>
-                        <SelectItem value="Sports">Sports</SelectItem>
+                        {departments.map((d: any) => (
+                          <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -525,7 +535,10 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setViewTeacherId(teacher.id)}>
+                            <DropdownMenuItem onClick={() => {
+                              setViewTeacherId(teacher.id);
+                              setTeacherViewMode('view');
+                            }}>
                               <Eye className="h-4 w-4 mr-2" />
                               View Details
                             </DropdownMenuItem>
@@ -549,80 +562,6 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
         </CardContent>
       </Card>
 
-      {/* Edit Dialog */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Edit Teacher Details</DialogTitle>
-            <DialogDescription>
-              Update information for {currentTeacher?.fullName}
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleUpdate} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-firstName">First Name</Label>
-                <Input id="edit-firstName" name="firstName" value={formData.firstName} onChange={handleInputChange} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-lastName">Last Name</Label>
-                <Input id="edit-lastName" name="lastName" value={formData.lastName} onChange={handleInputChange} required />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-email">Email Address</Label>
-              <Input id="edit-email" name="email" type="email" value={formData.email} disabled className="bg-slate-100" />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-department">Department</Label>
-                <Select onValueChange={(val) => handleSelectChange('department', val)} defaultValue={formData.department}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={formData.department || "Select Dept"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Science">Science</SelectItem>
-                    <SelectItem value="Mathematics">Mathematics</SelectItem>
-                    <SelectItem value="Languages">Languages</SelectItem>
-                    <SelectItem value="Humanities">Humanities</SelectItem>
-                    <SelectItem value="Arts">Arts</SelectItem>
-                    <SelectItem value="Sports">Sports</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-status">Status</Label>
-                <Select onValueChange={(val) => handleSelectChange('status', val)} defaultValue={formData.status}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={formData.status} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="On Leave">On Leave</SelectItem>
-                    <SelectItem value="Suspended">Suspended</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-subjects">Subjects</Label>
-              <MultiSelect
-                options={availableSubjects}
-                selected={formData.subjects}
-                onChange={(selected) => setFormData(prev => ({ ...prev, subjects: selected }))}
-                placeholder="Select subjects..."
-              />
-            </div>
-
-            <DialogFooter>
-              <Button type="submit">Update Details</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
       <ConfirmDialog
         open={!!deleteTargetId}
         onOpenChange={(open) => !open && setDeleteTargetId(null)}

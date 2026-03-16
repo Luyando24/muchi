@@ -18,8 +18,10 @@ import {
   Clock,
   Calendar,
   Download,
-  Lock
+  Lock,
+  AlertCircle
 } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -53,12 +55,13 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { ReportCardContent } from '@/components/shared/ReportCardContent';
 import { createPortal } from 'react-dom';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { OfflineIndicator } from '@/components/navigation/OfflineIndicator';
 import { syncFetch, offlineQuery } from '@/lib/syncService';
 
 export default function StudentPortal() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const studentId = id;
   const { toast } = useToast();
   
@@ -392,6 +395,18 @@ export default function StudentPortal() {
           <div className="p-4 sm:p-6 pb-24 lg:pb-6 max-w-7xl mx-auto">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsContent value="dashboard" className="space-y-6 m-0">
+              {student?.is_temp_password && (
+                <Alert variant="default" className="bg-amber-50 border-amber-200 text-amber-900 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-300">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle className="font-bold">Security Reminder</AlertTitle>
+                  <AlertDescription className="text-sm">
+                    You are currently using a temporary password. Please set a permanent password in your 
+                    <Button variant="link" className="p-0 h-auto text-amber-900 dark:text-amber-300 font-bold ml-1" onClick={() => navigate('/force-password-reset')}>
+                      Security Settings
+                    </Button>.
+                  </AlertDescription>
+                </Alert>
+              )}
               {/* Stats Overview */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <Card>
@@ -1040,6 +1055,7 @@ export default function StudentPortal() {
                 grades: printingTerm.grades
               }}
               term={`${String(printingTerm.term).toLowerCase().includes('term') ? '' : 'Term '}${printingTerm.term}`}
+              examType={printingTerm.grades?.[0]?.exam_type || 'End of Term'}
               academicYear={printingTerm.academicYear}
               className="w-full h-full shadow-none border-none m-0 p-0"
             />

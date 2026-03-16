@@ -81,7 +81,9 @@ export default function GradebookView() {
   const [selectedClass, setSelectedClass] = useState<string>('');
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [selectedTerm, setSelectedTerm] = useState<string>('');
+  const [selectedExamType, setSelectedExamType] = useState<string>('End of Term');
   const [selectedYear, setSelectedYear] = useState<string>('');
+  const [availableExamTypes, setAvailableExamTypes] = useState<string[]>(['Mid Term', 'End of Term']);
 
   // Data State
   const [students, setStudents] = useState<Student[]>([]);
@@ -108,6 +110,10 @@ export default function GradebookView() {
         if (settings) {
           setSelectedTerm(settings.current_term || 'Term 1');
           setSelectedYear(settings.academic_year || new Date().getFullYear().toString());
+          if (settings.exam_types && settings.exam_types.length > 0) {
+            setAvailableExamTypes(settings.exam_types);
+            setSelectedExamType(settings.exam_types[0]);
+          }
         } else {
           // Fallback
           setSelectedTerm('Term 1');
@@ -134,10 +140,10 @@ export default function GradebookView() {
 
   // Load students and existing grades when selection changes
   useEffect(() => {
-    if (selectedClass && selectedSubject && selectedTerm && selectedYear) {
+    if (selectedClass && selectedSubject && selectedTerm && selectedExamType && selectedYear) {
       loadGradebookData();
     }
-  }, [selectedClass, selectedSubject, selectedTerm, selectedYear]);
+  }, [selectedClass, selectedSubject, selectedTerm, selectedExamType, selectedYear]);
 
 
 
@@ -160,6 +166,7 @@ export default function GradebookView() {
           studentId: g.studentId,
           subjectId: selectedSubject,
           term: selectedTerm,
+          examType: selectedExamType,
           academicYear: selectedYear,
           percentage: g.percentage === '' ? 0 : g.percentage,
           comments: g.comments
@@ -239,9 +246,9 @@ export default function GradebookView() {
 
       // 2. Fetch Existing Grades via new API endpoint for better offline support
       const studentIdsStr = loadedStudents.map((s: any) => s.id).join(',');
-      const gradesData = await syncFetch(`/api/school/grades/batch?subjectId=${selectedSubject}&term=${encodeURIComponent(selectedTerm)}&academicYear=${selectedYear}&studentIds=${studentIdsStr}`, {
+      const gradesData = await syncFetch(`/api/school/grades/batch?subjectId=${selectedSubject}&term=${encodeURIComponent(selectedTerm)}&examType=${encodeURIComponent(selectedExamType)}&academicYear=${selectedYear}&studentIds=${studentIdsStr}`, {
         headers,
-        cacheKey: `school-gradebook-${selectedClass}-${selectedSubject}-${selectedTerm}-${selectedYear}`
+        cacheKey: `school-gradebook-${selectedClass}-${selectedSubject}-${selectedTerm}-${selectedExamType}-${selectedYear}`
       });
 
       const gradesMap: Record<string, GradeEntry> = {};
@@ -281,7 +288,7 @@ export default function GradebookView() {
         toast({ 
           title: "Offline Mode", 
           description: "No cached data for this selection. Please connect to load.",
-          variant: "warning" 
+          variant: "destructive" 
         });
       } else {
         toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -345,6 +352,7 @@ export default function GradebookView() {
           classId: selectedClass,
           subjectId: selectedSubject,
           term: selectedTerm,
+          examType: selectedExamType,
           academicYear: selectedYear
         })
       });
@@ -400,7 +408,7 @@ export default function GradebookView() {
           <CardDescription className="text-xs sm:text-sm">Select class and subject to enter grades.</CardDescription>
         </CardHeader>
         <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
             <div className="space-y-2">
               <Label>Academic Year</Label>
               <Select value={selectedYear} onValueChange={setSelectedYear}>
@@ -424,6 +432,19 @@ export default function GradebookView() {
                   <SelectItem value="Term 1">Term 1</SelectItem>
                   <SelectItem value="Term 2">Term 2</SelectItem>
                   <SelectItem value="Term 3">Term 3</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Assessment Type</Label>
+              <Select value={selectedExamType} onValueChange={setSelectedExamType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableExamTypes.map(type => (
+                    <SelectItem key={type} value={type}>{type}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -577,6 +598,7 @@ export default function GradebookView() {
                                 <ReportCardPreview
                                   studentId={student.id}
                                   term={selectedTerm}
+                                  examType={selectedExamType}
                                   academicYear={selectedYear}
                                 />
                               </DialogContent>

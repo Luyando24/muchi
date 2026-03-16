@@ -10,6 +10,7 @@ import {
   Edit,
   Loader2,
   Eye,
+  EyeOff,
   FileSpreadsheet
 } from 'lucide-react';
 import StudentDetailsView from './StudentDetailsView';
@@ -80,6 +81,7 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (initialViewId) {
@@ -100,7 +102,7 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
     grade: '',
     gender: '',
     guardian: '',
-    password: '', // Only for registration
+    password: '12345678', // Default temporary password
     status: 'Active',
     fees: 'Pending'
   });
@@ -133,7 +135,7 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
         toast({
           title: "Offline Mode",
           description: "No cached student data available. Please connect to sync.",
-          variant: "warning",
+          variant: "destructive" as any,
         });
         setStudents([]);
       } else {
@@ -169,7 +171,7 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
       grade: '',
       gender: '',
       guardian: '',
-      password: '',
+      password: '12345678',
       status: 'Active',
       fees: 'Pending'
     });
@@ -377,11 +379,34 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email Address</Label>
-                  <Input id="email" name="email" type="email" value={formData.email} onChange={handleInputChange} required />
+                  <Input id="email" name="email" type="email" value={formData.email} onChange={handleInputChange} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Temporary Password</Label>
-                  <Input id="password" name="password" type="password" value={formData.password} onChange={handleInputChange} required />
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      value={formData.password}
+                      onChange={handleInputChange}
+                      required
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4 text-slate-500" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-slate-500" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">

@@ -46,6 +46,7 @@ export interface School {
   // Settings
   academic_year?: string;
   current_term?: string;
+  exam_types?: string[];
   email?: string;
   phone?: string;
   address?: string;

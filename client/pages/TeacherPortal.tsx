@@ -32,8 +32,10 @@ import {
   Trash2,
   Save,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  AlertCircle
 } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -1011,6 +1013,18 @@ export default function TeacherPortal() {
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             {/* Dashboard Tab */}
             <TabsContent value="dashboard" className="space-y-6">
+              {profile?.is_temp_password && (
+                <Alert variant="default" className="bg-amber-50 border-amber-200 text-amber-900 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-300">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle className="font-bold">Security Reminder</AlertTitle>
+                  <AlertDescription className="text-sm">
+                    You are currently using a temporary password. Please set a permanent password in your 
+                    <Button variant="link" className="p-0 h-auto text-amber-900 dark:text-amber-300 font-bold ml-1" onClick={() => navigate('/force-password-reset')}>
+                      Security Settings
+                    </Button>.
+                  </AlertDescription>
+                </Alert>
+              )}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">

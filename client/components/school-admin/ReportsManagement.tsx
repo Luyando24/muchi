@@ -70,6 +70,7 @@ export default function ReportsManagement() {
   const [selectedTerm, setSelectedTerm] = useState<string>("");
   const [selectedYear, setSelectedYear] = useState<string>("");
   const [activeScreen, setActiveScreen] = useState("overview");
+  const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -204,9 +205,10 @@ export default function ReportsManagement() {
       </div>
 
       <Tabs value={activeScreen} onValueChange={setActiveScreen} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6 lg:w-[900px]">
+        <TabsList className="grid w-full grid-cols-4 md:grid-cols-7 lg:w-[1000px]">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="academic">Academic</TabsTrigger>
+          <TabsTrigger value="teachers">Teacher Performance</TabsTrigger>
           <TabsTrigger value="top-students">Top Students</TabsTrigger>
           <TabsTrigger value="support">Support Needed</TabsTrigger>
           <TabsTrigger value="finance">Finance</TabsTrigger>
@@ -325,21 +327,74 @@ export default function ReportsManagement() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="lg:col-span-2">
               <CardHeader>
-                <CardTitle className="text-lg">Performance by Department</CardTitle>
-                <CardDescription>Average scores grouped by academic department</CardDescription>
+                <CardTitle className="text-lg">School-wide Grade Distribution</CardTitle>
+                <CardDescription>Number of students per grade category (Distinction, Merit, etc.)</CardDescription>
               </CardHeader>
-              <CardContent className="h-[400px]">
+              <CardContent className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={liveStats?.performance?.byDepartment}>
+                  <BarChart data={Object.entries(liveStats?.performance?.gradeDistribution?.school || {}).map(([name, value]) => ({ name, value }))}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="name" />
-                    <YAxis domain={[0, 100]} />
+                    <YAxis />
                     <Tooltip />
-                    <Bar dataKey="average" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                      {Object.entries(liveStats?.performance?.gradeDistribution?.school || {}).map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Subject Performance Ranking</CardTitle>
+                <CardDescription>Sorted by average score across all years</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {liveStats?.performance?.bySubject?.map((subj: any, idx: number) => (
+                    <div key={subj.name} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-bold text-slate-400">#{idx + 1}</span>
+                        <span className="font-medium">{subj.name}</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="w-24 bg-slate-200 dark:bg-slate-800 rounded-full h-1.5 hidden md:block">
+                          <div className="bg-blue-600 h-1.5 rounded-full" style={{ width: `${subj.average}%` }} />
+                        </div>
+                        <span className="font-bold text-blue-600">{subj.average}%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Class Performance Ranking</CardTitle>
+                <CardDescription>Overall performance of classes for selected term</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {liveStats?.performance?.byClass?.sort((a: any, b: any) => b.average - a.average).map((cls: any, idx: number) => (
+                    <div key={cls.name} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-bold text-slate-400">#{idx + 1}</span>
+                        <span className="font-medium">{cls.name}</span>
+                      </div>
+                      <Badge className={idx === 0 ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100" : "bg-blue-100 text-blue-700 hover:bg-blue-100"}>
+                        {cls.average}% Average
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -363,15 +418,191 @@ export default function ReportsManagement() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-slate-50 dark:bg-slate-900 border-none shadow-none">
-              <CardContent className="p-6">
-                <p className="text-sm font-medium text-slate-500">Top Department</p>
-                <div className="flex justify-between items-end mt-2">
-                  <h4 className="text-xl font-bold">{liveStats?.performance?.byDepartment?.[0]?.name || 'N/A'}</h4>
-                  <span className="text-emerald-600 font-bold text-lg">{liveStats?.performance?.byDepartment?.[0]?.average || 0}%</span>
-                </div>
-              </CardContent>
-            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Teacher Performance Tab */}
+        <TabsContent value="teachers" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg">Teacher Performance Analysis</CardTitle>
+                    <CardDescription>Average performance and student grade distribution by teacher</CardDescription>
+                  </div>
+                  {selectedTeacher && (
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedTeacher(null)} className="h-8 gap-1.5 font-bold">
+                      <RefreshCcw className="h-3.5 w-3.5" />
+                      View All
+                    </Button>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {!selectedTeacher ? (
+                      liveStats?.performance?.teacherPerformance?.map((teacher: any, idx: number) => (
+                        <div 
+                          key={teacher.id} 
+                          onClick={() => setSelectedTeacher(teacher)}
+                          className="p-4 rounded-xl border bg-white dark:bg-slate-800 shadow-sm hover:shadow-md transition-all cursor-pointer group"
+                        >
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center font-extrabold text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                {idx + 1}
+                              </div>
+                              <div>
+                                <h4 className="font-bold text-slate-900 dark:text-white">{teacher.name}</h4>
+                                <div className="flex items-center gap-3 mt-0.5">
+                                  <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded font-bold text-slate-500 uppercase">
+                                    {teacher.workload?.classesCount || 0} Classes
+                                  </span>
+                                  <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded font-bold text-slate-500 uppercase">
+                                    {teacher.workload?.subjectsCount || 0} Subjects
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-medium">
+                                    {teacher.count} Grades
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-right flex items-center gap-4">
+                              <div>
+                                <div className="text-2xl font-black text-blue-600">{teacher.average}%</div>
+                                <span className="text-[10px] uppercase text-slate-400 font-bold">Average</span>
+                              </div>
+                              <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-blue-500 transition-colors" />
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <div className="flex gap-1 h-2 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700">
+                              {Object.entries(teacher.grades).map(([label, count]: any, itIdx) => {
+                                const totalCount: number = Object.values(teacher.grades).reduce((a: any, b: any) => a + b, 0) as number;
+                                const width = (count / totalCount) * 100;
+                                return (
+                                  <div 
+                                    key={label}
+                                    title={`${label}: ${count}`}
+                                    className="h-full" 
+                                    style={{ width: `${width}%`, backgroundColor: COLORS[itIdx % COLORS.length] }} 
+                                  />
+                                );
+                              })}
+                            </div>
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+                              {Object.entries(teacher.grades).map(([label, count]: any, itIdx) => (
+                                <div key={label} className="flex items-center gap-1.5">
+                                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[itIdx % COLORS.length] }} />
+                                  <span className="text-[10px] text-slate-500 font-medium">{label}: {count}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="space-y-6">
+                        <div className="bg-slate-50 dark:bg-slate-900 rounded-xl p-4 border flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center text-white font-black text-xl">
+                              {selectedTeacher.name.charAt(0)}
+                            </div>
+                            <div>
+                              <h3 className="text-xl font-black">{selectedTeacher.name}</h3>
+                              <p className="text-sm text-slate-500 font-medium">Performance Breakdown for current session</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-3xl font-black text-blue-600">{selectedTeacher.average}%</div>
+                            <p className="text-[10px] uppercase font-bold text-slate-400">Section Average</p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="p-4 bg-white dark:bg-slate-800 rounded-xl border">
+                            <p className="text-xs font-bold text-slate-400 uppercase mb-1">Subjects Taught</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {selectedTeacher.workload?.subjects?.map((s: string) => (
+                                <Badge key={s} variant="secondary" className="text-[10px]">{s}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="p-4 bg-white dark:bg-slate-800 rounded-xl border">
+                            <p className="text-xs font-bold text-slate-400 uppercase mb-1">Classes Managed</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {selectedTeacher.workload?.classes?.map((c: string) => (
+                                <Badge key={c} variant="outline" className="text-[10px]">{c}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-tight">Breakdown by Class & Subject</h4>
+                          {selectedTeacher.breakdown?.map((item: any) => (
+                            <div key={item.name} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border rounded-lg hover:border-blue-200 transition-colors">
+                              <span className="font-bold text-sm">{item.name}</span>
+                              <div className="flex items-center gap-4">
+                                <span className="text-[11px] text-slate-500 font-bold">{item.count} students</span>
+                                <Badge className={item.average >= 70 ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}>
+                                  {item.average}%
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {(!liveStats?.performance?.teacherPerformance || liveStats.performance.teacherPerformance.length === 0) && (
+                      <div className="text-center py-20 bg-slate-50/50 dark:bg-slate-900/50 rounded-2xl border-2 border-dashed">
+                        <Users2 className="h-10 w-10 text-slate-400 mx-auto mb-4" />
+                        <h4 className="text-lg font-bold">No Teacher Data</h4>
+                        <p className="text-slate-500">Assign teachers to class subjects to see performance analytics.</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="space-y-6">
+              <Card className="bg-blue-600 text-white border-none shadow-lg">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Trophy className="h-5 w-5" />
+                    Top Performing Teacher
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {liveStats?.performance?.teacherPerformance?.[0] ? (
+                    <>
+                      <div className="text-center py-4">
+                        <div className="text-4xl font-black mb-1">{liveStats.performance.teacherPerformance[0].average}%</div>
+                        <p className="text-blue-100 text-sm font-medium">{liveStats.performance.teacherPerformance[0].name}</p>
+                      </div>
+                      <div className="p-4 bg-white/10 rounded-xl border border-white/20">
+                        <p className="text-xs uppercase text-blue-100 font-bold mb-3">Strongest Grades</p>
+                        <div className="space-y-2">
+                          {Object.entries(liveStats.performance.teacherPerformance[0].grades)
+                            .sort((a: any, b: any) => b[1] - a[1])
+                            .slice(0, 3)
+                            .map(([label, count]: any) => (
+                              <div key={label} className="flex justify-between items-center text-sm">
+                                <span>{label}</span>
+                                <span className="font-bold">{count} students</span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-white/60 text-center py-10">Waiting for data...</p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </TabsContent>
 
@@ -768,6 +999,86 @@ export default function ReportsManagement() {
                     </span>
                     <span className="font-bold">{liveStats?.staff?.distribution?.[1]?.value || 0}</span>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Average Performance by Gender</CardTitle>
+                <CardDescription>Comparison of average scores across the school</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={liveStats?.performance?.genderPerformance}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name" />
+                    <YAxis domain={[0, 100]} />
+                    <Tooltip />
+                    <Bar dataKey="average" fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                      {liveStats?.performance?.genderPerformance?.map((entry: any, index: number) => (
+                        <Cell key={`cell-${index}`} fill={entry.name === 'Male' ? '#3b82f6' : entry.name === 'Female' ? '#ec4899' : '#94a3b8'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Grade Distribution by Gender</CardTitle>
+                <CardDescription>Academic outcomes compared with population context</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {liveStats?.performance?.genderPerformance?.filter((g: any) => g.count > 0).map((gender: any) => {
+                    const totalInGender = liveStats?.demographics?.find((d: any) => d.name === gender.name)?.value || 0;
+                    const participationRate = totalInGender > 0 ? Math.round((gender.count / totalInGender) * 100) : 0;
+                    
+                    return (
+                      <div key={gender.name} className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <h4 className="font-bold flex items-center gap-2">
+                            <div className={`w-3 h-3 rounded-full ${gender.name === 'Male' ? 'bg-blue-500' : gender.name === 'Female' ? 'bg-pink-500' : 'bg-slate-400'}`} />
+                            {gender.name} Students
+                          </h4>
+                          <div className="text-right">
+                            <div className="text-sm font-bold text-slate-900 dark:text-white">{gender.average}% Average</div>
+                            <div className="text-[10px] text-slate-500 font-medium">
+                              {gender.count} of {totalInGender} Students ({participationRate}% Participation)
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700">
+                          {Object.entries(gender.grades).map(([label, count]: any, idx) => {
+                            const width = (count / gender.count) * 100;
+                            return (
+                              <div 
+                                key={label}
+                                title={`${label}: ${count}`}
+                                className="h-full" 
+                                style={{ width: `${width}%`, backgroundColor: COLORS[idx % COLORS.length] }} 
+                              />
+                            );
+                          })}
+                        </div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+                          {Object.entries(gender.grades).map(([label, count]: any, idx) => (
+                            <div key={label} className="flex items-center gap-1.5">
+                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                              <span className="text-[10px] text-slate-600 dark:text-slate-400 font-medium">{label}: {count}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {(!liveStats?.performance?.genderPerformance || liveStats.performance.genderPerformance.filter((g: any) => g.count > 0).length === 0) && (
+                    <div className="text-center py-10 opacity-50">No gendered performance data available.</div>
+                  )}
                 </div>
               </CardContent>
             </Card>

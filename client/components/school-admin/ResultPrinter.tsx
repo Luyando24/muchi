@@ -56,6 +56,7 @@ interface Student {
 export default function ResultPrinter() {
     const [classes, setClasses] = useState<Class[]>([]);
     const [students, setStudents] = useState<Student[]>([]);
+    const [availableExamTypes, setAvailableExamTypes] = useState<string[]>(['Mid Term', 'End of Term']);
     const [isLoading, setIsLoading] = useState(true);
     const [isPrinting, setIsPrinting] = useState(false);
     const [batchData, setBatchData] = useState<any[]>([]);
@@ -66,6 +67,7 @@ export default function ResultPrinter() {
     const [filters, setFilters] = useState({
         classId: '',
         term: '',
+        examType: 'End of Term',
         academicYear: new Date().getFullYear().toString()
     });
 
@@ -101,9 +103,17 @@ export default function ResultPrinter() {
             });
             if (response.ok) {
                 const settings = await response.json();
+                
+                let examTypes = ['Mid Term', 'End of Term'];
+                if (settings.exam_types && settings.exam_types.length > 0) {
+                    examTypes = settings.exam_types;
+                }
+                setAvailableExamTypes(examTypes);
+
                 setFilters(prev => ({
                     ...prev,
                     term: settings.current_term,
+                    examType: examTypes[0],
                     academicYear: settings.academic_year
                 }));
             }
@@ -136,8 +146,8 @@ export default function ResultPrinter() {
     };
 
     const handleBulkPrint = async () => {
-        if (!filters.classId || !filters.term || !filters.academicYear) {
-            toast({ title: "Incomplete Selection", description: "Please select Class, Term and Year.", variant: "destructive" });
+        if (!filters.classId || !filters.term || !filters.examType || !filters.academicYear) {
+            toast({ title: "Incomplete Selection", description: "Please select Class, Term, Assessment Type and Year.", variant: "destructive" });
             return;
         }
 
@@ -146,7 +156,7 @@ export default function ResultPrinter() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
 
-            const response = await fetch(`/api/school/results/batch-report-cards?classId=${filters.classId}&term=${encodeURIComponent(filters.term)}&academicYear=${encodeURIComponent(filters.academicYear)}`, {
+            const response = await fetch(`/api/school/results/batch-report-cards?classId=${filters.classId}&term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`, {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
 
@@ -184,7 +194,7 @@ export default function ResultPrinter() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
 
-            const response = await fetch(`/api/school/results/report-card/${studentId}?term=${encodeURIComponent(filters.term)}&academicYear=${encodeURIComponent(filters.academicYear)}`, {
+            const response = await fetch(`/api/school/results/report-card/${studentId}?term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`, {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
 
@@ -217,7 +227,7 @@ export default function ResultPrinter() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
 
-            const response = await fetch(`/api/school/results/report-card/${studentId}?term=${encodeURIComponent(filters.term)}&academicYear=${encodeURIComponent(filters.academicYear)}`, {
+            const response = await fetch(`/api/school/results/report-card/${studentId}?term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`, {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
 
@@ -282,7 +292,7 @@ export default function ResultPrinter() {
                         <CardTitle className="text-sm font-medium">Filter Results</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             <div className="space-y-2">
                                 <label className="text-xs font-medium text-slate-500 uppercase">Class</label>
                                 <Select
@@ -313,6 +323,23 @@ export default function ResultPrinter() {
                                         <SelectItem value="Term 1">Term 1</SelectItem>
                                         <SelectItem value="Term 2">Term 2</SelectItem>
                                         <SelectItem value="Term 3">Term 3</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-slate-500 uppercase">Assessment</label>
+                                <Select
+                                    value={filters.examType}
+                                    onValueChange={(val) => setFilters(prev => ({ ...prev, examType: val }))}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select Type" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {availableExamTypes.map(type => (
+                                            <SelectItem key={type} value={type}>{type}</SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -495,6 +522,7 @@ export default function ResultPrinter() {
                                 <ReportCardContent
                                     data={data}
                                     term={filters.term}
+                                    examType={filters.examType}
                                     academicYear={filters.academicYear}
                                     className="border-none shadow-none w-full max-w-none p-0 !bg-white !text-black"
                                 />
@@ -519,6 +547,7 @@ export default function ResultPrinter() {
                             <ReportCardContent
                                 data={previewData}
                                 term={filters.term}
+                                examType={filters.examType}
                                 academicYear={filters.academicYear}
                             />
                         </div>

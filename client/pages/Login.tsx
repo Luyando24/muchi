@@ -20,7 +20,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const formSchema = z.object({
-  identifier: z.string().min(1, "Email or Student Number is required"),
+  identifier: z.string().min(1, "Email, Username, Phone, or Student Number is required"),
   password: z.string().min(1, "Password is required"),
   rememberMe: z.boolean().default(false),
 });
@@ -47,19 +47,19 @@ export default function Login() {
     try {
       let emailToUse = values.identifier;
       
-      // If it doesn't look like an email, try to look it up as a student number
+      // If it doesn't look like an email, try to look it up using the unified RPC
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(values.identifier)) {
-        const { data: lookedUpEmail, error: lookupError } = await supabase.rpc('get_email_by_student_number', {
-          p_student_number: values.identifier
+        const { data: lookedUpEmail, error: lookupError } = await supabase.rpc('get_email_by_identifier', {
+          p_identifier: values.identifier
         });
         
         if (lookupError) {
-           throw new Error("Error verifying student number");
+           throw new Error("Error verifying identifier");
         }
         
         if (!lookedUpEmail) {
-          throw new Error("Student number not found");
+          throw new Error("Account not found for this identifier");
         }
         emailToUse = lookedUpEmail;
       }
@@ -74,10 +74,10 @@ export default function Login() {
       }
 
       if (data.session) {
-        // Fetch user profile to determine role
+        // Check for temporary password
         const { data: profile, error: profileError } = await supabase
           .from("profiles")
-          .select("role")
+          .select("role, is_temp_password, temp_password_expires_at")
           .eq("id", data.session.user.id)
           .single();
 
@@ -85,19 +85,30 @@ export default function Login() {
           throw profileError;
         }
 
-        // Check if role matches selected tab
-        if (profile.role !== activeTab) {
+        // Handle temporary password expiration
+        if (profile.is_temp_password) {
+          const expiresAt = new Date(profile.temp_password_expires_at);
+          const now = new Date();
+
+          if (now > expiresAt) {
+            await supabase.auth.signOut();
+            throw new Error("Your temporary password has expired (72h limit). Please contact your administrator to reset it.");
+          }
+
           toast({
+            title: "Password Reset Required",
+            description: "You are using a temporary password. Please set a permanent password to continue.",
             variant: "default",
-            title: "Redirecting...",
-            description: `You logged in as a ${profile.role.replace('_', ' ')} but selected the ${activeTab.replace('_', ' ')} tab. Redirecting to your correct portal.`,
           });
-        } else {
-          toast({
-            title: "Welcome back!",
-            description: "Successfully logged in to your account.",
-          });
+          navigate("/force-password-reset");
+          return;
         }
+
+        // Welcome toast
+        toast({
+          title: "Welcome back!",
+          description: "Successfully logged in back to your account.",
+        });
 
         // Redirect based on role
         switch (profile.role) {
@@ -185,16 +196,16 @@ export default function Login() {
                     name="identifier"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{activeTab === 'student' ? "Email or Student Number" : "Email"}</FormLabel>
+                        <FormLabel>{activeTab === 'student' ? "Email or Student Number" : "Email, Username or Phone"}</FormLabel>
                         <FormControl>
                           <div className="relative">
                             {activeTab === 'student' ? (
                                <User className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
                             ) : (
-                               <Mail className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
+                               <User className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
                             )}
                             <Input 
-                              placeholder={activeTab === 'student' ? "Student Number or Email" : "name@school.com"}
+                              placeholder={activeTab === 'student' ? "Student Number or Email" : "Email, Username, or Phone"}
                               className="pl-10 h-11 bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus-visible:ring-blue-500" 
                               {...field} 
                             />

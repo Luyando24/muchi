@@ -130,7 +130,7 @@ export default function FinanceManagement() {
         toast({
           title: "Offline Mode",
           description: "No cached data found for this term. Please connect to sync.",
-          variant: "warning",
+          variant: "destructive" as any,
         });
         setTransactions([]);
         setStats(null);

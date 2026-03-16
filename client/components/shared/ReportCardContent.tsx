@@ -13,11 +13,12 @@ import { Badge } from '@/components/ui/badge';
 interface ReportCardContentProps {
   data: any;
   term: string;
+  examType: string;
   academicYear: string;
   className?: string;
 }
 
-export const ReportCardContent = ({ data, term, academicYear, className = "" }: ReportCardContentProps) => {
+export const ReportCardContent = ({ data, term, examType, academicYear, className = "" }: ReportCardContentProps) => {
   const { student, grades, gradingScale, school } = data;
 
   // Calculate Metrics
@@ -75,7 +76,7 @@ export const ReportCardContent = ({ data, term, academicYear, className = "" }: 
             <div className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold tracking-widest uppercase">
               Official Report
             </div>
-            <p className="text-xs font-bold text-slate-900">{term}</p>
+            <p className="text-xs font-bold text-slate-900">{term} - {examType}</p>
             <p className="text-xs text-slate-500">Academic Year {academicYear}</p>
           </div>
         </div>

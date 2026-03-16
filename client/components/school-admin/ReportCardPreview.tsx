@@ -18,12 +18,13 @@ import { ReportCardContent } from '@/components/shared/ReportCardContent';
 interface ReportCardProps {
   studentId: string;
   term: string;
+  examType: string;
   academicYear: string;
 }
 
 // ReportCardContent component has been moved to @/components/shared/ReportCardContent.tsx
 
-export default function ReportCardPreview({ studentId, term, academicYear }: ReportCardProps) {
+export default function ReportCardPreview({ studentId, term, examType, academicYear }: ReportCardProps) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +37,7 @@ export default function ReportCardPreview({ studentId, term, academicYear }: Rep
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
 
-        const response = await fetch(`/api/school/results/report-card/${studentId}?term=${encodeURIComponent(term)}&academicYear=${encodeURIComponent(academicYear)}`, {
+        const response = await fetch(`/api/school/results/report-card/${studentId}?term=${encodeURIComponent(term)}&examType=${encodeURIComponent(examType)}&academicYear=${encodeURIComponent(academicYear)}`, {
           headers: {
             'Authorization': `Bearer ${session.access_token}`
           }
@@ -55,10 +56,10 @@ export default function ReportCardPreview({ studentId, term, academicYear }: Rep
       }
     };
 
-    if (studentId && term && academicYear) {
+    if (studentId && term && examType && academicYear) {
       fetchReport();
     }
-  }, [studentId, term, academicYear]);
+  }, [studentId, term, examType, academicYear]);
 
   // Set document title for PDF filename
   useEffect(() => {
@@ -85,7 +86,7 @@ export default function ReportCardPreview({ studentId, term, academicYear }: Rep
     <>
       {/* On-Screen Version */}
       <div className="print:hidden">
-        <ReportCardContent data={data} term={term} academicYear={academicYear} />
+        <ReportCardContent data={data} term={term} examType={examType} academicYear={academicYear} />
         {/* Print Controls */}
         <div className="flex justify-end gap-2 pt-4">
           <Button variant="outline" size="sm" onClick={() => window.print()}>
@@ -97,9 +98,10 @@ export default function ReportCardPreview({ studentId, term, academicYear }: Rep
       {/* Print-Only Portal Version - Rendered directly to body to bypass layout constraints */}
       {ReactDOM.createPortal(
         <div className="print-portal">
-          <ReportCardContent 
-            data={data} 
+          <ReportCardContent
+            data={data}
             term={term}
+            examType={examType}
             academicYear={academicYear}
             className="border-none shadow-none w-full max-w-none print:w-full print:max-w-none" 
           />

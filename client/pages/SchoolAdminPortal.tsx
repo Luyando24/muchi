@@ -11,6 +11,7 @@ import {
   Settings,
   CreditCard,
   PieChart,
+  Globe,
 } from 'lucide-react';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ import FinanceManagement from '@/components/school-admin/FinanceManagement';
 import ReportsManagement from '@/components/school-admin/ReportsManagement';
 import CalendarManagement from '@/components/school-admin/CalendarManagement';
 import SchoolSettings from '@/components/school-admin/SchoolSettings';
+import WebsiteManagement from '@/components/school-admin/WebsiteManagement';
 import ApplicationsView from '@/components/school-admin/ApplicationsView';
 import SchoolAdminNavbar from '@/components/school-admin/SchoolAdminNavbar';
 import { syncFetch } from '@/lib/syncService';
@@ -46,6 +48,7 @@ export default function SchoolAdminPortal() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [licenseError, setLicenseError] = useState<string | null>(null);
   const [isLoadingLicense, setIsLoadingLicense] = useState(true);
+  const [userRole, setUserRole] = useState<string>("");
   const navigate = useNavigate();
 
   // Check license and pre-fetch critical data for offline use
@@ -54,6 +57,14 @@ export default function SchoolAdminPortal() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
+
+        // Fetch user role
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+        if (profile) setUserRole(profile.role);
 
         const headers = { Authorization: `Bearer ${session.access_token}` };
 
@@ -121,17 +132,22 @@ export default function SchoolAdminPortal() {
   };
 
   const sidebarItems = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "applications", label: "Applications", icon: UserPlus },
-    { id: "students", label: "Students", icon: Users },
-    { id: "teachers", label: "Teachers", icon: GraduationCap },
-    { id: "academics", label: "Academics & Results", icon: Building2 },
-    { id: "gradebook", label: "Gradebook", icon: GraduationCap },
-    { id: "finance", label: "Finance", icon: CreditCard },
-    { id: "reports", label: "Reports", icon: PieChart },
-    { id: "calendar", label: "Calendar", icon: Calendar },
-    { id: "settings", label: "Settings", icon: Settings }
+    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["school_admin", "bursar", "registrar", "exam_officer", "academic_auditor", "accounts", "content_manager"] },
+    { id: "applications", label: "Applications", icon: UserPlus, roles: ["school_admin", "registrar", "academic_auditor"] },
+    { id: "students", label: "Students", icon: Users, roles: ["school_admin", "registrar", "academic_auditor"] },
+    { id: "teachers", label: "Teachers", icon: GraduationCap, roles: ["school_admin", "registrar", "academic_auditor"] },
+    { id: "academics", label: "Academics & Results", icon: Building2, roles: ["school_admin", "registrar", "exam_officer", "academic_auditor"] },
+    { id: "gradebook", label: "Gradebook", icon: GraduationCap, roles: ["school_admin", "teacher", "exam_officer"] },
+    { id: "finance", label: "Finance", icon: CreditCard, roles: ["school_admin", "bursar", "accounts", "academic_auditor"] },
+    { id: "website", label: "Website", icon: Globe, roles: ["school_admin", "content_manager"] },
+    { id: "reports", label: "Reports", icon: PieChart, roles: ["school_admin", "academic_auditor"] },
+    { id: "calendar", label: "Calendar", icon: Calendar, roles: ["school_admin", "registrar"] },
+    { id: "settings", label: "Settings", icon: Settings, roles: ["school_admin"] }
   ];
+
+  const filteredSidebarItems = sidebarItems.filter(item => 
+    !item.roles || item.roles.includes(userRole)
+  );
 
   if (isLoadingLicense) {
     return (
@@ -162,7 +178,7 @@ export default function SchoolAdminPortal() {
         <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:static inset-y-0 left-0 z-40 w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 transition-transform duration-300 ease-in-out`}>
           <div className="flex flex-col h-full pt-16 lg:pt-0">
             <nav className="flex-1 px-4 py-6 space-y-2">
-              {sidebarItems.map((item) => {
+              {filteredSidebarItems.map((item) => {
                 const Icon = item.icon;
                 return (
                   <Button
@@ -250,6 +266,11 @@ export default function SchoolAdminPortal() {
               <ReportsManagement />
             </TabsContent>
 
+            {/* Website Tab */}
+            <TabsContent value="website" className="space-y-6 m-0">
+              <WebsiteManagement />
+            </TabsContent>
+
             {/* Calendar Tab */}
             <TabsContent value="calendar" className="space-y-6 m-0">
               <CalendarManagement />
@@ -267,11 +288,11 @@ export default function SchoolAdminPortal() {
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-40 px-2 py-2 safe-area-bottom shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
         <div className="flex justify-around items-center">
           {[
-            sidebarItems.find(i => i.id === 'dashboard'),
-            sidebarItems.find(i => i.id === 'students'),
-            sidebarItems.find(i => i.id === 'academics'),
-            sidebarItems.find(i => i.id === 'finance'),
-            sidebarItems.find(i => i.id === 'settings')
+            filteredSidebarItems.find(i => i.id === 'dashboard'),
+            filteredSidebarItems.find(i => i.id === 'students'),
+            filteredSidebarItems.find(i => i.id === 'academics'),
+            filteredSidebarItems.find(i => i.id === 'finance'),
+            filteredSidebarItems.find(i => i.id === 'settings')
           ].map((item) => {
             if (!item) return null;
             const Icon = item.icon;

@@ -49,13 +49,34 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 // Schema for creating a system admin or school admin
+const ALL_ADMIN_ROLES = [
+  'system_admin',
+  'school_admin',
+  'registrar',
+  'exam_officer',
+  'accounts',
+  'content_manager',
+  'academic_auditor',
+  'bursar'
+] as const;
+
 const userSchema = z.object({
   full_name: z.string().min(2, "Full name is required"),
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters").optional(), // Optional for editing
-  role: z.enum(['system_admin', 'school_admin']),
+  role: z.enum(ALL_ADMIN_ROLES),
   school_id: z.string().optional(),
 });
+
+const ROLE_OPTIONS = [
+  { id: 'system_admin', name: 'System Admin' },
+  { id: 'school_admin', name: 'School Admin' },
+  { id: 'registrar', name: 'Registrar' },
+  { id: 'exam_officer', name: 'Exam Officer' },
+  { id: 'accounts', name: 'Accounts / Bursar' },
+  { id: 'content_manager', name: 'Content Manager' },
+  { id: 'academic_auditor', name: 'Academic Auditor' },
+];
 
 interface UserProfile {
   id: string;
@@ -246,7 +267,7 @@ export default function UserManagement() {
     form.reset({
       full_name: user.full_name,
       email: user.email || '',
-      role: user.role as 'system_admin' | 'school_admin',
+      role: user.role as any,
       school_id: user.school_id || 'none',
     });
     setIsDialogOpen(true);
@@ -350,8 +371,11 @@ export default function UserManagement() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="system_admin">System Admin</SelectItem>
-                          <SelectItem value="school_admin">School Admin</SelectItem>
+                          {ROLE_OPTIONS.map((option) => (
+                            <SelectItem key={option.id} value={option.id}>
+                              {option.name}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -359,7 +383,7 @@ export default function UserManagement() {
                   )}
                 />
 
-                {selectedRole === 'school_admin' && (
+                {selectedRole !== 'system_admin' && (
                   <FormField
                     control={form.control}
                     name="school_id"
@@ -443,9 +467,12 @@ export default function UserManagement() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${user.role === 'system_admin'
-                        ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
-                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        user.role === 'system_admin'
+                          ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
+                          : user.role === 'school_admin'
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                          : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300'
                       }`}>
                       {user.role.replace('_', ' ')}
                     </span>

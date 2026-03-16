@@ -1015,6 +1015,7 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
           <ReportCardPreview 
             studentId={studentId}
             term={selectedTerm}
+            examType="End of Term"
             academicYear={currentAcademicYear}
           />
         </DialogContent>

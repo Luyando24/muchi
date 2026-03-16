@@ -1,0 +1,3 @@
+﻿client/components/school-admin/CalendarManagement.tsx(82,11): error TS2322: Type '"warning"' is not assignable to type '"default" | "destructive"'.
+client/components/school-admin/FinanceManagement.tsx(133,11): error TS2322: Type '"warning"' is not assignable to type '"default" | "destructive"'.
+client/components/school-admin/StudentDetailsView.tsx(1015,12): error TS2741: Property 'examType' is missing in type '{ studentId: string; term: string; academicYear: string; }' but required in type 'ReportCardProps'.

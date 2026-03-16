@@ -27,6 +27,11 @@ export async function ensureSchoolSettings(schoolId: string) {
     updated = true;
   }
 
+  if (!school.exam_types || school.exam_types.length === 0) {
+    updates.exam_types = ['Mid Term', 'End of Term'];
+    updated = true;
+  }
+
   if (updated) {
     const { data: updatedSchool, error: updateError } = await supabaseAdmin
       .from('schools')

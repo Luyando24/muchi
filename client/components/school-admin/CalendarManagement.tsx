@@ -79,7 +79,7 @@ export default function CalendarManagement() {
         toast({
           title: "Offline Mode",
           description: "No cached calendar data available. Please connect to sync.",
-          variant: "warning",
+          variant: "destructive" as any,
         });
         setEvents([]);
       } else {
@@ -136,6 +136,11 @@ export default function CalendarManagement() {
     e.preventDefault();
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      if (!navigator.onLine) {
+        toast({ title: 'Offline', description: 'Cannot delete event while offline.', variant: 'destructive' as any });
+        return;
+      }
+
       if (!session) {
         toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
         return;
