@@ -48,6 +48,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { syncFetch } from '@/lib/syncService';
+import { PaginationControls } from '@/components/ui/pagination-controls';
+import type { PaginatedResponse } from '@shared/api';
 
 interface Student {
   id: string;
@@ -72,7 +74,15 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Pagination & Search States
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [totalStudents, setTotalStudents] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -107,16 +117,31 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
     fees: 'Pending'
   });
 
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setCurrentPage(1); // Reset to page 1 on new search
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const fetchStudents = async () => {
     setIsLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const [studentsData, classesData] = await Promise.all([
-        syncFetch('/api/school/students', {
+      const queryParams = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: pageSize.toString(),
+        ...(debouncedSearch ? { search: debouncedSearch } : {})
+      });
+
+      const [studentsRes, classesData] = await Promise.all([
+        syncFetch(`/api/school/students?${queryParams.toString()}`, {
           headers: { 'Authorization': `Bearer ${session.access_token}` },
-          cacheKey: 'school-students-list'
+          cacheKey: `school-students-list-${currentPage}-${pageSize}-${debouncedSearch}`
         }),
         syncFetch('/api/school/classes', {
           headers: { 'Authorization': `Bearer ${session.access_token}` },
@@ -124,7 +149,19 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
         })
       ]);
 
-      setStudents(studentsData);
+      // Parse PaginatedResponse shape
+      const paginatedData = studentsRes as PaginatedResponse<Student>;
+      if (paginatedData && paginatedData.data) {
+        setStudents(paginatedData.data);
+        setTotalStudents(paginatedData.metadata.total);
+        setTotalPages(paginatedData.metadata.totalPages);
+      } else if (Array.isArray(studentsRes)) {
+        // Fallback for offline cached arrays
+        setStudents(studentsRes);
+        setTotalStudents(studentsRes.length);
+        setTotalPages(1);
+      }
+
       setClasses(classesData);
     } catch (error: any) {
       console.error('Error fetching data:', error);
@@ -152,7 +189,7 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
 
   useEffect(() => {
     fetchStudents();
-  }, []);
+  }, [currentPage, pageSize, debouncedSearch]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -314,11 +351,7 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
     }
   };
 
-  const filteredStudents = students.filter(student =>
-    student.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.grade.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.id.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filtering is now handled entirely server-side via the debouncedSearch query parameter.
 
   if (viewStudentId) {
     return <StudentDetailsView studentId={viewStudentId} onBack={handleBackFromDetails} userRole="school_admin" />;
@@ -477,8 +510,9 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
               <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
             </div>
           ) : (
-            <Table>
-              <TableHeader>
+            <>
+              <Table>
+                <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Grade</TableHead>
@@ -490,14 +524,14 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredStudents.length === 0 ? (
+                {students.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-slate-500">
                       No students found.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredStudents.map((student) => (
+                  students.map((student) => (
                     <TableRow key={student.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -557,6 +591,21 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
                 )}
               </TableBody>
             </Table>
+
+            <div className="mt-4">
+              <PaginationControls
+                currentPage={currentPage}
+                totalPages={totalPages}
+                pageSize={pageSize}
+                totalItems={totalStudents}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={(size) => {
+                  setPageSize(size);
+                  setCurrentPage(1);
+                }}
+              />
+            </div>
+            </>
           )}
         </CardContent>
       </Card>

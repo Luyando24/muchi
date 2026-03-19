@@ -49,6 +49,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { syncFetch } from '@/lib/syncService';
+import { PaginationControls } from '@/components/ui/pagination-controls';
+import type { PaginatedResponse } from '@shared/api';
 
 interface Teacher {
   id: string;
@@ -65,7 +67,15 @@ interface Teacher {
 export default function TeacherManagement({ initialViewId, onClearViewId }: { initialViewId?: string | null, onClearViewId?: () => void }) {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Pagination & Search States
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [totalTeachers, setTotalTeachers] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [currentTeacher, setCurrentTeacher] = useState<Teacher | null>(null);
@@ -128,20 +138,47 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
     fetchSubjects();
   }, []);
 
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setCurrentPage(1);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const fetchTeachers = async () => {
     setIsLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const data = await syncFetch('/api/school/teachers', {
+      const queryParams = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: pageSize.toString(),
+        ...(debouncedSearch ? { search: debouncedSearch } : {})
+      });
+
+      const data = await syncFetch(`/api/school/teachers?${queryParams.toString()}`, {
         headers: {
           'Authorization': `Bearer ${session.access_token}`
         },
-        cacheKey: 'school-teachers-list'
+        cacheKey: `school-teachers-list-${currentPage}-${pageSize}-${debouncedSearch}`
       });
 
-      setTeachers(data);
+      // Parse PaginatedResponse shape
+      const paginatedData = data as PaginatedResponse<Teacher>;
+      if (paginatedData && paginatedData.data) {
+        setTeachers(paginatedData.data);
+        setTotalTeachers(paginatedData.metadata.total);
+        setTotalPages(paginatedData.metadata.totalPages);
+      } else if (Array.isArray(data)) {
+        // Fallback for offline cached arrays
+        setTeachers(data);
+        setTotalTeachers(data.length);
+        setTotalPages(1);
+      }
+
     } catch (error: any) {
       console.error('Error fetching teachers:', error);
       
@@ -168,7 +205,7 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
 
   useEffect(() => {
     fetchTeachers();
-  }, []);
+  }, [currentPage, pageSize, debouncedSearch]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -282,10 +319,7 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
     }
   };
 
-  const filteredTeachers = teachers.filter(teacher =>
-    teacher.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    teacher.department.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filtering is now handled entirely server-side via the debouncedSearch query parameter.
 
   if (viewTeacherId) {
     return (
@@ -466,6 +500,7 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
               <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
             </div>
           ) : (
+            <>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -479,14 +514,14 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTeachers.length === 0 ? (
+                {teachers.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-slate-500">
                       No teachers found
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredTeachers.map((teacher) => (
+                  teachers.map((teacher) => (
                     <TableRow key={teacher.id}>
                       <TableCell className="font-medium text-xs text-slate-500">
                         {teacher.id.substring(0, 8)}...
@@ -558,6 +593,21 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
                 )}
               </TableBody>
             </Table>
+            
+            <div className="mt-4">
+              <PaginationControls
+                currentPage={currentPage}
+                totalPages={totalPages}
+                pageSize={pageSize}
+                totalItems={totalTeachers}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={(size) => {
+                  setPageSize(size);
+                  setCurrentPage(1);
+                }}
+              />
+            </div>
+            </>
           )}
         </CardContent>
       </Card>

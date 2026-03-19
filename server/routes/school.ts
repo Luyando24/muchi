@@ -481,15 +481,30 @@ router.get(
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
-    console.log(`[Students] Fetching students for School ID: ${schoolId}`);
+    
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const search = req.query.search as string;
+
+    console.log(`[Students] Fetching students (Page ${page}, Limit ${limit}) for School ID: ${schoolId}`);
 
     try {
-      const { data: students, error } = await supabaseAdmin
+      let query = supabaseAdmin
         .from("profiles")
-        .select("*")
+        .select("*", { count: 'exact' })
         .eq("school_id", schoolId)
-        .eq("role", "student")
-        .order("full_name", { ascending: true });
+        .eq("role", "student");
+
+      if (search) {
+        query = query.or(`full_name.ilike.%${search}%,student_number.ilike.%${search}%`);
+      }
+
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
+
+      const { data: students, error, count } = await query
+        .order("full_name", { ascending: true })
+        .range(from, to);
 
       if (error) throw error;
 
@@ -507,7 +522,15 @@ router.get(
         guardian: student.guardian_name || "None",
       }));
 
-      res.json(formattedStudents);
+      res.json({
+        data: formattedStudents,
+        metadata: {
+          total: count || 0,
+          page,
+          pageSize: limit,
+          totalPages: Math.ceil((count || 0) / limit)
+        }
+      });
     } catch (error: any) {
       console.error("[Students] Get Students Error:", error);
       res.status(500).json({ message: error.message, stack: error.stack });
@@ -2407,14 +2430,28 @@ router.get(
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
+    
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const search = req.query.search as string;
 
     try {
-      const { data: teachers, error } = await supabaseAdmin
+      let query = supabaseAdmin
         .from("profiles")
-        .select("*")
+        .select("*", { count: 'exact' })
         .eq("school_id", schoolId)
-        .eq("role", "teacher")
-        .order("full_name", { ascending: true });
+        .eq("role", "teacher");
+
+      if (search) {
+        query = query.or(`full_name.ilike.%${search}%,department.ilike.%${search}%`);
+      }
+
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
+
+      const { data: teachers, error, count } = await query
+        .order("full_name", { ascending: true })
+        .range(from, to);
 
       if (error) throw error;
 
@@ -2430,7 +2467,15 @@ router.get(
         joinDate: teacher.join_date || new Date().toISOString().split("T")[0],
       }));
 
-      res.json(formattedTeachers);
+      res.json({
+        data: formattedTeachers,
+        metadata: {
+          total: count || 0,
+          page,
+          pageSize: limit,
+          totalPages: Math.ceil((count || 0) / limit)
+        }
+      });
     } catch (error: any) {
       console.error("Get Teachers Error:", error);
       res.status(500).json({ message: error.message });
@@ -2945,12 +2990,19 @@ router.get(
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
 
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const search = req.query.search as string;
+
     try {
       let query = supabaseAdmin
         .from("classes")
-        .select("*, teacher:class_teacher_id(full_name)")
-        .eq("school_id", schoolId)
-        .order("name", { ascending: true });
+        .select("*, teacher:class_teacher_id(full_name)", { count: 'exact' })
+        .eq("school_id", schoolId);
+
+      if (search) {
+        query = query.or(`name.ilike.%${search}%,level.ilike.%${search}%`);
+      }
 
       // Filter for teachers: only show classes they teach or are class teacher for
       if (profile.role === "teacher") {
@@ -2978,11 +3030,16 @@ router.get(
         if (allIds.length > 0) {
           query = query.in("id", allIds);
         } else {
-          return res.json([]);
+          return res.json({ data: [], metadata: { total: 0, page, pageSize: limit, totalPages: 0 } });
         }
       }
 
-      const { data: classes, error } = await query;
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
+
+      const { data: classes, error, count } = await query
+        .order("name", { ascending: true })
+        .range(from, to);
 
       if (error) throw error;
 
@@ -2996,7 +3053,15 @@ router.get(
         classTeacherName: cls.teacher?.full_name || "Unassigned",
       }));
 
-      res.json(formattedClasses);
+      res.json({
+        data: formattedClasses,
+        metadata: {
+          total: count || 0,
+          page,
+          pageSize: limit,
+          totalPages: Math.ceil((count || 0) / limit)
+        }
+      });
     } catch (error: any) {
       console.error("Get Classes Error:", error);
       res.status(500).json({ message: error.message });
@@ -3262,20 +3327,36 @@ router.get(
     const schoolId = profile.school_id;
     const { term, academic_year } = req.query;
 
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+
     try {
       let query = supabaseAdmin
         .from("finance_records")
-        .select("*")
-        .eq("school_id", schoolId)
-        .order("date", { ascending: false });
+        .select("*", { count: 'exact' })
+        .eq("school_id", schoolId);
 
       if (term) query = query.eq("term", term);
       if (academic_year) query = query.eq("academic_year", academic_year);
 
-      const { data: records, error } = await query;
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
+
+      const { data: records, error, count } = await query
+        .order("date", { ascending: false })
+        .range(from, to);
 
       if (error) throw error;
-      res.json(records);
+
+      res.json({
+        data: records,
+        metadata: {
+          total: count || 0,
+          page,
+          pageSize: limit,
+          totalPages: Math.ceil((count || 0) / limit)
+        }
+      });
     } catch (error: any) {
       console.error("Get Finance Error:", error);
       res.status(500).json({ message: error.message });

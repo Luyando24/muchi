@@ -166,8 +166,8 @@ export default function AcademicManagement() {
 
       const [subjectsData, classesData, teachersData, scalesData, weightsData, settingsData, departmentsData] = await Promise.all([
         syncFetch('/api/school/subjects', { headers, cacheKey: 'school-subjects-list' }),
-        syncFetch('/api/school/classes', { headers, cacheKey: 'school-classes-list' }),
-        syncFetch('/api/school/teachers', { headers, cacheKey: 'school-teachers-list' }),
+        syncFetch('/api/school/classes?limit=500', { headers, cacheKey: 'school-classes-list-max' }),
+        syncFetch('/api/school/teachers?limit=500', { headers, cacheKey: 'school-teachers-list-max' }),
         syncFetch('/api/school/grading-scales', { headers, cacheKey: 'school-grading-scales' }),
         syncFetch('/api/school/grading-weights', { headers, cacheKey: 'school-grading-weights' }),
         syncFetch('/api/school/settings', { headers, cacheKey: 'school-settings' }),
@@ -175,8 +175,9 @@ export default function AcademicManagement() {
       ]);
 
       setSubjects(subjectsData);
-      setClasses(classesData);
-      setTeachers(teachersData);
+      // Handle the PaginatedResponse shape for endpoints that were updated
+      setClasses(classesData?.data || classesData);
+      setTeachers(teachersData?.data || teachersData);
       setGradingScales(scalesData);
       setGradingWeights(weightsData);
       setDepartments(departmentsData || []);

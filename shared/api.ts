@@ -13,6 +13,16 @@ export interface ApiError {
   status: 'error';
 }
 
+export interface PaginatedResponse<T> {
+  data: T[];
+  metadata: {
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  };
+}
+
 // --- Auth Types ---
 export interface User {
   id: string;

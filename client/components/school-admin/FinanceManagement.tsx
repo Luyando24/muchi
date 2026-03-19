@@ -38,15 +38,22 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
-import { FinanceRecord, FinanceStats } from '@shared/api';
+import { FinanceRecord, FinanceStats, PaginatedResponse } from '@shared/api';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { syncFetch } from '@/lib/syncService';
 import { isOnline } from '@/lib/offline';
+import { PaginationControls } from '@/components/ui/pagination-controls';
 
 export default function FinanceManagement() {
   const [transactions, setTransactions] = useState<FinanceRecord[]>([]);
   const [stats, setStats] = useState<FinanceStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Pagination States
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [totalTransactions, setTotalTransactions] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [currentTransaction, setCurrentTransaction] = useState<FinanceRecord | null>(null);
@@ -106,13 +113,25 @@ export default function FinanceManagement() {
       const queryParams = new URLSearchParams();
       if (currentTerm) queryParams.append('term', currentTerm);
       if (currentYear) queryParams.append('academic_year', currentYear);
+      queryParams.append('page', currentPage.toString());
+      queryParams.append('limit', pageSize.toString());
 
       // Fetch transactions using syncFetch
       const trxData = await syncFetch(`/api/school/finance?${queryParams.toString()}`, { 
         headers,
-        cacheKey: `school-finance-transactions-${currentTerm}-${currentYear}`
+        cacheKey: `school-finance-transactions-${currentTerm}-${currentYear}-${currentPage}-${pageSize}`
       });
-      setTransactions(trxData);
+      
+      const paginatedData = trxData as PaginatedResponse<FinanceRecord>;
+      if (paginatedData && paginatedData.data) {
+        setTransactions(paginatedData.data);
+        setTotalTransactions(paginatedData.metadata.total);
+        setTotalPages(paginatedData.metadata.totalPages);
+      } else if (Array.isArray(trxData)) {
+        setTransactions(trxData);
+        setTotalTransactions(trxData.length);
+        setTotalPages(1);
+      }
 
       // Fetch stats using syncFetch
       const statsData = await syncFetch(`/api/school/finance/stats?${queryParams.toString()}`, { 
@@ -148,7 +167,7 @@ export default function FinanceManagement() {
 
   useEffect(() => {
     fetchFinanceData();
-  }, [selectedTerm, selectedYear]);
+  }, [selectedTerm, selectedYear, currentPage, pageSize]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -713,6 +732,20 @@ export default function FinanceManagement() {
                 )}
               </TableBody>
             </Table>
+            
+            <div className="mt-4">
+              <PaginationControls
+                currentPage={currentPage}
+                totalPages={totalPages}
+                pageSize={pageSize}
+                totalItems={totalTransactions}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={(size) => {
+                  setPageSize(size);
+                  setCurrentPage(1);
+                }}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
