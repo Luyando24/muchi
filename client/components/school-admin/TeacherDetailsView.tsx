@@ -85,6 +85,13 @@ interface TeacherDetails {
     name: string;
     code: string;
   }>;
+  teachingAssignments: Array<{
+    id: string;
+    class_id: string;
+    subject_id: string;
+    classes: { name: string };
+    subjects: { name: string, code: string, department: string };
+  }>;
 }
 
 export default function TeacherDetailsView({ teacherId, onBack, initialMode }: TeacherDetailsViewProps) {
@@ -250,7 +257,7 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
     );
   }
 
-  const { profile, classes, headOfSubjects } = teacher;
+  const { profile, classes, headOfSubjects, teachingAssignments } = teacher;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -381,8 +388,8 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
                     <CardTitle className="text-sm font-medium text-muted-foreground">Subjects Taught</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">{profile.subjects?.length || 0}</div>
-                    <p className="text-xs text-muted-foreground">Active subjects</p>
+                    <div className="text-2xl font-bold">{teachingAssignments?.length || 0}</div>
+                    <p className="text-xs text-muted-foreground">Active teaching roles</p>
                   </CardContent>
                 </Card>
               </div>
@@ -441,6 +448,43 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground mb-6">No subjects listed.</p>
+                  )}
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle>Teaching Assignments</CardTitle>
+                  <CardDescription>Specific classes and subjects this teacher is assigned to</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {teachingAssignments && teachingAssignments.length > 0 ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Class</TableHead>
+                          <TableHead>Subject</TableHead>
+                          <TableHead>Code</TableHead>
+                          <TableHead>Department</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {teachingAssignments.map((assignment) => (
+                          <TableRow key={assignment.id}>
+                            <TableCell className="font-medium">{assignment.classes?.name}</TableCell>
+                            <TableCell>{assignment.subjects?.name}</TableCell>
+                            <TableCell>
+                              <Badge variant="secondary">{assignment.subjects?.code}</Badge>
+                            </TableCell>
+                            <TableCell>{assignment.subjects?.department}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No specific class teaching assignments found.
+                    </div>
                   )}
                 </CardContent>
               </Card>

@@ -2582,6 +2582,22 @@ router.get(
         .eq("head_teacher_id", id)
         .eq("school_id", schoolId);
 
+      // 3.5 Fetch Specific Teaching Assignments (from class_subjects)
+      const { data: teachingAssignments, error: assignmentsError } = await supabaseAdmin
+        .from("class_subjects")
+        .select(`
+          id,
+          class_id,
+          subject_id,
+          classes(name),
+          subjects(name, code, department)
+        `)
+        .eq("teacher_id", id);
+
+      if (assignmentsError) {
+        console.error("Error fetching teaching assignments:", assignmentsError);
+      }
+
       // 4. Structure Response
       const response = {
         profile: {
@@ -2593,6 +2609,7 @@ router.get(
         },
         classes: classes || [],
         headOfSubjects: subjectsHead || [],
+        teachingAssignments: teachingAssignments || [],
       };
 
       res.json(response);
