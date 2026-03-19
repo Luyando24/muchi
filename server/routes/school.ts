@@ -2678,6 +2678,51 @@ router.put(
         .eq("school_id", schoolId);
 
       if (error) throw error;
+
+      // Synchronization of class-subject assignments
+      if (subjects !== undefined) {
+        // Here, 'subjects' is an array of class_subject IDs.
+        
+        // 1. Clear existing assignments for THIS teacher
+        const { error: clearError } = await supabaseAdmin
+          .from("class_subjects")
+          .update({ teacher_id: null })
+          .eq("teacher_id", id);
+        
+        if (clearError) throw clearError;
+
+        // 2. Assign new subjects to THIS teacher
+        if (subjects.length > 0) {
+          const { error: assignError } = await supabaseAdmin
+            .from("class_subjects")
+            .update({ teacher_id: id })
+            .in("id", subjects);
+          
+          if (assignError) throw assignError;
+
+          // 3. Update the 'subjects' text array in profiles for display/backward compatibility
+          const { data: namesData } = await supabaseAdmin
+            .from("class_subjects")
+            .select(`
+              subjects!inner(name)
+            `)
+            .in("id", subjects);
+          
+          if (namesData) {
+            const subjectNames = Array.from(new Set(namesData.map((item: any) => item.subjects.name)));
+            await supabaseAdmin
+              .from("profiles")
+              .update({ subjects: subjectNames })
+              .eq("id", id);
+          }
+        } else {
+          // Clear the subjects array if no assignments
+          await supabaseAdmin
+            .from("profiles")
+            .update({ subjects: [] })
+            .eq("id", id);
+        }
+      }
       
       // Update Auth Email if provided
       if (email && typeof email === 'string' && typeof id === 'string') {

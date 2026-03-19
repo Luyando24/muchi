@@ -114,12 +114,12 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
-        const res = await fetch('/api/school/subjects', {
+        const res = await fetch('/api/school/class-subjects/allocation-options', {
           headers: { 'Authorization': `Bearer ${session.access_token}` }
         });
         if (res.ok) {
           const data = await res.json();
-          setAvailableSubjects(data.map((s: any) => ({ label: s.name, value: s.name })));
+          setAvailableSubjects(data);
         }
 
         const deptRes = await fetch('/api/school/departments', {
@@ -162,7 +162,7 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
           address: data.profile.address || '',
           date_of_birth: data.profile.date_of_birth || '',
           department: data.profile.department || '',
-          subjects: data.profile.subjects || [],
+          subjects: data.teachingAssignments ? data.teachingAssignments.map((ta: any) => ta.id) : [],
           qualifications: (data.profile.qualifications || []).join(', '),
           work_history: data.profile.work_history || [],
           status: data.profile.status
