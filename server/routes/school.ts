@@ -6114,6 +6114,41 @@ router.get(
   },
 );
 
+// GET /api/school/class-subjects/allocation-options
+// Provides Subject Name (Class Name) options for selection
+router.get(
+  "/class-subjects/allocation-options",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+
+    try {
+      // Fetch class subjects with related join data
+      const { data, error } = await supabaseAdmin
+        .from("class_subjects")
+        .select(`
+          id,
+          class:classes!inner(name, school_id),
+          subject:subjects!inner(name)
+        `)
+        .eq("class.school_id", schoolId);
+
+      if (error) throw error;
+
+      const options = data.map((item: any) => ({
+        value: item.id,
+        label: `${item.subject?.name || 'Unknown'} (${item.class?.name || 'Unknown Class'})`,
+      }));
+
+      res.json(options);
+    } catch (error: any) {
+      console.error("Fetch Class Subject Options Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  },
+);
+
 // POST /api/school/admins
 router.post(
   "/admins",

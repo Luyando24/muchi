@@ -706,12 +706,18 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
 
               <div className="space-y-2">
                 <Label htmlFor="subjects">Subjects</Label>
-                <MultiSelect
-                  options={availableSubjects}
-                  selected={profileForm.subjects || []}
-                  onChange={(selected) => setProfileForm((prev: any) => ({ ...prev, subjects: selected }))}
-                  placeholder="Select subjects..."
-                />
+                {availableSubjects.length > 0 ? (
+                  <MultiSelect
+                    options={availableSubjects}
+                    selected={profileForm.subjects || []}
+                    onChange={(selected) => setProfileForm((prev: any) => ({ ...prev, subjects: selected }))}
+                    placeholder="Select subjects..."
+                  />
+                ) : (
+                  <div className="h-10 w-full border rounded-md bg-slate-50 flex items-center px-3 text-sm text-muted-foreground animate-pulse">
+                    Loading allocation options...
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
