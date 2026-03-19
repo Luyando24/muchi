@@ -3515,6 +3515,71 @@ router.delete(
   },
 );
 
+// POST /api/school/classes/:id/subjects
+// Bulk assign subjects to a class
+router.post(
+  "/classes/:id/subjects",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const { id: classId } = req.params;
+    const { subjectIds } = req.body;
+
+    if (!subjectIds || !Array.isArray(subjectIds)) {
+      return res.status(400).json({ message: "subjectIds array is required" });
+    }
+
+    try {
+      // 1. Get current assignments for this class
+      const { data: currentAssignments, error: fetchError } = await supabaseAdmin
+        .from("class_subjects")
+        .select("subject_id")
+        .eq("class_id", classId);
+
+      if (fetchError) throw fetchError;
+
+      const currentSubjectIds = currentAssignments?.map((a) => a.subject_id) || [];
+
+      // 2. Identify subjects to remove and subjects to add
+      const subjectsToRemove = currentSubjectIds.filter(
+        (id) => !subjectIds.includes(id)
+      );
+      const subjectsToAdd = subjectIds.filter(
+        (id) => !currentSubjectIds.includes(id)
+      );
+
+      // 3. Remove subjects no longer selected
+      if (subjectsToRemove.length > 0) {
+        const { error: deleteError } = await supabaseAdmin
+          .from("class_subjects")
+          .delete()
+          .eq("class_id", classId)
+          .in("subject_id", subjectsToRemove);
+
+        if (deleteError) throw deleteError;
+      }
+
+      // 4. Add new subjects (without teacher assigned yet)
+      if (subjectsToAdd.length > 0) {
+        const newAssignments = subjectsToAdd.map((subjectId) => ({
+          class_id: classId,
+          subject_id: subjectId,
+        }));
+
+        const { error: insertError } = await supabaseAdmin
+          .from("class_subjects")
+          .insert(newAssignments);
+
+        if (insertError) throw insertError;
+      }
+
+      res.json({ message: "Class subjects updated successfully" });
+    } catch (error: any) {
+      console.error("Update Class Subjects Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  },
+);
+
 // --- FINANCE ENDPOINTS ---
 
 // GET /api/school/finance

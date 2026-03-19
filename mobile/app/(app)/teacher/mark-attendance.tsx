@@ -5,7 +5,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { ArrowLeft, CheckCircle2, XCircle, Clock, AlertCircle, ClipboardList } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 
 interface ClassInfo {
   id: string;
@@ -22,8 +22,9 @@ interface StudentAttendance {
 export default function MarkAttendance() {
   const { user } = useAuth();
   const router = useRouter();
+  const { classId } = useLocalSearchParams();
   const [classes, setClasses] = useState<ClassInfo[]>([]);
-  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(classId as string || null);
   const [students, setStudents] = useState<StudentAttendance[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -42,13 +43,15 @@ export default function MarkAttendance() {
       
       if (error) throw error;
       setClasses(data || []);
-      if (data && data.length > 0) {
+      
+      // If no classId from params and we have classes, pick the first one
+      if (!selectedClassId && data && data.length > 0) {
         setSelectedClassId(data[0].id);
       }
     } catch (error) {
       console.error('Error fetching classes:', error);
     } finally {
-      if (classes.length === 0) setLoading(false);
+      if (!selectedClassId && classes.length === 0) setLoading(false);
     }
   };
 
