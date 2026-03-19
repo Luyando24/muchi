@@ -103,10 +103,17 @@ interface BlogPost {
   };
 }
 
+interface School {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 export default function WebsiteManagement() {
   const [activeTab, setActiveTab] = useState("content");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [school, setSchool] = useState<School | null>(null);
   const [content, setContent] = useState<WebsiteContent>({});
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const { toast } = useToast();
@@ -134,13 +141,15 @@ export default function WebsiteManagement() {
 
       const headers = { 'Authorization': `Bearer ${session.access_token}` };
 
-      const [contentRes, postsRes] = await Promise.all([
+      const [contentRes, postsRes, schoolRes] = await Promise.all([
         fetch('/api/school/website-content', { headers }),
-        fetch('/api/school/blog-posts', { headers })
+        fetch('/api/school/blog-posts', { headers }),
+        fetch('/api/school/settings', { headers })
       ]);
 
       if (contentRes.ok) setContent(await contentRes.json());
       if (postsRes.ok) setPosts(await postsRes.json());
+      if (schoolRes.ok) setSchool(await schoolRes.json());
     } catch (error) {
       console.error('Error fetching website data:', error);
       toast({ title: "Error", description: "Failed to load website data", variant: "destructive" });
@@ -306,11 +315,31 @@ export default function WebsiteManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Website Management</h2>
+          <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Website Management</h2>
           <p className="text-muted-foreground text-lg">Manage your school's public presence and blog.</p>
         </div>
+        {school?.slug && (
+          <Button 
+            variant="outline" 
+            className="flex items-center gap-2 group transition-all hover:border-primary hover:text-primary"
+            onClick={() => {
+              const protocol = window.location.protocol;
+              const hostname = window.location.hostname;
+              let url = '';
+              if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
+                url = `${protocol}//${school.slug}.localhost:5173`;
+              } else {
+                url = `${protocol}//${school.slug}.muchi.vercel.app`;
+              }
+              window.open(url, '_blank');
+            }}
+          >
+            <Globe className="h-4 w-4 group-hover:rotate-12 transition-transform" />
+            View Website
+          </Button>
+        )}
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">

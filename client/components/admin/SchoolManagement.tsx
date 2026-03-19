@@ -538,8 +538,21 @@ export default function SchoolManagement() {
                         }}>
                           <Building className="mr-2 h-4 w-4" /> Manage License
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => window.open(`/school/${school.slug}`, '_blank')}>
-                          <ExternalLink className="mr-2 h-4 w-4" /> Visit Website
+                        <DropdownMenuItem onClick={() => {
+                          const protocol = window.location.protocol;
+                          const hostname = window.location.hostname;
+                          let url = '';
+                          if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
+                            // In local dev, we use the same port but with the subdomain
+                            // Note: This requires host file entry or special DNS for localhost subdomains
+                            const port = window.location.port ? `:${window.location.port}` : '';
+                            url = `${protocol}//${school.slug}.localhost${port}`;
+                          } else {
+                            url = `${protocol}//${school.slug}.muchi.vercel.app`;
+                          }
+                          window.open(url, '_blank');
+                        }}>
+                          <ExternalLink className="mr-2 h-4 w-4" /> Visit Website (New)
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => openEditDialog(school)}>

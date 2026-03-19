@@ -4,6 +4,8 @@ import { requireSchoolRole } from "./school.js";
 
 const router = Router();
 
+// --- PUBLIC WEBSITE ENDPOINTS ---
+
 // GET /api/school/public-website-content
 router.get(
   "/public-website-content",
@@ -36,6 +38,44 @@ router.get(
       res.json(data || {});
     } catch (error: any) {
       console.error("Get Public Website Content Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// GET /api/school/public-blog-posts
+router.get(
+  "/public-blog-posts",
+  async (req: Request, res: Response) => {
+    const { schoolSlug } = req.query;
+
+    if (!schoolSlug) {
+      return res.status(400).json({ message: "schoolSlug is required" });
+    }
+
+    try {
+      // First get school ID from slug
+      const { data: school, error: schoolError } = await supabaseAdmin
+        .from("schools")
+        .select("id")
+        .eq("slug", schoolSlug)
+        .single();
+
+      if (schoolError || !school) {
+        return res.status(404).json({ message: "School not found" });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from("blog_posts")
+        .select("*, profiles(full_name)")
+        .eq("school_id", school.id)
+        .eq("status", "Published")
+        .order("published_at", { ascending: false });
+
+      if (error) throw error;
+      res.json(data || []);
+    } catch (error: any) {
+      console.error("Get Public Blog Posts Error:", error);
       res.status(500).json({ message: error.message });
     }
   }

@@ -22,6 +22,44 @@ import SystemAdminPortal from "./pages/SystemAdminPortal";
 import SchoolWebsite from "./pages/SchoolWebsite";
 
 const App = () => {
+  // --- SUBDOMAIN DETECTION ---
+  const hostname = window.location.hostname;
+  const parts = hostname.split('.');
+  
+  // Check if we are on a subdomain (e.g., school-slug.muchi.vercel.app or school-slug.localhost)
+  // We assume the main domain is 'muchi.vercel.app' or 'localhost'
+  let schoolSlug: string | null = null;
+  
+  if (hostname.includes('vercel.app')) {
+    // pattern: [slug].muchi.vercel.app
+    if (parts.length >= 4 && parts[parts.length - 3] === 'muchi') {
+      schoolSlug = parts[0];
+    }
+  } else if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
+    // pattern: [slug].localhost
+    if (parts.length >= 2) {
+      const firstPart = parts[0];
+      if (firstPart !== 'localhost' && firstPart !== 'www' && firstPart !== '127') {
+        schoolSlug = firstPart;
+      }
+    }
+  }
+
+  // If a school slug is detected via subdomain, render the school website directly
+  if (schoolSlug) {
+    return (
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <ThemeProvider attribute="class" defaultTheme="light">
+          <BrowserRouter>
+            <SchoolWebsite subdomainSlug={schoolSlug} />
+          </BrowserRouter>
+        </ThemeProvider>
+      </TooltipProvider>
+    );
+  }
+
   return (
     <TooltipProvider>
       <Toaster />
@@ -35,7 +73,7 @@ const App = () => {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/force-password-reset" element={<ForcePasswordReset />} />
-            <Route path="/school/:slug" element={<SchoolWebsite />} />
+            <Route path="/school/:slug/*" element={<SchoolWebsite />} />
             <Route path="/student-portal/:id/*" element={
               <ProtectedRoute allowedRoles={['student']}>
                 <StudentPortal />
