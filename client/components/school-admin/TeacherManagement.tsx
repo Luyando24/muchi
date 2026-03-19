@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -82,6 +83,8 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
   const [viewTeacherId, setViewTeacherId] = useState<string | null>(initialViewId || null);
   const [teacherViewMode, setTeacherViewMode] = useState<'view' | 'edit'>('view');
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [selectedTeachers, setSelectedTeachers] = useState<string[]>([]);
+  const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
   const [availableSubjects, setAvailableSubjects] = useState<Option[]>([]);
@@ -319,6 +322,41 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
     }
   };
 
+  const handleBulkDeleteTeachers = async () => {
+    if (selectedTeachers.length === 0) return;
+    setIsDeleting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const promises = selectedTeachers.map(id => fetch(`/api/school/teachers/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      }));
+
+      const results = await Promise.all(promises);
+      const failed = results.filter(r => !r.ok);
+
+      if (failed.length > 0) {
+        toast({ 
+          title: "Partial Success", 
+          description: `Deleted ${selectedTeachers.length - failed.length} teachers. ${failed.length} failed.`,
+          variant: "destructive" 
+        });
+      } else {
+        toast({ title: "Success", description: `${selectedTeachers.length} teachers deleted successfully` });
+      }
+
+      setSelectedTeachers([]);
+      setIsBulkDeleteConfirmOpen(false);
+      fetchTeachers();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // Filtering is now handled entirely server-side via the debouncedSearch query parameter.
 
   if (viewTeacherId) {
@@ -339,6 +377,16 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
           <p className="text-slate-600 dark:text-slate-400">Manage teaching staff, assignments, and performance.</p>
         </div>
         <div className="flex gap-2">
+          {selectedTeachers.length > 0 && (
+            <Button 
+              variant="destructive" 
+              onClick={() => setIsBulkDeleteConfirmOpen(true)}
+              disabled={isDeleting}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete ({selectedTeachers.length})
+            </Button>
+          )}
           <Button variant="outline">
             <Download className="h-4 w-4 mr-2" />
             Export List
@@ -504,6 +552,15 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[50px]">
+                    <Checkbox 
+                      checked={selectedTeachers.length === teachers.length && teachers.length > 0}
+                      onCheckedChange={(checked) => {
+                        if (checked) setSelectedTeachers(teachers.map(t => t.id));
+                        else setSelectedTeachers([]);
+                      }}
+                    />
+                  </TableHead>
                   <TableHead>Staff ID</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Department</TableHead>
@@ -522,7 +579,16 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
                   </TableRow>
                 ) : (
                   teachers.map((teacher) => (
-                    <TableRow key={teacher.id}>
+                    <TableRow key={teacher.id} className={selectedTeachers.includes(teacher.id) ? "bg-slate-50 dark:bg-slate-800/50" : ""}>
+                      <TableCell>
+                        <Checkbox 
+                          checked={selectedTeachers.includes(teacher.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) setSelectedTeachers([...selectedTeachers, teacher.id]);
+                            else setSelectedTeachers(selectedTeachers.filter(id => id !== teacher.id));
+                          }}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium text-xs text-slate-500">
                         {teacher.id.substring(0, 8)}...
                       </TableCell>
@@ -621,6 +687,16 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
         variant="danger"
         loading={isDeleting}
         onConfirm={handleDelete}
+      />
+      <ConfirmDialog
+        open={isBulkDeleteConfirmOpen}
+        onOpenChange={(open) => !open && setIsBulkDeleteConfirmOpen(false)}
+        title={`Delete ${selectedTeachers.length} Teacher Accounts?`}
+        description={`Are you sure you want to delete the selected teachers? This action cannot be undone and will remove all their associated data.`}
+        confirmLabel="Delete Teachers"
+        variant="danger"
+        loading={isDeleting}
+        onConfirm={handleBulkDeleteTeachers}
       />
     </div>
   );

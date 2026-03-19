@@ -181,7 +181,10 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
           fees: data.profile.fees_status
         });
 
-        if (classesRes.ok) setClasses(await classesRes.json());
+        if (classesRes.ok) {
+          const classesJson = await classesRes.json();
+          setClasses(classesJson?.data || classesJson);
+        }
         if (subjectsRes.ok) setSubjects(await subjectsRes.json());
 
       } catch (error: any) {

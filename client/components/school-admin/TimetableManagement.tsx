@@ -120,14 +120,20 @@ export default function TimetableManagement() {
       }
 
       const [classesRes, subjectsRes, teachersRes] = await Promise.all([
-        fetch('/api/school/classes', { headers }),
+        fetch('/api/school/classes?limit=500', { headers }),
         fetch('/api/school/subjects', { headers }),
-        fetch('/api/school/teachers', { headers })
+        fetch('/api/school/teachers?limit=500', { headers })
       ]);
 
-      if (classesRes.ok) setClasses(await classesRes.json());
+      if (classesRes.ok) {
+        const d = await classesRes.json();
+        setClasses(d?.data || d);
+      }
       if (subjectsRes.ok) setSubjects(await subjectsRes.json());
-      if (teachersRes.ok) setTeachers(await teachersRes.json());
+      if (teachersRes.ok) {
+        const d = await teachersRes.json();
+        setTeachers(d?.data || d);
+      }
 
     } catch (error) {
       console.error('Error fetching initial data:', error);

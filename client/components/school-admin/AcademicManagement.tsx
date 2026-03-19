@@ -14,7 +14,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   ClipboardList,
-  Printer
+  Printer,
+  FileSpreadsheet,
+  Building
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,6 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,6 +54,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { syncFetch } from '@/lib/syncService';
+import BulkAcademicImport from './BulkAcademicImport';
 
 interface Teacher {
   id: string;
@@ -91,6 +95,11 @@ interface GradingWeight {
   weight_percentage: number;
 }
 
+interface Department {
+  id: string;
+  name: string;
+}
+
 import TimetableManagement from './TimetableManagement';
 import ResultPrinter from './ResultPrinter';
 
@@ -101,9 +110,10 @@ export default function AcademicManagement() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [gradingScales, setGradingScales] = useState<GradingScale[]>([]);
   const [gradingWeights, setGradingWeights] = useState<GradingWeight[]>([]);
-  const [departments, setDepartments] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [schoolSettings, setSchoolSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isImportOpen, setIsImportOpen] = useState<string | null>(null); // null | 'classes' | 'subjects' | 'departments'
   const { toast } = useToast();
 
   // Dialog States
@@ -111,6 +121,8 @@ export default function AcademicManagement() {
   const [isEditSubjectOpen, setIsEditSubjectOpen] = useState(false);
   const [isAddClassOpen, setIsAddClassOpen] = useState(false);
   const [isEditClassOpen, setIsEditClassOpen] = useState(false);
+  const [isAddDeptOpen, setIsAddDeptOpen] = useState(false);
+  const [isEditDeptOpen, setIsEditDeptOpen] = useState(false);
   const [isAddScaleOpen, setIsAddScaleOpen] = useState(false);
   const [isEditScaleOpen, setIsEditScaleOpen] = useState(false);
   const [isAddWeightOpen, setIsAddWeightOpen] = useState(false);
@@ -118,10 +130,14 @@ export default function AcademicManagement() {
   const [isManageSubjectsOpen, setIsManageSubjectsOpen] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedClassSubjects, setSelectedClassSubjects] = useState<string[]>([]);
+  const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
 
   // Form Data
   const [subjectForm, setSubjectForm] = useState({ id: '', name: '', department: '', headTeacherId: '', code: '' });
   const [classForm, setClassForm] = useState({ id: '', name: '', level: '', room: '', capacity: 40, classTeacherId: '' });
+  const [deptForm, setDeptForm] = useState({ id: '', name: '' });
   const [scaleForm, setScaleForm] = useState({ id: '', grade: '', min_percentage: 0, max_percentage: 100, description: '' });
   const [weightForm, setWeightForm] = useState({ id: '', assessment_type: '', weight_percentage: 0 });
 
@@ -148,7 +164,7 @@ export default function AcademicManagement() {
 
   // Confirmation State
   const [confirmState, setConfirmState] = useState<{
-    type: 'subject' | 'class' | 'scale' | 'weight' | 'publish' | null;
+    type: 'subject' | 'class' | 'scale' | 'weight' | 'publish' | 'department' | 'bulk-class' | 'bulk-subject' | 'bulk-department' | null;
     id?: string;
     message?: string;
     title?: string;
@@ -403,6 +419,106 @@ export default function AcademicManagement() {
       if (!response.ok) throw new Error('Failed to delete class');
 
       toast({ title: "Success", description: "Class deleted successfully" });
+      setConfirmState({ type: null });
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // Department Handlers
+  const handleDeptSubmit = async (e: React.FormEvent, isEdit: boolean) => {
+    e.preventDefault();
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const url = isEdit ? `/api/school/departments/${deptForm.id}` : '/api/school/departments';
+      const method = isEdit ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify(deptForm)
+      });
+
+      if (!response.ok) throw new Error('Failed to save department');
+
+      toast({ title: "Success", description: `Department ${isEdit ? 'updated' : 'created'} successfully` });
+      setIsAddDeptOpen(false);
+      setIsEditDeptOpen(false);
+      setDeptForm({ id: '', name: '' });
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleDeleteDept = async () => {
+    if (!confirmState.id) return;
+    setIsActionLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/school/departments/${confirmState.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+
+      if (!response.ok) throw new Error('Failed to delete department');
+
+      toast({ title: "Success", description: "Department deleted successfully" });
+      setConfirmState({ type: null });
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleBulkDelete = async (type: 'class' | 'subject' | 'department') => {
+    let ids: string[] = [];
+    if (type === 'class') ids = selectedClasses;
+    else if (type === 'subject') ids = selectedSubjects;
+    else if (type === 'department') ids = selectedDepartments;
+
+    if (ids.length === 0) return;
+
+    setIsActionLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const path = type === 'subject' ? 'subjects' : (type === 'class' ? 'classes' : type + 's');
+      const promises = ids.map(id => fetch(`/api/school/${path}/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      }));
+
+      const results = await Promise.all(promises);
+      const failed = results.filter(r => !r.ok);
+
+      if (failed.length > 0) {
+        toast({ 
+          title: "Partial Success", 
+          description: `Successfully deleted ${ids.length - failed.length} items. ${failed.length} failed.`,
+          variant: "destructive" 
+        });
+      } else {
+        toast({ title: "Success", description: `${ids.length} items deleted successfully` });
+      }
+
+      if (type === 'class') setSelectedClasses([]);
+      else if (type === 'subject') setSelectedSubjects([]);
+      else if (type === 'department') setSelectedDepartments([]);
+      
       setConfirmState({ type: null });
       fetchData();
     } catch (error: any) {
@@ -726,9 +842,13 @@ export default function AcademicManagement() {
     switch (confirmState.type) {
       case 'subject': handleDeleteSubject(); break;
       case 'class': handleDeleteClass(); break;
+      case 'department': handleDeleteDept(); break;
       case 'scale': handleDeleteScale(); break;
       case 'weight': handleDeleteWeight(); break;
       case 'publish': handlePublishResults(); break;
+      case 'bulk-class': handleBulkDelete('class'); break;
+      case 'bulk-subject': handleBulkDelete('subject'); break;
+      case 'bulk-department': handleBulkDelete('department'); break;
       default: setConfirmState({ type: null });
     }
   };
@@ -768,6 +888,9 @@ export default function AcademicManagement() {
         <TabsList className="w-full justify-start h-auto p-1 bg-slate-100/50 dark:bg-slate-800/50">
           <TabsTrigger value="classes" className="flex items-center gap-2 px-4 py-2">
             <Layers className="h-4 w-4" /> Classes
+          </TabsTrigger>
+          <TabsTrigger value="departments" className="flex items-center gap-2 px-4 py-2">
+            <Building className="h-4 w-4" /> Departments
           </TabsTrigger>
           <TabsTrigger value="subjects" className="flex items-center gap-2 px-4 py-2">
             <BookOpen className="h-4 w-4" /> Subjects
@@ -809,7 +932,25 @@ export default function AcademicManagement() {
                 <CardTitle>Active Classes</CardTitle>
                 <CardDescription>Manage class sections and teacher assignments</CardDescription>
               </div>
-              <Dialog open={isAddClassOpen} onOpenChange={setIsAddClassOpen}>
+              <div className="flex items-center gap-2">
+                {selectedClasses.length > 0 && (
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    disabled={isActionLoading}
+                    onClick={() => setConfirmState({ 
+                      type: 'bulk-class', 
+                      title: 'Bulk Delete Classes', 
+                      message: `Are you sure you want to delete ${selectedClasses.length} selected classes? This will remove all their associations.` 
+                    })}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" /> Delete ({selectedClasses.length})
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={() => setIsImportOpen('classes')}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" /> Import Classes
+                </Button>
+                <Dialog open={isAddClassOpen} onOpenChange={setIsAddClassOpen}>
                 <DialogTrigger asChild>
                   <Button onClick={() => setClassForm({ id: '', name: '', level: '', room: '', capacity: 40, classTeacherId: '' })}>
                     <Plus className="h-4 w-4 mr-2" /> Add Class
@@ -860,11 +1001,21 @@ export default function AcademicManagement() {
                   </form>
                 </DialogContent>
               </Dialog>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[50px]">
+                      <Checkbox 
+                        checked={selectedClasses.length === classes.length && classes.length > 0}
+                        onCheckedChange={(checked) => {
+                          if (checked) setSelectedClasses(classes.map(c => c.id));
+                          else setSelectedClasses([]);
+                        }}
+                      />
+                    </TableHead>
                     <TableHead>Class Name</TableHead>
                     <TableHead>Level</TableHead>
                     <TableHead>Room</TableHead>
@@ -875,7 +1026,16 @@ export default function AcademicManagement() {
                 </TableHeader>
                 <TableBody>
                   {classes.map((cls) => (
-                    <TableRow key={cls.id}>
+                    <TableRow key={cls.id} className={selectedClasses.includes(cls.id) ? "bg-slate-50 dark:bg-slate-800/50" : ""}>
+                      <TableCell>
+                        <Checkbox 
+                          checked={selectedClasses.includes(cls.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) setSelectedClasses([...selectedClasses, cls.id]);
+                            else setSelectedClasses(selectedClasses.filter(id => id !== cls.id));
+                          }}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">{cls.name}</TableCell>
                       <TableCell>{cls.level}</TableCell>
                       <TableCell>{cls.room}</TableCell>
@@ -908,7 +1068,7 @@ export default function AcademicManagement() {
                   ))}
                   {classes.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-slate-500">
+                      <TableCell colSpan={7} className="text-center py-8 text-slate-500">
                         No classes found. Add your first class to get started.
                       </TableCell>
                     </TableRow>
@@ -917,6 +1077,132 @@ export default function AcademicManagement() {
               </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+        
+        {/* DEPARTMENTS TAB */}
+        <TabsContent value="departments" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>School Departments</CardTitle>
+                <CardDescription>Organize subjects and staff into academic departments</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedDepartments.length > 0 && (
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    disabled={isActionLoading}
+                    onClick={() => setConfirmState({ 
+                      type: 'bulk-department', 
+                      title: 'Bulk Delete Departments', 
+                      message: `Are you sure you want to delete ${selectedDepartments.length} selected departments?` 
+                    })}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" /> Delete ({selectedDepartments.length})
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={() => setIsImportOpen('departments')}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" /> Import Departments
+                </Button>
+                <Dialog open={isAddDeptOpen} onOpenChange={setIsAddDeptOpen}>
+                  <DialogTrigger asChild>
+                    <Button onClick={() => setDeptForm({ id: '', name: '' })}>
+                      <Plus className="h-4 w-4 mr-2" /> Add Department
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Add New Department</DialogTitle>
+                      <DialogDescription>Create a new academic department.</DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={(e) => handleDeptSubmit(e, false)} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Department Name</Label>
+                        <Input required placeholder="e.g. Science" value={deptForm.name} onChange={e => setDeptForm({ ...deptForm, name: e.target.value })} />
+                      </div>
+                      <DialogFooter>
+                        <Button type="submit">Create Department</Button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[50px]">
+                      <Checkbox 
+                        checked={selectedDepartments.length === departments.length && departments.length > 0}
+                        onCheckedChange={(checked) => {
+                          if (checked) setSelectedDepartments(departments.map(d => d.id));
+                          else setSelectedDepartments([]);
+                        }}
+                      />
+                    </TableHead>
+                    <TableHead>Department Name</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {departments.map((dept) => (
+                    <TableRow key={dept.id} className={selectedDepartments.includes(dept.id) ? "bg-slate-50 dark:bg-slate-800/50" : ""}>
+                      <TableCell>
+                        <Checkbox 
+                          checked={selectedDepartments.includes(dept.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) setSelectedDepartments([...selectedDepartments, dept.id]);
+                            else setSelectedDepartments(selectedDepartments.filter(id => id !== dept.id));
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{dept.name}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => {
+                            setDeptForm({ id: dept.id, name: dept.name });
+                            setIsEditDeptOpen(true);
+                          }}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="text-red-500" onClick={() => setConfirmState({ type: 'department', id: dept.id })}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {departments.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center py-8 text-slate-500">
+                        No departments found. Add your first department to get started.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Dialog open={isEditDeptOpen} onOpenChange={setIsEditDeptOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Department</DialogTitle>
+                <DialogDescription>Update department details.</DialogDescription>
+              </DialogHeader>
+              <form onSubmit={(e) => handleDeptSubmit(e, true)} className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Department Name</Label>
+                  <Input required placeholder="e.g. Science" value={deptForm.name} onChange={e => setDeptForm({ ...deptForm, name: e.target.value })} />
+                </div>
+                <DialogFooter>
+                  <Button type="submit">Update Department</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* SUBJECTS TAB */}
@@ -927,7 +1213,25 @@ export default function AcademicManagement() {
                 <CardTitle>Subjects Curriculum</CardTitle>
                 <CardDescription>Manage subjects and department heads</CardDescription>
               </div>
-              <Dialog open={isAddSubjectOpen} onOpenChange={setIsAddSubjectOpen}>
+              <div className="flex items-center gap-2">
+                {selectedSubjects.length > 0 && (
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    disabled={isActionLoading}
+                    onClick={() => setConfirmState({ 
+                      type: 'bulk-subject', 
+                      title: 'Bulk Delete Subjects', 
+                      message: `Are you sure you want to delete ${selectedSubjects.length} selected subjects? This will remove all their associations.` 
+                    })}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" /> Delete ({selectedSubjects.length})
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={() => setIsImportOpen('subjects')}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" /> Import Subjects
+                </Button>
+                <Dialog open={isAddSubjectOpen} onOpenChange={setIsAddSubjectOpen}>
                 <DialogTrigger asChild>
                   <Button onClick={() => setSubjectForm({ id: '', name: '', department: '', headTeacherId: '', code: '' })}>
                     <Plus className="h-4 w-4 mr-2" /> Add Subject
@@ -1014,11 +1318,21 @@ export default function AcademicManagement() {
                   </form>
                 </DialogContent>
               </Dialog>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[50px]">
+                      <Checkbox 
+                        checked={selectedSubjects.length === subjects.length && subjects.length > 0}
+                        onCheckedChange={(checked) => {
+                          if (checked) setSelectedSubjects(subjects.map(s => s.id));
+                          else setSelectedSubjects([]);
+                        }}
+                      />
+                    </TableHead>
                     <TableHead>Code</TableHead>
                     <TableHead>Subject Name</TableHead>
                     <TableHead>Department</TableHead>
@@ -1028,7 +1342,16 @@ export default function AcademicManagement() {
                 </TableHeader>
                 <TableBody>
                   {subjects.map((sub) => (
-                    <TableRow key={sub.id}>
+                    <TableRow key={sub.id} className={selectedSubjects.includes(sub.id) ? "bg-slate-50 dark:bg-slate-800/50" : ""}>
+                      <TableCell>
+                        <Checkbox 
+                          checked={selectedSubjects.includes(sub.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) setSelectedSubjects([...selectedSubjects, sub.id]);
+                            else setSelectedSubjects(selectedSubjects.filter(id => id !== sub.id));
+                          }}
+                        />
+                      </TableCell>
                       <TableCell className="font-mono text-xs">{sub.code}</TableCell>
                       <TableCell className="font-medium">{sub.name}</TableCell>
                       <TableCell>{sub.department}</TableCell>
@@ -1056,7 +1379,7 @@ export default function AcademicManagement() {
                   ))}
                   {subjects.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-slate-500">
+                      <TableCell colSpan={6} className="text-center py-8 text-slate-500">
                         No subjects found. Add your first subject.
                       </TableCell>
                     </TableRow>
@@ -1945,6 +2268,17 @@ export default function AcademicManagement() {
             <Button variant="outline" onClick={() => setIsManageSubjectsOpen(false)}>Cancel</Button>
             <Button onClick={handleSaveClassSubjects}>Save Changes</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!isImportOpen} onOpenChange={(open) => !open && setIsImportOpen(null)}>
+        <DialogContent className="sm:max-w-[750px]">
+          <BulkAcademicImport 
+            defaultTab={isImportOpen === 'classes' ? 'classes' : isImportOpen === 'subjects' ? 'subjects' : 'departments'}
+            onImportSuccess={() => {
+              setIsImportOpen(null);
+              fetchData();
+            }} 
+          />
         </DialogContent>
       </Dialog>
       <ConfirmDialog

@@ -2795,6 +2795,205 @@ router.post(
   },
 );
 
+// POST /api/school/departments/bulk
+router.post(
+  "/departments/bulk",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { departments } = req.body;
+
+    if (!departments || !Array.isArray(departments) || departments.length === 0) {
+      return res.status(400).json({ message: "No departments provided" });
+    }
+
+    let importedCount = 0;
+    let skippedCount = 0;
+    const errors: { row: number; name: string; message: string }[] = [];
+
+    for (let i = 0; i < departments.length; i++) {
+      const dept = departments[i];
+      try {
+        if (!dept.name || typeof dept.name !== "string" || !dept.name.trim()) {
+          throw new Error("Department name is required");
+        }
+
+        const formattedName = dept.name
+          .toLowerCase()
+          .split(" ")
+          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ")
+          .trim();
+
+        // Check if already exists
+        const { data: existing } = await supabaseAdmin
+          .from("departments")
+          .select("id")
+          .eq("school_id", schoolId)
+          .ilike("name", formattedName)
+          .maybeSingle();
+
+        if (existing) {
+          skippedCount++;
+          continue;
+        }
+
+        const { error } = await supabaseAdmin
+          .from("departments")
+          .insert({ school_id: schoolId, name: formattedName });
+
+        if (error) throw error;
+        importedCount++;
+      } catch (err: any) {
+        errors.push({ row: i + 1, name: dept.name || "(empty)", message: err.message });
+      }
+    }
+
+    res.json({ importedCount, skippedCount, errors });
+  },
+);
+
+// DELETE /api/school/departments/:id
+router.delete(
+  "/departments/:id",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { id } = req.params;
+
+    try {
+      const { error } = await supabaseAdmin
+        .from("departments")
+        .delete()
+        .eq("id", id)
+        .eq("school_id", schoolId);
+
+      if (error) throw error;
+      res.json({ message: "Department deleted successfully" });
+    } catch (error: any) {
+      console.error("Delete Department Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  },
+);
+
+// POST /api/school/subjects/bulk
+router.post(
+  "/subjects/bulk",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { subjects } = req.body;
+
+    if (!subjects || !Array.isArray(subjects) || subjects.length === 0) {
+      return res.status(400).json({ message: "No subjects provided" });
+    }
+
+    let importedCount = 0;
+    let skippedCount = 0;
+    const errors: { row: number; name: string; message: string }[] = [];
+
+    for (let i = 0; i < subjects.length; i++) {
+      const subj = subjects[i];
+      try {
+        if (!subj.name || typeof subj.name !== "string" || !subj.name.trim()) {
+          throw new Error("Subject name is required");
+        }
+
+        // Check duplicate by name within school
+        const { data: existing } = await supabaseAdmin
+          .from("subjects")
+          .select("id")
+          .eq("school_id", schoolId)
+          .ilike("name", subj.name.trim())
+          .maybeSingle();
+
+        if (existing) {
+          skippedCount++;
+          continue;
+        }
+
+        const { error } = await supabaseAdmin
+          .from("subjects")
+          .insert({
+            school_id: schoolId,
+            name: subj.name.trim(),
+            code: subj.code?.trim() || null,
+            department: subj.department?.trim() || null,
+          });
+
+        if (error) throw error;
+        importedCount++;
+      } catch (err: any) {
+        errors.push({ row: i + 1, name: subj.name || "(empty)", message: err.message });
+      }
+    }
+
+    res.json({ importedCount, skippedCount, errors });
+  },
+);
+
+// POST /api/school/classes/bulk
+router.post(
+  "/classes/bulk",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { classes } = req.body;
+
+    if (!classes || !Array.isArray(classes) || classes.length === 0) {
+      return res.status(400).json({ message: "No classes provided" });
+    }
+
+    let importedCount = 0;
+    let skippedCount = 0;
+    const errors: { row: number; name: string; message: string }[] = [];
+
+    for (let i = 0; i < classes.length; i++) {
+      const cls = classes[i];
+      try {
+        if (!cls.name || typeof cls.name !== "string" || !cls.name.trim()) {
+          throw new Error("Class name is required");
+        }
+
+        // Check duplicate by name within school
+        const { data: existing } = await supabaseAdmin
+          .from("classes")
+          .select("id")
+          .eq("school_id", schoolId)
+          .ilike("name", cls.name.trim())
+          .maybeSingle();
+
+        if (existing) {
+          skippedCount++;
+          continue;
+        }
+
+        const { error } = await supabaseAdmin
+          .from("classes")
+          .insert({
+            school_id: schoolId,
+            name: cls.name.trim(),
+            level: cls.level?.trim() || null,
+            room: cls.room?.trim() || null,
+            capacity: cls.capacity ? parseInt(cls.capacity) : 40,
+          });
+
+        if (error) throw error;
+        importedCount++;
+      } catch (err: any) {
+        errors.push({ row: i + 1, name: cls.name || "(empty)", message: err.message });
+      }
+    }
+
+    res.json({ importedCount, skippedCount, errors });
+  },
+);
+
 // GET /api/school/subjects
 router.get(
   "/subjects",

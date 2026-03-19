@@ -126,7 +126,7 @@ export default function GradebookView() {
           syncFetch('/api/school/grading-scales', { headers, cacheKey: 'school-grading-scales' })
         ]);
 
-        if (classesData) setClasses(classesData);
+        if (classesData) setClasses(classesData?.data || classesData);
         if (subjectsData) setSubjects(subjectsData);
         if (scalesData) setGradingScales(scalesData);
 

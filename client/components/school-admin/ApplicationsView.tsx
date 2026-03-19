@@ -85,10 +85,10 @@ export default function ApplicationsView() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const data = await syncFetch('/api/school/classes', {
+      const data = await syncFetch('/api/school/classes?limit=500', {
         headers: { Authorization: `Bearer ${session.access_token}` }
       });
-      setClasses(data);
+      setClasses(data?.data || data);
     } catch (error) {
       console.error('Error fetching classes:', error);
     }

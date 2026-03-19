@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -89,6 +90,8 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
   const [currentStudent, setCurrentStudent] = useState<Student | null>(null);
   const [viewStudentId, setViewStudentId] = useState<string | null>(initialViewId || null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
@@ -162,7 +165,7 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
         setTotalPages(1);
       }
 
-      setClasses(classesData);
+      setClasses(classesData?.data || classesData);
     } catch (error: any) {
       console.error('Error fetching data:', error);
       
@@ -351,6 +354,41 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
     }
   };
 
+  const handleBulkDeleteStudents = async () => {
+    if (selectedStudents.length === 0) return;
+    setIsDeleting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const promises = selectedStudents.map(id => fetch(`/api/school/students/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      }));
+
+      const results = await Promise.all(promises);
+      const failed = results.filter(r => !r.ok);
+
+      if (failed.length > 0) {
+        toast({ 
+          title: "Partial Success", 
+          description: `Deleted ${selectedStudents.length - failed.length} students. ${failed.length} failed.`,
+          variant: "destructive" 
+        });
+      } else {
+        toast({ title: "Success", description: `${selectedStudents.length} students deleted successfully` });
+      }
+
+      setSelectedStudents([]);
+      setIsBulkDeleteConfirmOpen(false);
+      fetchStudents();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // Filtering is now handled entirely server-side via the debouncedSearch query parameter.
 
   if (viewStudentId) {
@@ -365,6 +403,16 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
           <p className="text-slate-600 dark:text-slate-400">Manage student records, enrollment, and status.</p>
         </div>
         <div className="flex gap-2">
+          {selectedStudents.length > 0 && (
+            <Button 
+              variant="destructive" 
+              onClick={() => setIsBulkDeleteConfirmOpen(true)}
+              disabled={isDeleting}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete ({selectedStudents.length})
+            </Button>
+          )}
           <Button variant="outline">
             <Download className="h-4 w-4 mr-2" />
             Export List
@@ -514,7 +562,16 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
               <Table>
                 <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
+                  <TableHead className="w-[50px]">
+                    <Checkbox 
+                      checked={selectedStudents.length === students.length && students.length > 0}
+                      onCheckedChange={(checked) => {
+                        if (checked) setSelectedStudents(students.map(s => s.id));
+                        else setSelectedStudents([]);
+                      }}
+                    />
+                  </TableHead>
+                  <TableHead>Student</TableHead>
                   <TableHead>Grade</TableHead>
                   <TableHead>Gender</TableHead>
                   <TableHead>Guardian</TableHead>
@@ -526,13 +583,22 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
               <TableBody>
                 {students.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-slate-500">
+                    <TableCell colSpan={8} className="text-center py-8 text-slate-500">
                       No students found.
                     </TableCell>
                   </TableRow>
                 ) : (
                   students.map((student) => (
-                    <TableRow key={student.id}>
+                    <TableRow key={student.id} className={selectedStudents.includes(student.id) ? "bg-slate-50 dark:bg-slate-800/50" : ""}>
+                      <TableCell>
+                        <Checkbox 
+                          checked={selectedStudents.includes(student.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) setSelectedStudents([...selectedStudents, student.id]);
+                            else setSelectedStudents(selectedStudents.filter(id => id !== student.id));
+                          }}
+                        />
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Avatar className="h-8 w-8">
@@ -702,6 +768,16 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
         variant="danger"
         loading={isDeleting}
         onConfirm={handleDelete}
+      />
+      <ConfirmDialog
+        open={isBulkDeleteConfirmOpen}
+        onOpenChange={(open) => !open && setIsBulkDeleteConfirmOpen(false)}
+        title={`Delete ${selectedStudents.length} Students?`}
+        description={`Are you sure you want to delete the selected students? This action cannot be undone and will remove all their associated data.`}
+        confirmLabel="Delete Students"
+        variant="danger"
+        loading={isDeleting}
+        onConfirm={handleBulkDeleteStudents}
       />
     </div>
   );
