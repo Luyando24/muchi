@@ -897,14 +897,14 @@ router.post(
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
-    const { students } = req.body;
+    // Fetch school settings to get the current academic year
+    const { data: settings } = await supabaseAdmin
+      .from("schools")
+      .select("academic_year")
+      .eq("id", schoolId)
+      .single();
 
-    if (!students || !Array.isArray(students) || students.length === 0) {
-      return res.status(400).json({ message: "No students provided" });
-    }
-
-    let importedCount = 0;
-    const errors: any[] = [];
+    const activeYear = settings?.academic_year || new Date().getFullYear().toString();
 
     // Process sequentially to avoid rate limits and ensure uniqueness
     for (const student of students) {
@@ -999,18 +999,23 @@ router.post(
             }
 
             if (classData) {
-              // 1. Create or update enrollment
-              await supabaseAdmin.from("enrollments").upsert(
-                {
-                  student_id: user.user.id,
-                  class_id: classData.id,
-                  academic_year: new Date().getFullYear().toString(),
-                  status: "Active",
-                },
-                { onConflict: "student_id, academic_year" },
-              );
+              // 1. Clear any existing active enrollment for this year to avoid conflicts
+              // and ensure the student is only in one class per year.
+              await supabaseAdmin
+                .from("enrollments")
+                .delete()
+                .eq("student_id", user.user.id)
+                .eq("academic_year", activeYear);
 
-              // 2. Update profile grade with official name
+              // 2. Create the new enrollment
+              await supabaseAdmin.from("enrollments").insert({
+                student_id: user.user.id,
+                class_id: classData.id,
+                academic_year: activeYear,
+                status: "Active",
+              });
+
+              // 3. Update profile grade with official name
               await supabaseAdmin
                 .from("profiles")
                 .update({ grade: classData.name })
