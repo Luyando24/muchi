@@ -895,19 +895,29 @@ router.post(
   "/students/bulk",
   requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
-    const profile = (req as any).profile;
-    const schoolId = profile.school_id;
-    // Fetch school settings to get the current academic year
-    const { data: settings } = await supabaseAdmin
-      .from("schools")
-      .select("academic_year")
-      .eq("id", schoolId)
-      .single();
+    try {
+      const profile = (req as any).profile;
+      const schoolId = profile.school_id;
+      const { students } = req.body;
+      if (!students || !Array.isArray(students) || students.length === 0) {
+        return res.status(400).json({ message: "No students provided" });
+      }
 
-    const activeYear = settings?.academic_year || new Date().getFullYear().toString();
+      let importedCount = 0;
+      const errors: any[] = [];
 
-    // Process sequentially to avoid rate limits and ensure uniqueness
-    for (const student of students) {
+      // Fetch school settings to get the current academic year
+      const { data: settings } = await supabaseAdmin
+        .from("schools")
+        .select("academic_year")
+        .eq("id", schoolId)
+        .single();
+
+      const activeYear =
+        settings?.academic_year || new Date().getFullYear().toString();
+
+      // Process sequentially to avoid rate limits and ensure uniqueness
+      for (const student of students) {
       try {
         const studentNumber = await generateUniqueStudentNumber();
         const emailToUse =
@@ -1031,13 +1041,17 @@ router.post(
       }
     }
 
-    res.json({
-      message: "Bulk import completed",
-      importedCount,
-      total: students.length,
-      errors,
-      success: errors.length === 0,
-    });
+      res.json({
+        message: "Bulk import completed",
+        importedCount,
+        total: students.length,
+        errors,
+        success: errors.length === 0,
+      });
+    } catch (error: any) {
+      console.error("Bulk Import Error:", error);
+      res.status(500).json({ message: error.message });
+    }
   },
 );
 
