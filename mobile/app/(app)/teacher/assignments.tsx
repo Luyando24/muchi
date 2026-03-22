@@ -31,7 +31,8 @@ export default function AssignmentsScreen() {
       const token = session?.access_token;
       if (!token) return;
 
-      const response = await fetch('/api/teacher/assignments', {
+      const baseUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8080';
+      const response = await fetch(`${baseUrl}/api/teacher/assignments`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -56,15 +57,12 @@ export default function AssignmentsScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <View className="px-6 py-4 flex-row items-center gap-4 border-b border-border">
-        <TouchableOpacity onPress={() => router.back()}>
-          <ArrowLeft size={24} color="#000" />
-        </TouchableOpacity>
-        <Text className="text-xl font-bold">Assignments</Text>
+    <SafeAreaView className="flex-1 bg-[#f8fafc]">
+      <View className="px-5 py-4 border-b border-slate-100 bg-white">
+        <Text className="text-xl font-extrabold text-slate-900">Assignments</Text>
       </View>
 
-      <ScrollView className="flex-1 p-6" showsVerticalScrollIndicator={false}>
+      <ScrollView className="flex-1 p-5" showsVerticalScrollIndicator={false}>
         {assignments.length > 0 ? (
           <View className="space-y-4">
             {assignments.map((assignment) => (
@@ -72,29 +70,33 @@ export default function AssignmentsScreen() {
                 key={assignment.id}
                 onPress={() => {/* TODO: Show submissions */}}
               >
-                <Card>
+                <Card className="bg-white border-slate-100 shadow-sm overflow-hidden">
                   <CardContent className="p-4">
-                    <View className="flex-row justify-between items-start mb-2">
+                    <View className="flex-row justify-between items-start mb-3">
                        <View className="flex-1">
-                         <Text className="font-bold text-base">{assignment.title}</Text>
-                         <Text className="text-xs text-muted-foreground mt-1" numberOfLines={2}>
+                         <Text className="font-extrabold text-slate-800 text-base">{assignment.title}</Text>
+                         <Text className="text-[10px] text-slate-500 mt-1 leading-relaxed" numberOfLines={2}>
                            {assignment.description}
                          </Text>
                        </View>
-                       <View className="bg-indigo-100 px-2 py-0.5 rounded">
-                         <Text className="text-indigo-600 text-[10px] font-bold uppercase">{assignment.type}</Text>
+                       <View className="bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                         <Text className="text-indigo-600 text-[10px] font-bold uppercase tracking-tighter">{assignment.type}</Text>
                        </View>
                     </View>
 
-                    <View className="flex-row items-center gap-4 mt-2">
-                      <View className="flex-row items-center gap-1">
-                        <BookOpen size={14} color="#64748b" />
-                        <Text className="text-[10px] text-slate-500">{assignment.subjects?.name} - {assignment.classes?.name}</Text>
+                    <View className="flex-row items-center gap-4 pt-3 border-t border-slate-50">
+                      <View className="flex-row items-center gap-1.5">
+                        <View className="bg-slate-100 p-1 rounded">
+                           <BookOpen size={10} color="#64748b" />
+                        </View>
+                        <Text className="text-[9px] font-bold text-slate-500 uppercase">{assignment.subjects?.name}</Text>
                       </View>
-                      <View className="flex-row items-center gap-1">
-                        <Calendar size={14} color="#64748b" />
-                        <Text className="text-[10px] text-slate-500">
-                          Due: {assignment.due_date ? new Date(assignment.due_date).toLocaleDateString() : 'No date'}
+                      <View className="flex-row items-center gap-1.5">
+                        <View className="bg-slate-100 p-1 rounded">
+                           <Calendar size={10} color="#64748b" />
+                        </View>
+                        <Text className="text-[9px] font-bold text-slate-500 uppercase">
+                          {assignment.due_date ? new Date(assignment.due_date).toLocaleDateString() : 'No date'}
                         </Text>
                       </View>
                     </View>
@@ -105,11 +107,14 @@ export default function AssignmentsScreen() {
           </View>
         ) : (
           <View className="py-20 items-center">
-            <BookOpen size={48} color="#cbd5e1" />
-            <Text className="text-muted-foreground mt-4">No assignments found.</Text>
+            <View className="w-16 h-16 rounded-full bg-slate-50 items-center justify-center mb-4">
+               <BookOpen size={32} color="#cbd5e1" />
+            </View>
+            <Text className="text-slate-400 font-bold">No Assignments Found</Text>
+            <Text className="text-slate-400 text-[10px] mt-1 italic">Click the "+" to create your first assignment.</Text>
           </View>
         )}
-        <View className="h-10" />
+        <View className="h-20" />
       </ScrollView>
     </SafeAreaView>
   );

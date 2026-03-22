@@ -54,6 +54,7 @@ import { supabase } from '@/lib/supabase';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { syncFetch } from '@/lib/syncService';
 import BulkAcademicImport from './BulkAcademicImport';
+import { Combobox } from "@/components/ui/combobox";
 
 interface Teacher {
   id: string;
@@ -983,16 +984,12 @@ export default function AcademicManagement() {
                     </div>
                     <div className="space-y-2">
                       <Label>Class Teacher</Label>
-                      <Select value={classForm.classTeacherId} onValueChange={v => setClassForm({ ...classForm, classTeacherId: v })}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select teacher" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {teachers.map(t => (
-                            <SelectItem key={t.id} value={t.id}>{t.fullName}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Combobox
+                        options={teachers.map(t => ({ label: t.fullName, value: t.id }))}
+                        value={classForm.classTeacherId}
+                        onValueChange={v => setClassForm({ ...classForm, classTeacherId: v })}
+                        placeholder="Select teacher"
+                      />
                     </div>
                     <DialogFooter>
                       <Button type="submit">Create Class</Button>
@@ -1300,16 +1297,12 @@ export default function AcademicManagement() {
                     </div>
                     <div className="space-y-2">
                       <Label>Head of Department</Label>
-                      <Select value={subjectForm.headTeacherId} onValueChange={v => setSubjectForm({ ...subjectForm, headTeacherId: v })}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select teacher" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {teachers.map(t => (
-                            <SelectItem key={t.id} value={t.id}>{t.fullName}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Combobox
+                        options={teachers.map(t => ({ label: t.fullName, value: t.id }))}
+                        value={subjectForm.headTeacherId}
+                        onValueChange={v => setSubjectForm({ ...subjectForm, headTeacherId: v })}
+                        placeholder="Select teacher"
+                      />
                     </div>
                     <DialogFooter>
                       <Button type="submit">Create Subject</Button>
@@ -1442,19 +1435,12 @@ export default function AcademicManagement() {
                       </div>
                       <div className="space-y-2">
                         <Label>Teacher</Label>
-                        <Select 
-                          value={allocationForm.teacherId} 
+                        <Combobox
+                          options={teachers.map(t => ({ label: t.fullName, value: t.id }))}
+                          value={allocationForm.teacherId}
                           onValueChange={v => setAllocationForm({...allocationForm, teacherId: v})}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select Teacher" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {teachers.map(t => (
-                              <SelectItem key={t.id} value={t.id}>{t.fullName}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          placeholder="Select Teacher"
+                        />
                       </div>
                     </div>
                     <DialogFooter>
@@ -1493,8 +1479,13 @@ export default function AcademicManagement() {
                         <TableCell className="font-medium">{cs.name}</TableCell>
                         <TableCell>{cs.department}</TableCell>
                         <TableCell>
-                           <Select 
-                             value={cs.teacherId || "unassigned"} 
+                           <Combobox
+                             className="w-[200px] h-8"
+                             options={[
+                               { label: "Unassigned", value: "unassigned" },
+                               ...teachers.map(t => ({ label: t.fullName, value: t.id }))
+                             ]}
+                             value={cs.teacherId || "unassigned"}
                              onValueChange={async (newTeacherId) => {
                                try {
                                  const { data: { session } } = await supabase.auth.getSession();
@@ -1517,19 +1508,9 @@ export default function AcademicManagement() {
                                  fetchAllocations(allocationClassId);
                                } catch (e) {
                                  toast({ title: "Error", description: "Failed to update teacher", variant: "destructive" });
-                               }
+                                }
                              }}
-                           >
-                             <SelectTrigger className="w-[200px] h-8">
-                               <SelectValue placeholder="Unassigned" />
-                             </SelectTrigger>
-                             <SelectContent>
-                               <SelectItem value="unassigned">Unassigned</SelectItem>
-                               {teachers.map(t => (
-                                 <SelectItem key={t.id} value={t.id}>{t.fullName}</SelectItem>
-                               ))}
-                             </SelectContent>
-                           </Select>
+                           />
                         </TableCell>
                         <TableCell className="text-right">
                           <Button 
@@ -2116,16 +2097,12 @@ export default function AcademicManagement() {
             </div>
             <div className="space-y-2">
               <Label>Class Teacher</Label>
-              <Select value={classForm.classTeacherId} onValueChange={v => setClassForm({ ...classForm, classTeacherId: v })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select teacher" />
-                </SelectTrigger>
-                <SelectContent>
-                  {teachers.map(t => (
-                    <SelectItem key={t.id} value={t.id}>{t.fullName}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                options={teachers.map(t => ({ label: t.fullName, value: t.id }))}
+                value={classForm.classTeacherId}
+                onValueChange={v => setClassForm({ ...classForm, classTeacherId: v })}
+                placeholder="Select teacher"
+              />
             </div>
             <DialogFooter>
               <Button type="submit">Update Class</Button>
@@ -2198,16 +2175,12 @@ export default function AcademicManagement() {
             </div>
             <div className="space-y-2">
               <Label>Head of Department</Label>
-              <Select value={subjectForm.headTeacherId} onValueChange={v => setSubjectForm({ ...subjectForm, headTeacherId: v })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select teacher" />
-                </SelectTrigger>
-                <SelectContent>
-                  {teachers.map(t => (
-                    <SelectItem key={t.id} value={t.id}>{t.fullName}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                options={teachers.map(t => ({ label: t.fullName, value: t.id }))}
+                value={subjectForm.headTeacherId}
+                onValueChange={v => setSubjectForm({ ...subjectForm, headTeacherId: v })}
+                placeholder="Select teacher"
+              />
             </div>
             <DialogFooter>
               <Button type="submit">Update Subject</Button>
