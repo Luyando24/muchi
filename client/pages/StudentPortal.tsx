@@ -252,6 +252,9 @@ export default function StudentPortal() {
       return 'FAIL';
     }
     
+    // Fallback if percentage is 0 and no grades exist
+    if (percentage === 0) return 'N/A';
+    
     // Fallback logic if no scale provided
     if (percentage >= 75) return 'DISTINCTION';
     if (percentage >= 70) return 'DISTINCTION';
@@ -340,7 +343,9 @@ export default function StudentPortal() {
                   {student?.firstName || "Student"}
                 </h1>
                 <p className="text-[10px] sm:text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {currentResult ? `${String(currentResult.term).toLowerCase().includes('term') ? '' : 'Term '}${currentResult.term} • ${currentResult.academicYear}` : 'No active term'}
+                  {(gradesData?.school?.current_term || currentResult?.term) ? 
+                    `${String(gradesData?.school?.current_term || currentResult.term).toLowerCase().includes('term') ? '' : 'Term '}${gradesData?.school?.current_term || currentResult.term} • ${gradesData?.school?.academic_year || currentResult.academicYear}` 
+                    : 'No active term'}
                 </p>
               </div>
               
@@ -416,7 +421,9 @@ export default function StudentPortal() {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Average Score</p>
-                      <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{currentAverage}%</h3>
+                      <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+                        {(currentGrades.length > 0) ? `${currentAverage}%` : 'N/A'}
+                      </h3>
                     </div>
                   </CardContent>
                 </Card>
@@ -428,7 +435,9 @@ export default function StudentPortal() {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Subjects</p>
-                      <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{currentGrades.length}</h3>
+                      <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+                        {gradesData?.assignedSubjects?.length || currentGrades.length}
+                      </h3>
                     </div>
                   </CardContent>
                 </Card>
@@ -708,30 +717,60 @@ export default function StudentPortal() {
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {currentGrades.map((grade: any) => (
-                  <Card key={grade.id} className="hover:shadow-md transition-shadow">
-                    <CardHeader className="pb-2">
-                      <div className="flex justify-between items-start">
-                        <div className={`p-2 rounded-lg ${getGradeColor(grade.grade).split(' ')[0]}`}>
-                           <BookOpen className={`h-5 w-5 ${getGradeColor(grade.grade).split(' ')[1]}`} />
+                {(gradesData?.assignedSubjects && gradesData.assignedSubjects.length > 0) ? (
+                  gradesData.assignedSubjects.map((subject: any) => {
+                    const grade = currentGrades.find((g: any) => g.subject_id === subject.id || g.subjects?.code === subject.code);
+                    return (
+                      <Card key={subject.id} className="hover:shadow-md transition-shadow">
+                        <CardHeader className="pb-2">
+                          <div className="flex justify-between items-start">
+                            <div className={`p-2 rounded-lg ${grade ? getGradeColor(grade.grade).split(' ')[0] : 'bg-slate-100'}`}>
+                              <BookOpen className={`h-5 w-5 ${grade ? getGradeColor(grade.grade).split(' ')[1] : 'text-slate-400'}`} />
+                            </div>
+                            <Badge variant="outline">{subject.code}</Badge>
+                          </div>
+                          <CardTitle className="mt-4">{subject.name}</CardTitle>
+                          <CardDescription>{subject.department || 'General'}</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="mt-2 space-y-2">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-slate-500">Current Score</span>
+                              <span className="font-bold">{grade ? `${grade.percentage}%` : 'No score'}</span>
+                            </div>
+                            {grade && <Progress value={grade.percentage} className={`h-2 ${getGradeColor(grade.grade)}`} />}
+                            {!grade && <div className="h-2 w-full bg-slate-100 rounded-full" />}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })
+                ) : (
+                  currentGrades.map((grade: any) => (
+                    <Card key={grade.id} className="hover:shadow-md transition-shadow">
+                      <CardHeader className="pb-2">
+                        <div className="flex justify-between items-start">
+                          <div className={`p-2 rounded-lg ${getGradeColor(grade.grade).split(' ')[0]}`}>
+                            <BookOpen className={`h-5 w-5 ${getGradeColor(grade.grade).split(' ')[1]}`} />
+                          </div>
+                          <Badge variant="outline">{grade.subjects?.code}</Badge>
                         </div>
-                        <Badge variant="outline">{grade.subjects?.code}</Badge>
-                      </div>
-                      <CardTitle className="mt-4">{grade.subjects?.name}</CardTitle>
-                      <CardDescription>{grade.subjects?.department || 'General'}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="mt-2 space-y-2">
-                         <div className="flex justify-between text-sm">
-                           <span className="text-slate-500">Current Score</span>
-                           <span className="font-bold">{grade.percentage}%</span>
-                         </div>
-                         <Progress value={grade.percentage} className={`h-2 ${getGradeColor(grade.grade)}`} />
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                {currentGrades.length === 0 && (
+                        <CardTitle className="mt-4">{grade.subjects?.name}</CardTitle>
+                        <CardDescription>{grade.subjects?.department || 'General'}</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="mt-2 space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-500">Current Score</span>
+                            <span className="font-bold">{grade.percentage}%</span>
+                          </div>
+                          <Progress value={grade.percentage} className={`h-2 ${getGradeColor(grade.grade)}`} />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+                {(!gradesData?.assignedSubjects || gradesData.assignedSubjects.length === 0) && currentGrades.length === 0 && (
                   <div className="col-span-full text-center py-12 text-slate-500">
                     No subjects found for this term.
                   </div>

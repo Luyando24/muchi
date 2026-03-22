@@ -212,10 +212,10 @@ router.get('/:id/portal-data', requireStudent, async (req: Request, res: Respons
   const schoolId = profile.school_id;
 
   try {
-    // 1. Fetch School Details
+    // 1. Fetch School Details & Settings
     const { data: school } = await supabaseAdmin
       .from('schools')
-      .select('name, logo_url, seal_url, signature_url, address, email, phone, website')
+      .select('*')
       .eq('id', schoolId)
       .single();
 
@@ -230,6 +230,22 @@ router.get('/:id/portal-data', requireStudent, async (req: Request, res: Respons
       .maybeSingle();
 
     const className = enrollment?.classes?.name || 'Not Assigned';
+
+    // 2b. Fetch Assigned Subjects (via class_subjects)
+    let assignedSubjects: any[] = [];
+    if (enrollment?.class_id) {
+      const { data: classSubjects } = await supabaseAdmin
+        .from('class_subjects')
+        .select('subject_id, subjects(id, name, code, department)')
+        .eq('class_id', enrollment.class_id);
+      
+      assignedSubjects = classSubjects?.map(cs => ({
+        id: cs.subjects?.id,
+        name: cs.subjects?.name,
+        code: cs.subjects?.code,
+        department: cs.subjects?.department
+      })).filter(s => s.id) || [];
+    }
 
     // 3. Fetch Grading Scale
     const { data: gradingScale } = await supabaseAdmin
@@ -299,7 +315,8 @@ router.get('/:id/portal-data', requireStudent, async (req: Request, res: Respons
       school,
       gradingScale,
       results,
-      attendance: attendance || []
+      attendance: attendance || [],
+      assignedSubjects
     });
 
   } catch (error: any) {
