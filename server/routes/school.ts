@@ -563,12 +563,22 @@ router.get(
       // 2. Fetch Current Enrollment (Class)
       const { data: enrollment, error: enrollmentError } = await supabaseAdmin
         .from("enrollments")
-        .select("*, classes(name)")
+        .select("*, classes(*)")
         .eq("student_id", studentId)
-        .eq("status", "Active") // Assuming 'Active' is the current status
+        .eq("status", "Active")
         .order("created_at", { ascending: false })
         .limit(1)
-        .maybeSingle(); // Use maybeSingle to handle no enrollment gracefully
+        .maybeSingle();
+
+      // 2.5 Fetch subjects assigned to the class
+      let classSubjects: any[] = [];
+      if (enrollment?.class_id) {
+        const { data: csData } = await supabaseAdmin
+          .from("class_subjects")
+          .select("subjects(name, code, department)")
+          .eq("class_id", enrollment.class_id);
+        if (csData) classSubjects = csData;
+      }
 
       // 3. Fetch Academic Performance (Grades)
       // Join with subjects to get subject names
@@ -689,10 +699,28 @@ router.get(
       }
 
       // 5. Structure the Response
+      // Combine subjects from different sources
+      const allSubjectNames = new Set<string>();
+      
+      // Add class-based subjects
+      classSubjects.forEach((cs: any) => {
+        if (cs.subjects?.name) allSubjectNames.add(cs.subjects.name);
+      });
+      
+      // Add student-specific subjects
+      enrolledSubjects?.forEach((s: any) => {
+        if (s.subjects?.name) allSubjectNames.add(s.subjects.name);
+      });
+      
+      // Add subjects from grades (fallback/historical)
+      grades?.forEach((g: any) => {
+        if (g.subjects?.name) allSubjectNames.add(g.subjects.name);
+      });
+
       const response = {
         profile: {
           ...student,
-          className: enrollment?.classes?.name || "Unassigned",
+          className: enrollment?.classes?.name || student.grade || "Unassigned",
           academicYear:
             enrollment?.academic_year || new Date().getFullYear().toString(),
           fees_status: student.fees_status || "Pending",
@@ -700,15 +728,7 @@ router.get(
         academics: {
           enrollment,
           grades: grades || [],
-          // Prefer enrolled subjects from student_subjects table, fallback to grades if empty (for backward compatibility)
-          subjects:
-            enrolledSubjects && enrolledSubjects.length > 0
-              ? enrolledSubjects
-                  .map((s: any) => s.subjects?.name)
-                  .filter(Boolean)
-              : grades
-                ? [...new Set(grades.map((g: any) => g.subjects?.name))]
-                : [],
+          subjects: Array.from(allSubjectNames),
         },
         attendance: attendanceSummary,
       };
@@ -944,23 +964,42 @@ router.post(
           if (student.grade) {
             let { data: classData } = await supabaseAdmin
               .from("classes")
-              .select("id")
+              .select("id, name")
               .eq("school_id", schoolId)
               .ilike("name", student.grade)
               .maybeSingle();
 
-            // If no exact match, try partial match (e.g., "10 T2" matching "Grade 10 T2")
+            // If no exact match, try robust matching
             if (!classData) {
-              const { data: fuzzyData } = await supabaseAdmin
+              // 1. Try fuzzy match with wildcards and limit to 1
+              const { data: fuzzyMatches } = await supabaseAdmin
                 .from("classes")
-                .select("id")
+                .select("id, name")
                 .eq("school_id", schoolId)
                 .ilike("name", `%${student.grade}%`)
-                .maybeSingle();
-              classData = fuzzyData;
+                .limit(1);
+              
+              if (fuzzyMatches && fuzzyMatches.length > 0) {
+                classData = fuzzyMatches[0];
+              } else {
+                // 2. Try matching without "Grade " or "Form " prefixes
+                const normalizedGrade = student.grade.replace(/^(Grade|Form|Class|Level)\s+/i, '').trim();
+                if (normalizedGrade !== student.grade) {
+                  const { data: prefixMatches } = await supabaseAdmin
+                    .from("classes")
+                    .select("id, name")
+                    .eq("school_id", schoolId)
+                    .ilike("name", `%${normalizedGrade}%`)
+                    .limit(1);
+                  if (prefixMatches && prefixMatches.length > 0) {
+                    classData = prefixMatches[0];
+                  }
+                }
+              }
             }
 
             if (classData) {
+              // 1. Create or update enrollment
               await supabaseAdmin.from("enrollments").upsert(
                 {
                   student_id: user.user.id,
@@ -970,6 +1009,12 @@ router.post(
                 },
                 { onConflict: "student_id, academic_year" },
               );
+
+              // 2. Update profile grade with official name
+              await supabaseAdmin
+                .from("profiles")
+                .update({ grade: classData.name })
+                .eq("id", user.user.id);
             }
           }
 
