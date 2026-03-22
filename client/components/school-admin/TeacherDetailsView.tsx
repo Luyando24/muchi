@@ -376,12 +376,13 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
               <div className="grid grid-cols-2 gap-4">
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Assigned Classes</CardTitle>
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Total Involved Classes</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">{classes.length}</div>
-                    <p className="text-xs text-muted-foreground">Class Teacher</p>
+                    <div className="text-2xl font-bold">{profile.totalClassesCount ?? classes.length}</div>
+                    <p className="text-xs text-muted-foreground">All assigned classes</p>
                   </CardContent>
+
                 </Card>
                 <Card>
                   <CardHeader className="pb-2">

@@ -66,12 +66,34 @@ router.get('/classes', requireTeacher, async (req: Request, res: Response) => {
 
     // If strictly teacher, filter by teacher_id
     if (profile.role === 'teacher') {
-      // For attendance (daily register), usually the form teacher (homeroom) takes it.
-      // So we filter by class_teacher_id.
-       query = query.eq('class_teacher_id', teacherId);
+      // 1. Get classes where they are the Class Teacher (homeroom)
+      const { data: homeroomClasses } = await supabaseAdmin
+        .from('classes')
+        .select('id')
+        .eq('class_teacher_id', teacherId);
+      
+      const homeroomIds = homeroomClasses?.map(c => c.id) || [];
+
+      // 2. Get classes where they teach a subject
+      const { data: subjectClasses } = await supabaseAdmin
+        .from('class_subjects')
+        .select('class_id')
+        .eq('teacher_id', teacherId);
+      
+      const subjectClassIds = subjectClasses?.map(c => c.class_id) || [];
+
+      // 3. Combine and filter
+      const allClassIds = Array.from(new Set([...homeroomIds, ...subjectClassIds]));
+      
+      if (allClassIds.length > 0) {
+        query = query.in('id', allClassIds);
+      } else {
+        return res.json([]);
+      }
     }
 
     const { data: classes, error } = await query;
+
 
     if (error) throw error;
 
@@ -261,39 +283,36 @@ router.get('/dashboard-stats', requireTeacher, async (req: Request, res: Respons
 
   try {
     // 1. Total Students (unique students in classes taught by teacher)
-    // If teacher is class teacher, count students in their class
-    // If subject teacher, count students in classes they teach (might be complex if not tracked)
-    // For simplicity: Count students in classes where teacher is class_teacher
-    const { data: myClasses } = await supabaseAdmin
+    // Get all classes teacher is involved in
+    const { data: homeroomClasses } = await supabaseAdmin
       .from('classes')
       .select('id')
       .eq('class_teacher_id', teacherId);
-      
+    
+    const { data: subjectClasses } = await supabaseAdmin
+      .from('class_subjects')
+      .select('class_id')
+      .eq('teacher_id', teacherId);
+    
+    const allClassIds = Array.from(new Set([
+      ...(homeroomClasses?.map(c => c.id) || []),
+      ...(subjectClasses?.map(c => c.class_id) || [])
+    ]));
+
     let totalStudents = 0;
-    if (myClasses && myClasses.length > 0) {
-      const classIds = myClasses.map(c => c.id);
+    if (allClassIds.length > 0) {
       const { count } = await supabaseAdmin
         .from('enrollments')
         .select('id', { count: 'exact', head: true })
-        .in('class_id', classIds)
+        .in('class_id', allClassIds)
         .eq('status', 'Active');
       totalStudents = count || 0;
     }
 
-    // 2. Classes Today (based on timetable - mock for now or simple count)
-    // We'll just return total classes assigned
-    const classesCount = myClasses?.length || 0;
+    // 2. Classes Today (based on timetable - simple count for now)
+    const classesCount = allClassIds.length;
 
     // 3. Pending Grading (assignments with ungraded submissions)
-    const { count: pendingGrading } = await supabaseAdmin
-      .from('submissions')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'submitted')
-      // join assignments to filter by teacher
-      // This is hard in supabase-js simple query, we need to fetch assignments first
-      // Or use a join if possible.
-      // Let's fetch teacher's assignments first
-    
     const { data: myAssignments } = await supabaseAdmin
       .from('assignments')
       .select('id')
@@ -313,26 +332,25 @@ router.get('/dashboard-stats', requireTeacher, async (req: Request, res: Respons
     // 4. Average Attendance (Overall for my classes)
     let averageAttendance = 0;
     
-    if (myClasses && myClasses.length > 0) {
-      const classIds = myClasses.map(c => c.id);
-      
+    if (allClassIds.length > 0) {
       // Get total attendance records
       const { count: totalRecords } = await supabaseAdmin
         .from('attendance')
         .select('id', { count: 'exact', head: true })
-        .in('class_id', classIds);
+        .in('class_id', allClassIds);
 
       if (totalRecords && totalRecords > 0) {
         // Get present records
         const { count: presentCount } = await supabaseAdmin
           .from('attendance')
           .select('id', { count: 'exact', head: true })
-          .in('class_id', classIds)
+          .in('class_id', allClassIds)
           .eq('status', 'present');
           
         averageAttendance = Math.round(((presentCount || 0) / totalRecords) * 100);
       }
     }
+
 
     res.json({
       totalStudents,

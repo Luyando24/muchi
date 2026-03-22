@@ -2693,6 +2693,12 @@ router.get(
         console.error("Error fetching teaching assignments:", assignmentsError);
       }
 
+      // 3.6 Calculate unique classes count
+      const uniqueClassIds = new Set([
+        ...(classes?.map((c: any) => c.id) || []),
+        ...(teachingAssignments?.map((ta: any) => ta.class_id) || [])
+      ]);
+
       // 4. Structure Response
       const response = {
         profile: {
@@ -2701,11 +2707,13 @@ router.get(
           lastName: teacher.full_name?.split(" ").slice(1).join(" ") || "",
           joinDate: teacher.join_date || teacher.created_at,
           status: teacher.employment_status || "Active",
+          totalClassesCount: uniqueClassIds.size,
         },
         classes: classes || [],
         headOfSubjects: subjectsHead || [],
         teachingAssignments: teachingAssignments || [],
       };
+
 
       res.json(response);
     } catch (error: any) {
