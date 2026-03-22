@@ -75,6 +75,8 @@ interface StudentDetails {
     academicYear: string;
     enrollment_status: string;
     fees_status: string;
+    temp_password?: string;
+    is_temp_password?: boolean;
   };
   academics: {
     enrollment: any;
@@ -441,7 +443,12 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
             <Download className="mr-2 h-4 w-4" />
             View Report Card
           </Button>
-          <Button variant="outline" size="icon">
+          <Button variant="outline" size="icon" onClick={() => {
+            if (profile.temp_password) {
+              navigator.clipboard.writeText(profile.temp_password);
+              toast({ title: "Copied", description: "Password copied to clipboard" });
+            }
+          }} title="Copy Temp Password">
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </div>
@@ -483,6 +490,26 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
                   <User className="h-4 w-4 text-muted-foreground" />
                   <span>Gender: {profile.gender || 'Not specified'}</span>
                 </div>
+                {profile.is_temp_password && profile.temp_password && (
+                  <div className="flex items-center space-x-3 text-sm p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
+                    <AlertCircle className="h-4 w-4 text-yellow-600" />
+                    <div className="flex-1">
+                      <p className="text-[10px] font-bold text-yellow-800 dark:text-yellow-500 uppercase">Temporary Password</p>
+                      <p className="font-mono font-bold text-slate-900 dark:text-slate-100">{profile.temp_password}</p>
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-8 w-8 p-0"
+                      onClick={() => {
+                        navigator.clipboard.writeText(profile.temp_password!);
+                        toast({ title: "Copied", description: "Password copied to clipboard" });
+                      }}
+                    >
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    </Button>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

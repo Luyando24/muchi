@@ -746,6 +746,17 @@ async function generateUniqueStudentNumber(): Promise<string> {
   return studentNumber;
 }
 
+// Helper to generate a simple random password
+function generateSimplePassword() {
+  const adjectives = ["Happy", "Bright", "Swift", "Brave", "Cool", "Kind", "Smart", "Wise", "Fast", "Strong", "Calm", "Bold"];
+  const nouns = ["Lion", "Eagle", "Tiger", "Star", "Sun", "Moon", "River", "Forest", "Wolf", "Hawk", "Peak", "Lake"];
+  const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+  const noun = nouns[Math.floor(Math.random() * nouns.length)];
+  const num = Math.floor(Math.random() * 90) + 10; // 10-99
+  return `${adj}${noun}${num}`;
+}
+
+
 // POST /api/school/create-student
 router.post(
   "/create-student",
@@ -782,12 +793,15 @@ router.post(
         email && email.trim() !== ""
           ? email
           : `${studentNumber}@student.muchi.app`;
+      
+      const simplePassword = generateSimplePassword();
+      const passwordToUse = password || simplePassword;
 
       // 4. Create Auth User
       const { data: user, error: userError } =
         await supabaseAdmin.auth.admin.createUser({
           email: emailToUse,
-          password: password || "12345678",
+          password: passwordToUse,
           email_confirm: true,
           user_metadata: {
             full_name: name,
@@ -806,11 +820,13 @@ router.post(
             id: user.user.id,
             school_id: schoolId,
             full_name: name,
+            email: emailToUse,
             role: "student",
             grade: className,
             guardian_name: guardian,
             gender,
             student_number: studentNumber,
+            temp_password: simplePassword,
             enrollment_status: "Active",
             fees_status: "Pending",
             is_temp_password: true,
@@ -819,7 +835,8 @@ router.post(
               Date.now() + 72 * 60 * 60 * 1000,
             ).toISOString(),
             updated_at: new Date().toISOString(),
-          });
+          }, { onConflict: 'id' });
+
 
         if (profileError)
           console.error("Error updating student profile:", profileError);
@@ -878,15 +895,15 @@ router.post(
             ? student.email
             : `${studentNumber}@student.muchi.app`;
 
-        // Default temporary password
-        const password = "12345678";
+        // Generate simple random password
+        const simplePassword = generateSimplePassword();
         const tempExpiresAt = new Date();
         tempExpiresAt.setHours(tempExpiresAt.getHours() + 72);
 
         const { data: user, error: userError } =
           await supabaseAdmin.auth.admin.createUser({
             email: emailToUse,
-            password: password,
+            password: simplePassword,
             email_confirm: true,
             user_metadata: {
               full_name: student.name,
@@ -897,7 +914,7 @@ router.post(
 
         if (userError) throw userError;
 
-        // 3. Update Profile with extra details (Use UPSERT to handle race condition)
+        // 3. Update Profile with extra details (Use UPSERT with onConflict)
         if (user.user) {
           const { error: profileError } = await supabaseAdmin
             .from("profiles")
@@ -905,18 +922,21 @@ router.post(
               id: user.user.id,
               school_id: schoolId,
               full_name: student.name,
+              email: emailToUse,
               role: "student",
               grade: student.grade,
               guardian_name: student.guardian,
               gender: student.gender,
               student_number: studentNumber,
+              temp_password: simplePassword,
               enrollment_status: "Active",
               fees_status: "Pending",
               is_temp_password: true,
               temp_password_set_at: new Date().toISOString(),
               temp_password_expires_at: tempExpiresAt.toISOString(),
               updated_at: new Date().toISOString(),
-            });
+            }, { onConflict: 'id' });
+
 
           if (profileError) throw profileError;
 
