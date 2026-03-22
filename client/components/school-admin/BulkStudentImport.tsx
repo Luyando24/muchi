@@ -65,6 +65,20 @@ export default function BulkStudentImport({ onImportSuccess }: { onImportSuccess
                     return;
                 }
 
+                const normalizeGender = (val: string): string => {
+                    const v = String(val).toLowerCase().trim();
+                    if (v.startsWith('m')) return 'Male';
+                    if (v.startsWith('f')) return 'Female';
+                    if (v === 'other' || v === 'o' || v.includes('other')) return 'Other';
+                    // Default to 'Male' if we can't decide, or keep original for debugging if not sure?
+                    // Actually, the database is STRICT. So we should pick one or return as-is to see the error.
+                    // Let's be smart: if it's 'm'/'f' or contains 'boy'/'girl'/'man'/'woman'
+                    if (v.includes('boy') || v.includes('man')) return 'Male';
+                    if (v.includes('girl') || (v.includes('woman') && !v.includes('man'))) return 'Female';
+                    
+                    return val.charAt(0).toUpperCase() + val.slice(1).toLowerCase(); // Try Capital Case
+                };
+
                 const students: ImportedStudent[] = jsonData.map((row: any) => {
                     const findValue = (possibleKeys: string[]) => {
                         const rowKeys = Object.keys(row);
@@ -78,12 +92,15 @@ export default function BulkStudentImport({ onImportSuccess }: { onImportSuccess
                         return key ? row[key] : '';
                     };
 
+                    const rawGender = String(findValue(['Gender', 'Sex', 'Gender Identity', 'M/F']) || '');
+                    const rawGrade = String(findValue(['Grade', 'Class', 'Level', 'Form', 'Grade Level', 'Year Group']) || '');
+
                     return {
-                        name: String(findValue(['Name', 'Student Name', 'Full Name', 'Student']) || ''),
-                        email: String(findValue(['Email', 'Email Address', 'Mail']) || ''),
-                        grade: String(findValue(['Grade', 'Class', 'Level', 'Form', 'Grade Level', 'Year Group']) || ''),
-                        gender: String(findValue(['Gender', 'Sex', 'Gender Identity', 'M/F']) || ''),
-                        guardian: String(findValue(['Guardian', 'Parent', 'Next of Kin', 'Sponsor']) || ''),
+                        name: String(findValue(['Name', 'Student Name', 'Full Name', 'Student']) || '').trim(),
+                        email: String(findValue(['Email', 'Email Address', 'Mail']) || '').trim(),
+                        grade: rawGrade.trim(),
+                        gender: normalizeGender(rawGender),
+                        guardian: String(findValue(['Guardian', 'Parent', 'Next of Kin', 'Sponsor']) || '').trim(),
                         status: 'Pending' as const
                     };
                 }).filter((s: ImportedStudent) => s.name && String(s.name).trim() !== '');

@@ -824,7 +824,7 @@ router.post(
             role: "student",
             grade: className,
             guardian_name: guardian,
-            gender,
+            gender: gender ? (gender.toLowerCase().trim().startsWith('m') ? 'Male' : gender.toLowerCase().trim().startsWith('f') ? 'Female' : 'Other') : null,
             student_number: studentNumber,
             temp_password: simplePassword,
             enrollment_status: "Active",
@@ -942,12 +942,23 @@ router.post(
 
           // 4. Handle Enrollment (Try to find class by name)
           if (student.grade) {
-            const { data: classData } = await supabaseAdmin
+            let { data: classData } = await supabaseAdmin
               .from("classes")
               .select("id")
               .eq("school_id", schoolId)
               .ilike("name", student.grade)
               .maybeSingle();
+
+            // If no exact match, try partial match (e.g., "10 T2" matching "Grade 10 T2")
+            if (!classData) {
+              const { data: fuzzyData } = await supabaseAdmin
+                .from("classes")
+                .select("id")
+                .eq("school_id", schoolId)
+                .ilike("name", `%${student.grade}%`)
+                .maybeSingle();
+              classData = fuzzyData;
+            }
 
             if (classData) {
               await supabaseAdmin.from("enrollments").upsert(
