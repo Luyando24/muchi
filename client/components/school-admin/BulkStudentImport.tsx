@@ -240,9 +240,17 @@ export default function BulkStudentImport({ onImportSuccess }: { onImportSuccess
                     </div>
 
                     {isImporting && (
-                        <div className="space-y-2">
-                            <Progress value={importProgress} className="h-2" />
-                            <p className="text-xs text-center text-slate-500 font-medium">Processing batch... please do not close this window</p>
+                        <div className="space-y-3 p-4 bg-blue-50/50 dark:bg-blue-900/10 rounded-lg border border-blue-100 dark:border-blue-800/50">
+                            <div className="flex justify-between items-end mb-1">
+                                <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">Importing Students...</p>
+                                <p className="text-xs font-mono font-medium text-blue-600">
+                                    {Math.min(Math.floor((importProgress / 100) * previewData.length), previewData.length)} / {previewData.length}
+                                </p>
+                            </div>
+                            <Progress value={importProgress} className="h-2.5 bg-blue-100 dark:bg-blue-900/40" />
+                            <p className="text-[10px] text-center text-slate-500 font-medium">
+                                Processing batch... please stay on this page until completion.
+                            </p>
                         </div>
                     )}
 
