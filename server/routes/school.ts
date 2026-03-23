@@ -3,6 +3,14 @@ import { supabaseAdmin } from "../lib/supabase.js";
 import { WhatsAppService } from "../services/whatsappService.js";
 import { requireActiveLicense } from "../middleware/license.js";
 import { ensureSchoolSettings } from "../lib/school-settings.js";
+import fs from "fs";
+const LOG_FILE = "C:/tmp/import_debug.log";
+function logToFile(msg: string) {
+  const timestamp = new Date().toISOString();
+  try {
+    fs.appendFileSync(LOG_FILE, `[${timestamp}] ${msg}\n`);
+  } catch (e) {}
+}
 
 const router = Router();
 
@@ -769,6 +777,7 @@ async function generateUniqueStudentNumber(): Promise<string> {
 
 // Helper to generate a unique staff number
 async function generateUniqueStaffNumber(): Promise<string> {
+  logToFile("Starting generateUniqueStaffNumber");
   let isUnique = false;
   let staffNumber = "";
   let attempts = 0;
@@ -1103,6 +1112,7 @@ router.post(
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
     const { teachers } = req.body;
+    logToFile(`[BulkTeacher] Received request with ${teachers?.length || 0} teachers`);
     console.log(`[BulkTeacher] Received request with ${teachers?.length || 0} teachers`);
 
     if (!teachers || !Array.isArray(teachers) || teachers.length === 0) {
@@ -1119,14 +1129,16 @@ router.post(
           throw new Error("Name is required");
         }
         
-        console.log(`[BulkTeacher] Processing teacher: ${teacher.name}`);
-        
+        logToFile(`[BulkTeacher] Loop Start: ${teacher.name}`);
         const staffNumber = await generateUniqueStaffNumber();
+        logToFile(`[BulkTeacher] StaffNumber for ${teacher.name}: ${staffNumber}`);
+
         const emailToUse = teacher.email && teacher.email.trim() !== "" 
           ? teacher.email 
           : `${staffNumber}@teacher.muchi.app`;
 
         // 2. Create Auth User
+        logToFile(`[BulkTeacher] Creating Auth User for ${teacher.name}`);
         const { data: user, error: userError } =
           await supabaseAdmin.auth.admin.createUser({
             email: emailToUse,
@@ -1139,10 +1151,14 @@ router.post(
             },
           });
 
-        if (userError) throw userError;
+        if (userError) {
+          logToFile(`[BulkTeacher] Auth Error for ${teacher.name}: ${userError.message}`);
+          throw userError;
+        }
 
         // 3. Update Profile with extra details
         if (user.user) {
+          logToFile(`[BulkTeacher] Updating Profile for ${teacher.name}`);
           const { error: profileError } = await supabaseAdmin
             .from("profiles")
             .update({
@@ -1166,15 +1182,21 @@ router.post(
             })
             .eq("id", user.user.id);
 
-          if (profileError) throw profileError;
+          if (profileError) {
+            logToFile(`[BulkTeacher] Profile Update Error for ${teacher.name}: ${profileError.message}`);
+            throw profileError;
+          }
 
+          logToFile(`[BulkTeacher] Success for ${teacher.name}`);
           importedCount++;
         }
       } catch (error: any) {
+        logToFile(`[BulkTeacher] Catch Error for ${teacher.name || 'unknown'}: ${error.message}`);
         console.error(`Error importing teacher ${teacher.name}:`, error);
         errors.push({ name: teacher.name, error: error.message });
       }
     }
+    logToFile(`[BulkTeacher] Finished batch. Imported: ${importedCount}`);
 
     res.json({
       message: "Bulk import completed",
