@@ -1110,8 +1110,6 @@ router.post(
     }
 
     let importedCount = 0;
-    const errors: any[] = [];
-
     const results: any[] = [];
 
     for (const teacher of teachers) {
@@ -1121,57 +1119,88 @@ router.post(
           throw new Error("Name is required");
         }
         
-        const staffNumber = await generateUniqueStaffNumber();
+        let existingId = null;
+        let staffNumber = null;
+        
         const emailToUse = (teacher.email && teacher.email.trim() !== "") 
           ? teacher.email.trim().toLowerCase()
-          : `${staffNumber}@teacher.muchi.app`;
+          : null;
 
-        // 2. Create Auth User
-        const { data: user, error: userError } =
-          await supabaseAdmin.auth.admin.createUser({
-            email: emailToUse,
-            password: teacher.password || "12345678",
-            email_confirm: true,
-            user_metadata: {
-              full_name: teacher.name,
-              role: "teacher",
-              school_id: schoolId,
-            },
-          });
-
-        if (userError) {
-          if (userError.message.includes("already exists")) {
-            throw new Error(`Email ${emailToUse} is already registered.`);
-          }
-          throw userError;
-        }
-
-        // 3. Upsert Profile with extra details
-        if (user.user) {
-          const { error: profileError } = await supabaseAdmin
+        // 2. Check if a profile with this email already exists
+        if (emailToUse) {
+          const { data: existingProfile } = await supabaseAdmin
             .from("profiles")
-            .upsert({
-              id: user.user.id,
-              school_id: schoolId,
-              full_name: teacher.name,
-              role: "teacher",
-              staff_number: staffNumber,
-              username: teacher.username || null,
-              phone_number: teacher.phone || null,
-              department: teacher.department || "",
-              subjects: teacher.subjects || [],
-              join_date: teacher.joinDate || new Date().toISOString().split("T")[0],
-              employment_status: "Active",
-              is_temp_password: true,
-              temp_password_set_at: new Date().toISOString(),
-              temp_password_expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
-              updated_at: new Date().toISOString(),
-            }, { onConflict: 'id' });
-
-          if (profileError) throw profileError;
-          importedCount++;
-          results.push({ name: teacher.name, status: "Success" });
+            .select("id, staff_number")
+            .eq("email", emailToUse)
+            .maybeSingle();
+          
+          if (existingProfile) {
+            existingId = existingProfile.id;
+            staffNumber = existingProfile.staff_number;
+          }
         }
+
+        // 3. Handle Auth User (Create if doesn't exist)
+        if (!existingId) {
+          const finalEmail = emailToUse || `${await generateUniqueStaffNumber()}@teacher.muchi.app`;
+          
+          const { data: user, error: userError } =
+            await supabaseAdmin.auth.admin.createUser({
+              email: finalEmail,
+              password: teacher.password || "12345678",
+              email_confirm: true,
+              user_metadata: {
+                full_name: teacher.name,
+                role: "teacher",
+                school_id: schoolId,
+              },
+            });
+
+          if (userError) {
+            // If user already exists in Auth but not linked to a profile with this email
+            if (userError.message.includes("already exists")) {
+               // Try to find the user in Auth to get their ID? 
+               // listing users is slow, but for 126 it's doable if needed.
+               // However, usually they should have a profile if they exist in Auth.
+               throw new Error(`Email ${finalEmail} is already in use by another user.`);
+            }
+            throw userError;
+          }
+          existingId = user.user.id;
+        }
+
+        // 4. Generate Staff Number if missing (for new or existing but migrated users)
+        if (!staffNumber) {
+          staffNumber = await generateUniqueStaffNumber();
+        }
+
+        // 5. Upsert Profile with latest details
+        const { error: profileError } = await supabaseAdmin
+          .from("profiles")
+          .upsert({
+            id: existingId,
+            school_id: schoolId,
+            full_name: teacher.name,
+            email: emailToUse || `${staffNumber}@teacher.muchi.app`,
+            role: "teacher",
+            staff_number: staffNumber,
+            username: teacher.username || null,
+            phone_number: teacher.phone || null,
+            department: teacher.department || "",
+            subjects: teacher.subjects || [],
+            join_date: teacher.joinDate || new Date().toISOString().split("T")[0],
+            employment_status: "Active",
+            is_temp_password: true,
+            temp_password_set_at: new Date().toISOString(),
+            temp_password_expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'id' });
+
+        if (profileError) throw profileError;
+        
+        importedCount++;
+        results.push({ name: teacher.name, status: "Success" });
+        
       } catch (error: any) {
         console.error(`Error importing teacher ${teacher.name}:`, error);
         errors.push({ name: teacher.name, error: error.message });
