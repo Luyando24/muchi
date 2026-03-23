@@ -146,7 +146,7 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
             const result = await response.json();
 
             if (response.ok) {
-                successCount += result.importedCount || batch.length;
+                successCount += result.importedCount;
                 for (let j = 0; j < batch.length; j++) {
                     updatedData[i + j].status = 'Success';
                 }

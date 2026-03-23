@@ -4,7 +4,7 @@ import { WhatsAppService } from "../services/whatsappService.js";
 import { requireActiveLicense } from "../middleware/license.js";
 import { ensureSchoolSettings } from "../lib/school-settings.js";
 import fs from "fs";
-const LOG_FILE = "C:/tmp/import_debug.log";
+const LOG_FILE = "import_debug.log";
 function logToFile(msg: string) {
   const timestamp = new Date().toISOString();
   try {
