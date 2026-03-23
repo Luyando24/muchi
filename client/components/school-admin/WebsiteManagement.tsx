@@ -30,7 +30,10 @@ import {
   ListOrdered,
   Quote,
   Code,
-  Eraser
+  Eraser,
+  Briefcase,
+  Calendar,
+  AlertCircle
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -41,6 +44,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
+import { Tender } from '@shared/api';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { 
   Dialog, 
   DialogContent, 
@@ -116,6 +121,7 @@ export default function WebsiteManagement() {
   const [school, setSchool] = useState<School | null>(null);
   const [content, setContent] = useState<WebsiteContent>({});
   const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [tenders, setTenders] = useState<Tender[]>([]);
   const { toast } = useToast();
 
   // Blog Post Editor State
@@ -123,6 +129,10 @@ export default function WebsiteManagement() {
   const [isUploading, setIsUploading] = useState(false);
   const [isPreview, setIsPreview] = useState(false);
   const [isPreviewFormOpen, setIsPreviewFormOpen] = useState(false);
+  
+  // Tender Editor State
+  const [editingTender, setEditingTender] = useState<Partial<Tender> | null>(null);
+  const isTenderEditorOpen = !!editingTender;
 
   const isEditorOpen = !!editingPost;
   const setIsEditorOpen = (open: boolean) => {
@@ -150,6 +160,9 @@ export default function WebsiteManagement() {
       if (contentRes.ok) setContent(await contentRes.json());
       if (postsRes.ok) setPosts(await postsRes.json());
       if (schoolRes.ok) setSchool(await schoolRes.json());
+      
+      const tendersRes = await fetch('/api/school/tenders', { headers });
+      if (tendersRes.ok) setTenders(await tendersRes.json());
     } catch (error) {
       console.error('Error fetching website data:', error);
       toast({ title: "Error", description: "Failed to load website data", variant: "destructive" });
@@ -305,6 +318,58 @@ export default function WebsiteManagement() {
     }
   };
 
+  const handleTenderSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTender?.title || !editingTender?.description || !editingTender?.deadline) {
+      toast({ title: "Validation Error", description: "All marked fields are required", variant: "destructive" });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const method = editingTender.id ? 'PUT' : 'POST';
+      const url = editingTender.id ? `/api/school/tenders/${editingTender.id}` : '/api/school/tenders';
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
+        body: JSON.stringify(editingTender)
+      });
+
+      if (!res.ok) throw new Error('Failed to save tender');
+      
+      toast({ title: "Success", description: `Tender ${editingTender.id ? 'updated' : 'published'} successfully` });
+      setEditingTender(null);
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteTender = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this tender?')) return;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/school/tenders/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${session?.access_token}` }
+      });
+
+      if (!res.ok) throw new Error('Failed to delete tender');
+      setTenders(tenders.filter(t => t.id !== id));
+      toast({ title: "Success", description: "Tender deleted" });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center p-12">
@@ -351,6 +416,10 @@ export default function WebsiteManagement() {
           <TabsTrigger value="blog" className="flex items-center gap-2 px-4 py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
             <FileText className="h-4 w-4" />
             Blog System
+          </TabsTrigger>
+          <TabsTrigger value="tenders" className="flex items-center gap-2 px-4 py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
+            <Briefcase className="h-4 w-4" />
+            Tenders
           </TabsTrigger>
         </TabsList>
 
@@ -984,6 +1053,191 @@ export default function WebsiteManagement() {
                     </Card>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="tenders" className="space-y-6">
+          {!editingTender ? (
+            <>
+              <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div>
+                  <h3 className="text-xl font-bold">Supply Tenders</h3>
+                  <p className="text-sm text-muted-foreground">Manage supply opportunities displayed on your public website.</p>
+                </div>
+                <Button onClick={() => setEditingTender({ status: 'Open', category: 'Food Supplies' })}>
+                  <Plus className="h-4 w-4 mr-2" /> New Tender
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {tenders.length === 0 ? (
+                  <Card className="col-span-full border-dashed p-12 text-center bg-slate-50 dark:bg-slate-900/50">
+                    <Briefcase className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+                    <h4 className="text-lg font-medium">No active tenders</h4>
+                    <p className="text-muted-foreground mb-4">Display supply opportunities for the feeding program or other needs.</p>
+                    <Button variant="outline" onClick={() => setEditingTender({ status: 'Open', category: 'Food Supplies' })}>
+                      Post First Tender
+                    </Button>
+                  </Card>
+                ) : (
+                  tenders.map(tender => (
+                    <Card key={tender.id} className="relative overflow-hidden group border-none shadow-md hover:shadow-lg transition-all">
+                      <div className="p-1 bg-primary/10 absolute top-0 left-0 right-0 h-1" />
+                      <CardHeader className="pb-2">
+                        <div className="flex justify-between items-start mb-2">
+                          <Badge variant="secondary" className="bg-primary/5 text-primary border-primary/10">{tender.category}</Badge>
+                          <Badge className={
+                            tender.status === 'Open' ? 'bg-emerald-500' : 
+                            tender.status === 'Closed' ? 'bg-slate-500' : 'bg-blue-500'
+                          }>
+                            {tender.status}
+                          </Badge>
+                        </div>
+                        <CardTitle className="line-clamp-1">{tender.title}</CardTitle>
+                        <CardDescription className="flex items-center gap-2 mt-1">
+                          <Calendar className="h-3 w-3" />
+                          Deadline: {new Date(tender.deadline).toLocaleDateString()}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-sm text-muted-foreground line-clamp-3 mb-4 min-h-[60px]">
+                          {tender.description}
+                        </p>
+                        <div className="flex gap-2 pt-4 border-t">
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => setEditingTender(tender)}>
+                            <Edit className="h-3 w-3 mr-2" /> Edit
+                          </Button>
+                          <Button variant="ghost" size="sm" className="text-rose-500 hover:text-rose-600 hover:bg-rose-50" onClick={() => handleDeleteTender(tender.id)}>
+                            <Trash2 className="h-3 w-3 mr-2" /> Delete
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </>
+          ) : (
+            <Card className="border-none shadow-xl overflow-hidden">
+              <CardHeader className="bg-slate-50 dark:bg-slate-900/50 border-b flex flex-row items-center justify-between space-y-0 py-4">
+                <div className="flex items-center gap-4">
+                  <Button variant="ghost" size="sm" onClick={() => setEditingTender(null)} className="h-8 w-8 p-0 rounded-full">
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                  <div>
+                    <CardTitle className="text-xl">{editingTender.id ? 'Edit Tender' : 'New Supply Opportunity'}</CardTitle>
+                    <CardDescription>Details for suppliers and service providers.</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                <form onSubmit={handleTenderSave} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="tender-title">Tender Title <span className="text-rose-500">*</span></Label>
+                        <Input 
+                          id="tender-title" 
+                          value={editingTender.title || ''} 
+                          onChange={e => setEditingTender({...editingTender, title: e.target.value})}
+                          placeholder="e.g. Supply of Grade A Maize (50kg bags)"
+                        />
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Category <span className="text-rose-500">*</span></Label>
+                          <Select 
+                            value={editingTender.category} 
+                            onValueChange={val => setEditingTender({...editingTender, category: val})}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Food Supplies">Food Supplies</SelectItem>
+                              <SelectItem value="Stationery">Stationery</SelectItem>
+                              <SelectItem value="Infrastructure">Infrastructure</SelectItem>
+                              <SelectItem value="IT Equipment">IT Equipment</SelectItem>
+                              <SelectItem value="Other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Status</Label>
+                          <Select 
+                            value={editingTender.status} 
+                            onValueChange={(val: any) => setEditingTender({...editingTender, status: val})}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Open">Open</SelectItem>
+                              <SelectItem value="Closed">Closed</SelectItem>
+                              <SelectItem value="Awarded">Awarded</SelectItem>
+                              <SelectItem value="Cancelled">Cancelled</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="tender-deadline">Submission Deadline <span className="text-rose-500">*</span></Label>
+                        <Input 
+                          id="tender-deadline" 
+                          type="datetime-local"
+                          value={editingTender.deadline ? new Date(editingTender.deadline).toISOString().slice(0, 16) : ''} 
+                          onChange={e => setEditingTender({...editingTender, deadline: e.target.value})}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="tender-description">Detailed Description <span className="text-rose-500">*</span></Label>
+                        <Textarea 
+                          id="tender-description" 
+                          className="min-h-[150px]"
+                          value={editingTender.description || ''} 
+                          onChange={e => setEditingTender({...editingTender, description: e.target.value})}
+                          placeholder="Provide full specifications, requirements and submission process..."
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="tender-contact">Contact Information</Label>
+                        <Input 
+                          id="tender-contact" 
+                          value={editingTender.contact_info || ''} 
+                          onChange={e => setEditingTender({...editingTender, contact_info: e.target.value})}
+                          placeholder="Email or Phone for inquiries"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="tender-doc">Document URL</Label>
+                        <div className="flex gap-2">
+                          <Input 
+                            id="tender-doc" 
+                            value={editingTender.document_url || ''} 
+                            onChange={e => setEditingTender({...editingTender, document_url: e.target.value})}
+                            placeholder="Link to full PDF document"
+                          />
+                          <Button type="button" variant="outline" size="icon"><Upload className="h-4 w-4" /></Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-6 border-t">
+                    <Button type="button" variant="outline" onClick={() => setEditingTender(null)}>Cancel</Button>
+                    <Button type="submit" disabled={isSaving}>
+                      {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                      {editingTender.id ? 'Update Tender' : 'Publish Tender'}
+                    </Button>
+                  </div>
+                </form>
               </CardContent>
             </Card>
           )}

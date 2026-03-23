@@ -12,6 +12,7 @@ import {
   CreditCard,
   PieChart,
   Globe,
+  Utensils
 } from 'lucide-react';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ import ReportsManagement from '@/components/school-admin/ReportsManagement';
 import CalendarManagement from '@/components/school-admin/CalendarManagement';
 import SchoolSettings from '@/components/school-admin/SchoolSettings';
 import WebsiteManagement from '@/components/school-admin/WebsiteManagement';
+import FeedingProgramManagement from '@/components/school-admin/FeedingProgramManagement';
 import ApplicationsView from '@/components/school-admin/ApplicationsView';
 import SchoolAdminNavbar from '@/components/school-admin/SchoolAdminNavbar';
 import { syncFetch } from '@/lib/syncService';
@@ -139,6 +141,7 @@ export default function SchoolAdminPortal() {
     { id: "academics", label: "Academics & Results", icon: Building2, roles: ["school_admin", "registrar", "exam_officer", "academic_auditor"] },
     { id: "gradebook", label: "Gradebook", icon: GraduationCap, roles: ["school_admin", "teacher", "exam_officer"] },
     { id: "finance", label: "Finance", icon: CreditCard, roles: ["school_admin", "bursar", "accounts", "academic_auditor"] },
+    { id: "feeding_program", label: "Feeding Program", icon: Utensils, roles: ["school_admin", "bursar", "content_manager"] },
     { id: "website", label: "Website", icon: Globe, roles: ["school_admin", "content_manager"] },
     { id: "reports", label: "Reports", icon: PieChart, roles: ["school_admin", "academic_auditor"] },
     { id: "calendar", label: "Calendar", icon: Calendar, roles: ["school_admin", "registrar"] },
@@ -269,6 +272,11 @@ export default function SchoolAdminPortal() {
             {/* Website Tab */}
             <TabsContent value="website" className="space-y-6 m-0">
               <WebsiteManagement />
+            </TabsContent>
+
+            {/* Feeding Program Tab */}
+            <TabsContent value="feeding_program" className="space-y-6 m-0">
+              <FeedingProgramManagement />
             </TabsContent>
 
             {/* Calendar Tab */}

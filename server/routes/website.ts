@@ -304,4 +304,168 @@ router.delete(
   }
 );
 
+// --- TENDER ENDPOINTS ---
+
+// GET /api/school/public-tenders
+router.get(
+  "/public-tenders",
+  async (req: Request, res: Response) => {
+    const { schoolSlug } = req.query;
+
+    if (!schoolSlug) {
+      return res.status(400).json({ message: "schoolSlug is required" });
+    }
+
+    try {
+      const { data: school, error: schoolError } = await supabaseAdmin
+        .from("schools")
+        .select("id")
+        .eq("slug", schoolSlug)
+        .single();
+
+      if (schoolError || !school) {
+        return res.status(404).json({ message: "School not found" });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from("school_tenders")
+        .select("*")
+        .eq("school_id", school.id)
+        .eq("status", "Open")
+        .order("deadline", { ascending: true });
+
+      if (error) throw error;
+      res.json(data || []);
+    } catch (error: any) {
+      console.error("Get Public Tenders Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// GET /api/school/tenders
+router.get(
+  "/tenders",
+  requireSchoolRole(["school_admin", "content_manager"]),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("school_tenders")
+        .select("*")
+        .eq("school_id", schoolId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      res.json(data || []);
+    } catch (error: any) {
+      console.error("Get Tenders Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// POST /api/school/tenders
+router.post(
+  "/tenders",
+  requireSchoolRole(["school_admin", "content_manager"]),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { title, description, category, deadline, contact_info, document_url, status } = req.body;
+
+    if (!title || !description || !category || !deadline) {
+      return res.status(400).json({ message: "Required fields missing" });
+    }
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("school_tenders")
+        .insert({
+          school_id: schoolId,
+          created_by: profile.id,
+          title,
+          description,
+          category,
+          deadline,
+          contact_info,
+          document_url,
+          status: status || "Open"
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.status(201).json(data);
+    } catch (error: any) {
+      console.error("Create Tender Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// PUT /api/school/tenders/:id
+router.put(
+  "/tenders/:id",
+  requireSchoolRole(["school_admin", "content_manager"]),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { id } = req.params;
+    const { title, description, category, deadline, contact_info, document_url, status } = req.body;
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("school_tenders")
+        .update({
+          title,
+          description,
+          category,
+          deadline,
+          contact_info,
+          document_url,
+          status,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", id)
+        .eq("school_id", schoolId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.json(data);
+    } catch (error: any) {
+      console.error("Update Tender Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// DELETE /api/school/tenders/:id
+router.delete(
+  "/tenders/:id",
+  requireSchoolRole(["school_admin", "content_manager"]),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { id } = req.params;
+
+    try {
+      const { error } = await supabaseAdmin
+        .from("school_tenders")
+        .delete()
+        .eq("id", id)
+        .eq("school_id", schoolId);
+
+      if (error) throw error;
+      res.json({ message: "Tender deleted successfully" });
+    } catch (error: any) {
+      console.error("Delete Tender Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
 export const websiteRouter = router;

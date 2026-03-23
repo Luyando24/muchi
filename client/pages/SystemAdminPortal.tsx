@@ -48,6 +48,7 @@ import InfrastructureSettings from '@/components/admin/InfrastructureSettings';
 import GlobalSettings from '@/components/admin/GlobalSettings';
 import SystemDashboard from '@/components/admin/SystemDashboard';
 import SystemAdminNavbar from '@/components/admin/SystemAdminNavbar';
+import GovernmentPortal from '@/pages/GovernmentPortal';
 
 // Mock data for System Admin Portal
 const databaseBackups: any[] = [];
@@ -78,6 +79,7 @@ export default function SystemAdminPortal() {
     { id: "infrastructure", label: "Infrastructure", icon: Server },
     { id: "security", label: "Security & Access", icon: Shield },
     { id: "database", label: "Database", icon: Database },
+    { id: "feeding_program", label: "National Feeding", icon: Globe },
     { id: "logs", label: "System Logs", icon: Activity },
     { id: "settings", label: "Global Settings", icon: Settings }
   ];
@@ -402,6 +404,11 @@ export default function SystemAdminPortal() {
                   </Table>
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            {/* National Feeding Portal Tab */}
+            <TabsContent value="feeding_program" className="space-y-6">
+              <GovernmentPortal />
             </TabsContent>
 
             {/* Logs Tab */}

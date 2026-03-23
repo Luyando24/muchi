@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { School, User, CalendarEvent } from '@shared/api';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
-import { GraduationCap, BookOpen, Users, Calendar, MapPin, Phone, Mail, Clock, Award, CheckCircle2, User as UserIcon, Globe, Facebook, Twitter, Instagram, Linkedin, FileText, Upload, Plus, ArrowRight, User as AuthorIcon } from 'lucide-react';
+import { GraduationCap, BookOpen, Users, Calendar, MapPin, Phone, Mail, Clock, Award, CheckCircle2, User as UserIcon, Globe, Facebook, Twitter, Instagram, Linkedin, FileText, Upload, Plus, ArrowRight, User as AuthorIcon, Briefcase } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 
@@ -23,6 +23,15 @@ interface BlogPost {
   profiles?: {
     full_name: string;
   };
+}
+
+interface Tender {
+  id: string;
+  title: string;
+  description: string;
+  deadline: string;
+  status: string;
+  requirements?: any;
 }
 
 interface WebsiteContent {
@@ -63,6 +72,7 @@ export default function SchoolWebsite({ subdomainSlug }: { subdomainSlug?: strin
   const [websiteContent, setWebsiteContent] = useState<WebsiteContent | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
+  const [tenders, setTenders] = useState<Tender[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -139,10 +149,23 @@ export default function SchoolWebsite({ subdomainSlug }: { subdomainSlug?: strin
       }
     };
 
+    const fetchTenders = async () => {
+      try {
+        const res = await fetch(`/api/school/public-tenders?schoolSlug=${slug}`);
+        if (res.ok) {
+          const data = await res.json();
+          setTenders(data);
+        }
+      } catch (error) {
+        console.error('Error fetching tenders:', error);
+      }
+    };
+
     fetchSchool();
     fetchEvents();
     fetchWebsiteContent();
     fetchBlogPosts();
+    fetchTenders();
   }, [slug]);
 
   const handleApply = async (e: React.FormEvent) => {
@@ -269,6 +292,7 @@ export default function SchoolWebsite({ subdomainSlug }: { subdomainSlug?: strin
             <Link to="/#about" className="text-slate-600 hover:text-primary transition-colors">About</Link>
             <Link to="/#academics" className="text-slate-600 hover:text-primary transition-colors">Academics</Link>
             <Link to="/news" className="text-slate-600 hover:text-primary transition-colors">News</Link>
+            {tenders.length > 0 && <Link to="/tenders" className="text-slate-600 hover:text-primary transition-colors">Tenders</Link>}
             <Link to="/#admissions" className="text-slate-600 hover:text-primary transition-colors">Admissions</Link>
             <Link to="/#contact" className="text-slate-600 hover:text-primary transition-colors">Contact</Link>
           </nav>
@@ -637,6 +661,65 @@ export default function SchoolWebsite({ subdomainSlug }: { subdomainSlug?: strin
                             Read Full Article
                           </Button>
                         </Link>
+                      </CardFooter>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          } />
+
+          {/* Tenders Page */}
+          <Route path="tenders" element={
+            <div className="container mx-auto px-4 py-12">
+              <div className="mb-12">
+                <nav className="flex mb-4 text-sm text-slate-500 gap-2 items-center">
+                  <Link to="/" className="hover:text-primary">Home</Link>
+                  <span>/</span>
+                  <span className="text-slate-900 font-medium">Tenders</span>
+                </nav>
+                <h2 className="text-4xl font-bold text-slate-900 mb-4">Supply Tenders & Opportunities</h2>
+                <p className="text-lg text-slate-600 max-w-2xl">
+                  View open procurement notices and supply opportunities for {school.name}.
+                </p>
+              </div>
+
+              {tenders.length === 0 ? (
+                <div className="text-center py-20 bg-white rounded-2xl border flex flex-col items-center gap-4">
+                  <Briefcase className="h-12 w-12 text-slate-200" />
+                  <p className="text-slate-500">No active tenders at this time.</p>
+                </div>
+              ) : (
+                <div className="grid md:grid-cols-2 gap-8">
+                  {tenders.map((tender) => (
+                    <Card key={tender.id} className="border-none shadow-md bg-white overflow-hidden group">
+                      <CardHeader className="bg-slate-50 border-b">
+                         <div className="flex justify-between items-start">
+                            <CardTitle className="text-xl group-hover:text-primary transition-colors">{tender.title}</CardTitle>
+                            <Badge className={tender.status === 'Open' ? 'bg-emerald-500' : 'bg-slate-500'}>
+                               {tender.status}
+                            </Badge>
+                         </div>
+                      </CardHeader>
+                      <CardContent className="pt-6">
+                        <p className="text-slate-600 text-sm mb-6 line-clamp-3">
+                           {tender.description}
+                        </p>
+                        <div className="space-y-3">
+                           <div className="flex items-center gap-2 text-sm text-slate-500">
+                              <Calendar className="h-4 w-4" />
+                              <span className="font-semibold">Deadline:</span>
+                              <span>{new Date(tender.deadline).toLocaleDateString()}</span>
+                           </div>
+                           <div className="flex items-center gap-2 text-sm text-slate-500">
+                              <CheckCircle2 className="h-4 w-4" />
+                              <span className="font-semibold">ID:</span>
+                              <span className="font-mono">{tender.id.slice(0, 8)}</span>
+                           </div>
+                        </div>
+                      </CardContent>
+                      <CardFooter className="bg-slate-50 border-t py-4">
+                         <Button className="w-full">Download Tender Documents</Button>
                       </CardFooter>
                     </Card>
                   ))}

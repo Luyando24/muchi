@@ -213,3 +213,18 @@ export interface CalendarEvent {
   created_by?: string;
   created_at?: string;
 }
+// --- Tender Types ---
+export interface Tender {
+  id: string;
+  school_id: string;
+  title: string;
+  description: string;
+  category: string;
+  status: 'Open' | 'Closed' | 'Awarded' | 'Cancelled';
+  deadline: string;
+  contact_info?: string;
+  document_url?: string;
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+}

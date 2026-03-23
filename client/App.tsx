@@ -18,8 +18,9 @@ import NotFound from "./pages/NotFound";
 import StudentPortal from "./pages/StudentPortal";
 import TeacherPortal from "./pages/TeacherPortal";
 import SchoolAdminPortal from "./pages/SchoolAdminPortal";
-import SystemAdminPortal from "./pages/SystemAdminPortal";
 import SchoolWebsite from "./pages/SchoolWebsite";
+import GovernmentPortal from "./pages/GovernmentPortal";
+import SystemAdminPortal from "./pages/SystemAdminPortal";
 
 const App = () => {
   // --- SUBDOMAIN DETECTION ---
@@ -92,6 +93,11 @@ const App = () => {
             <Route path="/system-admin" element={
               <ProtectedRoute allowedRoles={['system_admin']}>
                 <SystemAdminPortal />
+              </ProtectedRoute>
+            } />
+            <Route path="/government-portal" element={
+              <ProtectedRoute allowedRoles={['system_admin']}>
+                <GovernmentPortal />
               </ProtectedRoute>
             } />
             <Route path="*" element={<NotFound />} />

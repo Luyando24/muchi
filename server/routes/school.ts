@@ -766,6 +766,31 @@ async function generateUniqueStudentNumber(): Promise<string> {
   return studentNumber;
 }
 
+// Helper to generate a unique staff number
+async function generateUniqueStaffNumber(): Promise<string> {
+  let isUnique = false;
+  let staffNumber = "";
+
+  while (!isUnique) {
+    // Generate format: T + YYYY + Random 4 digits (e.g., T20241234)
+    const now = new Date();
+    const year = now.getFullYear().toString();
+    const random = Math.floor(1000 + Math.random() * 9000).toString();
+    staffNumber = `T${year}${random}`;
+
+    // Check uniqueness
+    const { count } = await supabaseAdmin
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .eq("staff_number", staffNumber);
+
+    if (count === 0) {
+      isUnique = true;
+    }
+  }
+  return staffNumber;
+}
+
 // Helper to generate a simple random password
 function generateSimplePassword() {
   const adjectives = ["Happy", "Bright", "Swift", "Brave", "Cool", "Kind", "Smart", "Wise", "Fast", "Strong", "Calm", "Bold"];
@@ -1079,9 +1104,10 @@ router.post(
           throw new Error("Name is required");
         }
         
+        const staffNumber = await generateUniqueStaffNumber();
         const emailToUse = teacher.email && teacher.email.trim() !== "" 
           ? teacher.email 
-          : `${teacher.name.toLowerCase().replace(/\s+/g, '')}@teacher.muchi.app`;
+          : `${staffNumber}@teacher.muchi.app`;
 
         // 2. Create Auth User
         const { data: user, error: userError } =
@@ -1106,6 +1132,7 @@ router.post(
               school_id: schoolId,
               full_name: teacher.name,
               role: "teacher",
+              staff_number: staffNumber,
               username: teacher.username || null,
               phone_number: teacher.phone || null,
               department: teacher.department || "",
@@ -2535,7 +2562,8 @@ router.get(
         .from("profiles")
         .select("*", { count: 'exact' })
         .eq("school_id", schoolId)
-        .eq("role", "teacher");
+        .eq("role", "teacher")
+        .neq("employment_status", "Terminated");
 
       if (search) {
         query = query.or(`full_name.ilike.%${search}%,department.ilike.%${search}%`);
@@ -2555,6 +2583,7 @@ router.get(
         firstName: teacher.full_name?.split(" ")[0] || "",
         lastName: teacher.full_name?.split(" ").slice(1).join(" ") || "",
         fullName: teacher.full_name,
+        staffNumber: teacher.staff_number,
         email: teacher.email || "",
         department: teacher.department || "General",
         subjects: teacher.subjects || [],
@@ -2588,9 +2617,10 @@ router.post(
     const { email, password, name, username, department, subjects, joinDate } = req.body;
 
     try {
+      const staffNumber = await generateUniqueStaffNumber();
       const emailToUse = email && email.trim() !== "" 
         ? email 
-        : `${name.toLowerCase().replace(/\s+/g, '')}@teacher.muchi.app`;
+        : `${staffNumber}@teacher.muchi.app`;
         
       // 1. Create Auth User
       const { data: user, error: userError } =
@@ -2615,6 +2645,7 @@ router.post(
             username: username || null,
             department,
             subjects, // Assumes text[] or jsonb in DB
+            staff_number: staffNumber,
             join_date: joinDate,
             employment_status: "Active",
             is_temp_password: true,
