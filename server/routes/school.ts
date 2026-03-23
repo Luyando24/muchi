@@ -1,3 +1,7 @@
+import { Router, Request, Response } from "express";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { WhatsAppService } from "../services/whatsappService.js";
+import { requireActiveLicense } from "../middleware/license.js";
 import { ensureSchoolSettings } from "../lib/school-settings.js";
 
 const router = Router();
