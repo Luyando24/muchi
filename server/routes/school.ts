@@ -771,8 +771,11 @@ async function generateUniqueStudentNumber(): Promise<string> {
 async function generateUniqueStaffNumber(): Promise<string> {
   let isUnique = false;
   let staffNumber = "";
+  let attempts = 0;
+  const MAX_ATTEMPTS = 5;
 
-  while (!isUnique) {
+  while (!isUnique && attempts < MAX_ATTEMPTS) {
+    attempts++;
     // Generate format: T + YYYY + Random 4 digits (e.g., T20241234)
     const now = new Date();
     const year = now.getFullYear().toString();
@@ -780,15 +783,25 @@ async function generateUniqueStaffNumber(): Promise<string> {
     staffNumber = `T${year}${random}`;
 
     // Check uniqueness
-    const { count } = await supabaseAdmin
+    const { count, error } = await supabaseAdmin
       .from("profiles")
       .select("*", { count: "exact", head: true })
       .eq("staff_number", staffNumber);
+
+    if (error) {
+      console.error(`[StaffNumber] Error checking uniqueness:`, error);
+      throw new Error(`Database error verifying staff number uniqueness: ${error.message}`);
+    }
 
     if (count === 0) {
       isUnique = true;
     }
   }
+
+  if (!isUnique) {
+    throw new Error("Failed to generate a unique staff number after multiple attempts.");
+  }
+
   return staffNumber;
 }
 
@@ -1090,6 +1103,7 @@ router.post(
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
     const { teachers } = req.body;
+    console.log(`[BulkTeacher] Received request with ${teachers?.length || 0} teachers`);
 
     if (!teachers || !Array.isArray(teachers) || teachers.length === 0) {
       return res.status(400).json({ message: "No teachers provided" });
@@ -1101,9 +1115,11 @@ router.post(
     for (const teacher of teachers) {
       try {
         // 1. Validate mandatory fields
-        if (!teacher.name) {
+        if (!teacher.name || typeof teacher.name !== "string" || !teacher.name.trim()) {
           throw new Error("Name is required");
         }
+        
+        console.log(`[BulkTeacher] Processing teacher: ${teacher.name}`);
         
         const staffNumber = await generateUniqueStaffNumber();
         const emailToUse = teacher.email && teacher.email.trim() !== "" 
