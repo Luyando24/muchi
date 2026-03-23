@@ -273,7 +273,8 @@ router.get(
           .from("profiles")
           .select("id", { count: "exact", head: true })
           .eq("school_id", schoolId)
-          .eq("role", "teacher"),
+          .eq("role", "teacher")
+          .or('employment_status.neq.Terminated,employment_status.is.null'),
         supabaseAdmin
           .from("classes")
           .select("id", { count: "exact", head: true })
@@ -2563,7 +2564,7 @@ router.get(
         .select("*", { count: 'exact' })
         .eq("school_id", schoolId)
         .eq("role", "teacher")
-        .neq("employment_status", "Terminated");
+        .or('employment_status.neq.Terminated,employment_status.is.null');
 
       if (search) {
         query = query.or(`full_name.ilike.%${search}%,department.ilike.%${search}%`);
