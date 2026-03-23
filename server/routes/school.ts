@@ -2991,6 +2991,59 @@ router.post(
   },
 );
 
+// PUT /api/school/departments/:id
+router.put(
+  "/departments/:id",
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { id } = req.params;
+    const { name } = req.body;
+
+    if (!name || typeof name !== "string") {
+      return res.status(400).json({ message: "Department name is required" });
+    }
+
+    const formattedName = name
+      .toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+      .trim();
+
+    try {
+      // Check if another department with same name exists
+      const { data: existing } = await supabaseAdmin
+        .from("departments")
+        .select("id")
+        .eq("school_id", schoolId)
+        .ilike("name", formattedName)
+        .neq("id", id)
+        .maybeSingle();
+
+      if (existing) {
+        return res.status(400).json({ message: "Another department with this name already exists" });
+      }
+
+      const { data: updatedDept, error } = await supabaseAdmin
+        .from("departments")
+        .update({ name: formattedName })
+        .eq("id", id)
+        .eq("school_id", schoolId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      res.json(updatedDept);
+    } catch (error: any) {
+      console.error("Update Department Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  },
+);
+
 // POST /api/school/departments/bulk
 router.post(
   "/departments/bulk",
