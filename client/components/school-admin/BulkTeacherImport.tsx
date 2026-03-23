@@ -147,8 +147,24 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
 
             if (response.ok) {
                 successCount += result.importedCount;
-                for (let j = 0; j < batch.length; j++) {
-                    updatedData[i + j].status = 'Success';
+                
+                // Map results back to the original rows
+                if (result.results && Array.isArray(result.results)) {
+                    result.results.forEach((res: any, resIndex: number) => {
+                        const targetIndex = i + resIndex;
+                        if (updatedData[targetIndex]) {
+                            updatedData[targetIndex].status = res.status;
+                            updatedData[targetIndex].message = res.message;
+                            if (res.status === 'Error') {
+                                errorCount++;
+                            }
+                        }
+                    });
+                } else {
+                    // Fallback for unexpected response format
+                    for (let j = 0; j < batch.length; j++) {
+                        updatedData[i + j].status = 'Success';
+                    }
                 }
             } else {
                 errorCount += batch.length;

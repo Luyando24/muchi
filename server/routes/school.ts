@@ -1,16 +1,4 @@
-import { Router, Request, Response } from "express";
-import { supabaseAdmin } from "../lib/supabase.js";
-import { WhatsAppService } from "../services/whatsappService.js";
-import { requireActiveLicense } from "../middleware/license.js";
 import { ensureSchoolSettings } from "../lib/school-settings.js";
-import fs from "fs";
-const LOG_FILE = "import_debug.log";
-function logToFile(msg: string) {
-  const timestamp = new Date().toISOString();
-  try {
-    fs.appendFileSync(LOG_FILE, `[${timestamp}] ${msg}\n`);
-  } catch (e) {}
-}
 
 const router = Router();
 
@@ -777,7 +765,6 @@ async function generateUniqueStudentNumber(): Promise<string> {
 
 // Helper to generate a unique staff number
 async function generateUniqueStaffNumber(): Promise<string> {
-  logToFile("Starting generateUniqueStaffNumber");
   let isUnique = false;
   let staffNumber = "";
   let attempts = 0;
@@ -1112,7 +1099,6 @@ router.post(
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
     const { teachers } = req.body;
-    logToFile(`[BulkTeacher] Received request with ${teachers?.length || 0} teachers`);
     console.log(`[BulkTeacher] Received request with ${teachers?.length || 0} teachers`);
 
     if (!teachers || !Array.isArray(teachers) || teachers.length === 0) {
@@ -1122,6 +1108,8 @@ router.post(
     let importedCount = 0;
     const errors: any[] = [];
 
+    const results: any[] = [];
+
     for (const teacher of teachers) {
       try {
         // 1. Validate mandatory fields
@@ -1129,20 +1117,16 @@ router.post(
           throw new Error("Name is required");
         }
         
-        logToFile(`[BulkTeacher] Loop Start: ${teacher.name}`);
         const staffNumber = await generateUniqueStaffNumber();
-        logToFile(`[BulkTeacher] StaffNumber for ${teacher.name}: ${staffNumber}`);
-
-        const emailToUse = teacher.email && teacher.email.trim() !== "" 
-          ? teacher.email 
+        const emailToUse = (teacher.email && teacher.email.trim() !== "") 
+          ? teacher.email.trim().toLowerCase()
           : `${staffNumber}@teacher.muchi.app`;
 
         // 2. Create Auth User
-        logToFile(`[BulkTeacher] Creating Auth User for ${teacher.name}`);
         const { data: user, error: userError } =
           await supabaseAdmin.auth.admin.createUser({
             email: emailToUse,
-            password: teacher.password || "12345678", // Default temporary password
+            password: teacher.password || "12345678",
             email_confirm: true,
             user_metadata: {
               full_name: teacher.name,
@@ -1152,16 +1136,18 @@ router.post(
           });
 
         if (userError) {
-          logToFile(`[BulkTeacher] Auth Error for ${teacher.name}: ${userError.message}`);
+          if (userError.message.includes("already exists")) {
+            throw new Error(`Email ${emailToUse} is already registered.`);
+          }
           throw userError;
         }
 
-        // 3. Update Profile with extra details
+        // 3. Upsert Profile with extra details
         if (user.user) {
-          logToFile(`[BulkTeacher] Updating Profile for ${teacher.name}`);
           const { error: profileError } = await supabaseAdmin
             .from("profiles")
-            .update({
+            .upsert({
+              id: user.user.id,
               school_id: schoolId,
               full_name: teacher.name,
               role: "teacher",
@@ -1170,39 +1156,31 @@ router.post(
               phone_number: teacher.phone || null,
               department: teacher.department || "",
               subjects: teacher.subjects || [],
-              join_date:
-                teacher.joinDate || new Date().toISOString().split("T")[0],
+              join_date: teacher.joinDate || new Date().toISOString().split("T")[0],
               employment_status: "Active",
               is_temp_password: true,
               temp_password_set_at: new Date().toISOString(),
-              temp_password_expires_at: new Date(
-                Date.now() + 72 * 60 * 60 * 1000,
-              ).toISOString(),
+              temp_password_expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
               updated_at: new Date().toISOString(),
-            })
-            .eq("id", user.user.id);
+            }, { onConflict: 'id' });
 
-          if (profileError) {
-            logToFile(`[BulkTeacher] Profile Update Error for ${teacher.name}: ${profileError.message}`);
-            throw profileError;
-          }
-
-          logToFile(`[BulkTeacher] Success for ${teacher.name}`);
+          if (profileError) throw profileError;
           importedCount++;
+          results.push({ name: teacher.name, status: "Success" });
         }
       } catch (error: any) {
-        logToFile(`[BulkTeacher] Catch Error for ${teacher.name || 'unknown'}: ${error.message}`);
         console.error(`Error importing teacher ${teacher.name}:`, error);
         errors.push({ name: teacher.name, error: error.message });
+        results.push({ name: teacher.name, status: "Error", message: error.message });
       }
     }
-    logToFile(`[BulkTeacher] Finished batch. Imported: ${importedCount}`);
 
     res.json({
       message: "Bulk import completed",
       importedCount,
       total: teachers.length,
       errors,
+      results,
       success: errors.length === 0,
     });
   },
