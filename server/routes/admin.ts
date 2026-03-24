@@ -145,6 +145,160 @@ router.delete('/schools/:id', requireSystemAdmin, async (req: Request, res: Resp
   }
 });
 
+// DELETE /api/admin/schools/:schoolId/teachers/permanent
+// Permanently deletes ALL teachers in a school (Auth + Profiles)
+router.delete('/schools/:schoolId/teachers/permanent', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { schoolId } = req.params;
+
+  if (!schoolId) {
+    return res.status(400).json({ message: 'School ID is required' });
+  }
+
+  try {
+    // 1. Fetch all teacher IDs for this school
+    const { data: profiles, error: profilesError } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('school_id', schoolId)
+      .eq('role', 'teacher');
+
+    if (profilesError) throw profilesError;
+
+    if (!profiles || profiles.length === 0) {
+      return res.json({ message: 'No teachers found to delete for this school' });
+    }
+
+    // 2. Delete from Supabase Auth
+    // This is permanent and handles profile deletion if triggers are set,
+    // otherwise we also delete from profiles table explicitly below.
+    let deletedCount = 0;
+    for (const profile of profiles) {
+      const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(profile.id);
+      if (authError) {
+        console.error(`Failed to delete auth user ${profile.id}:`, authError.message);
+      } else {
+        deletedCount++;
+      }
+    }
+
+    // 3. Explicitly delete from profiles table just in case (e.g. orphans or missing triggers)
+    const { error: dbError } = await supabaseAdmin
+      .from('profiles')
+      .delete()
+      .eq('school_id', schoolId)
+      .eq('role', 'teacher');
+
+    if (dbError) throw dbError;
+
+    res.json({ 
+      message: `Successfully deleted ${deletedCount} teachers permanently from school ${schoolId}`,
+      totalAttempted: profiles.length
+    });
+
+  } catch (error: any) {
+    console.error('Permanent Teacher Deletion Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// GET /api/admin/schools/:schoolId/teachers
+// List all teachers in a specific school with emails
+router.get('/schools/:schoolId/teachers', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { schoolId } = req.params;
+  
+  try {
+    const { data: profiles, error: profilesError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, full_name, role, employment_status, staff_number, created_at')
+      .eq('school_id', schoolId)
+      .eq('role', 'teacher');
+
+    if (profilesError) throw profilesError;
+
+    if (!profiles || profiles.length === 0) {
+      return res.json([]);
+    }
+
+    // Get emails from auth
+    // Note: We'll fetch all users and filter locally for simplicity, 
+    // though for very large datasets this should be paginated or optimized.
+    const { data: { users }, error: authError } = await supabaseAdmin.auth.admin.listUsers();
+    if (authError) throw authError;
+
+    const teachersWithEmails = profiles.map(profile => {
+      const authUser = users.find(u => u.id === profile.id);
+      return {
+        ...profile,
+        email: authUser?.email
+      };
+    });
+
+    res.json(teachersWithEmails);
+  } catch (error: any) {
+    console.error('Fetch School Teachers Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// POST /api/admin/schools/:schoolId/teachers/bulk-delete-permanent
+// Selective permanent deletion of teachers
+router.post('/schools/:schoolId/teachers/bulk-delete-permanent', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { schoolId } = req.params;
+  const { teacherIds } = req.body;
+
+  if (!Array.isArray(teacherIds) || teacherIds.length === 0) {
+    return res.status(400).json({ message: 'Teacher IDs are required' });
+  }
+
+  try {
+    let deletedCount = 0;
+    const errors: string[] = [];
+
+    for (const id of teacherIds) {
+      try {
+        // Verify the teacher belongs to the school
+        const { data: profile } = await supabaseAdmin
+          .from('profiles')
+          .select('school_id')
+          .eq('id', id)
+          .eq('role', 'teacher')
+          .single();
+
+        if (profile && profile.school_id === schoolId) {
+          const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(id);
+          if (authError) {
+            console.error(`Failed to delete auth user ${id}:`, authError.message);
+            errors.push(`Failed to delete auth user ${id}: ${authError.message}`);
+          } else {
+            deletedCount++;
+          }
+          
+          // Also delete profile explicitly (cascade might handle it, but being explicit)
+          await supabaseAdmin
+            .from('profiles')
+            .delete()
+            .eq('id', id);
+        } else {
+          errors.push(`Teacher ${id} not found in school ${schoolId}`);
+        }
+      } catch (innerError: any) {
+        console.error(`Error deleting teacher ${id}:`, innerError);
+        errors.push(`Error deleting teacher ${id}: ${innerError.message}`);
+      }
+    }
+
+    res.json({ 
+      message: `Successfully deleted ${deletedCount} teachers permanently`,
+      deletedCount,
+      errors: errors.length > 0 ? errors : undefined
+    });
+
+  } catch (error: any) {
+    console.error('Selective Teacher Deletion Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
 
 // GET /api/admin/users
 // List all users with profiles and emails

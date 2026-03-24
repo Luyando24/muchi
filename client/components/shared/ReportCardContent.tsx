@@ -204,9 +204,12 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
                           {grades.length > 0 && (
                             <TableRow className="border-t border-slate-900 mt-8 print:mt-4 block">
                               <TableCell colSpan={4} className="p-4 print:p-2 pl-0">
-                                <div className="flex justify-between items-center text-xs font-bold text-slate-900 uppercase tracking-widest">
-                                  <div>SUBJECTS RECORDED: {grades.length}</div>
-                                  <div>SUBJECTS PASSED: {subjectsPassed}</div>
+                                <div className="flex justify-between items-center text-xs font-bold text-slate-900 uppercase tracking-widest gap-4">
+                                  <div>RECORDED: {grades.length}</div>
+                                  {school?.school_type === 'Basic' && (
+                                    <div className="bg-slate-900 text-white px-3 py-1 rounded-sm">TOTAL MARKS: {totalPercentage}</div>
+                                  )}
+                                  <div>PASSED: {subjectsPassed}</div>
                                 </div>
                               </TableCell>
                             </TableRow>

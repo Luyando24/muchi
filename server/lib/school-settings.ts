@@ -32,6 +32,11 @@ export async function ensureSchoolSettings(schoolId: string) {
     updated = true;
   }
 
+  if (!school.school_type) {
+    updates.school_type = 'Secondary';
+    updated = true;
+  }
+
   if (updated) {
     const { data: updatedSchool, error: updateError } = await supabaseAdmin
       .from('schools')

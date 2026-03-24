@@ -7,7 +7,9 @@ import {
   Edit,
   Trash2,
   Loader2,
-  ExternalLink
+  ExternalLink,
+  UserX,
+  Users
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -46,6 +48,7 @@ import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import SchoolDetails from './SchoolDetails';
 
 // Schema for creating/editing a school
 const schoolSchema = z.object({
@@ -91,6 +94,9 @@ export default function SchoolManagement() {
   const [generatingLicense, setGeneratingLicense] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [viewingSchool, setViewingSchool] = useState<School | null>(null);
+  const [teacherDeleteTargetId, setTeacherDeleteTargetId] = useState<string | null>(null);
+  const [isDeletingTeachers, setIsDeletingTeachers] = useState(false);
 
   const { toast } = useToast();
 
@@ -322,6 +328,37 @@ export default function SchoolManagement() {
       setIsDeleting(false);
     }
   };
+  const handleDeleteTeachers = async () => {
+    if (!teacherDeleteTargetId) return;
+    setIsDeletingTeachers(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      const response = await fetch(`/api/admin/schools/${teacherDeleteTargetId}/teachers/permanent`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`
+        }
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to delete teachers');
+      }
+
+      toast({ title: "All teachers deleted permanently" });
+      setTeacherDeleteTargetId(null);
+      fetchSchools();
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Deletion failed",
+        description: error.message,
+      });
+    } finally {
+      setIsDeletingTeachers(false);
+    }
+  };
 
 
   const openEditDialog = (school: School) => {
@@ -352,6 +389,16 @@ export default function SchoolManagement() {
     school.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     school.slug.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (viewingSchool) {
+    return (
+      <SchoolDetails 
+        schoolId={viewingSchool.id} 
+        schoolName={viewingSchool.name} 
+        onBack={() => setViewingSchool(null)} 
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -554,6 +601,12 @@ export default function SchoolManagement() {
                         }}>
                           <ExternalLink className="mr-2 h-4 w-4" /> Visit Website (New)
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-blue-600 focus:text-blue-600"
+                          onClick={() => setViewingSchool(school)}
+                        >
+                          <Users className="mr-2 h-4 w-4" /> View Details & Staff
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => openEditDialog(school)}>
                           <Edit className="mr-2 h-4 w-4" /> Edit Details
@@ -698,6 +751,16 @@ export default function SchoolManagement() {
         variant="danger"
         loading={isDeleting}
         onConfirm={handleDelete}
+      />
+      <ConfirmDialog
+        open={!!teacherDeleteTargetId}
+        onOpenChange={(open) => !open && setTeacherDeleteTargetId(null)}
+        title="Permanently Delete All Teachers"
+        description="This will permanently delete ALL teachers in this school from both the database and authentication system. This action is IRREVERSIBLE. Are you absolutely sure?"
+        confirmLabel="Permanently Delete Teachers"
+        variant="danger"
+        loading={isDeletingTeachers}
+        onConfirm={handleDeleteTeachers}
       />
     </div>
   );

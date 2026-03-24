@@ -64,6 +64,7 @@ export interface School {
   logo_url?: string;
   signature_url?: string;
   seal_url?: string;
+  school_type?: 'Secondary' | 'Basic';
 }
 
 // --- Student Types ---

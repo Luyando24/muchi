@@ -22,6 +22,7 @@ CREATE TABLE schools (
   address TEXT,
   logo_url TEXT,
   contact_email TEXT,
+  school_type TEXT DEFAULT 'Secondary' CHECK (school_type IN ('Secondary', 'Basic')),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

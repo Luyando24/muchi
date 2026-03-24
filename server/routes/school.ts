@@ -1110,6 +1110,7 @@ router.post(
     }
 
     let importedCount = 0;
+    const errors: any[] = [];
     const results: any[] = [];
 
     for (const teacher of teachers) {
@@ -2343,7 +2344,7 @@ router.get(
       const { data: schoolDetails } = await supabaseAdmin
         .from("schools")
         .select(
-          "name, address, email, phone, website, logo_url, signature_url, seal_url",
+          "name, address, email, phone, website, logo_url, signature_url, seal_url, school_type",
         )
         .eq("id", schoolId)
         .single();
@@ -2393,7 +2394,7 @@ router.get(
       const { data: schoolDetails } = await supabaseAdmin
         .from("schools")
         .select(
-          "name, address, email, phone, website, logo_url, signature_url, seal_url",
+          "name, address, email, phone, website, logo_url, signature_url, seal_url, school_type",
         )
         .eq("id", schoolId)
         .single();
@@ -5028,6 +5029,7 @@ router.put(
       signature_url,
       seal_url,
       logo_url,
+      school_type,
     } = req.body;
 
     try {
@@ -5045,6 +5047,7 @@ router.put(
           signature_url,
           seal_url,
           logo_url,
+          school_type,
           updated_at: new Date(),
         })
         .eq("id", schoolId)
@@ -5603,6 +5606,7 @@ router.post(
       examType,
       academicYear,
       skipCalculation,
+      force,
     } = req.body;
 
     if (!term || !examType || !academicYear) {
@@ -5792,7 +5796,7 @@ router.post(
               }
             }
 
-            if (missing.length > 0) {
+            if (missing.length > 0 && !force) {
               return res.status(400).json({
                 message: `Cannot calculate grades: ${missing.length} grade record(s) have not been published by teachers yet.`,
                 unpublished: missing,

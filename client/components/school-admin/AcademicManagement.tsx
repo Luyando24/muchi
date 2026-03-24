@@ -681,7 +681,7 @@ export default function AcademicManagement() {
   };
 
   // Grade Calculation Handler
-  const handleCalculateGrades = async () => {
+  const handleCalculateGrades = async (force: boolean = false) => {
     if (!calcForm.classId || !calcForm.term || !calcForm.academicYear || !calcForm.examType) {
       toast({ title: "Error", description: "Please fill in all required fields", variant: "destructive" });
       return;
@@ -704,7 +704,8 @@ export default function AcademicManagement() {
           term: calcForm.term,
           examType: calcForm.examType,
           academicYear: calcForm.academicYear,
-          skipCalculation: calcForm.skipCalculation
+          skipCalculation: calcForm.skipCalculation,
+          force
         })
       });
 
@@ -1799,7 +1800,7 @@ export default function AcademicManagement() {
                   </div>
 
                   <Button
-                    onClick={handleCalculateGrades}
+                    onClick={() => handleCalculateGrades()}
                     disabled={isCalculating || !calcForm.term || !calcForm.academicYear}
                     className="w-full"
                   >
@@ -1844,10 +1845,28 @@ export default function AcademicManagement() {
                           {unpublishedGrades.length === 0 ? (
                             "All required grade entries have been submitted or published. You are ready to proceed with calculations."
                           ) : (
-                            <>
-                              The following student grades are <strong>Draft</strong> or <strong>Not Entered</strong>.
-                              Grades can only be calculated once all entries are either <strong>Submitted</strong> (by teachers) or <strong>Published</strong>.
-                            </>
+                            <div className="space-y-4 text-left">
+                              <p>
+                                The following student grades are <strong>Draft</strong> or <strong>Not Entered</strong>.
+                                Grades can only be calculated once all entries are either <strong>Submitted</strong> (by teachers) or <strong>Published</strong>.
+                              </p>
+                              <div className="flex justify-end gap-2 pt-2">
+                                <Button 
+                                  variant="destructive" 
+                                  size="sm"
+                                  onClick={() => {
+                                    if (confirm("Forcing calculation with missing grades may result in incomplete percentages for those students. Continue?")) {
+                                      handleCalculateGrades(true);
+                                      setIsReadinessReportOpen(false);
+                                    }
+                                  }}
+                                  disabled={isCalculating}
+                                >
+                                  {isCalculating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                  Force Calculate Anyway
+                                </Button>
+                              </div>
+                            </div>
                           )}
                         </DialogDescription>
                       </DialogHeader>

@@ -9,13 +9,21 @@ import {
   Bell,
   Palette,
   Loader2,
-  X // imported X for the tags
+  X,
+  School as SchoolIcon // imported School for the type
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { syncFetch } from '@/lib/syncService';
@@ -42,7 +50,8 @@ export default function SchoolSettings() {
     website: '',
     logo_url: '',
     signature_url: '',
-    seal_url: ''
+    seal_url: '',
+    school_type: 'Secondary' as 'Secondary' | 'Basic'
   });
 
   const [newExamType, setNewExamType] = useState('');
@@ -72,7 +81,8 @@ export default function SchoolSettings() {
         website: data.website || '',
         logo_url: data.logo_url || '',
         signature_url: data.signature_url || '',
-        seal_url: data.seal_url || ''
+        seal_url: data.seal_url || '',
+        school_type: data.school_type || 'Secondary'
       });
     } catch (error: any) {
       console.error('Error fetching settings:', error);
@@ -247,6 +257,24 @@ export default function SchoolSettings() {
                         onChange={handleInputChange}
                         placeholder="e.g. Term 1"
                       />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="school_type">School Type</Label>
+                      <Select
+                        value={formData.school_type}
+                        onValueChange={(value: 'Secondary' | 'Basic') =>
+                          setFormData(prev => ({ ...prev, school_type: value }))
+                        }
+                      >
+                        <SelectTrigger id="school_type" className="w-full">
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Secondary">Secondary School (Grades 8-12)</SelectItem>
+                          <SelectItem value="Basic">Basic School (Grades 1-9)</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="space-y-2 md:col-span-2">
