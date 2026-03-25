@@ -19,8 +19,12 @@ import {
   Menu,
   X,
   ChevronRight,
-  GraduationCap
+  GraduationCap,
+  ShieldAlert,
+  ChevronDown,
+  Loader2
 } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
@@ -29,6 +33,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from "@/components/ui/use-toast";
 import ThemeToggle from '@/components/navigation/ThemeToggle';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
 
 // --- SUB-COMPONENTS --- //
 
@@ -383,18 +396,17 @@ function FeedingDashboard() {
 }
 
 // --- MAIN PORTAL COMPONENT --- //
-
 export default function GovernmentPortal() {
   const [activeTab, setActiveTab] = useState("overview");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [userProfile, setUserProfile] = useState<{full_name: string; role: string} | null>(null);
+  const [userProfile, setUserProfile] = useState<{full_name: string; role: string; secondary_role?: string} | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     async function getUser() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data } = await supabase.from('profiles').select('full_name, role').eq('id', user.id).single();
+        const { data } = await supabase.from('profiles').select('full_name, role, secondary_role').eq('id', user.id).single();
         if (data) setUserProfile(data);
       }
     }
@@ -413,119 +425,187 @@ export default function GovernmentPortal() {
     { id: "settings", label: "Portal Settings", icon: Settings }
   ];
 
+  if (!userProfile) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <span className="ml-2 text-lg font-medium">Loading Government Portal...</span>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col">
-      {/* Navbar */}
-      <nav className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 lg:px-6 fixed top-0 w-full z-50">
-        <div className="flex items-center gap-4">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="lg:hidden"
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          >
-            {isSidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </Button>
-          <div className="flex items-center gap-2">
-            <div className="bg-blue-600 p-1.5 rounded-lg">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex">
+      {/* Sidebar - Desktop */}
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 transition-transform duration-300 lg:translate-x-0 lg:static lg:inset-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex flex-col h-full">
+          {/* Sidebar Header */}
+          <div className="h-16 flex items-center px-6 border-b border-slate-200 dark:border-slate-700">
+            <div className="bg-blue-600 p-1.5 rounded-lg mr-3">
               <Building2 className="h-5 w-5 text-white" />
             </div>
-            <span className="font-bold text-lg hidden sm:block text-slate-900 dark:text-white">Ministry of Education</span>
+            <span className="font-black text-sm text-slate-900 dark:text-white uppercase tracking-tight">Ministry of Education</span>
           </div>
-        </div>
 
-        <div className="flex items-center gap-4">
-          <ThemeToggle />
-          <div className="hidden md:flex items-center gap-3 border-l border-slate-200 dark:border-slate-800 pl-4">
-            <div className="text-right">
-              <p className="text-sm font-bold text-slate-900 dark:text-white">{userProfile?.full_name || 'Official'}</p>
-              <p className="text-xs text-slate-500 capitalize">{userProfile?.role.replace('_', ' ') || 'Government'}</p>
+          <nav className="flex-1 px-4 py-6 space-y-1">
+            <div className="mb-4 px-2">
+              <p className="text-[10px] font-black tracking-widest text-slate-400 uppercase">Core Monitoring</p>
             </div>
-            <Avatar className="h-9 w-9 border border-slate-200 dark:border-slate-800">
-              <AvatarImage src="" />
-              <AvatarFallback className="bg-blue-100 text-blue-700 font-bold">
-                {userProfile?.full_name?.substring(0,2).toUpperCase() || 'MO'}
-              </AvatarFallback>
-            </Avatar>
-          </div>
-        </div>
-      </nav>
+            {sidebarItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Button
+                  key={item.id}
+                  variant={activeTab === item.id ? "default" : "ghost"}
+                  className={`w-full justify-start font-bold h-11 transition-all ${activeTab === item.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400'}`}
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    setIsSidebarOpen(false);
+                  }}
+                >
+                  <Icon className="h-5 w-5 mr-3" />
+                  {item.label}
+                </Button>
+              );
+            })}
+          </nav>
 
-      <div className="flex flex-1 pt-16">
-        {/* Sidebar */}
-        <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:static inset-y-0 left-0 mt-16 lg:mt-0 z-40 w-64 bg-slate-900 text-slate-300 transition-transform duration-300 ease-in-out border-r border-slate-800 h-[calc(100vh-64px)] overflow-y-auto`}>
-          <div className="flex flex-col h-full">
-            <nav className="flex-1 px-4 py-6 space-y-2">
-              <div className="mb-6 px-2">
-                <p className="text-xs font-black tracking-wider text-slate-500 uppercase">Core Systems</p>
-              </div>
-              {sidebarItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Button
-                    key={item.id}
-                    variant={activeTab === item.id ? "secondary" : "ghost"}
-                    className={`w-full justify-start ${activeTab === item.id ? 'bg-blue-600 text-white hover:bg-blue-700' : 'hover:bg-slate-800 hover:text-white'}`}
-                    onClick={() => {
-                      setActiveTab(item.id);
-                      setIsSidebarOpen(false);
-                    }}
-                  >
-                    <Icon className="h-5 w-5 mr-3" />
-                    {item.label}
-                  </Button>
-                );
-              })}
-            </nav>
-            <div className="p-4 border-t border-slate-800">
-              <Button variant="ghost" className="w-full justify-start text-red-400 hover:text-red-300 hover:bg-red-950/30" onClick={handleLogout}>
-                <LogOut className="mr-2 h-4 w-4" />
-                Sign Out
-              </Button>
+          <div className="p-4 border-t border-slate-200 dark:border-slate-700">
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl">
+              <p className="text-sm font-bold text-blue-800 dark:text-blue-200 mb-1">National Support</p>
+              <p className="text-xs text-blue-600 dark:text-blue-300 mb-3">Priority helpdesk for Ministry staff.</p>
+              <Button size="sm" variant="outline" className="w-full text-xs font-bold rounded-xl border-blue-200 dark:border-blue-800 bg-white dark:bg-slate-800">Support Center</Button>
             </div>
           </div>
-        </aside>
+        </div>
+      </aside>
 
-        {/* Overlay for mobile */}
-        {isSidebarOpen && (
-          <div 
-            className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden top-16"
-            onClick={() => setIsSidebarOpen(false)}
-          />
-        )}
+      {/* Main Container */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top Header */}
+        <header className="h-16 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-4 sm:px-8 sticky top-0 z-40">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="lg:hidden h-10 w-10 text-slate-500"
+            onClick={() => setIsSidebarOpen(true)}
+          >
+            <Menu className="h-6 w-6" />
+          </Button>
 
-        {/* Main Content */}
-        <main className="flex-1 p-6 md:p-8 overflow-y-auto h-[calc(100vh-64px)]">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full">
-            <TabsContent value="overview" className="h-full m-0">
+          <div className="flex items-center gap-2 md:gap-4 ml-auto">
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 rounded-full border border-slate-200 dark:border-slate-700">
+               <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+               <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">System Live</span>
+            </div>
+            
+            <ThemeToggle />
+
+            {/* Profile Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="flex items-center gap-2 px-2 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                  <Avatar className="h-9 w-9 border-2 border-slate-100 dark:border-slate-700 shadow-sm">
+                    <AvatarImage src="" />
+                    <AvatarFallback className="bg-blue-100 text-blue-700 font-bold uppercase">
+                      {userProfile?.full_name?.substring(0, 2) || 'MO'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="hidden md:block text-left">
+                    <p className="text-sm font-bold text-slate-900 dark:text-white leading-none">
+                      {userProfile?.full_name || 'Official'}
+                    </p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-1">
+                      {userProfile?.role?.replace('_', ' ') || 'Government'}
+                    </p>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-slate-400 hidden sm:block" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64 p-2 shadow-xl border-slate-200 dark:border-slate-700">
+                <DropdownMenuLabel className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Management</DropdownMenuLabel>
+                <DropdownMenuSeparator className="my-1" />
+                <DropdownMenuItem onClick={() => setActiveTab('settings')} className="rounded-lg h-10 cursor-pointer">
+                  <Settings className="mr-3 h-4 w-4 text-slate-500" />
+                  <span className="font-medium">Portal Settings</span>
+                </DropdownMenuItem>
+                
+                {userProfile?.role === 'school_admin' || userProfile?.secondary_role === 'school_admin' ? (
+                  <>
+                    <DropdownMenuSeparator className="my-1" />
+                    <DropdownMenuItem 
+                      className="rounded-lg h-10 cursor-pointer bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
+                      onClick={() => {
+                        window.location.href = '/school-admin';
+                      }}
+                    >
+                      <ShieldAlert className="mr-3 h-4 w-4" />
+                      <span className="font-bold">Switch to Admin Portal</span>
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
+
+                <DropdownMenuSeparator className="my-1" />
+                <DropdownMenuItem onClick={handleLogout} className="rounded-lg h-10 cursor-pointer text-red-600 focus:text-red-700 focus:bg-red-50 dark:focus:bg-red-900/10">
+                  <LogOut className="mr-3 h-4 w-4" />
+                  <span className="font-bold">Sign out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </header>
+
+        {/* Main Content Area */}
+        <main className="flex-1 p-4 md:p-8 overflow-y-auto bg-slate-50 dark:bg-slate-900/50">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full space-y-8">
+            <TabsContent value="overview" className="m-0 focus-visible:outline-none">
                <OverviewDashboard />
             </TabsContent>
             
-            <TabsContent value="performance" className="h-full m-0">
+            <TabsContent value="performance" className="m-0 focus-visible:outline-none">
                <PerformanceDashboard />
             </TabsContent>
             
-            <TabsContent value="feeding" className="h-full m-0">
+            <TabsContent value="feeding" className="m-0 focus-visible:outline-none">
                <FeedingDashboard />
             </TabsContent>
 
-            <TabsContent value="settings" className="m-0">
-              <div className="max-w-2xl">
-                 <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-6">Portal Settings</h2>
-                 <Card className="border-none shadow-md">
-                   <CardHeader>
-                     <CardTitle>Preferences</CardTitle>
-                   </CardHeader>
-                   <CardContent className="space-y-4">
-                     <p className="text-sm text-slate-500">Government portal settings and API access management will be configured here.</p>
-                     <Button variant="outline">Manage Preferences</Button>
-                   </CardContent>
+            <TabsContent value="settings" className="m-0 focus-visible:outline-none">
+              <div className="max-w-3xl">
+                 <div className="mb-8">
+                    <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Portal Settings</h2>
+                    <p className="text-slate-500 mt-2">Manage your ministry official profile and portal preferences.</p>
+                 </div>
+                 <Card className="border-none shadow-xl bg-white dark:bg-slate-800 rounded-3xl overflow-hidden">
+                    <CardHeader className="border-b dark:border-slate-700 p-8 bg-slate-50/50 dark:bg-slate-900/50">
+                       <CardTitle className="text-xl font-bold">Account Preferences</CardTitle>
+                       <CardDescription>Configure how you interact with the national monitoring systems.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-8 space-y-6">
+                       <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700">
+                          <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed italic">
+                            National monitoring thresholds, automated report distribution, and regional access permissions will be configurable here in the next release.
+                          </p>
+                       </div>
+                       <div className="flex justify-end gap-3 pt-4">
+                          <Button variant="outline" className="rounded-xl px-6">Discard Changes</Button>
+                          <Button className="rounded-xl px-8 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200 dark:shadow-none">Save Settings</Button>
+                       </div>
+                    </CardContent>
                  </Card>
               </div>
             </TabsContent>
           </Tabs>
         </main>
       </div>
+
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 lg:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
     </div>
   );
 }
