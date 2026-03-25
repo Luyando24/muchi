@@ -95,8 +95,8 @@ const App = () => {
                 <SystemAdminPortal />
               </ProtectedRoute>
             } />
-            <Route path="/government-portal" element={
-              <ProtectedRoute allowedRoles={['system_admin']}>
+            <Route path="/gov" element={
+              <ProtectedRoute allowedRoles={['system_admin', 'government']}>
                 <GovernmentPortal />
               </ProtectedRoute>
             } />

@@ -23,9 +23,10 @@ export const requireActiveLicense = async (req: Request, res: Response, next: Ne
 
       const { data: profileData, error: profileError } = await supabaseAdmin
         .from('profiles')
-        .select('school_id, role')
+        .select('school_id, role, secondary_role')
         .eq('id', user.id)
         .single();
+
 
       if (profileError || !profileData) {
         return res.status(403).json({ message: 'Forbidden: Profile not found' });

@@ -3,6 +3,7 @@ import { supabaseAdmin } from "../lib/supabase.js";
 import { WhatsAppService } from "../services/whatsappService.js";
 import { requireActiveLicense } from "../middleware/license.js";
 import { ensureSchoolSettings } from "../lib/school-settings.js";
+import { findBestClassMatch, normalizeClassName } from "../lib/class-matching.js";
 
 const router = Router();
 
@@ -213,9 +214,10 @@ export const requireSchoolRole = (allowedRoles: string[]) => {
       // Check role in profiles table
       const { data: profile, error: profileError } = await supabaseAdmin
         .from("profiles")
-        .select("id, role, school_id") // Simplified selection to avoid join issues
+        .select("id, role, secondary_role, school_id") 
         .eq("id", user.id)
         .single();
+
 
       if (profileError || !profile) {
         return res
@@ -223,13 +225,14 @@ export const requireSchoolRole = (allowedRoles: string[]) => {
           .json({ message: "Forbidden: Profile not found" });
       }
 
-      if (!allowedRoles.includes(profile.role)) {
+      if (!allowedRoles.includes(profile.role) && (!profile.secondary_role || !allowedRoles.includes(profile.secondary_role))) {
         return res
           .status(403)
           .json({
             message: `Forbidden: Requires one of [${allowedRoles.join(", ")}]`,
           });
       }
+
 
       // Attach user and profile to request
       (req as any).user = user;
@@ -955,6 +958,14 @@ router.post(
       const activeYear =
         settings?.academic_year || new Date().getFullYear().toString();
 
+      // Fetch all classes once for the school to enable efficient matching
+      const { data: allClassData } = await supabaseAdmin
+        .from("classes")
+        .select("id, name")
+        .eq("school_id", schoolId);
+      
+      const schoolClasses = allClassData || [];
+
       // Process sequentially to avoid rate limits and ensure uniqueness
       for (const student of students) {
       try {
@@ -1010,42 +1021,8 @@ router.post(
           if (profileError) throw profileError;
 
           // 4. Handle Enrollment (Try to find class by name)
-          if (student.grade) {
-            let { data: classData } = await supabaseAdmin
-              .from("classes")
-              .select("id, name")
-              .eq("school_id", schoolId)
-              .ilike("name", student.grade)
-              .maybeSingle();
-
-            // If no exact match, try robust matching
-            if (!classData) {
-              // 1. Try fuzzy match with wildcards and limit to 1
-              const { data: fuzzyMatches } = await supabaseAdmin
-                .from("classes")
-                .select("id, name")
-                .eq("school_id", schoolId)
-                .ilike("name", `%${student.grade}%`)
-                .limit(1);
-              
-              if (fuzzyMatches && fuzzyMatches.length > 0) {
-                classData = fuzzyMatches[0];
-              } else {
-                // 2. Try matching without "Grade " or "Form " prefixes
-                const normalizedGrade = student.grade.replace(/^(Grade|Form|Class|Level)\s+/i, '').trim();
-                if (normalizedGrade !== student.grade) {
-                  const { data: prefixMatches } = await supabaseAdmin
-                    .from("classes")
-                    .select("id, name")
-                    .eq("school_id", schoolId)
-                    .ilike("name", `%${normalizedGrade}%`)
-                    .limit(1);
-                  if (prefixMatches && prefixMatches.length > 0) {
-                    classData = prefixMatches[0];
-                  }
-                }
-              }
-            }
+            // Use the robust matching utility
+            const classData = findBestClassMatch(student.grade, schoolClasses);
 
             if (classData) {
               // 1. Clear any existing active enrollment for this year to avoid conflicts
@@ -1070,7 +1047,6 @@ router.post(
                 .update({ grade: classData.name })
                 .eq("id", user.user.id);
             }
-          }
 
           importedCount++;
         }
@@ -1092,6 +1068,128 @@ router.post(
       res.status(500).json({ message: error.message });
     }
   },
+);
+
+// POST /api/school/students/re-match-classes
+// maintenance endpoint to fix already uploaded data with mismatched formatting
+router.post(
+  "/students/re-match-classes",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+
+    try {
+      // 1. Fetch current academic year
+      const { data: settings } = await supabaseAdmin
+        .from("schools")
+        .select("academic_year")
+        .eq("id", schoolId)
+        .single();
+      const activeYear = settings?.academic_year || new Date().getFullYear().toString();
+
+      // 2. Fetch all classes for the school
+      const { data: classes } = await supabaseAdmin
+        .from("classes")
+        .select("id, name")
+        .eq("school_id", schoolId);
+      
+      if (!classes || classes.length === 0) {
+        return res.status(400).json({ message: "No classes found in the system. Create classes first." });
+      }
+
+      // 3. Fetch students who potentially need matching
+      // We look for students who have a 'grade' string (raw from excel) 
+      // but might not be enrolled in that specific class yet.
+      const { data: students } = await supabaseAdmin
+        .from("profiles")
+        .select("id, full_name, grade")
+        .eq("school_id", schoolId)
+        .eq("role", "student")
+        .not("grade", "is", null);
+
+      if (!students || students.length === 0) {
+        return res.json({ message: "No students with grade information found.", fixedCount: 0 });
+      }
+
+      let fixedCount = 0;
+      const results = [];
+
+      for (const student of students) {
+        const bestMatch = findBestClassMatch(student.grade, classes);
+        
+        // Process ALL students for whom we can find a matching class — regardless
+        // of whether the stored grade string already happens to equal the class
+        // name.  A student could have the correct grade text but still have no
+        // enrollment (e.g. import partially failed, or the class was created after
+        // the import ran).
+        if (bestMatch) {
+          // Check if already enrolled in THIS specific matched class for THIS year
+          const { data: existingEnrollment } = await supabaseAdmin
+            .from("enrollments")
+            .select("id, class_id")
+            .eq("student_id", student.id)
+            .eq("academic_year", activeYear)
+            .maybeSingle();
+
+          if (!existingEnrollment || existingEnrollment.class_id !== bestMatch.id) {
+            // Fix / create enrollment
+            if (existingEnrollment) {
+              await supabaseAdmin
+                .from("enrollments")
+                .update({ class_id: bestMatch.id, status: "Active" })
+                .eq("id", existingEnrollment.id);
+            } else {
+              await supabaseAdmin.from("enrollments").insert({
+                student_id: student.id,
+                class_id: bestMatch.id,
+                school_id: schoolId,
+                academic_year: activeYear,
+                status: "Active",
+              });
+            }
+
+            // Always normalise the profile grade to the official class name so
+            // that display and future lookups are consistent.
+            await supabaseAdmin
+              .from("profiles")
+              .update({ grade: bestMatch.name })
+              .eq("id", student.id);
+
+            fixedCount++;
+            results.push({
+              student: student.full_name,
+              from: student.grade,
+              matchedTo: bestMatch.name,
+            });
+          } else if (student.grade !== bestMatch.name) {
+            // Enrollment already points to the correct class, but the grade text
+            // stored on the profile is still the raw / misformatted string.
+            await supabaseAdmin
+              .from("profiles")
+              .update({ grade: bestMatch.name })
+              .eq("id", student.id);
+
+            fixedCount++;
+            results.push({
+              student: student.full_name,
+              from: student.grade,
+              matchedTo: bestMatch.name,
+            });
+          }
+        }
+      }
+
+      res.json({
+        message: `Successfully re-matched ${fixedCount} students to classes based on their records.`,
+        fixedCount,
+        details: results
+      });
+    } catch (error: any) {
+      console.error("Re-match Classes Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
 );
 
 // POST /api/school/teachers/bulk

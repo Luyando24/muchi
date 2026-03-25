@@ -93,6 +93,7 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isRematching, setIsRematching] = useState(false);
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
 
@@ -389,6 +390,41 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
     }
   };
 
+  const handleRematchClasses = async () => {
+    setIsRematching(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch('/api/school/students/re-match-classes', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        toast({
+          title: "Re-match Complete",
+          description: result.message,
+        });
+        fetchStudents();
+      } else {
+        throw new Error(result.message || 'Failed to re-match classes');
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsRematching(false);
+    }
+  };
+
   // Filtering is now handled entirely server-side via the debouncedSearch query parameter.
 
   if (viewStudentId) {
@@ -413,6 +449,15 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
               Delete ({selectedStudents.length})
             </Button>
           )}
+          <Button 
+            variant="outline" 
+            onClick={handleRematchClasses} 
+            disabled={isRematching || isLoading}
+            title="Intelligently match students to classes based on their records (fixes formatting mismatches)"
+          >
+            {isRematching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Filter className="h-4 w-4 mr-2" />}
+            Fix Assignments
+          </Button>
           <Button variant="outline">
             <Download className="h-4 w-4 mr-2" />
             Export List

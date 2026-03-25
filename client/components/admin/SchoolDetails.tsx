@@ -4,7 +4,8 @@ import {
   Users, 
   Trash2, 
   Loader2, 
-  Search
+  Search,
+  Key
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,15 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Progress } from '@/components/ui/progress';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 interface Teacher {
   id: string;
@@ -47,6 +57,10 @@ export default function SchoolDetails({ schoolId, schoolName, onBack }: SchoolDe
   const [isDeleting, setIsDeleting] = useState(false);
   const [deletionProgress, setDeletionProgress] = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [resetTeacher, setResetTeacher] = useState<Teacher | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -147,6 +161,55 @@ export default function SchoolDetails({ schoolId, schoolName, onBack }: SchoolDe
     }
   };
 
+  const handleResetPassword = async () => {
+    if (!resetTeacher || !newPassword) return;
+    if (newPassword.length < 6) {
+      toast({
+        variant: "destructive",
+        title: "Weak Password",
+        description: "Password must be at least 6 characters long.",
+      });
+      return;
+    }
+
+    setIsResetting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('No active session found.');
+
+      const response = await fetch(`/api/admin/users/${resetTeacher.id}/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ password: newPassword })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to reset password');
+      }
+
+      toast({
+        title: "Password Reset",
+        description: `Successfully updated password for ${resetTeacher.full_name}.`,
+      });
+      
+      setShowResetDialog(false);
+      setNewPassword('');
+      setResetTeacher(null);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   const filteredTeachers = teachers.filter(t => 
     t.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (t.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -231,6 +294,7 @@ export default function SchoolDetails({ schoolId, schoolName, onBack }: SchoolDe
                   <TableHead className="font-semibold">Staff Number</TableHead>
                   <TableHead className="font-semibold">Status</TableHead>
                   <TableHead className="font-semibold text-right pr-6">Joined Date</TableHead>
+                  <TableHead className="w-20 text-right pr-6 font-semibold">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -281,6 +345,20 @@ export default function SchoolDetails({ schoolId, schoolName, onBack }: SchoolDe
                       <TableCell className="text-sm text-slate-500 dark:text-slate-400 text-right pr-6 font-medium">
                         {new Date(teacher.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
                       </TableCell>
+                      <TableCell className="text-right pr-6">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                          onClick={() => {
+                            setResetTeacher(teacher);
+                            setShowResetDialog(true);
+                          }}
+                          title="Change Password"
+                        >
+                          <Key className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -300,6 +378,42 @@ export default function SchoolDetails({ schoolId, schoolName, onBack }: SchoolDe
         loading={isDeleting}
         onConfirm={handleBulkDelete}
       />
+
+      <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>
+              Enter a new login password for {resetTeacher?.full_name}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="password">New Password</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="Min 6 characters"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowResetDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleResetPassword} 
+              disabled={isResetting || !newPassword || newPassword.length < 6}
+            >
+              {isResetting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Update Password
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

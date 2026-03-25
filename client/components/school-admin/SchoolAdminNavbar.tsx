@@ -64,10 +64,13 @@ export default function SchoolAdminNavbar({
     firstName: string;
     lastName: string;
     role: string;
+    secondaryRole?: string | null;
     email: string;
     profileImage?: string;
     schoolName?: string;
   } | null>(null);
+
+
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
@@ -111,10 +114,12 @@ export default function SchoolAdminNavbar({
           firstName: names[0],
           lastName: names.length > 1 ? names.slice(1).join(' ') : '',
           role: profile.role || 'School Admin',
+          secondaryRole: profile.secondary_role,
           email: authUser.email || '',
           profileImage: profile.avatar_url,
           schoolName: profile.school?.name
         });
+
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -223,9 +228,11 @@ export default function SchoolAdminNavbar({
     firstName: 'Admin',
     lastName: 'User',
     role: 'Loading...',
+    secondaryRole: null,
     email: '',
     profileImage: undefined
   };
+
 
   return (
     <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 sticky top-0 z-50 overflow-hidden">
@@ -453,6 +460,22 @@ export default function SchoolAdminNavbar({
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
                 </DropdownMenuItem>
+
+                {displayUser.role === 'teacher' || displayUser.secondaryRole === 'teacher' ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold"
+                      onClick={() => {
+                        window.location.href = '/teacher-portal';
+                      }}
+                    >
+                      <GraduationCap className="mr-2 h-4 w-4" />
+                      <span>Switch to Teacher Portal</span>
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
+
                 <div className="sm:hidden px-2 py-1.5 flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-800 rounded-sm">
                   <div className="flex items-center">
                     <Settings className="mr-2 h-4 w-4" />

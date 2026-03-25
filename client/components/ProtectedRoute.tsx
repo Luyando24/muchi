@@ -29,17 +29,17 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
           // Check user role from profiles table
           const { data: profile, error } = await supabase
             .from('profiles')
-            .select('role')
+            .select('role, secondary_role')
             .eq('id', session.user.id)
             .single();
-
+          
           if (error || !profile) {
             console.error('Error fetching profile:', error);
             setLoading(false);
             return;
           }
 
-          if (allowedRoles.includes(profile.role)) {
+          if (allowedRoles.includes(profile.role) || (profile.secondary_role && allowedRoles.includes(profile.secondary_role))) {
             setAuthorized(true);
           } else {
              toast({

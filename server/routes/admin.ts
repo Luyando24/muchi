@@ -78,9 +78,11 @@ router.post('/create-school', requireSystemAdmin, async (req: Request, res: Resp
       user_metadata: {
         full_name: adminName,
         role: 'school_admin',
+        secondary_role: 'teacher',
         school_id: school.id
       }
     });
+
 
     if (userError) {
       // Rollback school creation if user creation fails (basic rollback)
@@ -209,7 +211,7 @@ router.get('/schools/:schoolId/teachers', requireSystemAdmin, async (req: Reques
   try {
     const { data: profiles, error: profilesError } = await supabaseAdmin
       .from('profiles')
-      .select('id, full_name, role, employment_status, staff_number, created_at')
+      .select('id, full_name, role, employment_status, staff_number, created_at, email')
       .eq('school_id', schoolId)
       .eq('role', 'teacher');
 
@@ -219,17 +221,29 @@ router.get('/schools/:schoolId/teachers', requireSystemAdmin, async (req: Reques
       return res.json([]);
     }
 
-    // Get emails from auth
-    // Note: We'll fetch all users and filter locally for simplicity, 
-    // though for very large datasets this should be paginated or optimized.
-    const { data: { users }, error: authError } = await supabaseAdmin.auth.admin.listUsers();
-    if (authError) throw authError;
+    // Get emails from auth as a fallback only if profile.email is missing
+    const profilesMissingEmail = profiles.filter(p => !p.email);
+    let authUsers: any[] = [];
+    
+    if (profilesMissingEmail.length > 0) {
+      // Increase limit to 1000 for listUsers as a simple way to handle larger datasets for now
+      const { data: { users }, error: authError } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+      if (!authError) {
+        authUsers = users;
+      }
+    }
 
     const teachersWithEmails = profiles.map(profile => {
-      const authUser = users.find(u => u.id === profile.id);
+      // Use email from profile if available, otherwise fallback to Auth
+      let email = profile.email;
+      if (!email && authUsers.length > 0) {
+        const authUser = authUsers.find(u => u.id === profile.id);
+        email = authUser?.email;
+      }
+      
       return {
         ...profile,
-        email: authUser?.email
+        email
       };
     });
 
@@ -339,7 +353,7 @@ router.get('/users', requireSystemAdmin, async (req: Request, res: Response) => 
 // POST /api/admin/users
 // Create a new user (System Admin or School Admin)
 router.post('/users', requireSystemAdmin, async (req: Request, res: Response) => {
-  const { email, password, full_name, role, school_id } = req.body;
+  const { email, password, full_name, role, secondary_role, school_id } = req.body;
 
   if (!email || !password || !full_name || !role) {
     return res.status(400).json({ message: 'Missing required fields' });
@@ -353,9 +367,13 @@ router.post('/users', requireSystemAdmin, async (req: Request, res: Response) =>
       user_metadata: {
         full_name,
         role,
+        secondary_role: (secondary_role && secondary_role !== 'none') ? secondary_role : (role === 'school_admin' ? 'teacher' : null),
         school_id: school_id === 'none' ? null : school_id
       }
     });
+
+
+
 
     if (error) throw error;
 
@@ -370,7 +388,7 @@ router.post('/users', requireSystemAdmin, async (req: Request, res: Response) =>
 // Update a user (System Admin or School Admin)
 router.put('/users/:id', requireSystemAdmin, async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const { email, password, full_name, role, school_id } = req.body;
+  const { email, password, full_name, role, secondary_role, school_id } = req.body;
 
   try {
     const updateData: any = {
@@ -378,6 +396,7 @@ router.put('/users/:id', requireSystemAdmin, async (req: Request, res: Response)
       user_metadata: {
         full_name,
         role,
+        secondary_role,
         school_id: school_id === 'none' ? null : school_id
       }
     };
@@ -397,15 +416,13 @@ router.put('/users/:id', requireSystemAdmin, async (req: Request, res: Response)
       .update({
         full_name,
         role,
+        secondary_role: (secondary_role && secondary_role !== 'none') ? secondary_role : (role === 'school_admin' ? 'teacher' : null),
         school_id: school_id === 'none' ? null : school_id,
-        // email is often stored in profiles too for easier querying, update if it exists in schema
-        // The schema might or might not have email. Based on UserManagement.tsx interfaces, it seems we expect it.
-        // Let's check if we can update it. If not, it will ignore or error.
-        // Inspecting earlier schema.sql, profiles has (id, full_name, role, school_id). Email is in auth.users.
-        // However, in UserManagement.tsx, we merge them.
-        // Let's safe update only known fields.
       })
       .eq('id', id);
+
+
+
 
     if (profileError) throw profileError;
 
@@ -799,6 +816,119 @@ router.put('/licenses/:id', requireSystemAdmin, async (req: Request, res: Respon
   }
 });
 
+// --- DATA MAINTENANCE ENDPOINTS ---
+
+// Helpers for the fix-class-enrollments endpoint
+function normalizeClassName(name: string): string {
+  if (!name) return '';
+  return name
+    .trim()
+    .replace(/^(Grade|Form|Class|Level|Year)\s*/i, '')
+    .replace(/\s+/g, '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toLowerCase();
+}
+
+function findBestClassMatch(
+  input: string,
+  classes: { id: string; name: string }[]
+): { id: string; name: string } | null {
+  if (!input || !classes.length) return null;
+  const trimmed = input.trim();
+
+  const exact = classes.find(c => c.name.toLowerCase() === trimmed.toLowerCase());
+  if (exact) return exact;
+
+  const normInput = normalizeClassName(trimmed);
+  if (!normInput) return null;
+  const norm = classes.find(c => normalizeClassName(c.name) === normInput);
+  if (norm) return norm;
+
+  return classes.find(c => {
+    const nc = normalizeClassName(c.name);
+    return nc.includes(normInput) || normInput.includes(nc);
+  }) || null;
+}
+
+// POST /api/admin/system/fix-class-enrollments
+// Scans all students and fuzzy-matches them to classes, fixing missing/wrong enrollments
+router.post('/system/fix-class-enrollments', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const { data: schools, error: schoolsErr } = await supabaseAdmin
+      .from('schools')
+      .select('id, name, academic_year');
+
+    if (schoolsErr) throw schoolsErr;
+    if (!schools || schools.length === 0) return res.json({ fixedCount: 0, message: "No schools found" });
+
+    let totalFixed = 0;
+
+    for (const school of schools) {
+      const academicYear = school.academic_year || new Date().getFullYear().toString();
+
+      const { data: classes } = await supabaseAdmin
+        .from('classes')
+        .select('id, name')
+        .eq('school_id', school.id);
+      
+      if (!classes || classes.length === 0) continue;
+
+      const { data: students } = await supabaseAdmin
+        .from('profiles')
+        .select('id, full_name, grade')
+        .eq('school_id', school.id)
+        .eq('role', 'student')
+        .not('grade', 'is', null);
+
+      if (!students || students.length === 0) continue;
+
+      for (const student of students) {
+        const match = findBestClassMatch(student.grade, classes);
+        if (!match) continue;
+
+        const { data: existing } = await supabaseAdmin
+          .from('enrollments')
+          .select('id, class_id')
+          .eq('student_id', student.id)
+          .eq('academic_year', academicYear)
+          .maybeSingle();
+
+        const needsEnrollmentFix = !existing || existing.class_id !== match.id;
+        const needsGradeTextFix = student.grade !== match.name;
+
+        if (needsEnrollmentFix) {
+          if (existing) {
+            await supabaseAdmin
+              .from('enrollments')
+              .update({ class_id: match.id, status: 'Active' })
+              .eq('id', existing.id);
+          } else {
+            await supabaseAdmin
+              .from('enrollments')
+              .insert({ student_id: student.id, class_id: match.id, school_id: school.id, academic_year: academicYear, status: 'Active' });
+          }
+          totalFixed++;
+        }
+
+        if (needsGradeTextFix) {
+          await supabaseAdmin
+            .from('profiles')
+            .update({ grade: match.name })
+            .eq('id', student.id);
+          if (!needsEnrollmentFix) {
+            totalFixed++;
+          }
+        }
+      }
+    }
+
+    res.json({ message: `Successfully repaired ${totalFixed} student records`, fixedCount: totalFixed });
+  } catch (error: any) {
+    console.error('System Fix Enrollments Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // GET /api/admin/settings
 // Get system settings
 router.get('/settings', async (req: Request, res: Response) => {
@@ -851,6 +981,30 @@ router.put('/settings', requireSystemAdmin, async (req: Request, res: Response) 
   } catch (error: any) {
     console.error('Update System Settings Error:', error);
     res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/admin/users/:id/reset-password
+// Reset a user's password (System Admin only)
+router.post('/users/:id/reset-password', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { password } = req.body;
+
+  if (!password || password.length < 6) {
+    return res.status(400).json({ message: 'Password must be at least 6 characters long' });
+  }
+
+  try {
+    const { data: user, error } = await supabaseAdmin.auth.admin.updateUserById(id, {
+      password: password
+    });
+
+    if (error) throw error;
+
+    res.json({ message: 'Password reset successfully' });
+  } catch (error: any) {
+    console.error('Reset Password Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
   }
 });
 

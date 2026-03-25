@@ -15,7 +15,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Loader2, GraduationCap, Lock, Mail, ArrowRight, User } from "lucide-react";
+import { Loader2, GraduationCap, Lock, Mail, ArrowRight, User, BookOpen, ShieldAlert } from "lucide-react";
+
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -30,7 +31,10 @@ type UserRole = "student" | "teacher" | "school_admin" | "system_admin";
 export default function Login() {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<UserRole>("student");
+  const [showRoleSelection, setShowRoleSelection] = useState(false);
+  const [userData, setUserData] = useState<{ session: any; profile: any } | null>(null);
   const navigate = useNavigate();
+
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -42,20 +46,101 @@ export default function Login() {
     },
   });
 
+  const handleRoleNavigation = (role: string, userId: string) => {
+    if (["school_admin", "bursar", "registrar", "exam_officer", "academic_auditor", "accounts", "content_manager"].includes(role)) {
+      navigate("/school-admin");
+    } else {
+      switch (role) {
+        case "system_admin":
+          navigate("/system-admin");
+          break;
+        case "government":
+          navigate("/gov");
+          break;
+        case "teacher":
+          navigate("/teacher-portal");
+          break;
+        case "student":
+          navigate(`/student-portal/${userId}`);
+          break;
+        default:
+          navigate("/");
+      }
+    }
+  };
+
+  if (showRoleSelection && userData) {
+    const roles = [
+      { id: userData.profile.role, name: userData.profile.role.replace('_', ' '), icon: userData.profile.role === 'teacher' ? BookOpen : ShieldAlert },
+      { id: userData.profile.secondary_role, name: userData.profile.secondary_role.replace('_', ' '), icon: userData.profile.secondary_role === 'teacher' ? BookOpen : ShieldAlert },
+    ];
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-6">
+        <div className="w-full max-w-2xl space-y-8">
+          <div className="text-center">
+            <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+              Choose your dashboard
+            </h2>
+            <p className="mt-2 text-slate-600 dark:text-slate-400">
+              Select which portal you'd like to use for this session
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {roles.map((role) => (
+              <Button
+                key={role.id}
+                variant="outline"
+                className="h-auto p-8 flex flex-col items-center gap-4 bg-white dark:bg-slate-900 hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-all border-2"
+                onClick={() => handleRoleNavigation(role.id, userData.session.user.id)}
+              >
+                <div className="p-4 bg-blue-100 dark:bg-blue-900/30 rounded-2xl text-blue-600">
+                  {role.id === 'teacher' ? <BookOpen className="h-10 w-10 text-blue-600" /> : <ShieldAlert className="h-10 w-10 text-blue-600" />}
+                </div>
+                <div className="text-center">
+                  <h3 className="text-xl font-bold capitalize">{role.name}</h3>
+                  <p className="text-sm text-slate-500 mt-1">Access the {role.name} features and dashboard</p>
+                </div>
+              </Button>
+            ))}
+          </div>
+
+          <div className="text-center">
+            <Button variant="ghost" className="text-slate-500" onClick={() => setShowRoleSelection(false)}>
+              Back to login
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
+
     setLoading(true);
     try {
-      let emailToUse = values.identifier;
+      const identifier = values.identifier.trim();
+      let emailToUse = identifier;
       
       // If it doesn't look like an email, try to look it up using the unified RPC
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(values.identifier)) {
-        const { data: lookedUpEmail, error: lookupError } = await supabase.rpc('get_email_by_identifier', {
-          p_identifier: values.identifier
+      if (!emailRegex.test(identifier)) {
+        let { data: lookedUpEmail, error: lookupError } = await supabase.rpc('get_email_by_identifier', {
+          p_identifier: identifier
         });
         
         if (lookupError) {
-           throw new Error("Error verifying identifier");
+           console.error("Lookup error:", lookupError);
+        }
+        
+        // Robust Fallback: If unified lookup fails, try specific staff number lookup
+        // This handles cases where the unified migration might not have been applied yet.
+        if (!lookedUpEmail) {
+          const { data: staffEmail } = await supabase.rpc('get_email_by_staff_number', {
+            p_staff_number: identifier
+          });
+          lookedUpEmail = staffEmail;
         }
         
         if (!lookedUpEmail) {
@@ -77,9 +162,11 @@ export default function Login() {
         // Check for temporary password
         const { data: profile, error: profileError } = await supabase
           .from("profiles")
-          .select("role, is_temp_password, temp_password_expires_at")
+          .select("role, secondary_role, is_temp_password, temp_password_expires_at")
           .eq("id", data.session.user.id)
           .single();
+
+
 
         if (profileError) {
           throw profileError;
@@ -110,26 +197,20 @@ export default function Login() {
           description: "Successfully logged in back to your account.",
         });
 
-        // Redirect based on role
-        if (["school_admin", "bursar", "registrar", "exam_officer", "academic_auditor", "accounts", "content_manager"].includes(profile.role)) {
-            navigate("/school-admin");
-        } else {
-            switch (profile.role) {
-            case "system_admin":
-                navigate("/system-admin");
-                break;
-            case "teacher":
-                navigate("/teacher-portal");
-                break;
-            case "student":
-                navigate(`/student-portal/${data.session.user.id}`);
-                break;
-            default:
-                navigate("/");
-            }
+        // Handle dual role selection
+        if (profile.secondary_role && profile.secondary_role !== 'none') {
+            setUserData({ session: data.session, profile });
+            setLoading(false);
+            setShowRoleSelection(true);
+            return;
         }
+
+        // Redirect based on role
+
+        handleRoleNavigation(profile.role, data.session.user.id);
       }
     } catch (error: any) {
+
       toast({
         variant: "destructive",
         title: "Login Failed",
@@ -197,7 +278,11 @@ export default function Login() {
                     name="identifier"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{activeTab === 'student' ? "Email or Student Number" : "Email, Username or Phone"}</FormLabel>
+                        <FormLabel>
+                          {activeTab === 'student' 
+                            ? "Email or Student Number" 
+                            : "Email, Staff Number, Username or Phone"}
+                        </FormLabel>
                         <FormControl>
                           <div className="relative">
                             {activeTab === 'student' ? (
@@ -206,7 +291,9 @@ export default function Login() {
                                <User className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
                             )}
                             <Input 
-                              placeholder={activeTab === 'student' ? "Student Number or Email" : "Email, Username, or Phone"}
+                              placeholder={activeTab === 'student' 
+                                ? "Student Number or Email" 
+                                : "Email, Staff Number, Username, or Phone"}
                               className="pl-10 h-11 bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus-visible:ring-blue-500" 
                               {...field} 
                             />

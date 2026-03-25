@@ -33,8 +33,10 @@ import {
   Save,
   ChevronDown,
   ChevronRight,
-  AlertCircle
+  AlertCircle,
+  ShieldAlert
 } from 'lucide-react';
+
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -667,6 +669,8 @@ export default function TeacherPortal() {
     { id: "settings", label: "Settings", icon: Settings }
   ];
 
+
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950">
@@ -955,7 +959,25 @@ export default function TeacherPortal() {
                     <Settings className="mr-2 h-4 w-4" />
                     <span>Settings</span>
                   </DropdownMenuItem>
+                  
+                  {profile?.role === 'school_admin' || profile?.secondary_role === 'school_admin' ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem 
+                        className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold"
+                        onClick={() => {
+                          window.location.href = '/school-admin';
+                        }}
+                      >
+                        <ShieldAlert className="mr-2 h-4 w-4" />
+                        <span>Switch to Admin Portal</span>
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+
+
                   <DropdownMenuSeparator />
+
                   <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600">
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Log out</span>
@@ -983,6 +1005,8 @@ export default function TeacherPortal() {
                       setActiveTab(item.id);
                       setIsSidebarOpen(false);
                     }}
+
+
                   >
                     <Icon className="h-5 w-5 mr-3" />
                     {item.label}

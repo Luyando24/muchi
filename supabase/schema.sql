@@ -164,6 +164,34 @@ ON classes FOR SELECT USING (
   (is_school_admin() AND school_id = get_my_school_id())
 );
 
+-- Enrollments:
+-- - School Admins can manage enrollments in their school.
+-- - Teachers can view enrollments in their school.
+-- - Students can view their own enrollments.
+
+CREATE POLICY "School Admins manage enrollments" 
+ON enrollments FOR ALL USING (
+  is_school_admin() 
+  AND (
+    SELECT school_id FROM classes WHERE id = class_id
+  ) = get_my_school_id()
+);
+
+CREATE POLICY "Teachers view enrollments" 
+ON enrollments FOR SELECT USING (
+  EXISTS (
+    SELECT 1 FROM profiles 
+    WHERE id = auth.uid() 
+    AND (role = 'teacher' OR role = 'school_admin')
+    AND school_id = (SELECT school_id FROM classes WHERE id = enrollments.class_id)
+  )
+);
+
+CREATE POLICY "Students view own enrollments" 
+ON enrollments FOR SELECT USING (
+  auth.uid() = student_id
+);
+
 -- Functions
 -- Function to handle new user creation trigger (Optional, if using Auth Hooks)
 CREATE OR REPLACE FUNCTION public.handle_new_user() 

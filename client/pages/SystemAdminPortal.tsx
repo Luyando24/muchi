@@ -49,6 +49,8 @@ import GlobalSettings from '@/components/admin/GlobalSettings';
 import SystemDashboard from '@/components/admin/SystemDashboard';
 import SystemAdminNavbar from '@/components/admin/SystemAdminNavbar';
 import GovernmentPortal from '@/pages/GovernmentPortal';
+import { useToast } from "@/components/ui/use-toast";
+import { Loader2, Wrench } from 'lucide-react';
 
 // Mock data for System Admin Portal
 const databaseBackups: any[] = [];
@@ -60,7 +62,9 @@ const systemLogs: any[] = [];
 export default function SystemAdminPortal() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isFixingEnrollments, setIsFixingEnrollments] = useState(false);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const handleLogout = async () => {
     try {
@@ -72,14 +76,50 @@ export default function SystemAdminPortal() {
     }
   };
 
+  const handleFixEnrollments = async () => {
+    setIsFixingEnrollments(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("No active session");
+
+      const response = await fetch('/api/admin/system/fix-class-enrollments', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.message || "Failed to fix enrollments");
+      }
+
+      toast({
+        title: "Maintenance Complete",
+        description: `Successfully resolved ${result.fixedCount} student enrollment mismatches.`,
+      });
+    } catch (error: any) {
+      console.error("Fix enrollments error:", error);
+      toast({
+        title: "Maintenance Failed",
+        description: error.message || "An error occurred during the maintenance task.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsFixingEnrollments(false);
+    }
+  };
+
   const sidebarItems = [
+
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "schools", label: "Schools Management", icon: Building },
     { id: "users", label: "User Directory", icon: Users },
     { id: "infrastructure", label: "Infrastructure", icon: Server },
     { id: "security", label: "Security & Access", icon: Shield },
     { id: "database", label: "Database", icon: Database },
-    { id: "feeding_program", label: "National Feeding", icon: Globe },
     { id: "logs", label: "System Logs", icon: Activity },
     { id: "settings", label: "Global Settings", icon: Settings }
   ];
@@ -404,11 +444,40 @@ export default function SystemAdminPortal() {
                   </Table>
                 </CardContent>
               </Card>
-            </TabsContent>
 
-            {/* National Feeding Portal Tab */}
-            <TabsContent value="feeding_program" className="space-y-6">
-              <GovernmentPortal />
+              <Card className="border-blue-200 shadow-sm dark:border-blue-900/50">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
+                    <Wrench className="h-5 w-5" />
+                    Data Maintenance & Repairs
+                  </CardTitle>
+                  <CardDescription>Run system-wide diagnostic and repair tools</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                    <div>
+                      <h4 className="font-bold text-slate-900 dark:text-white">Fix Mismatched Class Enrollments</h4>
+                      <p className="text-sm text-slate-500 mt-1 max-w-xl">
+                        Scans all students across all schools and repairs missing or incorrect class enrollments caused by spacing/case differences in bulk Excel uploads (e.g., matching "FORM 1T3" to "FORM 1 T3").
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={handleFixEnrollments} 
+                      disabled={isFixingEnrollments}
+                      className="shrink-0 bg-blue-600 hover:bg-blue-700"
+                    >
+                      {isFixingEnrollments ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Running...
+                        </>
+                      ) : (
+                        "Run Diagnostic & Fix"
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             {/* Logs Tab */}

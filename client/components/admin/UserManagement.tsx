@@ -44,7 +44,8 @@ import { supabase } from '@/lib/supabase';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
@@ -57,16 +58,20 @@ const ALL_ADMIN_ROLES = [
   'accounts',
   'content_manager',
   'academic_auditor',
-  'bursar'
+  'bursar',
+  'government'
 ] as const;
+
 
 const userSchema = z.object({
   full_name: z.string().min(2, "Full name is required"),
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters").optional(), // Optional for editing
   role: z.enum(ALL_ADMIN_ROLES),
+  secondary_role: z.string().optional().nullable(),
   school_id: z.string().optional(),
 });
+
 
 const ROLE_OPTIONS = [
   { id: 'system_admin', name: 'System Admin' },
@@ -76,6 +81,7 @@ const ROLE_OPTIONS = [
   { id: 'accounts', name: 'Accounts / Bursar' },
   { id: 'content_manager', name: 'Content Manager' },
   { id: 'academic_auditor', name: 'Academic Auditor' },
+  { id: 'government', name: 'Government Official' },
 ];
 
 interface UserProfile {
@@ -83,10 +89,12 @@ interface UserProfile {
   full_name: string;
   email?: string;
   role: string;
+  secondary_role?: string | null;
   school_id: string | null;
   schools?: { name: string } | null;
   created_at?: string;
 }
+
 
 interface School {
   id: string;
@@ -111,11 +119,23 @@ export default function UserManagement() {
       email: '',
       password: '',
       role: 'school_admin',
+      secondary_role: 'none',
       school_id: 'none',
     },
   });
 
+
   const selectedRole = form.watch('role');
+
+  // Automatically suggest 'teacher' as secondary role for school admins
+  useEffect(() => {
+    if (selectedRole === 'school_admin') {
+      const currentSecondary = form.getValues('secondary_role');
+      if (currentSecondary === 'none' || !currentSecondary) {
+        form.setValue('secondary_role', 'teacher');
+      }
+    }
+  }, [selectedRole, form]);
 
   // Fetch users and schools on mount
   useEffect(() => {
@@ -264,12 +284,15 @@ export default function UserManagement() {
 
   const openEditDialog = (user: UserProfile) => {
     setEditingUser(user);
-    form.reset({
-      full_name: user.full_name,
-      email: user.email || '',
-      role: user.role as any,
-      school_id: user.school_id || 'none',
-    });
+      form.reset({
+        full_name: user.full_name,
+        email: user.email || '',
+        password: '',
+        role: user.role as any,
+        secondary_role: user.secondary_role || 'none',
+        school_id: user.school_id || 'none',
+      });
+
     setIsDialogOpen(true);
   };
 
@@ -280,6 +303,7 @@ export default function UserManagement() {
       email: '',
       password: '',
       role: 'school_admin',
+      secondary_role: 'none',
       school_id: 'none',
     });
     setIsDialogOpen(true);
@@ -363,21 +387,45 @@ export default function UserManagement() {
                   name="role"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Role</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
+                      <FormLabel>Primary Role</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select a role" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {ROLE_OPTIONS.map((option) => (
-                            <SelectItem key={option.id} value={option.id}>
-                              {option.name}
-                            </SelectItem>
+                          {ROLE_OPTIONS.map(role => (
+                            <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="secondary_role"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Secondary Role (Optional)</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || 'none'}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a secondary role" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          <SelectItem value="teacher">Teacher</SelectItem>
+                          <SelectItem value="school_admin">School Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription className="text-xs">
+                        Allow user to switch between portals (e.g. Admin + Teacher).
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -470,6 +518,8 @@ export default function UserManagement() {
                     <span className={`px-2 py-1 rounded text-xs font-medium ${
                         user.role === 'system_admin'
                           ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
+                          : user.role === 'government'
+                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300'
                           : user.role === 'school_admin'
                           ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
                           : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300'

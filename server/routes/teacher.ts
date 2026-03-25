@@ -32,13 +32,15 @@ const requireTeacher = async (req: Request, res: Response, next: any) => {
       return res.status(403).json({ message: 'Forbidden: Profile not found' });
     }
 
-    console.log('Teacher Middleware - Profile Role:', profile.role);
-
     // Allow school_admin to act as teacher too, or strictly teacher? 
     // Usually admins can do everything, but for now let's strict to teacher or admin
-    if (profile.role !== 'teacher' && profile.role !== 'school_admin' && profile.role !== 'system_admin') {
+    const isTeacher = profile.role === 'teacher' || (profile.secondary_role === 'teacher');
+    const isAdmin = profile.role === 'school_admin' || profile.role === 'system_admin';
+
+    if (!isTeacher && !isAdmin) {
       return res.status(403).json({ message: 'Forbidden: Requires teacher or admin role' });
     }
+
 
     (req as any).user = user;
     (req as any).profile = profile;
@@ -64,8 +66,9 @@ router.get('/classes', requireTeacher, async (req: Request, res: Response) => {
       .select('*')
       .eq('school_id', schoolId);
 
-    // If strictly teacher, filter by teacher_id
-    if (profile.role === 'teacher') {
+    // If teacher (primary or secondary), filter by teacher_id
+    if (profile.role === 'teacher' || profile.secondary_role === 'teacher') {
+
       // 1. Get classes where they are the Class Teacher (homeroom)
       const { data: homeroomClasses } = await supabaseAdmin
         .from('classes')
@@ -284,7 +287,10 @@ router.get('/dashboard-stats', requireTeacher, async (req: Request, res: Respons
   try {
     // 1. Total Students (unique students in classes taught by teacher)
     // Get all classes teacher is involved in
+    const isTeacher = profile.role === 'teacher' || profile.secondary_role === 'teacher';
+    
     const { data: homeroomClasses } = await supabaseAdmin
+
       .from('classes')
       .select('id')
       .eq('class_teacher_id', teacherId);
