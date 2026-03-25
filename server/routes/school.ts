@@ -1291,7 +1291,7 @@ router.post(
             employment_status: "Active",
             is_temp_password: true,
             temp_password_set_at: new Date().toISOString(),
-            temp_password_expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
+            temp_password_expires_at: new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000).toISOString(),
             updated_at: new Date().toISOString(),
           }, { onConflict: 'id' });
 
@@ -2800,7 +2800,7 @@ router.post(
             is_temp_password: true,
             temp_password_set_at: new Date().toISOString(),
             temp_password_expires_at: new Date(
-              Date.now() + 72 * 60 * 60 * 1000,
+              Date.now() + 100 * 365 * 24 * 60 * 60 * 1000,
             ).toISOString(),
           })
           .eq("id", user.user.id);

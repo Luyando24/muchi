@@ -27,36 +27,95 @@ const requireGovernmentAccess = async (req: Request, res: Response, next: any) =
 
 // GET /api/government/overview
 router.get('/overview', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const { province, district } = req.query;
   try {
-    const { count: totalSchools } = await supabaseAdmin.from('schools').select('*', { count: 'exact', head: true });
-    
-    const { count: totalStudents } = await supabaseAdmin
-      .from('profiles')
-      .select('*', { count: 'exact', head: true })
-      .eq('role', 'student');
+    // 1. Basic Counts (Filtered by region if provided)
+    let schoolQuery = supabaseAdmin.from('schools').select('*', { count: 'exact', head: true });
+    let studentQuery = supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student');
+    let teacherQuery = supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'teacher');
 
-    const { count: totalTeachers } = await supabaseAdmin
-      .from('profiles')
-      .select('*', { count: 'exact', head: true })
-      .eq('role', 'teacher');
+    if (province) {
+      schoolQuery = schoolQuery.eq('province', province);
+      // For student/teacher, we need to join with schools or filter by school_id
+      const { data: schoolIds } = await supabaseAdmin.from('schools').select('id').eq('province', province);
+      const ids = schoolIds?.map(s => s.id) || [];
+      studentQuery = studentQuery.in('school_id', ids);
+      teacherQuery = teacherQuery.in('school_id', ids);
+    }
+    if (district) {
+      schoolQuery = schoolQuery.eq('district', district);
+      const { data: schoolIds } = await supabaseAdmin.from('schools').select('id').eq('district', district);
+      const ids = schoolIds?.map(s => s.id) || [];
+      studentQuery = studentQuery.in('school_id', ids);
+      teacherQuery = teacherQuery.in('school_id', ids);
+    }
 
-    // Aggregate average attendance (Mock calculation for MVP: 85% - 95%)
-    const avgAttendance = 92.4; 
+    const [
+      { count: totalSchools },
+      { count: totalStudents },
+      { count: totalTeachers }
+    ] = await Promise.all([schoolQuery, studentQuery, teacherQuery]);
 
-    // Aggregate national pass rate
-    const nationalPassRate = 78.5;
+    // 2. Aggregate average attendance (%)
+    let attendanceQuery = supabaseAdmin.from('attendance').select('status');
+    if (province || district) {
+       const { data: schoolIds } = await supabaseAdmin.from('schools').select('id')
+         .match({ ...(province && { province }), ...(district && { district }) });
+       attendanceQuery = attendanceQuery.in('school_id', schoolIds?.map(s => s.id) || []);
+    }
+    const { data: attendanceData } = await attendanceQuery;
+    const totalAttendanceDays = attendanceData?.length || 0;
+    const presentDays = attendanceData?.filter(a => a.status === 'present').length || 0;
+    const avgAttendanceValue = totalAttendanceDays > 0 ? (presentDays / totalAttendanceDays) * 100 : 0;
+
+    // 3. Aggregate national pass rate (%) - Based on average grade percentage
+    let passRateQuery = supabaseAdmin.from('student_grades').select('percentage');
+    if (province || district) {
+      const { data: schoolIds } = await supabaseAdmin.from('schools').select('id')
+        .match({ ...(province && { province }), ...(district && { district }) });
+      passRateQuery = passRateQuery.in('school_id', schoolIds?.map(s => s.id) || []);
+    }
+    const { data: gradeData } = await passRateQuery;
+    const totalGrades = gradeData?.length || 0;
+    const avgPassRate = totalGrades > 0 
+      ? gradeData?.reduce((acc, curr) => acc + curr.percentage, 0) / totalGrades 
+      : 0;
 
     res.json({
       totalSchools: totalSchools || 0,
       totalStudents: totalStudents || 0,
       totalTeachers: totalTeachers || 0,
-      avgAttendance,
-      nationalPassRate
+      avgAttendance: Number(avgAttendanceValue.toFixed(1)),
+      nationalPassRate: Number(avgPassRate.toFixed(1))
     });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
 });
+
+// GET /api/government/regional-stats
+router.get('/regional-stats', requireGovernmentAccess, async (req: Request, res: Response) => {
+  try {
+    // Get schools count per province
+    const { data: rawData, error } = await supabaseAdmin
+      .from('schools')
+      .select('province, id');
+    
+    if (error) throw error;
+
+    const stats = rawData.reduce((acc: any, curr) => {
+      const province = curr.province || 'Unknown';
+      if (!acc[province]) acc[province] = { province, schools: 0 };
+      acc[province].schools += 1;
+      return acc;
+    }, {});
+
+    res.json(Object.values(stats));
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 
 
 // GET /api/government/feeding-program/stats
