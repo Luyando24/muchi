@@ -15,8 +15,8 @@ interface ImportedTeacher {
   name: string;
   email: string;
   phone: string;
-  department: string;
-  subjects: string[];
+  department?: string;
+  subjects?: string[];
   status: 'Pending' | 'Success' | 'Error';
   message?: string;
 }
@@ -33,7 +33,7 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
     const template = [
       { 'Full Name': 'John Smith', 'Email': 'john.smith@school.com', 'Phone': '0971234567', 'Department': 'Science', 'Subjects': 'Biology, Chemistry' },
       { 'Full Name': 'Jane Doe', 'Email': 'jane.doe@school.com', 'Phone': '0967654321', 'Department': 'Mathematics', 'Subjects': 'Algebra, Geometry' },
-      { 'Full Name': 'Robert Brown', 'Email': 'robert.b@school.com', 'Phone': '0955123456', 'Department': 'Languages', 'Subjects': 'English, Literature' },
+      { 'Full Name': 'Robert Brown', 'Email': 'robert.b@school.com', 'Phone': '0955123456', 'Department': '', 'Subjects': '' },
       { 'Full Name': 'Alice White', 'Email': 'alice.w@school.com', 'Phone': '0944987654', 'Department': 'Humanities', 'Subjects': 'History, Geography' },
     ];
     
@@ -92,8 +92,8 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
             name: String(findValue(['Name', 'Teacher Name', 'Full Name']) || '').trim(),
             email: String(findValue(['Email', 'Email Address', 'Mail']) || '').trim(),
             phone: String(findValue(['Phone', 'Phone Number', 'Telephone', 'Contact']) || '').trim(),
-            department: String(findValue(['Department', 'Dept', 'Faculty']) || '').trim(),
-            subjects: subjects,
+            department: String(findValue(['Department', 'Dept', 'Faculty']) || '').trim() || undefined,
+            subjects: subjects.length > 0 ? subjects : undefined,
             status: 'Pending' as const
           };
         }).filter((t: ImportedTeacher) => t.name && String(t.name).trim() !== '');
@@ -302,10 +302,10 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
                                   {teacher.email || <span className="text-slate-400 italic">Auto-generated</span>}
                                 </TableCell>
                                 <TableCell className="text-xs">{teacher.phone || 'N/A'}</TableCell>
-                                <TableCell>{teacher.department}</TableCell>
+                                <TableCell>{teacher.department || '-'}</TableCell>
                                 <TableCell>
                                     <div className="flex flex-wrap gap-1">
-                                        {teacher.subjects.map((s, i) => (
+                                        {teacher.subjects && teacher.subjects.map((s, i) => (
                                             <Badge key={i} variant="secondary" className="text-[10px]">{s}</Badge>
                                         ))}
                                     </div>

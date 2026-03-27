@@ -1306,6 +1306,7 @@ router.post(
         }
 
         // 3. Handle Auth User (Create if doesn't exist)
+        let isNewAuthUser = false;
         if (!existingId) {
           const finalEmail = emailToUse || `${await generateUniqueStaffNumber()}@teacher.muchi.app`;
           
@@ -1324,14 +1325,12 @@ router.post(
           if (userError) {
             // If user already exists in Auth but not linked to a profile with this email
             if (userError.message.includes("already exists")) {
-               // Try to find the user in Auth to get their ID? 
-               // listing users is slow, but for 126 it's doable if needed.
-               // However, usually they should have a profile if they exist in Auth.
                throw new Error(`Email ${finalEmail} is already in use by another user.`);
             }
             throw userError;
           }
           existingId = user.user.id;
+          isNewAuthUser = true;
         }
 
         // 4. Generate Staff Number if missing (for new or existing but migrated users)
@@ -1351,8 +1350,8 @@ router.post(
             staff_number: staffNumber,
             username: teacher.username || null,
             phone_number: teacher.phone || null,
-            department: teacher.department || "",
-            subjects: teacher.subjects || [],
+            department: teacher.department || null,
+            subjects: Array.isArray(teacher.subjects) ? teacher.subjects : [],
             join_date: teacher.joinDate || new Date().toISOString().split("T")[0],
             employment_status: "Active",
             is_temp_password: true,
@@ -1361,7 +1360,14 @@ router.post(
             updated_at: new Date().toISOString(),
           }, { onConflict: 'id' });
 
-        if (profileError) throw profileError;
+        if (profileError) {
+          // 🚨 ROLLBACK: If profile creation fails, delete the "ghost" Auth user we just created
+          if (isNewAuthUser) {
+            console.warn(`[BulkTeacher] Profile creation failed. Rolling back Auth User: ${existingId}`);
+            await supabaseAdmin.auth.admin.deleteUser(existingId);
+          }
+          throw profileError;
+        }
         
         importedCount++;
         results.push({ name: teacher.name, status: "Success" });
