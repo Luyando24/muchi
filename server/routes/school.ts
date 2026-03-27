@@ -296,6 +296,14 @@ export const requireSchoolRole = (allowedRoles: string[]) => {
       (req as any).user = user;
       (req as any).profile = profile;
 
+      // 4. Extra Security: Verify user has a valid school_id
+      if (!profile.school_id && profile.role !== 'system_admin') {
+        return res.status(403).json({ message: "Forbidden: Account not associated with any school." });
+      }
+
+      // 5. Extra Security: Verify current user session is not expired or revoked
+      // Supabase getUser() handles this by verifying the JWT token
+
       // Check for active license
       await requireActiveLicense(req, res, next);
     } catch (error: any) {

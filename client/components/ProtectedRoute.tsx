@@ -16,6 +16,13 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
   const { toast } = useToast();
 
   useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        setAuthorized(false);
+        setLoading(false);
+      }
+    });
+
     const checkAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -62,6 +69,10 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
     };
 
     checkAuth();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [allowedRoles, toast]);
 
   if (loading) {
