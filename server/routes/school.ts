@@ -1045,6 +1045,9 @@ router.post(
         const simplePassword = generateSimplePassword();
         const tempExpiresAt = new Date();
         tempExpiresAt.setHours(tempExpiresAt.getHours() + 72);
+        
+        let isNewAuthUser = false;
+        let createdUserId = null;
 
         const { data: user, error: userError } =
           await supabaseAdmin.auth.admin.createUser({
@@ -1058,14 +1061,22 @@ router.post(
             },
           });
 
-        if (userError) throw userError;
+        if (userError) {
+          if (userError.message.includes("already exists")) {
+            throw new Error(`Email ${emailToUse} is already in use by another user.`);
+          }
+          throw userError;
+        }
+        
+        isNewAuthUser = true;
+        createdUserId = user.user.id;
 
         // 3. Update Profile with extra details (Use UPSERT with onConflict)
-        if (user.user) {
+        if (createdUserId) {
           const { error: profileError } = await supabaseAdmin
             .from("profiles")
             .upsert({
-              id: user.user.id,
+              id: createdUserId,
               school_id: schoolId,
               full_name: student.name,
               email: emailToUse,
@@ -1084,7 +1095,14 @@ router.post(
             }, { onConflict: 'id' });
 
 
-          if (profileError) throw profileError;
+          if (profileError) {
+            // ROLLBACK: If profile creation fails, delete the "ghost" Auth user
+            if (isNewAuthUser) {
+              console.warn(`[BulkStudent] Profile creation failed. Rolling back Auth User: ${createdUserId}`);
+              await supabaseAdmin.auth.admin.deleteUser(createdUserId);
+            }
+            throw profileError;
+          }
 
           // 4. Handle Enrollment (Try to find class by name)
             // Use the robust matching utility
@@ -1096,12 +1114,12 @@ router.post(
               await supabaseAdmin
                 .from("enrollments")
                 .delete()
-                .eq("student_id", user.user.id)
+                .eq("student_id", createdUserId)
                 .eq("academic_year", activeYear);
 
               // 2. Create the new enrollment
               await supabaseAdmin.from("enrollments").insert({
-                student_id: user.user.id,
+                student_id: createdUserId,
                 class_id: classData.id,
                 academic_year: activeYear,
                 status: "Active",
@@ -1111,7 +1129,7 @@ router.post(
               await supabaseAdmin
                 .from("profiles")
                 .update({ grade: classData.name })
-                .eq("id", user.user.id);
+                .eq("id", createdUserId);
             }
 
           importedCount++;
