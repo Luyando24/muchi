@@ -197,8 +197,8 @@ ON enrollments FOR SELECT USING (
 CREATE OR REPLACE FUNCTION public.handle_new_user() 
 RETURNS trigger AS $$
 BEGIN
-  INSERT INTO public.profiles (id, full_name, role, school_id)
-  VALUES (new.id, new.raw_user_meta_data->>'full_name', (new.raw_user_meta_data->>'role')::user_role, (new.raw_user_meta_data->>'school_id')::uuid);
+  INSERT INTO public.profiles (id, full_name, email, role, school_id)
+  VALUES (new.id, new.raw_user_meta_data->>'full_name', new.email, (new.raw_user_meta_data->>'role')::user_role, (new.raw_user_meta_data->>'school_id')::uuid);
   RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
