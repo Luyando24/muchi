@@ -205,6 +205,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Trigger to automatically create profile on signup
 -- Note: This requires the client/backend to pass metadata during signup
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
