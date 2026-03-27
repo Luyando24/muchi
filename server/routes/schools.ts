@@ -105,7 +105,22 @@ router.post('/register', async (req: Request, res: Response) => {
       return res.status(400).json({ message: authError.message });
     }
 
-    // Note: The public.profiles record is handled by the DB trigger on_auth_user_created
+    // --- MANUAL PROFILE CREATION (Fallback for trigger failures) ---
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .upsert({
+        id: authData.user.id,
+        full_name: adminName,
+        email: adminEmail,
+        role: 'school_admin',
+        school_id: school.id
+      }, { onConflict: 'id' });
+
+    if (profileError) {
+      console.warn('[Registration] Manual profile creation fallback failed:', profileError.message);
+      // We don't fail the whole registration if Upsert fails, as the trigger might still work
+    }
+    // ---------------------------------------------------------------
 
     // 4. Create an initial "Standard" license for the school
     const { error: licenseError } = await supabaseAdmin
