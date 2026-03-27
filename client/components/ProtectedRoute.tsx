@@ -33,7 +33,17 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
         }
 
         if (allowedRoles && allowedRoles.length > 0) {
-          // Check user role from profiles table
+          // 1. Try session metadata FIRST since it's faster and guaranteed to be there for new users
+          const metaRole = session.user.user_metadata?.role;
+          const metaSecondaryRole = session.user.user_metadata?.secondary_role;
+
+          let isAuthorized = false;
+
+          if (metaRole && (allowedRoles.includes(metaRole) || (metaSecondaryRole && allowedRoles.includes(metaSecondaryRole)))) {
+             isAuthorized = true;
+          }
+
+          // 2. Double check with DB profile if metadata failed or just to be safe
           const { data: profiles, error } = await supabase
             .from('profiles')
             .select('role, secondary_role')
@@ -41,17 +51,20 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
             .limit(1);
           
           const profile = profiles && profiles.length > 0 ? profiles[0] : null;
-          
-          if (error || !profile) {
-            console.error('Error fetching profile:', error);
-            setLoading(false);
-            return;
+
+          if (profile) {
+            if (allowedRoles.includes(profile.role) || (profile.secondary_role && allowedRoles.includes(profile.secondary_role))) {
+              isAuthorized = true;
+            } else if (isAuthorized) {
+              // If metadata said yes but DB says no, DB wins (role might have been revoked)
+              isAuthorized = false;
+            }
           }
 
-          if (allowedRoles.includes(profile.role) || (profile.secondary_role && allowedRoles.includes(profile.secondary_role))) {
+          if (isAuthorized) {
             setAuthorized(true);
           } else {
-             console.warn(`[ProtectedRoute] Access Denied. User Role: ${profile.role}, Secondary: ${profile.secondary_role}. Allowed: ${allowedRoles.join(', ')}`);
+             console.warn(`[ProtectedRoute] Access Denied. DB Role: ${profile?.role}, Secondary: ${profile?.secondary_role}. Meta Role: ${metaRole}, Meta Secondary: ${metaSecondaryRole}. Allowed: ${allowedRoles.join(', ')}`);
              toast({
               variant: "destructive",
               title: "Access Denied",

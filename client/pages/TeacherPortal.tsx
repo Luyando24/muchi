@@ -308,37 +308,49 @@ export default function TeacherPortal() {
 
       const profile = profiles && profiles.length > 0 ? profiles[0] : null;
 
-      if (!profile) {
-        console.error('Profile not found during checkUser');
-        navigate('/login');
-        return;
+      if (profile) {
+        setProfile(profile);
       }
-
-      setProfile(profile);
 
       // Validation: If user is an admin without a secondary teacher role, 
       // we allow them but they might have limited teaching data.
       // If they are strictly a teacher, we continue.
       // Only redirect if they are neither a teacher nor an admin.
-      const isTeacher = profile.role === 'teacher' || profile.secondary_role === 'teacher';
+      const userRole = profile?.role || user.user_metadata?.role;
+      const userSecondaryRole = profile?.secondary_role || user.user_metadata?.secondary_role;
+
+      const isTeacher = userRole === 'teacher' || userSecondaryRole === 'teacher';
       const adminRoles = ['school_admin', 'bursar', 'registrar', 'exam_officer', 'academic_auditor', 'accounts', 'content_manager', 'system_admin'];
-      const isAdmin = adminRoles.includes(profile.role) ||
-                      (profile.secondary_role && adminRoles.includes(profile.secondary_role));
+      const isAdmin = adminRoles.includes(userRole) ||
+                      (userSecondaryRole && adminRoles.includes(userSecondaryRole));
 
       if (!isTeacher && !isAdmin) {
-        console.warn(`Unauthorized access to teacher portal. Role: ${profile.role}, Secondary: ${profile.secondary_role}. Redirecting...`);
+        console.warn(`Unauthorized access to teacher portal. Role: ${userRole}, Secondary: ${userSecondaryRole}. Redirecting...`);
         navigate('/login');
         return;
       }
 
       await fetchDashboardData();
+      
       // 6. Timetable
-      const timetableData = await fetchWithAuth('/api/teacher/timetable');
-      setTimetable(timetableData);
+      try {
+        const timetableData = await fetchWithAuth('/api/teacher/timetable');
+        setTimetable(timetableData);
+      } catch (e) {
+        console.error('Failed to fetch timetable', e);
+      }
 
     } catch (error) {
       console.error('Error checking user:', error);
-      navigate('/login');
+      toast({
+        variant: "destructive",
+        title: "Session Error",
+        description: "There was a problem loading your session. Please try logging in again.",
+      });
+      // Only redirect if it's truly an auth failure, not an API data failure
+      if (error instanceof Error && (error.message.includes('No session') || error.message.includes('Unauthorized'))) {
+        navigate('/login');
+      }
     }
   };
 
