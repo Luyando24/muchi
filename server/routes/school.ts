@@ -9,6 +9,61 @@ const router = Router();
 
 // --- PUBLIC ENDPOINTS ---
 
+// POST /api/school/teacher/reset-password
+// Allows a teacher to reset their own password by providing their Email and Staff Number
+router.post("/teacher/reset-password", async (req: Request, res: Response) => {
+  const { email, staffNumber, newPassword } = req.body;
+
+  if (!email || !staffNumber || !newPassword) {
+    return res.status(400).json({ message: "Email, Staff Number, and New Password are required." });
+  }
+
+  if (newPassword.length < 8) {
+    return res.status(400).json({ message: "Password must be at least 8 characters." });
+  }
+
+  try {
+    // 1. Verify that the email and staff number match a profile
+    // We join with auth.users to be sure the email is the one used for auth
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .select("id, role, email")
+      .eq("email", email)
+      .eq("staff_number", staffNumber)
+      .maybeSingle();
+
+    if (profileError) {
+      console.error("Profile lookup error:", profileError);
+      return res.status(500).json({ message: "Internal server error during verification." });
+    }
+
+    if (!profile) {
+      return res.status(404).json({ message: "Account not found. Please verify your Email and Staff Number." });
+    }
+
+    if (profile.role !== 'teacher') {
+       // Optional: Restrict this direct reset to teachers only?
+       // The requirement says "allow teachers to reset own password"
+       return res.status(403).json({ message: "Direct reset is only available for Teacher accounts." });
+    }
+
+    // 2. Update the password using admin privileges
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(profile.id, {
+      password: newPassword
+    });
+
+    if (updateError) {
+      console.error("Password update error:", updateError);
+      return res.status(500).json({ message: "Failed to update password: " + updateError.message });
+    }
+
+    res.json({ message: "Password reset successful. You can now log in with your new password." });
+  } catch (error: any) {
+    console.error("Teacher Password Reset Error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
 // POST /api/school/public-register
 router.post("/public-register", async (req: Request, res: Response) => {
   const { name, email, password, grade, schoolSlug } = req.body;

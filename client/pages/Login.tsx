@@ -15,10 +15,12 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Loader2, GraduationCap, Lock, Mail, ArrowRight, User, BookOpen, ShieldAlert } from "lucide-react";
+import { Loader2, GraduationCap, Lock, Mail, ArrowRight, User, BookOpen, ShieldAlert, KeyRound } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 const formSchema = z.object({
   identifier: z.string().min(1, "Email, Username, Phone, or Student Number is required"),
@@ -33,9 +35,58 @@ export default function Login() {
   const [activeTab, setActiveTab] = useState<UserRole>("student");
   const [showRoleSelection, setShowRoleSelection] = useState(false);
   const [userData, setUserData] = useState<{ session: any; profile: any } | null>(null);
+  
+  // Teacher Password Reset State
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetStaffNumber, setResetStaffNumber] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+
   const navigate = useNavigate();
 
   const { toast } = useToast();
+
+  const handleTeacherReset = async () => {
+    if (!resetEmail || !resetStaffNumber || !resetNewPassword) {
+      toast({ title: "Error", description: "Please fill in all fields.", variant: "destructive" });
+      return;
+    }
+
+    if (resetNewPassword.length < 8) {
+      toast({ title: "Error", description: "Password must be at least 8 characters.", variant: "destructive" });
+      return;
+    }
+
+    setIsResetting(true);
+    try {
+      const response = await fetch('/api/school/teacher/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: resetEmail,
+          staffNumber: resetStaffNumber,
+          newPassword: resetNewPassword
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to reset password');
+      }
+
+      toast({ title: "Success", description: data.message });
+      setShowResetDialog(false);
+      setResetEmail('');
+      setResetStaffNumber('');
+      setResetNewPassword('');
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -144,9 +195,21 @@ export default function Login() {
         }
         
         if (!lookedUpEmail) {
-          throw new Error("Account not found for this identifier");
+          throw new Error("User account not found for this identifier. Please check your " + 
+            (activeTab === 'student' ? "Student Number" : "Staff Number/Username") + ".");
         }
         emailToUse = lookedUpEmail;
+      } else {
+        // If it IS an email, verify if it exists in profiles
+        const { data: profileExists, error: profileCheckError } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('email', identifier)
+          .maybeSingle();
+        
+        if (!profileExists) {
+          throw new Error("No account found with this email address.");
+        }
       }
 
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -155,6 +218,9 @@ export default function Login() {
       });
 
       if (error) {
+        if (error.message.toLowerCase().includes('invalid login credentials')) {
+          throw new Error("Incorrect password. Please try again or reset your password.");
+        }
         throw error;
       }
 
@@ -357,22 +423,48 @@ export default function Login() {
                     </Link>
                   </div>
 
-                  <Button 
-                    type="submit" 
-                    className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-medium transition-all shadow-md hover:shadow-lg" 
-                    disabled={loading}
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Signing in...
-                      </>
-                    ) : (
-                      <span className="flex items-center justify-center gap-2">
-                        Sign In <ArrowRight className="h-4 w-4" />
-                      </span>
+                  {activeTab === 'teacher' && (
+                    <div className="flex justify-end -mt-3 mb-2">
+                      <Button 
+                        type="button" 
+                        variant="link" 
+                        className="p-0 h-auto text-xs text-slate-500 hover:text-blue-600"
+                        onClick={() => setShowResetDialog(true)}
+                      >
+                        <KeyRound className="h-3 w-3 mr-1" /> Direct Password Reset
+                      </Button>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-3">
+                    <Button 
+                      type="submit" 
+                      className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-medium transition-all shadow-md hover:shadow-lg" 
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Signing in...
+                        </>
+                      ) : (
+                        <span className="flex items-center justify-center gap-2">
+                          Sign In <ArrowRight className="h-4 w-4" />
+                        </span>
+                      )}
+                    </Button>
+
+                    {activeTab === 'teacher' && (
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        className="w-full h-11 border-blue-200 text-blue-600 hover:bg-blue-50"
+                        onClick={() => navigate('/teacher/register')}
+                      >
+                        New Teacher? Register Here
+                      </Button>
                     )}
-                  </Button>
+                  </div>
                 </form>
               </Form>
 
@@ -392,6 +484,68 @@ export default function Login() {
             © {new Date().getFullYear()} MUCHI Systems
           </div>
       </div>
+
+      <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5 text-blue-600" />
+              Teacher Password Reset
+            </DialogTitle>
+            <DialogDescription>
+              Reset your password directly by providing your registered details. No email link required.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="reset-email">Registered Email</Label>
+              <Input 
+                id="reset-email" 
+                type="email" 
+                placeholder="teacher@school.edu" 
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reset-staff">Staff Number / Teacher ID</Label>
+              <Input 
+                id="reset-staff" 
+                placeholder="Enter your Staff ID" 
+                value={resetStaffNumber}
+                onChange={(e) => setResetStaffNumber(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reset-password">New Password</Label>
+              <Input 
+                id="reset-password" 
+                type="password" 
+                placeholder="Min 8 characters" 
+                value={resetNewPassword}
+                onChange={(e) => setResetNewPassword(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowResetDialog(false)}>Cancel</Button>
+            <Button 
+              className="bg-blue-600 hover:bg-blue-700" 
+              onClick={handleTeacherReset}
+              disabled={isResetting}
+            >
+              {isResetting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Resetting...
+                </>
+              ) : (
+                "Reset Password"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

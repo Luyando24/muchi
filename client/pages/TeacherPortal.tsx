@@ -219,6 +219,11 @@ export default function TeacherPortal() {
   const [isGradingOpen, setIsGradingOpen] = useState(false);
   const [gradingSubmissions, setGradingSubmissions] = useState<any[]>([]); // Using any for joined structure
 
+  // Password Reset State
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+
   useEffect(() => {
     checkUser();
   }, []);
@@ -228,6 +233,59 @@ export default function TeacherPortal() {
       fetchStudentsAndAttendance();
     }
   }, [selectedClassId, selectedDate]);
+
+  const handleUpdatePassword = async () => {
+    if (!newPassword || !confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Please fill in all fields.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Passwords do not match.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      toast({
+        title: "Error",
+        description: "Password must be at least 8 characters.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsResettingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Password updated successfully."
+      });
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update password.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
 
   const checkUser = async () => {
     try {
@@ -1977,6 +2035,53 @@ export default function TeacherPortal() {
                     </div>
                     <ThemeToggle />
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Lock className="h-5 w-5 text-blue-600" />
+                    <CardTitle>Security</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4 max-w-md">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-password">New Password</Label>
+                    <Input
+                      id="new-password"
+                      type="password"
+                      placeholder="Enter new password (8+ characters)"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-password">Confirm New Password</Label>
+                    <Input
+                      id="confirm-password"
+                      type="password"
+                      placeholder="Confirm your new password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                    />
+                  </div>
+                  <Button 
+                    className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 mt-2" 
+                    onClick={handleUpdatePassword}
+                    disabled={isResettingPassword}
+                  >
+                    {isResettingPassword ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Updating...
+                      </>
+                    ) : (
+                      <>
+                        Update Password
+                      </>
+                    )}
+                  </Button>
                 </CardContent>
               </Card>
             </TabsContent>
