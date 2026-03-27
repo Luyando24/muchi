@@ -52,14 +52,26 @@ export default function SystemAdminLogin() {
 
       if (data.session) {
         // Fetch user profile to determine role
-        const { data: profile, error: profileError } = await supabase
+        const { data: profiles, error: profileError } = await supabase
           .from("profiles")
           .select("role")
           .eq("id", data.session.user.id)
-          .single();
+          .limit(1);
 
         if (profileError) {
           throw profileError;
+        }
+
+        const profile = profiles && profiles.length > 0 ? profiles[0] : null;
+
+        if (!profile) {
+          await supabase.auth.signOut();
+          toast({
+            variant: "destructive",
+            title: "Access Denied",
+            description: "Account profile not found.",
+          });
+          return;
         }
 
         // Strictly check for system_admin role

@@ -267,12 +267,13 @@ export const requireSchoolRole = (allowedRoles: string[]) => {
       }
 
       // Check role in profiles table
-      const { data: profile, error: profileError } = await supabaseAdmin
+      const { data: profiles, error: profileError } = await supabaseAdmin
         .from("profiles")
         .select("id, role, secondary_role, school_id") 
         .eq("id", user.id)
-        .single();
+        .limit(1);
 
+      const profile = profiles && profiles.length > 0 ? profiles[0] : null;
 
       if (profileError || !profile) {
         return res

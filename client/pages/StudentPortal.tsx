@@ -90,14 +90,16 @@ export default function StudentPortal() {
       }
 
       // Fetch student profile
-      const { data: profile } = await offlineQuery(
+      const { data: profiles } = await offlineQuery(
         supabase
           .from('profiles')
           .select('*')
           .eq('id', studentId)
-          .single(),
+          .limit(1),
         `student-profile:${studentId}`
       );
+
+      const profile = profiles && profiles.length > 0 ? profiles[0] : null;
 
       if (!profile) throw new Error('Profile not found');
       

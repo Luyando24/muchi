@@ -297,14 +297,16 @@ export default function TeacherPortal() {
       setUser(user);
 
       // Fetch Profile
-      const { data: profile } = await offlineQuery(
+      const { data: profiles } = await offlineQuery(
         supabase
           .from('profiles')
           .select('*, schools(*)')
           .eq('id', user.id)
-          .single(),
+          .limit(1),
         `profile:${user.id}`
       );
+
+      const profile = profiles && profiles.length > 0 ? profiles[0] : null;
 
       setProfile(profile);
 

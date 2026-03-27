@@ -10,7 +10,19 @@ DROP TABLE IF EXISTS schools CASCADE;
 DROP TYPE IF EXISTS user_role CASCADE;
 
 -- 1. Create User Roles Enum
-CREATE TYPE user_role AS ENUM ('system_admin', 'school_admin', 'teacher', 'student');
+CREATE TYPE user_role AS ENUM (
+  'system_admin', 
+  'school_admin', 
+  'teacher', 
+  'student',
+  'bursar',
+  'registrar',
+  'exam_officer',
+  'academic_auditor',
+  'accounts',
+  'content_manager',
+  'government'
+);
 
 -- 2. Create Schools Table
 CREATE TABLE schools (
@@ -34,6 +46,9 @@ CREATE TABLE profiles (
   school_id UUID REFERENCES schools(id) ON DELETE CASCADE, -- Null for System Admins
   full_name TEXT,
   email TEXT,
+  secondary_role user_role, -- For users with multiple roles (e.g., teacher who is also school admin)
+  is_temp_password BOOLEAN DEFAULT FALSE, -- To force password change on next login
+  temp_password_expires_at TIMESTAMPTZ, -- Expiration for temporary passwords
   avatar_url TEXT,
   gender TEXT CHECK (gender IN ('Male', 'Female', 'Other')),
   date_of_birth DATE,

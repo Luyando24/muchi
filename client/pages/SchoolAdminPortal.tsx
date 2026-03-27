@@ -61,12 +61,12 @@ export default function SchoolAdminPortal() {
         if (!session) return;
 
         // Fetch user role
-        const { data: profile } = await supabase
+        const { data: profiles } = await supabase
           .from('profiles')
           .select('role')
           .eq('id', session.user.id)
-          .single();
-        if (profile) setUserRole(profile.role);
+          .limit(1);
+        if (profiles && profiles.length > 0) setUserRole(profiles[0].role);
 
         const headers = { Authorization: `Bearer ${session.access_token}` };
 

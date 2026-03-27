@@ -162,38 +162,44 @@ export default function Login() {
         if (error.message.toLowerCase().includes('invalid login credentials')) {
           // If it's an email login, try to check if the account exists in profiles to be specific
           if (emailRegex.test(identifier)) {
-            const { data: profileExists } = await supabase
-              .from('profiles')
-              .select('id')
-              .eq('email', identifier)
-              .maybeSingle();
-            
-            if (!profileExists) {
-              throw new Error("No account found with this email address. Please check your spelling or register.");
-            }
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('email', identifier)
+            .limit(1);
+          
+          if (!profiles || profiles.length === 0) {
+            throw new Error("No account found with this email address. Please check your spelling or register.");
           }
-          // If profile exists or it was a Staff/Student ID lookup, it's definitely a wrong password
-          throw new Error("Incorrect password. Please try again or reset your password.");
+        }
+        // If profile exists or it was a Staff/Student ID lookup, it's definitely a wrong password
+        throw new Error("Incorrect password. Please try again or reset your password.");
         }
         throw error;
       }
 
       if (data.session) {
-        // Check for temporary password
-        const { data: profile, error: profileError } = await supabase
+        // Check for temporary password. Use maybeSingle() to avoid 406 errors
+        // if there are multiple profiles for some reason, and we'll just take the first one.
+        const { data: profileData, error: profileError } = await supabase
           .from("profiles")
           .select("role, secondary_role, is_temp_password, temp_password_expires_at")
-          .eq("id", data.session.user.id)
-          .single();
-
-
+          .eq("id", data.session.user.id);
 
         if (profileError) {
           throw profileError;
         }
 
+        const profile = profileData && profileData.length > 0 ? profileData[0] : null;
+
+        if (!profile) {
+           // If the auth user exists but the profile is missing (e.g., due to database reset)
+           await supabase.auth.signOut();
+           throw new Error("Your account profile is missing or was deleted. Please contact your system administrator.");
+        }
+
         // Handle temporary password expiration
-        if (profile.is_temp_password) {
+        if (profile.is_temp_password && profile.temp_password_expires_at) {
           const expiresAt = new Date(profile.temp_password_expires_at);
           const now = new Date();
 

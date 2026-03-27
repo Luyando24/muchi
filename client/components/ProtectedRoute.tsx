@@ -27,11 +27,13 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
 
         if (allowedRoles && allowedRoles.length > 0) {
           // Check user role from profiles table
-          const { data: profile, error } = await supabase
+          const { data: profiles, error } = await supabase
             .from('profiles')
             .select('role, secondary_role')
             .eq('id', session.user.id)
-            .single();
+            .limit(1);
+          
+          const profile = profiles && profiles.length > 0 ? profiles[0] : null;
           
           if (error || !profile) {
             console.error('Error fetching profile:', error);
