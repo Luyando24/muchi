@@ -2,8 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { supabase } from "@/lib/supabase";
-import { Link } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,45 +14,63 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Loader2, ArrowLeft, GraduationCap, Mail } from "lucide-react";
+import { Loader2, ArrowLeft, GraduationCap, Mail, KeyRound, User } from "lucide-react";
 
 const formSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
+  staffNumber: z.string().min(1, "Staff Number is required"),
+  newPassword: z.string().min(8, "Password must be at least 8 characters"),
+  confirmPassword: z.string().min(8, "Please confirm your password"),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"],
 });
 
 export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       email: "",
+      staffNumber: "",
+      newPassword: "",
+      confirmPassword: "",
     },
   });
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(values.email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      const response = await fetch('/api/school/teacher/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: values.email,
+          staffNumber: values.staffNumber,
+          newPassword: values.newPassword
+        })
       });
 
-      if (error) {
-        throw error;
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to reset password');
       }
 
       setSubmitted(true);
       toast({
-        title: "Reset link sent",
-        description: "Check your email for the password reset link.",
+        title: "Success",
+        description: data.message,
       });
     } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message || "Failed to send reset link",
+        description: error.message || "Failed to reset password",
       });
     } finally {
       setLoading(false);
@@ -81,10 +98,10 @@ export default function ForgotPassword() {
           
           <div className="space-y-6 max-w-md">
             <h1 className="text-4xl font-bold leading-tight">
-              Forgot your password?
+              Reset your password
             </h1>
             <p className="text-slate-400 text-lg">
-              Don't worry, it happens. We'll help you get back into your account in no time.
+              Don't worry, it happens. Provide your registered details to set a new password instantly.
             </p>
           </div>
         </div>
@@ -111,12 +128,12 @@ export default function ForgotPassword() {
               </div>
             </div>
             <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
-              Reset Password
+              Direct Reset
             </h2>
             <p className="mt-2 text-slate-600 dark:text-slate-400">
               {submitted 
-                ? "Check your email for the reset link" 
-                : "Enter your email to receive a reset link"}
+                ? "Your password has been reset successfully" 
+                : "Enter your registered details to reset your password instantly"}
             </p>
           </div>
 
@@ -124,14 +141,11 @@ export default function ForgotPassword() {
             {submitted ? (
               <div className="text-center space-y-6">
                 <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg text-green-700 dark:text-green-300 text-sm">
-                  We have sent a password reset link to <span className="font-semibold">{form.getValues().email}</span>. Please check your inbox and spam folder.
+                  Your password has been reset. You can now log in with your new password.
                 </div>
-                <Link to="/login">
-                  <Button variant="outline" className="w-full h-11 gap-2">
-                    <ArrowLeft className="h-4 w-4" />
-                    Back to Login
-                  </Button>
-                </Link>
+                <Button onClick={() => navigate('/login')} className="w-full h-11 bg-blue-600 hover:bg-blue-700">
+                  Go to Login
+                </Button>
               </div>
             ) : (
               <Form {...form}>
@@ -141,12 +155,77 @@ export default function ForgotPassword() {
                     name="email"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Email Address</FormLabel>
+                        <FormLabel>Registered Email</FormLabel>
                         <FormControl>
                           <div className="relative">
                             <Mail className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
                             <Input 
                               placeholder="name@school.com" 
+                              className="pl-10 h-11 bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus-visible:ring-blue-500" 
+                              {...field} 
+                            />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="staffNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Staff Number / Teacher ID</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <User className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
+                            <Input 
+                              placeholder="Enter your Staff ID" 
+                              className="pl-10 h-11 bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus-visible:ring-blue-500" 
+                              {...field} 
+                            />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="newPassword"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>New Password</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <KeyRound className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
+                            <Input 
+                              type="password"
+                              placeholder="Min 8 characters" 
+                              className="pl-10 h-11 bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus-visible:ring-blue-500" 
+                              {...field} 
+                            />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="confirmPassword"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Confirm New Password</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <KeyRound className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
+                            <Input 
+                              type="password"
+                              placeholder="Confirm your password" 
                               className="pl-10 h-11 bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus-visible:ring-blue-500" 
                               {...field} 
                             />
@@ -165,10 +244,10 @@ export default function ForgotPassword() {
                     {loading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Sending Link...
+                        Resetting Password...
                       </>
                     ) : (
-                      "Send Reset Link"
+                      "Reset Password"
                     )}
                   </Button>
 
