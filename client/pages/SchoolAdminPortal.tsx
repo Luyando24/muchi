@@ -77,7 +77,14 @@ export default function SchoolAdminPortal() {
         });
 
         if (response.status === 403) {
-          setLicenseError("Your school license has expired or is invalid.");
+          // If 403, it could be license or role/profile issues
+          // Let's try a GET to get the error message
+          const getRes = await fetch('/api/school/dashboard', {
+            method: 'GET',
+            headers
+          });
+          const errorData = await getRes.json().catch(() => ({ message: "Your school license has expired or is invalid." }));
+          setLicenseError(errorData.message || "Your school license has expired or is invalid.");
         }
 
         // 2. Pre-fetch School Settings (Foundation for all other data)

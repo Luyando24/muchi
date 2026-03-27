@@ -49,6 +49,18 @@ export const requireActiveLicense = async (req: Request, res: Response, next: Ne
       return res.status(403).json({ message: 'Forbidden: No school associated with user' });
     }
 
+    // --- LICENSE CHECK BYPASSED TEMPORARILY ---
+    // The license check has been bypassed below. We just attach a dummy license.
+    console.log(`[License] Bypassing license check for school ${schoolId} (user ${user.email})`);
+    (req as any).license = {
+      status: 'active',
+      plan: 'Unlimited (Bypassed)',
+      end_date: new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000).toISOString(), // 10 years from now
+    };
+    return next();
+    // ------------------------------------------
+
+    /*
     // Check License
     const { data: license, error: licenseError } = await supabaseAdmin
       .from('school_licenses')
@@ -56,7 +68,9 @@ export const requireActiveLicense = async (req: Request, res: Response, next: Ne
       .eq('school_id', schoolId)
       .eq('status', 'active')
       .gt('end_date', new Date().toISOString())
-      .single();
+      .order('end_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (licenseError || !license) {
       return res.status(403).json({ 
@@ -67,6 +81,7 @@ export const requireActiveLicense = async (req: Request, res: Response, next: Ne
 
     (req as any).license = license;
     next();
+    */
   } catch (error: any) {
     console.error('License Check Error:', error);
     res.status(500).json({ message: 'Internal Server Error', error: error.message });

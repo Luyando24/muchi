@@ -34,14 +34,29 @@ export const syncFetch = async (url: string, options: SyncOptions = {}) => {
         const data = await response.json();
         await db.cache.put({ url: cacheKey, data, timestamp: Date.now() });
         return data;
+      } else {
+        // Server responded with an error (e.g. 403, 500)
+        console.warn(`Server responded with ${response.status} for ${url}`);
+        
+        // Try to get from cache as a fallback even for non-network errors
+        const cached = await db.cache.get(cacheKey);
+        if (cached) {
+          console.log('Serving from cache after server error:', cacheKey);
+          return cached.data;
+        }
+
+        const errorData = await response.json().catch(() => ({ message: `HTTP Error ${response.status}` }));
+        throw new Error(errorData.message || `Server error: ${response.status}`);
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error.message.includes('Server error') || error.message.includes('HTTP Error')) {
+        throw error;
+      }
       console.warn('Network error, falling back to cache...', error);
       const cached = await db.cache.get(cacheKey);
       if (cached) return cached.data;
+      throw new Error(`No connection and no cached data available: ${error.message}`);
     }
-
-    throw new Error('No connection and no cached data available.');
   }
 
   // POST/PUT/DELETE Requests: Queue and Sync

@@ -5,10 +5,12 @@ import {
   Trash2, 
   Loader2, 
   Search,
-  Key
+  Key,
+  FileSpreadsheet
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import * as XLSX from 'xlsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -210,6 +212,49 @@ export default function SchoolDetails({ schoolId, schoolName, onBack }: SchoolDe
     }
   };
 
+  const handleExportToExcel = () => {
+    if (teachers.length === 0) {
+      toast({
+        title: "No data to export",
+        description: "There are no teacher records available for export.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      // Prepare data for export
+      const exportData = teachers.map(teacher => ({
+        'Full Name': teacher.full_name,
+        'Email': teacher.email || 'N/A',
+        'Staff Number': teacher.staff_number || 'PENDING',
+        'Status': teacher.employment_status,
+        'Joined Date': new Date(teacher.created_at).toLocaleDateString()
+      }));
+
+      // Create worksheet
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Teachers Directory");
+
+      // Generate file and trigger download
+      const fileName = `${schoolName.replace(/\s+/g, '_')}_Teachers_Directory.xlsx`;
+      XLSX.writeFile(wb, fileName);
+
+      toast({
+        title: "Export Successful",
+        description: `Teacher directory has been exported to ${fileName}`,
+      });
+    } catch (error: any) {
+      console.error('Export error:', error);
+      toast({
+        title: "Export Failed",
+        description: error.message || "An error occurred while exporting the data.",
+        variant: "destructive"
+      });
+    }
+  };
+
   const filteredTeachers = teachers.filter(t => 
     t.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (t.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -267,14 +312,24 @@ export default function SchoolDetails({ schoolId, schoolName, onBack }: SchoolDe
               <CardTitle>Staff Records</CardTitle>
               <CardDescription>Manage permanent teacher accounts for this institution.</CardDescription>
             </div>
-            <div className="relative w-full md:w-80">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <Input
-                placeholder="Search by name, email or staff #..."
-                className="pl-10 bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus-visible:ring-blue-500"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
+              <div className="relative w-full md:w-80">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  placeholder="Search by name, email or staff #..."
+                  className="pl-10 bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus-visible:ring-blue-500"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <Button 
+                variant="outline" 
+                onClick={handleExportToExcel}
+                className="w-full md:w-auto border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold"
+              >
+                <FileSpreadsheet className="h-4 w-4 mr-2 text-green-600" />
+                Export to Excel
+              </Button>
             </div>
           </div>
         </CardHeader>

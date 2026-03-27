@@ -276,12 +276,14 @@ export const requireSchoolRole = (allowedRoles: string[]) => {
       const profile = profiles && profiles.length > 0 ? profiles[0] : null;
 
       if (profileError || !profile) {
+        console.error(`[Auth] Forbidden: Profile not found for UID ${user.id}`);
         return res
           .status(403)
           .json({ message: "Forbidden: Profile not found" });
       }
 
       if (!allowedRoles.includes(profile.role) && (!profile.secondary_role || !allowedRoles.includes(profile.secondary_role))) {
+        console.error(`[Auth] Forbidden: Role mismatch for UID ${user.id}. Role: ${profile.role}, Allowed: ${allowedRoles}`);
         return res
           .status(403)
           .json({
