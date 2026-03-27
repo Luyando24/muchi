@@ -199,6 +199,18 @@ export default function Login() {
             (activeTab === 'student' ? "Student Number" : "Staff Number/Username") + ".");
         }
         emailToUse = lookedUpEmail;
+      } else {
+        // If it's an email, check if it exists in profiles to provide specific error
+        // Note: This relies on the profiles.email column being populated
+        const { data: profileExists } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('email', identifier)
+          .maybeSingle();
+        
+        if (!profileExists) {
+          throw new Error("No account found with this email address. Please check your spelling or register.");
+        }
       }
 
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -208,7 +220,8 @@ export default function Login() {
 
       if (error) {
         if (error.message.toLowerCase().includes('invalid login credentials')) {
-          throw new Error("Incorrect " + (emailRegex.test(identifier) ? "email" : "password") + ". Please try again or reset your password.");
+          // Since we already verified the account exists above, this must be a wrong password
+          throw new Error("Incorrect password. Please try again or reset your password.");
         }
         throw error;
       }
