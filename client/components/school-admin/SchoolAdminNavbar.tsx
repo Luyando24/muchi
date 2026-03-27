@@ -461,20 +461,16 @@ export default function SchoolAdminNavbar({
                   <span>Settings</span>
                 </DropdownMenuItem>
 
-                {displayUser.role === 'teacher' || displayUser.secondaryRole === 'teacher' ? (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem 
-                      className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold"
-                      onClick={() => {
-                        window.location.href = '/teacher-portal';
-                      }}
-                    >
-                      <GraduationCap className="mr-2 h-4 w-4" />
-                      <span>Switch to Teacher Portal</span>
-                    </DropdownMenuItem>
-                  </>
-                ) : null}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold"
+                  onClick={() => {
+                    window.location.href = '/teacher-portal';
+                  }}
+                >
+                  <GraduationCap className="mr-2 h-4 w-4" />
+                  <span>Switch to Teacher Portal</span>
+                </DropdownMenuItem>
 
                 <div className="sm:hidden px-2 py-1.5 flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-800 rounded-sm">
                   <div className="flex items-center">

@@ -308,11 +308,29 @@ export default function TeacherPortal() {
 
       const profile = profiles && profiles.length > 0 ? profiles[0] : null;
 
+      if (!profile) {
+        console.error('Profile not found during checkUser');
+        navigate('/login');
+        return;
+      }
+
       setProfile(profile);
 
-      if (profile) {
-        await fetchDashboardData();
+      // Validation: If user is an admin without a secondary teacher role, 
+      // we allow them but they might have limited teaching data.
+      // If they are strictly a teacher, we continue.
+      // Only redirect if they are neither a teacher nor an admin.
+      const isTeacher = profile.role === 'teacher' || profile.secondary_role === 'teacher';
+      const isAdmin = ['school_admin', 'bursar', 'registrar', 'exam_officer', 'academic_auditor', 'accounts', 'content_manager'].includes(profile.role) ||
+                      (profile.secondary_role && ['school_admin', 'bursar', 'registrar', 'exam_officer', 'academic_auditor', 'accounts', 'content_manager'].includes(profile.secondary_role));
+
+      if (!isTeacher && !isAdmin) {
+        console.warn('Unauthorized access to teacher portal. Redirecting...');
+        navigate('/login');
+        return;
       }
+
+      await fetchDashboardData();
       // 6. Timetable
       const timetableData = await fetchWithAuth('/api/teacher/timetable');
       setTimetable(timetableData);
@@ -1020,7 +1038,8 @@ export default function TeacherPortal() {
                     <span>Settings</span>
                   </DropdownMenuItem>
                   
-                  {profile?.role === 'school_admin' || profile?.secondary_role === 'school_admin' ? (
+                  {['school_admin', 'bursar', 'registrar', 'exam_officer', 'academic_auditor', 'accounts', 'content_manager'].includes(profile?.role) || 
+                   ['school_admin', 'bursar', 'registrar', 'exam_officer', 'academic_auditor', 'accounts', 'content_manager'].includes(profile?.secondary_role) ? (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem 

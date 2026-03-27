@@ -85,7 +85,7 @@ const App = () => {
               </ProtectedRoute>
             } />
             <Route path="/teacher-portal" element={
-              <ProtectedRoute allowedRoles={['teacher']}>
+              <ProtectedRoute allowedRoles={['teacher', 'school_admin', 'bursar', 'registrar', 'exam_officer', 'academic_auditor', 'accounts', 'content_manager']}>
                 <TeacherPortal />
               </ProtectedRoute>
             } />

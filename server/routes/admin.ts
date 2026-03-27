@@ -410,22 +410,16 @@ router.put('/users/:id', requireSystemAdmin, async (req: Request, res: Response)
   const { email, password, full_name, role, secondary_role, school_id } = req.body;
 
   try {
-    const updateData: any = {
+    const { data: user, error: authError } = await supabaseAdmin.auth.admin.updateUserById(id, {
       email,
+      password: (password && password.length > 0) ? password : undefined,
       user_metadata: {
         full_name,
         role,
-        secondary_role,
+        secondary_role: (secondary_role && secondary_role !== 'none') ? secondary_role : (role === 'school_admin' ? 'teacher' : null),
         school_id: school_id === 'none' ? null : school_id
       }
-    };
-
-    if (password && password.length > 0) {
-      updateData.password = password;
-    }
-
-    // 1. Update Auth User
-    const { data: user, error: authError } = await supabaseAdmin.auth.admin.updateUserById(id, updateData);
+    });
 
     if (authError) throw authError;
 
@@ -434,6 +428,7 @@ router.put('/users/:id', requireSystemAdmin, async (req: Request, res: Response)
       .from('profiles')
       .update({
         full_name,
+        email,
         role,
         secondary_role: (secondary_role && secondary_role !== 'none') ? secondary_role : (role === 'school_admin' ? 'teacher' : null),
         school_id: school_id === 'none' ? null : school_id,
