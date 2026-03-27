@@ -15,6 +15,7 @@ import SystemAdminLogin from "./pages/SystemAdminLogin";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import ForcePasswordReset from "./pages/ForcePasswordReset";
+import SchoolRegister from "./pages/SchoolRegister";
 import NotFound from "./pages/NotFound";
 import StudentPortal from "./pages/StudentPortal";
 import TeacherPortal from "./pages/TeacherPortal";
@@ -71,6 +72,7 @@ const App = () => {
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/school/register" element={<SchoolRegister />} />
             <Route path="/teacher/register" element={<TeacherRegister />} />
             <Route path="/system-admin/login" element={<SystemAdminLogin />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />

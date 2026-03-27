@@ -75,10 +75,10 @@ export default function Index() {
             </p>
             <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
               <Button size="lg" className="text-lg px-8 py-6 rounded-full bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all">
-                <Link to="/login" className="flex items-center gap-2">Get Started <ArrowRight className="ml-2" /></Link>
+                <Link to="/school/register" className="flex items-center gap-2">Register School <ArrowRight className="ml-2" /></Link>
               </Button>
               <Button size="lg" variant="outline" className="text-lg px-8 py-6 rounded-full bg-white/10 hover:bg-white/20 text-white border-white/30 shadow-lg hover:shadow-xl transition-all">
-                <a href="#features" className="flex items-center gap-2">Features <FileText className="ml-2" /></a>
+                <Link to="/login" className="flex items-center gap-2">Log In <UserCheck className="ml-2" /></Link>
               </Button>
             </div>
 
