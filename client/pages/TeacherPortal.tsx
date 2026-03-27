@@ -321,11 +321,12 @@ export default function TeacherPortal() {
       // If they are strictly a teacher, we continue.
       // Only redirect if they are neither a teacher nor an admin.
       const isTeacher = profile.role === 'teacher' || profile.secondary_role === 'teacher';
-      const isAdmin = ['school_admin', 'bursar', 'registrar', 'exam_officer', 'academic_auditor', 'accounts', 'content_manager'].includes(profile.role) ||
-                      (profile.secondary_role && ['school_admin', 'bursar', 'registrar', 'exam_officer', 'academic_auditor', 'accounts', 'content_manager'].includes(profile.secondary_role));
+      const adminRoles = ['school_admin', 'bursar', 'registrar', 'exam_officer', 'academic_auditor', 'accounts', 'content_manager', 'system_admin'];
+      const isAdmin = adminRoles.includes(profile.role) ||
+                      (profile.secondary_role && adminRoles.includes(profile.secondary_role));
 
       if (!isTeacher && !isAdmin) {
-        console.warn('Unauthorized access to teacher portal. Redirecting...');
+        console.warn(`Unauthorized access to teacher portal. Role: ${profile.role}, Secondary: ${profile.secondary_role}. Redirecting...`);
         navigate('/login');
         return;
       }

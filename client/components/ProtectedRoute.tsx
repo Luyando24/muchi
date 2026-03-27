@@ -51,10 +51,11 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
           if (allowedRoles.includes(profile.role) || (profile.secondary_role && allowedRoles.includes(profile.secondary_role))) {
             setAuthorized(true);
           } else {
+             console.warn(`[ProtectedRoute] Access Denied. User Role: ${profile.role}, Secondary: ${profile.secondary_role}. Allowed: ${allowedRoles.join(', ')}`);
              toast({
               variant: "destructive",
               title: "Access Denied",
-              description: `You do not have permission to access this page. Required role: ${allowedRoles.join(', ')}`,
+              description: `You do not have permission to access this page.`,
             });
           }
         } else {
