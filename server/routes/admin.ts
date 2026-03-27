@@ -377,6 +377,25 @@ router.post('/users', requireSystemAdmin, async (req: Request, res: Response) =>
 
     if (error) throw error;
 
+    // --- MANUAL PROFILE CREATION (Fallback for trigger failures) ---
+    if (user && user.user) {
+      const { error: profileError } = await supabaseAdmin
+        .from('profiles')
+        .upsert({
+          id: user.user.id,
+          full_name,
+          email,
+          role,
+          secondary_role: (secondary_role && secondary_role !== 'none') ? secondary_role : (role === 'school_admin' ? 'teacher' : null),
+          school_id: school_id === 'none' ? null : school_id
+        }, { onConflict: 'id' });
+
+      if (profileError) {
+        console.warn('[Admin Create User] Manual profile creation failed:', profileError.message);
+      }
+    }
+    // ---------------------------------------------------------------
+
     res.status(201).json({ message: 'User created successfully', user });
   } catch (error: any) {
     console.error('Create User Error:', error);
@@ -426,7 +445,7 @@ router.put('/users/:id', requireSystemAdmin, async (req: Request, res: Response)
 
     if (profileError) throw profileError;
 
-    res.json({ message: 'User updated successfully', user: data });
+    res.json({ message: 'User updated successfully', user: user.user });
   } catch (error: any) {
     console.error('Update User Error:', error);
     res.status(500).json({ message: error.message || 'Internal Server Error' });
