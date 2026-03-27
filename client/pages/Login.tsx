@@ -199,13 +199,15 @@ export default function Login() {
         }
 
         // Handle temporary password expiration
-        if (profile.is_temp_password && profile.temp_password_expires_at) {
-          const expiresAt = new Date(profile.temp_password_expires_at);
-          const now = new Date();
+        if (profile.is_temp_password) {
+          if (profile.temp_password_expires_at) {
+            const expiresAt = new Date(profile.temp_password_expires_at);
+            const now = new Date();
 
-          if (now > expiresAt && profile.role !== 'teacher') {
-            await supabase.auth.signOut();
-            throw new Error("Your temporary password has expired (72h limit). Please contact your administrator to reset it.");
+            if (now > expiresAt && profile.role !== 'teacher') {
+              await supabase.auth.signOut();
+              throw new Error("Your temporary password has expired (72h limit). Please contact your administrator to reset it.");
+            }
           }
 
           toast({

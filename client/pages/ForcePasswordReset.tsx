@@ -80,20 +80,26 @@ export default function ForcePasswordReset() {
       // 2. Update Profile status
       const { error: profileError } = await supabase
         .from("profiles")
-        .update({ is_temp_password: false })
+        .update({ 
+          is_temp_password: false,
+          temp_password_expires_at: null,
+          temp_password_set_at: null
+        })
         .eq("id", session.user.id);
 
-      if (profileError) throw profileError;
+      if (profileError) {
+         console.error("Profile update error during password reset:", profileError);
+         throw profileError;
+      }
 
       toast({
         title: "Success",
         description: "Your password has been set successfully. You can now access your dashboard.",
       });
 
-      // Redirect to login to ensure fresh session or just redirect to dashboard
-      // Let's redirect to login for safety
-      await supabase.auth.signOut();
-      navigate("/login");
+      // Instead of forcing a full sign out, just redirect to home
+      // The session is already active with the new password
+      navigate("/");
     } catch (error: any) {
       toast({
         variant: "destructive",
