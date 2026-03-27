@@ -426,9 +426,73 @@ router.put('/users/:id', requireSystemAdmin, async (req: Request, res: Response)
 
     if (profileError) throw profileError;
 
-    res.json({ message: 'User updated successfully', user });
+    res.json({ message: 'User updated successfully', user: data });
   } catch (error: any) {
     console.error('Update User Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// POST /api/admin/users/purge-non-system
+// DANGEROUS: Purges all users from the system EXCEPT system_admins
+router.post('/users/purge-non-system', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    // 1. Fetch all profiles that are NOT system admins
+    const { data: profiles, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, full_name, role')
+      .neq('role', 'system_admin');
+
+    if (profileError) throw profileError;
+
+    if (!profiles || profiles.length === 0) {
+      return res.json({ message: 'No non-system users found to purge.', deletedCount: 0 });
+    }
+
+    console.log(`[Purge] Found ${profiles.length} non-system users to delete.`);
+
+    let deletedCount = 0;
+    const errors: string[] = [];
+
+    // 2. Delete each user from Supabase Auth
+    // Auth deletion will trigger profile deletion if the trigger is set up correctly,
+    // but we'll also do a bulk profile delete later just in case.
+    for (const profile of profiles) {
+      try {
+        const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(profile.id);
+        if (authError) {
+          console.error(`[Purge] Failed to delete auth user ${profile.id} (${profile.full_name}):`, authError.message);
+          errors.push(`Auth Error (${profile.full_name}): ${authError.message}`);
+        } else {
+          deletedCount++;
+        }
+      } catch (innerError: any) {
+        console.error(`[Purge] Exception deleting user ${profile.id}:`, innerError);
+        errors.push(`Exception (${profile.full_name}): ${innerError.message}`);
+      }
+    }
+
+    // 3. Explicitly purge any remaining profiles that are not system admins
+    // (This handles users who might not have an Auth record or if triggers failed)
+    const { error: dbPurgeError } = await supabaseAdmin
+      .from('profiles')
+      .delete()
+      .neq('role', 'system_admin');
+
+    if (dbPurgeError) {
+      console.error('[Purge] DB Purge Error:', dbPurgeError);
+      errors.push(`DB Purge Error: ${dbPurgeError.message}`);
+    }
+
+    res.json({
+      message: `System purge completed. Successfully removed ${deletedCount} users.`,
+      deletedCount,
+      totalFound: profiles.length,
+      errors: errors.length > 0 ? errors : undefined
+    });
+
+  } catch (error: any) {
+    console.error('Purge Users Error:', error);
     res.status(500).json({ message: error.message || 'Internal Server Error' });
   }
 });

@@ -110,6 +110,8 @@ export default function UserManagement() {
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isPurgeConfirmOpen, setIsPurgeConfirmOpen] = useState(false);
+  const [isPurging, setIsPurging] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof userSchema>>({
@@ -282,6 +284,41 @@ export default function UserManagement() {
     }
   };
 
+  const handlePurgeUsers = async () => {
+    setIsPurging(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('No session');
+
+      const response = await fetch('/api/admin/users/purge-non-system', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Purge operation failed');
+      }
+
+      const result = await response.json();
+      toast({ 
+        title: "System Purge Complete", 
+        description: result.message 
+      });
+      
+      setIsPurgeConfirmOpen(false);
+      fetchUsers();
+    } catch (error: any) {
+      toast({ 
+        variant: "destructive", 
+        title: "Purge failed", 
+        description: error.message 
+      });
+    } finally {
+      setIsPurging(false);
+    }
+  };
+
   const openEditDialog = (user: UserProfile) => {
     setEditingUser(user);
       form.reset({
@@ -322,12 +359,20 @@ export default function UserManagement() {
           <h2 className="text-2xl font-bold tracking-tight">User Management</h2>
           <p className="text-muted-foreground">Manage system administrators and school administrators</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openCreateDialog}>
-              <Plus className="mr-2 h-4 w-4" /> Add User
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+            onClick={() => setIsPurgeConfirmOpen(true)}
+          >
+            <ShieldAlert className="mr-2 h-4 w-4" /> Purge Users
+          </Button>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={openCreateDialog}>
+                <Plus className="mr-2 h-4 w-4" /> Add User
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{editingUser ? 'Edit User' : 'Add New User'}</DialogTitle>
@@ -468,6 +513,7 @@ export default function UserManagement() {
             </Form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="flex items-center space-x-2">
@@ -569,6 +615,17 @@ export default function UserManagement() {
         variant="danger"
         loading={isDeleting}
         onConfirm={handleDelete}
+      />
+
+      <ConfirmDialog
+        open={isPurgeConfirmOpen}
+        onOpenChange={setIsPurgeConfirmOpen}
+        title="SYSTEM-WIDE PURGE"
+        description="DANGER: This will permanently delete ALL users (School Admins, Teachers, Students, etc.) from the entire system. ONLY System Administrators will remain. This action is IRREVERSIBLE. Do you want to proceed?"
+        confirmLabel="Purge All Non-System Users"
+        variant="danger"
+        loading={isPurging}
+        onConfirm={handlePurgeUsers}
       />
     </div>
   );
