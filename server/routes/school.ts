@@ -3712,12 +3712,33 @@ router.get(
 
       if (error) throw error;
 
+      // 1. Fetch enrollment counts for these classes
+      const classIds = classes.map((c: any) => c.id);
+      let enrollmentCounts: Record<string, number> = {};
+      
+      if (classIds.length > 0) {
+        const currentYear = new Date().getFullYear().toString();
+        const { data: enrollments, error: enrollError } = await supabaseAdmin
+          .from('enrollments')
+          .select('class_id')
+          .in('class_id', classIds)
+          .eq('status', 'Active')
+          .eq('academic_year', currentYear);
+
+        if (!enrollError && enrollments) {
+          enrollments.forEach((e: any) => {
+            enrollmentCounts[e.class_id] = (enrollmentCounts[e.class_id] || 0) + 1;
+          });
+        }
+      }
+
       const formattedClasses = classes.map((cls: any) => ({
         id: cls.id,
         name: cls.name,
         level: cls.level,
         room: cls.room,
-        capacity: cls.capacity,
+        capacity: cls.capacity, // Database hard limit if needed
+        enrolledCount: enrollmentCounts[cls.id] || 0, // Dynamic calculation
         classTeacherId: cls.class_teacher_id,
         classTeacherName: cls.teacher?.full_name || "Unassigned",
       }));

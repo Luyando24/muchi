@@ -97,9 +97,16 @@ export default function ForcePasswordReset() {
         description: "Your password has been set successfully. You can now access your dashboard.",
       });
 
-      // Instead of forcing a full sign out, just redirect to home
-      // The session is already active with the new password
-      navigate("/");
+      // Redirect based on role instead of just going to root "/"
+      const role = session.user.user_metadata?.role;
+      if (role === 'teacher') {
+        navigate("/teacher-portal");
+      } else if (role === 'student') {
+        navigate("/student-portal");
+      } else {
+        // Fallback for admins or others
+        navigate("/school-admin");
+      }
     } catch (error: any) {
       toast({
         variant: "destructive",

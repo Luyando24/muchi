@@ -77,6 +77,7 @@ interface Class {
   level: string;
   room: string;
   capacity: number;
+  enrolledCount?: number;
   classTeacherId: string | null;
   classTeacherName: string;
 }
@@ -1016,7 +1017,7 @@ export default function AcademicManagement() {
                     <TableHead>Class Name</TableHead>
                     <TableHead>Level</TableHead>
                     <TableHead>Room</TableHead>
-                    <TableHead>Capacity</TableHead>
+                    <TableHead>Students / Capacity</TableHead>
                     <TableHead>Class Teacher</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -1036,7 +1037,14 @@ export default function AcademicManagement() {
                       <TableCell className="font-medium">{cls.name}</TableCell>
                       <TableCell>{cls.level}</TableCell>
                       <TableCell>{cls.room}</TableCell>
-                      <TableCell>{cls.capacity}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <span className={`font-semibold ${cls.enrolledCount && cls.enrolledCount > cls.capacity ? 'text-red-600' : 'text-slate-900 dark:text-slate-100'}`}>
+                            {cls.enrolledCount || 0}
+                          </span>
+                          <span className="text-slate-400">/ {cls.capacity}</span>
+                        </div>
+                      </TableCell>
                       <TableCell>{cls.classTeacherName}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
