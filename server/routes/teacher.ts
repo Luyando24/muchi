@@ -121,6 +121,27 @@ router.get('/classes', requireTeacher, async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/teacher/all-school-classes
+// Get all classes in the school (for self-assignment)
+router.get('/all-school-classes', requireTeacher, async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const schoolId = profile.school_id;
+
+  try {
+    const { data: classes, error } = await supabaseAdmin
+      .from('classes')
+      .select('*')
+      .eq('school_id', schoolId)
+      .order('name');
+
+    if (error) throw error;
+    res.json(classes);
+  } catch (error: any) {
+    console.error('Get All School Classes Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // GET /api/teacher/classes/:classId/students
 // Get students in a specific class
 router.get('/classes/:classId/students', requireTeacher, async (req: Request, res: Response) => {
@@ -397,7 +418,7 @@ router.get('/assignments', requireTeacher, async (req: Request, res: Response) =
 router.post('/assignments', requireTeacher, async (req: Request, res: Response) => {
   const profile = (req as any).profile;
   const { title, description, class_id, subject_id, due_date, type, category, assignment_number } = req.body;
-
+  
   try {
     const { data, error } = await supabaseAdmin
       .from('assignments')
@@ -408,10 +429,10 @@ router.post('/assignments', requireTeacher, async (req: Request, res: Response) 
         description,
         class_id,
         subject_id,
-        due_date: due_date || null,
+        due_date,
         type,
-        category: category || 'Homework',
-        assignment_number: assignment_number || 1
+        category,
+        assignment_number
       })
       .select()
       .single();
@@ -423,80 +444,45 @@ router.post('/assignments', requireTeacher, async (req: Request, res: Response) 
   }
 });
 
-// DELETE /api/teacher/assignments/:id
-router.delete('/assignments/:id', requireTeacher, async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const profile = (req as any).profile;
+// GET /api/teacher/assignment-submissions
+// Get submissions for assignments created by this teacher
+router.get('/assignment-submissions', requireTeacher, async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const teacherId = profile.id;
+    
+    try {
+        // 1. Get assignments by teacher
+        const { data: assignments } = await supabaseAdmin
+            .from('assignments')
+            .select('id')
+            .eq('teacher_id', teacherId);
+        
+        if (!assignments || assignments.length === 0) return res.json([]);
 
-  try {
-    // Verify ownership
-    const { data: assignment } = await supabaseAdmin
-      .from('assignments')
-      .select('teacher_id')
-      .eq('id', id)
-      .single();
+        const assignmentIds = assignments.map(a => a.id);
 
-    if (!assignment || assignment.teacher_id !== profile.id) {
-        return res.status(403).json({ message: 'Forbidden' });
+        // 2. Get submissions for those assignments
+        const { data: submissions, error } = await supabaseAdmin
+            .from('submissions')
+            .select(`
+                *,
+                students:profiles!student_id(first_name, last_name, full_name),
+                assignments:assignments(title)
+            `)
+            .in('assignment_id', assignmentIds)
+            .order('submitted_at', { ascending: false });
+            
+        if (error) throw error;
+        res.json(submissions);
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
     }
-
-    const { error } = await supabaseAdmin
-      .from('assignments')
-      .delete()
-      .eq('id', id);
-
-    if (error) throw error;
-    res.json({ message: 'Assignment deleted' });
-  } catch (error: any) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// PUT /api/teacher/assignments/:id
-router.put('/assignments/:id', requireTeacher, async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const profile = (req as any).profile;
-  const { title, description, class_id, subject_id, due_date, type, category, assignment_number } = req.body;
-
-  try {
-    // Verify ownership
-    const { data: assignment } = await supabaseAdmin
-      .from('assignments')
-      .select('teacher_id')
-      .eq('id', id)
-      .single();
-
-    if (!assignment || assignment.teacher_id !== profile.id) {
-        return res.status(403).json({ message: 'Forbidden' });
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from('assignments')
-      .update({
-        title,
-        description,
-        class_id,
-        subject_id,
-        due_date: due_date || null,
-        type,
-        category: category || 'Homework',
-        assignment_number: assignment_number || 1,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) throw error;
-    res.json(data);
-  } catch (error: any) {
-    res.status(500).json({ message: error.message });
-  }
 });
 
 // GET /api/teacher/assignments/:id/submissions
 router.get('/assignments/:id/submissions', requireTeacher, async (req: Request, res: Response) => {
   const { id } = req.params;
+  const profile = (req as any).profile;
   
   try {
     // Get all students in the class for this assignment to ensure we show everyone
@@ -605,10 +591,61 @@ router.put('/profile', requireTeacher, async (req: Request, res: Response) => {
       .single();
 
     if (error) throw error;
-    
     res.json(data);
   } catch (error: any) {
     console.error('Update Profile Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/teacher/self-assign
+// Allow a teacher to self-assign to a subject in a class
+router.post('/self-assign', requireTeacher, async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const teacherId = profile.id;
+  const { classId, subjectId } = req.body;
+
+  if (!classId || !subjectId) {
+    return res.status(400).json({ message: 'Class ID and Subject ID are required' });
+  }
+
+  try {
+    // Check if the assignment already exists
+    const { data: existing } = await supabaseAdmin
+      .from('class_subjects')
+      .select('id, teacher_id')
+      .eq('class_id', classId)
+      .eq('subject_id', subjectId)
+      .maybeSingle();
+
+    if (existing) {
+      // If already assigned to someone else, we'll allow overwriting for self-assignment
+      const { data, error } = await supabaseAdmin
+        .from('class_subjects')
+        .update({ teacher_id: teacherId })
+        .eq('id', existing.id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return res.json(data);
+    } else {
+      // Create new assignment
+      const { data, error } = await supabaseAdmin
+        .from('class_subjects')
+        .insert({
+          class_id: classId,
+          subject_id: subjectId,
+          teacher_id: teacherId
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return res.json(data);
+    }
+  } catch (error: any) {
+    console.error('Self-assign Error:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -627,22 +664,15 @@ router.get('/timetable', requireTeacher, async (req: Request, res: Response) => 
                 classes(name),
                 subjects(name, code)
             `)
-            .eq('school_id', profile.school_id)
             .eq('teacher_id', profile.id);
-            
+
         if (settings) {
-            if (settings.academic_year) {
-                query = query.eq('academic_year', settings.academic_year);
-            }
-            if (settings.current_term) {
-                query = query.eq('term', settings.current_term);
-            }
+            query = query.eq('academic_year', settings.academic_year)
+                        .eq('term', settings.current_term);
         }
 
-        const { data: timetable, error } = await query
-            .order('day_of_week')
-            .order('start_time');
-        
+        const { data: timetable, error } = await query.order('day_of_week').order('start_time');
+
         if (error) throw error;
         res.json(timetable);
     } catch (error: any) {
@@ -650,4 +680,4 @@ router.get('/timetable', requireTeacher, async (req: Request, res: Response) => 
     }
 });
 
-export const teacherRouter = router;
+export default router;

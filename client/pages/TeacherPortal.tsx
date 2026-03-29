@@ -168,6 +168,7 @@ export default function TeacherPortal() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isCreateAssignmentOpen, setIsCreateAssignmentOpen] = useState(false);
+  const [isSelfAssignOpen, setIsSelfAssignOpen] = useState(false);
   const [savingAttendance, setSavingAttendance] = useState(false);
 
   // Data State
@@ -176,12 +177,20 @@ export default function TeacherPortal() {
   const [schoolSettings, setSchoolSettings] = useState<SchoolSettings | null>(null);
   const [stats, setStats] = useState<Stats>({ totalStudents: 0, classesToday: 0, pendingGrading: 0, averageAttendance: 0 });
   const [classes, setClasses] = useState<ClassData[]>([]);
+  const [allClasses, setAllClasses] = useState<ClassData[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
+
+  // Self-Assign State
+  const [selfAssignForm, setSelfAssignForm] = useState({
+    classId: '',
+    subjectId: ''
+  });
+  const [isSubmittingSelfAssign, setIsSubmittingSelfAssign] = useState(false);
 
   // Attendance & Students State
   const [selectedClassId, setSelectedClassId] = useState<string>("");
@@ -402,6 +411,14 @@ export default function TeacherPortal() {
         setClasses(classesData);
         if (classesData.length > 0 && !selectedClassId) {
           setSelectedClassId(classesData[0].id);
+        }
+
+        // If no classes assigned, open self-assign modal
+        if (classesData.length === 0) {
+          setIsSelfAssignOpen(true);
+          // Also fetch all classes for the school
+          const allClassesData = await fetchWithAuth('/api/teacher/all-school-classes');
+          setAllClasses(allClassesData);
         }
       } catch (e) {
         console.error('Failed to fetch classes', e);
@@ -627,6 +644,46 @@ export default function TeacherPortal() {
     } catch (error) {
       console.error('Error saving grade:', error);
       toast({ title: "Error", description: "Failed to save grade.", variant: "destructive" });
+    }
+  };
+
+  const handleSelfAssign = async () => {
+    if (!selfAssignForm.classId || !selfAssignForm.subjectId) {
+      toast({
+        title: "Selection Required",
+        description: "Please select both a class and a subject.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsSubmittingSelfAssign(true);
+    try {
+      await fetchWithAuth('/api/teacher/self-assign', {
+        method: 'POST',
+        body: JSON.stringify({
+          classId: selfAssignForm.classId,
+          subjectId: selfAssignForm.subjectId
+        })
+      });
+
+      toast({
+        title: "Success",
+        description: "Successfully assigned yourself to the subject."
+      });
+      
+      setIsSelfAssignOpen(false);
+      // Refresh dashboard data to reflect new assignment
+      fetchDashboardData();
+    } catch (error: any) {
+      console.error('Self-assign error:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to self-assign.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmittingSelfAssign(false);
     }
   };
 
@@ -2121,6 +2178,82 @@ export default function TeacherPortal() {
         loading={isDeleting}
         onConfirm={handleDeleteAssignment}
       />
+
+      {/* Self-Assignment Modal */}
+      <Dialog 
+        open={isSelfAssignOpen} 
+        onOpenChange={(open) => {
+          // Prevent closing if no classes are assigned
+          if (classes.length === 0) return;
+          setIsSelfAssignOpen(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-blue-600" />
+              Welcome to Your Portal!
+            </DialogTitle>
+            <DialogDescription>
+              To get started, please assign yourself to at least one class and subject you teach. This will help you manage your students and grading.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="class">Select Class</Label>
+              <Select 
+                value={selfAssignForm.classId} 
+                onValueChange={(v) => setSelfAssignForm({ ...selfAssignForm, classId: v })}
+              >
+                <SelectTrigger id="class">
+                  <SelectValue placeholder="Select a class" />
+                </SelectTrigger>
+                <SelectContent>
+                  {allClasses.map((cls) => (
+                    <SelectItem key={cls.id} value={cls.id}>
+                      {cls.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="subject">Select Subject</Label>
+              <Select 
+                value={selfAssignForm.subjectId} 
+                onValueChange={(v) => setSelfAssignForm({ ...selfAssignForm, subjectId: v })}
+              >
+                <SelectTrigger id="subject">
+                  <SelectValue placeholder="Select a subject" />
+                </SelectTrigger>
+                <SelectContent>
+                  {subjects.map((sub) => (
+                    <SelectItem key={sub.id} value={sub.id}>
+                      {sub.name} ({sub.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              className="w-full bg-blue-600 hover:bg-blue-700" 
+              onClick={handleSelfAssign}
+              disabled={isSubmittingSelfAssign || !selfAssignForm.classId || !selfAssignForm.subjectId}
+            >
+              {isSubmittingSelfAssign ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Assigning...
+                </>
+              ) : (
+                "Get Started"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Mobile Bottom Navigation */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-40 px-2 py-2 safe-area-bottom shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
