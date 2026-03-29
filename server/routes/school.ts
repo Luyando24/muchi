@@ -2319,7 +2319,7 @@ router.get(
       // Fetch teachers assigned to subjects for this class
       let classAssignedTeachersQuery = supabaseAdmin
         .from("class_subjects")
-        .select("subject_id, profiles(full_name)");
+        .select("subject_id, teacher:profiles(full_name)");
 
       if (classId && classId !== "all") {
         classAssignedTeachersQuery = classAssignedTeachersQuery.eq(
@@ -2332,15 +2332,16 @@ router.get(
 
       const subjectTeacherMap = new Map();
       classAssignedTeachers?.forEach((cs: any) => {
-        if (cs.profiles && cs.profiles.full_name) {
-          subjectTeacherMap.set(cs.subject_id, cs.profiles.full_name);
+        if (cs.teacher && cs.teacher.full_name) {
+          subjectTeacherMap.set(cs.subject_id, cs.teacher.full_name);
         } else if (
-          cs.profiles &&
-          cs.profiles.length > 0 &&
-          cs.profiles[0].full_name
+          cs.teacher &&
+          Array.isArray(cs.teacher) &&
+          cs.teacher.length > 0 &&
+          cs.teacher[0].full_name
         ) {
           // In case it's an array due to foreign key mapping
-          subjectTeacherMap.set(cs.subject_id, cs.profiles[0].full_name);
+          subjectTeacherMap.set(cs.subject_id, cs.teacher[0].full_name);
         }
       });
 
@@ -6345,7 +6346,7 @@ router.get(
         *,
         classes(name),
         subjects(name, code),
-        profiles(full_name)
+        teacher:profiles(full_name)
       `,
         )
         .eq("school_id", schoolId);
