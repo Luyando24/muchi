@@ -680,4 +680,5 @@ router.get('/timetable', requireTeacher, async (req: Request, res: Response) => 
     }
 });
 
+export const teacherRouter = router;
 export default router;
