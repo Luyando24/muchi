@@ -99,6 +99,11 @@ interface GradingWeight {
 interface Department {
   id: string;
   name: string;
+  head_of_department_id?: string | null;
+  head_of_department?: {
+    id: string;
+    full_name: string;
+  } | null;
 }
 
 import TimetableManagement from './TimetableManagement';
@@ -138,7 +143,7 @@ export default function AcademicManagement() {
   // Form Data
   const [subjectForm, setSubjectForm] = useState({ id: '', name: '', department: '', headTeacherId: '', code: '' });
   const [classForm, setClassForm] = useState({ id: '', name: '', level: '', room: '', capacity: 40, classTeacherId: '' });
-  const [deptForm, setDeptForm] = useState({ id: '', name: '' });
+  const [deptForm, setDeptForm] = useState({ id: '', name: '', head_of_department_id: '' });
   const [scaleForm, setScaleForm] = useState({ id: '', grade: '', min_percentage: 0, max_percentage: 100, description: '' });
   const [weightForm, setWeightForm] = useState({ id: '', assessment_type: '', weight_percentage: 0 });
 
@@ -453,7 +458,7 @@ export default function AcademicManagement() {
       toast({ title: "Success", description: `Department ${isEdit ? 'updated' : 'created'} successfully` });
       setIsAddDeptOpen(false);
       setIsEditDeptOpen(false);
-      setDeptForm({ id: '', name: '' });
+      setDeptForm({ id: '', name: '', head_of_department_id: '' });
       fetchData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -1112,7 +1117,7 @@ export default function AcademicManagement() {
                 </Button>
                 <Dialog open={isAddDeptOpen} onOpenChange={setIsAddDeptOpen}>
                   <DialogTrigger asChild>
-                    <Button onClick={() => setDeptForm({ id: '', name: '' })}>
+                    <Button onClick={() => setDeptForm({ id: '', name: '', head_of_department_id: '' })}>
                       <Plus className="h-4 w-4 mr-2" /> Add Department
                     </Button>
                   </DialogTrigger>
@@ -1125,6 +1130,15 @@ export default function AcademicManagement() {
                       <div className="space-y-2">
                         <Label>Department Name</Label>
                         <Input required placeholder="e.g. Science" value={deptForm.name} onChange={e => setDeptForm({ ...deptForm, name: e.target.value })} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Head of Department (Optional)</Label>
+                        <Combobox
+                          options={teachers.map(t => ({ label: t.fullName, value: t.id }))}
+                          value={deptForm.head_of_department_id}
+                          onValueChange={v => setDeptForm({ ...deptForm, head_of_department_id: v })}
+                          placeholder="Select Head of Department"
+                        />
                       </div>
                       <DialogFooter>
                         <Button type="submit">Create Department</Button>
@@ -1148,6 +1162,7 @@ export default function AcademicManagement() {
                       />
                     </TableHead>
                     <TableHead>Department Name</TableHead>
+                    <TableHead>Head of Department</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1164,10 +1179,13 @@ export default function AcademicManagement() {
                         />
                       </TableCell>
                       <TableCell className="font-medium">{dept.name}</TableCell>
+                      <TableCell>
+                        {dept.head_of_department?.full_name || <span className="text-muted-foreground italic">Unassigned</span>}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button variant="ghost" size="sm" onClick={() => {
-                            setDeptForm({ id: dept.id, name: dept.name });
+                            setDeptForm({ id: dept.id, name: dept.name, head_of_department_id: dept.head_of_department_id || '' });
                             setIsEditDeptOpen(true);
                           }}>
                             <Edit className="h-4 w-4" />
@@ -1201,6 +1219,15 @@ export default function AcademicManagement() {
                 <div className="space-y-2">
                   <Label>Department Name</Label>
                   <Input required placeholder="e.g. Science" value={deptForm.name} onChange={e => setDeptForm({ ...deptForm, name: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Head of Department (Optional)</Label>
+                  <Combobox
+                    options={teachers.map(t => ({ label: t.fullName, value: t.id }))}
+                    value={deptForm.head_of_department_id}
+                    onValueChange={v => setDeptForm({ ...deptForm, head_of_department_id: v })}
+                    placeholder="Select Head of Department"
+                  />
                 </div>
                 <DialogFooter>
                   <Button type="submit">Update Department</Button>

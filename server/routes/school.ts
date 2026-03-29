@@ -3159,7 +3159,7 @@ router.get(
     try {
       const { data: departments, error } = await supabaseAdmin
         .from("departments")
-        .select("*")
+        .select("*, head_of_department:profiles!departments_head_of_department_id_fkey(id, full_name)")
         .eq("school_id", schoolId)
         .order("name", { ascending: true });
 
@@ -3180,7 +3180,7 @@ router.post(
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
-    const { name } = req.body;
+    const { name, head_of_department_id } = req.body;
 
     if (!name || typeof name !== "string") {
       return res.status(400).json({ message: "Department name is required" });
@@ -3212,8 +3212,9 @@ router.post(
         .insert({
           school_id: schoolId,
           name: formattedName,
+          head_of_department_id: head_of_department_id || null,
         })
-        .select()
+        .select("*, head_of_department:profiles!departments_head_of_department_id_fkey(id, full_name)")
         .single();
 
       if (error) throw error;
@@ -3238,7 +3239,7 @@ router.put(
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
     const { id } = req.params;
-    const { name } = req.body;
+    const { name, head_of_department_id } = req.body;
 
     if (!name || typeof name !== "string") {
       return res.status(400).json({ message: "Department name is required" });
@@ -3267,10 +3268,13 @@ router.put(
 
       const { data: updatedDept, error } = await supabaseAdmin
         .from("departments")
-        .update({ name: formattedName })
+        .update({ 
+          name: formattedName,
+          head_of_department_id: head_of_department_id || null,
+        })
         .eq("id", id)
         .eq("school_id", schoolId)
-        .select()
+        .select("*, head_of_department:profiles!departments_head_of_department_id_fkey(id, full_name)")
         .single();
 
       if (error) throw error;

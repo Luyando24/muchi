@@ -74,6 +74,7 @@ interface TeacherDetails {
     joinDate: string;
     status: string;
     avatar_url: string;
+    totalClassesCount?: number;
   };
   classes: Array<{
     id: string;

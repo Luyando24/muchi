@@ -58,6 +58,16 @@ CREATE TABLE profiles (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Create Departments Table
+CREATE TABLE departments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  head_of_department_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(school_id, name)
+);
+
 -- 4. Create Classes Table (Teachers manage classes)
 CREATE TABLE classes (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
