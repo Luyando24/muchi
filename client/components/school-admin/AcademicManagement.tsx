@@ -109,6 +109,15 @@ interface Department {
 import TimetableManagement from './TimetableManagement';
 import ResultPrinter from './ResultPrinter';
 
+// Helper function to auto-generate subject codes
+const generateSubjectCode = (name: string) => {
+  if (!name) return '';
+  const cleanName = name.replace(/[^a-zA-Z0-9\s]/g, '').trim();
+  const words = cleanName.split(/\s+/);
+  if (words.length === 1) return words[0].substring(0, 3).toUpperCase();
+  return words.map(w => w[0]).join('').substring(0, 3).toUpperCase();
+};
+
 export default function AcademicManagement() {
   const [activeTab, setActiveTab] = useState('classes');
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -1278,7 +1287,22 @@ export default function AcademicManagement() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Subject Name</Label>
-                        <Input required placeholder="e.g. Mathematics" value={subjectForm.name} onChange={e => setSubjectForm({ ...subjectForm, name: e.target.value })} />
+                        <Input 
+                          required 
+                          placeholder="e.g. Mathematics" 
+                          value={subjectForm.name} 
+                          onChange={e => {
+                            const newName = e.target.value;
+                            const oldAutoCode = generateSubjectCode(subjectForm.name);
+                            const newAutoCode = generateSubjectCode(newName);
+                            
+                            setSubjectForm({ 
+                              ...subjectForm, 
+                              name: newName,
+                              code: (!subjectForm.code || subjectForm.code === oldAutoCode) ? newAutoCode : subjectForm.code
+                            });
+                          }} 
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label>Code</Label>
@@ -2184,7 +2208,21 @@ export default function AcademicManagement() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Subject Name</Label>
-                <Input required value={subjectForm.name} onChange={e => setSubjectForm({ ...subjectForm, name: e.target.value })} />
+                <Input 
+                  required 
+                  value={subjectForm.name} 
+                  onChange={e => {
+                    const newName = e.target.value;
+                    const oldAutoCode = generateSubjectCode(subjectForm.name);
+                    const newAutoCode = generateSubjectCode(newName);
+                    
+                    setSubjectForm({ 
+                      ...subjectForm, 
+                      name: newName,
+                      code: (!subjectForm.code || subjectForm.code === oldAutoCode) ? newAutoCode : subjectForm.code
+                    });
+                  }} 
+                />
               </div>
               <div className="space-y-2">
                 <Label>Code</Label>
