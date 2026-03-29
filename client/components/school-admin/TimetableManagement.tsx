@@ -43,8 +43,8 @@ interface TimetableEntry {
   subject_id: string;
   teacher_id: string | null;
   room: string | null;
-  classes?: { name: string };
-  subjects?: { name: string; code: string };
+  class?: { name: string };
+  subject?: { name: string; code: string };
   teacher?: { full_name: string };
 }
 
@@ -430,8 +430,8 @@ export default function TimetableManagement() {
                       <div className="font-medium">{entry.day_of_week}</div>
                       <div className="text-sm text-slate-500">{entry.start_time.substring(0, 5)} - {entry.end_time.substring(0, 5)}</div>
                     </TableCell>
-                    <TableCell>{entry.classes?.name}</TableCell>
-                    <TableCell>{entry.subjects?.name}</TableCell>
+                    <TableCell>{entry.class?.name}</TableCell>
+                    <TableCell>{entry.subject?.name}</TableCell>
                     <TableCell>{entry.teacher?.full_name || 'Unassigned'}</TableCell>
                     <TableCell>{entry.room || '-'}</TableCell>
                     <TableCell className="text-right">
@@ -482,7 +482,7 @@ export default function TimetableManagement() {
                           <TableCell key={`${day}-${time}`} className="p-2">
                             {entry ? (
                               <div className="bg-slate-100 dark:bg-slate-800 p-2 rounded-md border border-slate-200 dark:border-slate-700 group relative hover:shadow-sm transition-shadow">
-                                <div className="font-semibold text-sm">{entry.subjects?.name}</div>
+                                <div className="font-semibold text-sm">{entry.subject?.name}</div>
                                 <div className="text-xs text-slate-500">{entry.teacher?.full_name}</div>
                                 {entry.room && <div className="text-xs text-slate-400 mt-1">{entry.room}</div>}
 

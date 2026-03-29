@@ -6344,9 +6344,9 @@ router.get(
         .select(
           `
         *,
-        classes(name),
-        subjects(name, code),
-        teacher:profiles(full_name)
+        class:classes!class_id(name),
+        subject:subjects!subject_id(name, code),
+        teacher:profiles!teacher_id(full_name)
       `,
         )
         .eq("school_id", schoolId);
