@@ -3927,7 +3927,7 @@ router.get(
         subject_id,
         teacher_id,
         subjects(id, name, code, department),
-        profiles!class_subjects_teacher_id_fkey(id, full_name)
+        profiles:teacher_id(id, full_name)
       `,
         )
         .eq("class_id", id);
@@ -3939,7 +3939,7 @@ router.get(
         ...item.subjects,
         classSubjectId: item.id,
         teacherId: item.teacher_id,
-        teacherName: item.profiles?.full_name,
+        teacherName: Array.isArray(item.profiles) ? item.profiles[0]?.full_name : item.profiles?.full_name,
       }));
 
       res.json(subjects);
