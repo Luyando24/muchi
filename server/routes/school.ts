@@ -4078,11 +4078,16 @@ router.post(
           subject_id: subjectId,
         }));
 
+        // Use upsert to avoid duplicate key errors if there's a race condition
+        // or leftover data that wasn't properly deleted
         const { error: insertError } = await supabaseAdmin
           .from("class_subjects")
-          .insert(newAssignments);
+          .upsert(newAssignments, { onConflict: 'class_id, subject_id' });
 
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.error("Insert Error:", insertError);
+          throw insertError;
+        }
       }
 
       res.json({ message: "Class subjects updated successfully" });
