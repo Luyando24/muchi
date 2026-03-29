@@ -3927,12 +3927,15 @@ router.get(
         subject_id,
         teacher_id,
         subjects(id, name, code, department),
-        profiles:teacher_id(id, full_name)
+        profiles(id, full_name)
       `,
         )
         .eq("class_id", id);
 
-      if (error) throw error;
+      if (error) {
+        console.error("Get Class Subjects Error details:", error);
+        throw error;
+      }
 
       // Map to a cleaner structure
       const subjects = data.map((item: any) => ({
