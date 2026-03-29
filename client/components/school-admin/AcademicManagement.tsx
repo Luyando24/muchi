@@ -1288,7 +1288,17 @@ export default function AcademicManagement() {
                     <div className="space-y-2">
                       <Label>Department</Label>
                       <div className="flex gap-2">
-                        <Select value={subjectForm.department} onValueChange={v => setSubjectForm({ ...subjectForm, department: v })}>
+                        <Select 
+                          value={subjectForm.department} 
+                          onValueChange={v => {
+                            const dept = departments.find(d => d.name === v);
+                            setSubjectForm({ 
+                              ...subjectForm, 
+                              department: v,
+                              headTeacherId: dept?.head_of_department_id || ''
+                            });
+                          }}
+                        >
                           <SelectTrigger className="flex-1">
                             <SelectValue placeholder="Select department" />
                           </SelectTrigger>
@@ -2184,7 +2194,17 @@ export default function AcademicManagement() {
             <div className="space-y-2">
               <Label>Department</Label>
               <div className="flex gap-2">
-                <Select value={subjectForm.department} onValueChange={v => setSubjectForm({ ...subjectForm, department: v })}>
+                <Select 
+                  value={subjectForm.department} 
+                  onValueChange={v => {
+                    const dept = departments.find(d => d.name === v);
+                    setSubjectForm({ 
+                      ...subjectForm, 
+                      department: v,
+                      headTeacherId: dept?.head_of_department_id || ''
+                    });
+                  }}
+                >
                   <SelectTrigger className="flex-1">
                     <SelectValue placeholder="Select department" />
                   </SelectTrigger>
