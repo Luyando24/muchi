@@ -3159,7 +3159,7 @@ router.get(
     try {
       const { data: departments, error } = await supabaseAdmin
         .from("departments")
-        .select("*, head_of_department:profiles!departments_head_of_department_id_fkey(id, full_name)")
+        .select("*, head_of_department:profiles!head_of_department_id(id, full_name)")
         .eq("school_id", schoolId)
         .order("name", { ascending: true });
 
@@ -3214,7 +3214,7 @@ router.post(
           name: formattedName,
           head_of_department_id: head_of_department_id || null,
         })
-        .select("*, head_of_department:profiles!departments_head_of_department_id_fkey(id, full_name)")
+        .select("*, head_of_department:profiles!head_of_department_id(id, full_name)")
         .single();
 
       if (error) throw error;
@@ -3274,7 +3274,7 @@ router.put(
         })
         .eq("id", id)
         .eq("school_id", schoolId)
-        .select("*, head_of_department:profiles!departments_head_of_department_id_fkey(id, full_name)")
+        .select("*, head_of_department:profiles!head_of_department_id(id, full_name)")
         .single();
 
       if (error) throw error;
