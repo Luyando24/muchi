@@ -409,17 +409,18 @@ export default function TeacherPortal() {
       let classesData = [];
       try {
         classesData = await fetchWithAuth('/api/teacher/classes');
-        setClasses(classesData);
-        if (classesData.length > 0 && !selectedClassId) {
-          setSelectedClassId(classesData[0].id);
+        const finalClasses = Array.isArray(classesData) ? classesData : (classesData?.data || []);
+        setClasses(finalClasses);
+        if (finalClasses.length > 0 && !selectedClassId) {
+          setSelectedClassId(finalClasses[0].id);
         }
 
         // If no classes assigned, open self-assign modal
-        if (classesData.length === 0) {
+        if (finalClasses.length === 0) {
           setIsSelfAssignOpen(true);
           // Also fetch all classes for the school
           const allClassesData = await fetchWithAuth('/api/teacher/all-school-classes');
-          setAllClasses(allClassesData);
+          setAllClasses(Array.isArray(allClassesData) ? allClassesData : (allClassesData?.data || []));
         }
       } catch (e) {
         console.error('Failed to fetch classes', e);
@@ -436,7 +437,7 @@ export default function TeacherPortal() {
       // 4. Subjects
       try {
         const subjectsData = await fetchWithAuth('/api/teacher/subjects');
-        setSubjects(subjectsData);
+        setSubjects(Array.isArray(subjectsData) ? subjectsData : (subjectsData?.data || []));
       } catch (e) {
         console.error('Failed to fetch subjects', e);
       }
@@ -1533,10 +1534,10 @@ export default function TeacherPortal() {
                 <Button 
                   onClick={async () => {
                     // Fetch all classes for the school if not already fetched
-                    if (allClasses.length === 0) {
+                    if (!allClasses || allClasses.length === 0) {
                       try {
                         const data = await fetchWithAuth('/api/teacher/all-school-classes');
-                        setAllClasses(data);
+                        setAllClasses(Array.isArray(data) ? data : (data?.data || []));
                       } catch (e) {
                         console.error('Failed to fetch school classes', e);
                       }
@@ -2215,7 +2216,7 @@ export default function TeacherPortal() {
         open={isSelfAssignOpen} 
         onOpenChange={(open) => {
           // Prevent closing if no classes are assigned
-          if (classes.length === 0) return;
+          if (!classes || classes.length === 0) return;
           setIsSelfAssignOpen(open);
         }}
       >
@@ -2223,10 +2224,10 @@ export default function TeacherPortal() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-blue-600" />
-              {classes.length === 0 ? "Welcome to Your Portal!" : "Add Class/Subject"}
+              {(!classes || classes.length === 0) ? "Welcome to Your Portal!" : "Add Class/Subject"}
             </DialogTitle>
             <DialogDescription>
-              {classes.length === 0 
+              {(!classes || classes.length === 0) 
                 ? "To get started, please assign yourself to at least one class and subject you teach. This will help you manage your students and grading."
                 : "Select a class and the subjects you teach to add them to your portal."}
             </DialogDescription>
@@ -2242,7 +2243,7 @@ export default function TeacherPortal() {
                   <SelectValue placeholder="Select a class" />
                 </SelectTrigger>
                 <SelectContent>
-                  {allClasses.map((cls) => (
+                  {(allClasses || []).map((cls) => (
                     <SelectItem key={cls.id} value={cls.id}>
                       {cls.name}
                     </SelectItem>
@@ -2253,15 +2254,13 @@ export default function TeacherPortal() {
             <div className="space-y-2">
               <Label htmlFor="subject">Select Subjects</Label>
               <MultiSelect
-                options={subjects.map((sub) => ({
+                options={(subjects || []).map((sub) => ({
                   label: `${sub.name} (${sub.code})`,
                   value: sub.id,
                 }))}
-                onValueChange={(vals) => setSelfAssignForm({ ...selfAssignForm, subjectIds: vals })}
-                defaultValue={selfAssignForm.subjectIds}
+                selected={selfAssignForm.subjectIds || []}
+                onChange={(vals) => setSelfAssignForm({ ...selfAssignForm, subjectIds: vals })}
                 placeholder="Select subjects"
-                variant="inverted"
-                maxCount={3}
               />
             </div>
           </div>
@@ -2269,7 +2268,7 @@ export default function TeacherPortal() {
             <Button 
               className="w-full bg-blue-600 hover:bg-blue-700" 
               onClick={handleSelfAssign}
-              disabled={isSubmittingSelfAssign || !selfAssignForm.classId || selfAssignForm.subjectIds.length === 0}
+              disabled={isSubmittingSelfAssign || !selfAssignForm.classId || (selfAssignForm.subjectIds || []).length === 0}
             >
               {isSubmittingSelfAssign ? (
                 <>
