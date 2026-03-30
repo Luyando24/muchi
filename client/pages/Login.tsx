@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -39,6 +39,26 @@ export default function Login() {
   const navigate = useNavigate();
 
   const { toast } = useToast();
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role, secondary_role")
+          .eq("id", session.user.id)
+          .single();
+
+        if (profile) {
+          // If the user has a secondary role, they should probably see the selection
+          // but for an auto-redirect, we'll go with the primary role.
+          handleRoleNavigation(profile.role, session.user.id);
+        }
+      }
+    };
+    checkSession();
+  }, []);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
