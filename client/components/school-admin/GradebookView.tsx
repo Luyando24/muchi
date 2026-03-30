@@ -378,24 +378,41 @@ export default function GradebookView() {
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-4 border-b mb-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Gradebook</h2>
-            <p className="text-sm text-slate-600 dark:text-slate-400">Enter and manage student grades.</p>
+    <div className="space-y-4 sm:space-y-6 pb-20 sm:pb-0">
+      <div className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 -mx-4 px-4 sm:mx-0 sm:px-0 py-3 sm:py-4 border-b mb-2 sm:mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center justify-between sm:block">
+            <div>
+              <h2 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">Gradebook</h2>
+              <p className="hidden sm:block text-sm text-slate-600 dark:text-slate-400">Enter and manage student grades.</p>
+            </div>
+            <div className="sm:hidden flex items-center gap-2">
+              {saving && <span className="text-[10px] text-muted-foreground animate-pulse">Saving...</span>}
+              {!saving && lastSaved && <span className="text-[10px] text-muted-foreground">{lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+            </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-            <div className="flex items-center justify-between sm:justify-end gap-2 px-1">
-              {saving && <span className="text-[10px] sm:text-sm text-muted-foreground animate-pulse">Saving...</span>}
-              {!saving && lastSaved && <span className="text-[10px] sm:text-xs text-muted-foreground">Saved {lastSaved.toLocaleTimeString()}</span>}
+            <div className="hidden sm:flex items-center justify-end gap-2 px-1">
+              {saving && <span className="text-sm text-muted-foreground animate-pulse">Saving...</span>}
+              {!saving && lastSaved && <span className="text-xs text-muted-foreground">Saved {lastSaved.toLocaleTimeString()}</span>}
             </div>
             <div className="grid grid-cols-2 sm:flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => handleSaveAll(false)} disabled={loading || saving} className="w-full sm:w-auto">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => handleSaveAll(false)} 
+                disabled={loading || saving} 
+                className="w-full sm:w-auto h-10 sm:h-9 font-bold"
+              >
                 {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
                 Save Now
               </Button>
-              <Button size="sm" onClick={() => setIsSubmitModalOpen(true)} disabled={loading || !selectedClass || !selectedSubject} className="w-full sm:w-auto">
+              <Button 
+                size="sm" 
+                onClick={() => setIsSubmitModalOpen(true)} 
+                disabled={loading || !selectedClass || !selectedSubject} 
+                className="w-full sm:w-auto h-10 sm:h-9 font-bold bg-blue-600 hover:bg-blue-700"
+              >
                 <Send className="h-4 w-4 mr-2" />
                 Submit Results
               </Button>
@@ -404,18 +421,25 @@ export default function GradebookView() {
         </div>
       </div>
 
-      <Card className="shadow-sm">
-        <CardHeader className="p-4 sm:p-6">
-          <CardTitle className="text-lg">Filters</CardTitle>
-          <CardDescription className="text-xs sm:text-sm">Select class and subject to enter grades.</CardDescription>
+      <Card className="shadow-sm border-slate-200 dark:border-slate-800">
+        <CardHeader className="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800/50">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base sm:text-lg font-bold">Filters</CardTitle>
+              <CardDescription className="text-[10px] sm:text-sm">Select class and subject to enter grades.</CardDescription>
+            </div>
+            <Badge variant="outline" className="sm:hidden bg-slate-50 text-[10px]">
+              {selectedYear} {selectedTerm}
+            </Badge>
+          </div>
         </CardHeader>
-        <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-            <div className="space-y-2">
-              <Label>Academic Year</Label>
+        <CardContent className="p-4 sm:p-6">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Year</Label>
               <Select value={selectedYear} onValueChange={setSelectedYear}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Year" />
+                <SelectTrigger className="h-9 text-xs sm:text-sm">
+                  <SelectValue placeholder="Year" />
                 </SelectTrigger>
                 <SelectContent>
                   {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map(year => (
@@ -424,10 +448,10 @@ export default function GradebookView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Term</Label>
+            <div className="space-y-1.5">
+              <Label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Term</Label>
               <Select value={selectedTerm} onValueChange={setSelectedTerm}>
-                <SelectTrigger>
+                <SelectTrigger className="h-9 text-xs sm:text-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -437,11 +461,11 @@ export default function GradebookView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Assessment Type</Label>
+            <div className="space-y-1.5 col-span-2 sm:col-span-1">
+              <Label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Assessment</Label>
               <Select value={selectedExamType} onValueChange={setSelectedExamType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Type" />
+                <SelectTrigger className="h-9 text-xs sm:text-sm">
+                  <SelectValue placeholder="Type" />
                 </SelectTrigger>
                 <SelectContent>
                   {availableExamTypes.map(type => (
@@ -450,11 +474,11 @@ export default function GradebookView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Class</Label>
+            <div className="space-y-1.5">
+              <Label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Class</Label>
               <Select value={selectedClass} onValueChange={setSelectedClass}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Class" />
+                <SelectTrigger className="h-9 text-xs sm:text-sm">
+                  <SelectValue placeholder="Class" />
                 </SelectTrigger>
                 <SelectContent>
                   {classes.map(c => (
@@ -463,11 +487,11 @@ export default function GradebookView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Subject</Label>
+            <div className="space-y-1.5">
+              <Label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Subject</Label>
               <Select value={selectedSubject} onValueChange={setSelectedSubject}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Subject" />
+                <SelectTrigger className="h-9 text-xs sm:text-sm">
+                  <SelectValue placeholder="Subject" />
                 </SelectTrigger>
                 <SelectContent>
                   {subjects.map(s => (
@@ -482,18 +506,20 @@ export default function GradebookView() {
 
       {/* Confirmation Dialog for Submitting Results */}
       <Dialog open={isSubmitModalOpen} onOpenChange={setIsSubmitModalOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[425px]">
           <div className="space-y-4">
             <div className="flex items-center gap-3 text-amber-600">
-              <AlertCircle className="h-6 w-6" />
-              <h3 className="font-semibold text-lg text-slate-900 dark:text-white">Submit Results?</h3>
+              <div className="bg-amber-100 dark:bg-amber-900/30 p-2 rounded-full">
+                <AlertCircle className="h-6 w-6" />
+              </div>
+              <h3 className="font-bold text-lg text-slate-900 dark:text-white">Submit Results?</h3>
             </div>
-            <p className="text-slate-600 dark:text-slate-400">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
               Are you sure you want to submit these grades? This will send them to the school administration for review and calculation.
             </p>
-            <div className="flex justify-end gap-3 pt-4">
-              <Button variant="outline" onClick={() => setIsSubmitModalOpen(false)}>Cancel</Button>
-              <Button onClick={handleSubmit} disabled={loading}>
+            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setIsSubmitModalOpen(false)} className="w-full sm:w-auto">Cancel</Button>
+              <Button onClick={handleSubmit} disabled={loading} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700">
                 {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
                 Confirm Submission
               </Button>
@@ -504,99 +530,149 @@ export default function GradebookView() {
 
 
       {selectedClass && selectedSubject ? (
-        <Card className="shadow-sm overflow-hidden">
+        <Card className="shadow-sm overflow-hidden border-slate-200 dark:border-slate-800">
           <CardContent className="p-0">
             {fetchingStudents ? (
-              <div className="p-8 flex justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <div className="p-12 flex flex-col items-center justify-center gap-3">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                <p className="text-sm text-slate-500 animate-pulse font-medium">Loading roster...</p>
               </div>
             ) : students.length > 0 ? (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[180px] sm:w-[200px] text-xs font-bold uppercase tracking-wider">Student Name</TableHead>
-                      <TableHead className="text-xs font-bold uppercase tracking-wider whitespace-nowrap">Percentage (%)</TableHead>
-                      <TableHead className="text-xs font-bold uppercase tracking-wider whitespace-nowrap">Grade</TableHead>
-                      <TableHead className="min-w-[200px] sm:w-[300px] text-xs font-bold uppercase tracking-wider">Comments</TableHead>
-                      <TableHead className="text-xs font-bold uppercase tracking-wider">Status</TableHead>
-                      <TableHead className="w-[80px] sm:w-[100px] text-right text-xs font-bold uppercase tracking-wider">View</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {students.map(student => {
-                      const entry: GradeEntry = grades[student.id] || {
-                        studentId: student.id,
-                        percentage: '',
-                        grade: '-',
-                        comments: '',
-                        status: 'Draft',
-                        isDirty: false
-                      };
-                      return (
-                        <TableRow key={student.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
-                          <TableCell className="py-3 sm:py-4">
-                            <div className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">{student.fullName}</div>
-                            <div className="text-[10px] sm:text-xs text-muted-foreground font-mono uppercase tracking-tight">{student.studentNumber}</div>
-                          </TableCell>
-                          <TableCell className="py-3 sm:py-4">
-                            <div className="relative max-w-[80px] sm:max-w-[100px]">
+              <>
+                {/* Desktop View Table */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-slate-50 dark:bg-slate-900/50">
+                      <TableRow>
+                        <TableHead className="w-[200px] text-[10px] font-bold uppercase tracking-wider text-slate-500">Student Name</TableHead>
+                        <TableHead className="w-[120px] text-[10px] font-bold uppercase tracking-wider text-slate-500 text-center">Percentage (%)</TableHead>
+                        <TableHead className="w-[80px] text-[10px] font-bold uppercase tracking-wider text-slate-500 text-center">Grade</TableHead>
+                        <TableHead className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Comments</TableHead>
+                        <TableHead className="w-[120px] text-[10px] font-bold uppercase tracking-wider text-slate-500">Status</TableHead>
+                        <TableHead className="w-[60px] text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">View</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {students.map(student => {
+                        const entry: GradeEntry = grades[student.id] || {
+                          studentId: student.id,
+                          percentage: '',
+                          grade: '-',
+                          comments: '',
+                          status: 'Draft',
+                          isDirty: false
+                        };
+                        return (
+                          <TableRow key={student.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                            <TableCell className="py-4">
+                              <div className="font-bold text-slate-900 dark:text-white text-sm">{student.fullName}</div>
+                              <div className="text-[10px] text-slate-500 font-mono uppercase tracking-tight">{student.studentNumber}</div>
+                            </TableCell>
+                            <TableCell className="py-4">
+                              <div className="flex justify-center">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  className="h-9 w-20 text-center font-bold focus:ring-2 focus:ring-blue-500/20 border-slate-200 dark:border-slate-700"
+                                  value={entry.percentage}
+                                  onChange={(e) => handleGradeChange(student.id, 'percentage', e.target.value)}
+                                />
+                              </div>
+                            </TableCell>
+                            <TableCell className="py-4 text-center">
+                              <Badge 
+                                variant={entry.grade === 'F' || entry.grade === '9' ? 'destructive' : 'secondary'}
+                                className="font-bold min-w-[30px] justify-center h-7"
+                              >
+                                {entry.grade}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="py-4">
                               <Input
-                                type="number"
-                                min="0"
-                                max="100"
-                                className="h-9 text-center font-bold focus:ring-2 focus:ring-blue-500/20"
-                                value={entry.percentage}
-                                onChange={(e) => handleGradeChange(student.id, 'percentage', e.target.value)}
+                                placeholder="Add comments..."
+                                className="h-9 text-sm bg-slate-50/50 focus:bg-white border-slate-200 dark:border-slate-700"
+                                value={entry.comments}
+                                onChange={(e) => handleGradeChange(student.id, 'comments', e.target.value)}
                               />
-                            </div>
-                          </TableCell>
-                          <TableCell className="py-3 sm:py-4">
+                            </TableCell>
+                            <TableCell className="py-4">
+                              <div className="flex flex-col gap-1 items-start">
+                                {(() => {
+                                  let displayStatus = entry.status;
+                                  if (entry.isDirty) displayStatus = 'Draft';
+                                  else if (displayStatus !== 'Published' && displayStatus !== 'Submitted' && entry.percentage === '') displayStatus = 'Absent';
+
+                                  switch (displayStatus) {
+                                    case 'Published':
+                                      return <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-[10px] h-5 px-1.5 font-bold">Published</Badge>;
+                                    case 'Submitted':
+                                      return <Badge variant="default" className="bg-blue-600 hover:bg-blue-700 text-[10px] h-5 px-1.5 font-bold">Submitted</Badge>;
+                                    case 'Absent':
+                                      return <Badge variant="destructive" className="text-[10px] h-5 px-1.5 font-bold">Absent</Badge>;
+                                    default:
+                                      return <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-bold border-slate-300">Draft</Badge>;
+                                  }
+                                })()}
+                                {entry.isDirty && <span className="text-[10px] text-amber-500 font-bold italic animate-pulse">Unsaved Changes</span>}
+                              </div>
+                            </TableCell>
+                            <TableCell className="py-4 text-right">
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-blue-50 dark:hover:bg-blue-900/20">
+                                    <Eye className="h-4 w-4 text-blue-600" />
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 sm:p-6">
+                                  <ReportCardPreview
+                                    studentId={student.id}
+                                    term={selectedTerm}
+                                    examType={selectedExamType}
+                                    academicYear={selectedYear}
+                                  />
+                                </DialogContent>
+                              </Dialog>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Mobile View Cards */}
+                <div className="sm:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                  {students.map(student => {
+                    const entry: GradeEntry = grades[student.id] || {
+                      studentId: student.id,
+                      percentage: '',
+                      grade: '-',
+                      comments: '',
+                      status: 'Draft',
+                      isDirty: false
+                    };
+                    return (
+                      <div key={student.id} className="p-4 space-y-3 bg-white dark:bg-slate-900/40">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="font-bold text-slate-900 dark:text-white text-base leading-tight">{student.fullName}</div>
+                            <div className="text-[10px] text-slate-500 font-mono uppercase mt-0.5">{student.studentNumber}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
                             <Badge 
                               variant={entry.grade === 'F' || entry.grade === '9' ? 'destructive' : 'secondary'}
-                              className="font-bold min-w-[30px] justify-center"
+                              className="font-bold h-7 min-w-[32px] justify-center text-sm"
                             >
                               {entry.grade}
                             </Badge>
-                          </TableCell>
-                          <TableCell className="py-3 sm:py-4">
-                            <Input
-                              placeholder="Add comments..."
-                              className="h-9 text-xs sm:text-sm bg-slate-50/50 focus:bg-white"
-                              value={entry.comments}
-                              onChange={(e) => handleGradeChange(student.id, 'comments', e.target.value)}
-                            />
-                          </TableCell>
-                          <TableCell className="py-3 sm:py-4">
-                            <div className="flex flex-col gap-1 items-start">
-                              {(() => {
-                                // If it's dirty, or blank but not saved, show Draft.
-                                let displayStatus = entry.status;
-                                if (entry.isDirty) displayStatus = 'Draft';
-                                else if (displayStatus !== 'Published' && displayStatus !== 'Submitted' && entry.percentage === '') displayStatus = 'Absent';
-
-                                switch (displayStatus) {
-                                  case 'Published':
-                                    return <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-[10px] h-5">Published</Badge>;
-                                  case 'Submitted':
-                                    return <Badge variant="default" className="bg-blue-600 hover:bg-blue-700 text-[10px] h-5">Submitted</Badge>;
-                                  case 'Absent':
-                                    return <Badge variant="destructive" className="text-[10px] h-5">Absent</Badge>;
-                                  default:
-                                    return <Badge variant="outline" className="text-[10px] h-5">Draft</Badge>;
-                                }
-                              })()}
-                              {entry.isDirty && <span className="text-[10px] text-amber-500 font-medium italic animate-pulse">Unsaved</span>}
-                            </div>
-                          </TableCell>
-                          <TableCell className="py-3 sm:py-4 text-right">
                             <Dialog>
                               <DialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-blue-50 dark:hover:bg-blue-900/20">
-                                  <Eye className="h-4 w-4 text-blue-600" />
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600">
+                                  <Eye className="h-5 w-5" />
                                 </Button>
                               </DialogTrigger>
-                              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 sm:p-6">
+                              <DialogContent className="p-0 max-h-[90vh] overflow-y-auto">
                                 <ReportCardPreview
                                   studentId={student.id}
                                   term={selectedTerm}
@@ -605,25 +681,81 @@ export default function GradebookView() {
                                 />
                               </DialogContent>
                             </Dialog>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-12 gap-3 items-center">
+                          <div className="col-span-4 space-y-1">
+                            <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Score (%)</Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              max="100"
+                              className="h-10 text-center font-bold text-lg border-slate-200 focus:ring-2 focus:ring-blue-500/20"
+                              value={entry.percentage}
+                              onChange={(e) => handleGradeChange(student.id, 'percentage', e.target.value)}
+                            />
+                          </div>
+                          <div className="col-span-8 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</Label>
+                              {entry.isDirty && <span className="text-[9px] text-amber-500 font-bold uppercase animate-pulse">Unsaved</span>}
+                            </div>
+                            <div className="h-10 flex items-center bg-slate-50 dark:bg-slate-800/50 rounded-md px-3 border border-slate-200 dark:border-slate-800">
+                              {(() => {
+                                let displayStatus = entry.status;
+                                if (entry.isDirty) displayStatus = 'Draft';
+                                else if (displayStatus !== 'Published' && displayStatus !== 'Submitted' && entry.percentage === '') displayStatus = 'Absent';
+
+                                switch (displayStatus) {
+                                  case 'Published':
+                                    return <div className="flex items-center gap-1.5 text-green-600 font-bold text-xs uppercase"><CheckCircle2 className="h-3.5 w-3.5" /> Published</div>;
+                                  case 'Submitted':
+                                    return <div className="flex items-center gap-1.5 text-blue-600 font-bold text-xs uppercase"><Send className="h-3.5 w-3.5" /> Submitted</div>;
+                                  case 'Absent':
+                                    return <div className="flex items-center gap-1.5 text-rose-600 font-bold text-xs uppercase"><AlertCircle className="h-3.5 w-3.5" /> Absent</div>;
+                                  default:
+                                    return <div className="flex items-center gap-1.5 text-slate-500 font-bold text-xs uppercase"><Filter className="h-3.5 w-3.5" /> Draft</div>;
+                                }
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Teacher Comments</Label>
+                          <Input
+                            placeholder="Type a comment for the report card..."
+                            className="h-10 text-sm bg-slate-50/50 border-slate-200 focus:bg-white"
+                            value={entry.comments}
+                            onChange={(e) => handleGradeChange(student.id, 'comments', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             ) : (
-              <div className="p-8 text-center text-muted-foreground">
-                No students found in this class.
+              <div className="p-12 text-center flex flex-col items-center gap-4">
+                <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-full">
+                  <Users className="h-10 w-10 text-slate-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">Empty Roster</h3>
+                  <p className="text-sm text-slate-500">No students are currently enrolled in this class for the selected year.</p>
+                </div>
               </div>
             )}
           </CardContent>
         </Card>
       ) : (
-        <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed rounded-lg bg-slate-50 dark:bg-slate-900/50">
-          <Filter className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium">Select Class and Subject</h3>
-          <p className="text-muted-foreground">Please select a class and subject to start entering grades.</p>
+        <div className="flex flex-col items-center justify-center p-12 sm:p-20 border-2 border-dashed rounded-xl bg-slate-50/50 dark:bg-slate-900/30 border-slate-200 dark:border-slate-800">
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm mb-6">
+            <Filter className="h-10 w-10 text-blue-600" />
+          </div>
+          <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">Select Class and Subject</h3>
+          <p className="text-slate-500 text-center max-w-[280px] text-sm font-medium">Please select a class and subject from the filters above to start entering grades.</p>
         </div>
       )}
     </div>

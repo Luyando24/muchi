@@ -1198,13 +1198,23 @@ export default function TeacherPortal() {
                     Here's what's happening in your classes today.
                   </p>
                 </div>
-                <Button 
-                  onClick={() => setActiveTab("attendance")}
-                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 h-11 sm:h-10 text-base sm:text-sm font-bold shadow-md"
-                >
-                  <ClipboardCheck className="h-5 w-5 sm:h-4 sm:w-4 mr-2" />
-                  Mark Attendance
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                  <Button 
+                    onClick={() => setActiveTab("attendance")}
+                    className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 h-11 sm:h-10 text-base sm:text-sm font-bold shadow-md"
+                  >
+                    <ClipboardCheck className="h-5 w-5 sm:h-4 sm:w-4 mr-2" />
+                    Mark Attendance
+                  </Button>
+                  <Button 
+                    onClick={() => setActiveTab("gradebook")}
+                    variant="outline"
+                    className="w-full sm:w-auto h-11 sm:h-10 text-base sm:text-sm font-bold border-blue-200 dark:border-blue-900 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                  >
+                    <PenTool className="h-5 w-5 sm:h-4 sm:w-4 mr-2 text-blue-600" />
+                    Enter Results
+                  </Button>
+                </div>
               </div>
 
               {/* Quick Stats */}
