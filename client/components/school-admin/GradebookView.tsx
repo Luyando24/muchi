@@ -379,25 +379,27 @@ export default function GradebookView() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Gradebook</h2>
-          <p className="text-sm text-slate-600 dark:text-slate-400">Enter and manage student grades.</p>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-          <div className="flex items-center justify-between sm:justify-end gap-2 px-1">
-            {saving && <span className="text-[10px] sm:text-sm text-muted-foreground animate-pulse">Saving...</span>}
-            {!saving && lastSaved && <span className="text-[10px] sm:text-xs text-muted-foreground">Saved {lastSaved.toLocaleTimeString()}</span>}
+      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-4 border-b mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Gradebook</h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400">Enter and manage student grades.</p>
           </div>
-          <div className="grid grid-cols-2 sm:flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => handleSaveAll(false)} disabled={loading || saving} className="w-full sm:w-auto">
-              {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-              Save Now
-            </Button>
-            <Button size="sm" onClick={() => setIsSubmitModalOpen(true)} disabled={loading || !selectedClass || !selectedSubject} className="w-full sm:w-auto">
-              <Send className="h-4 w-4 mr-2" />
-              Submit Results
-            </Button>
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+            <div className="flex items-center justify-between sm:justify-end gap-2 px-1">
+              {saving && <span className="text-[10px] sm:text-sm text-muted-foreground animate-pulse">Saving...</span>}
+              {!saving && lastSaved && <span className="text-[10px] sm:text-xs text-muted-foreground">Saved {lastSaved.toLocaleTimeString()}</span>}
+            </div>
+            <div className="grid grid-cols-2 sm:flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => handleSaveAll(false)} disabled={loading || saving} className="w-full sm:w-auto">
+                {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                Save Now
+              </Button>
+              <Button size="sm" onClick={() => setIsSubmitModalOpen(true)} disabled={loading || !selectedClass || !selectedSubject} className="w-full sm:w-auto">
+                <Send className="h-4 w-4 mr-2" />
+                Submit Results
+              </Button>
+            </div>
           </div>
         </div>
       </div>
