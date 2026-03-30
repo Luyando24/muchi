@@ -63,6 +63,7 @@ import {
 import ThemeToggle from '@/components/navigation/ThemeToggle';
 import { useToast } from "@/components/ui/use-toast";
 import GradebookView from '@/components/school-admin/GradebookView';
+import { MultiSelect } from '@/components/ui/multi-select';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { OfflineIndicator } from '@/components/navigation/OfflineIndicator';
 import { syncFetch, offlineQuery } from '@/lib/syncService';
@@ -188,7 +189,7 @@ export default function TeacherPortal() {
   // Self-Assign State
   const [selfAssignForm, setSelfAssignForm] = useState({
     classId: '',
-    subjectId: ''
+    subjectIds: [] as string[]
   });
   const [isSubmittingSelfAssign, setIsSubmittingSelfAssign] = useState(false);
 
@@ -648,10 +649,10 @@ export default function TeacherPortal() {
   };
 
   const handleSelfAssign = async () => {
-    if (!selfAssignForm.classId || !selfAssignForm.subjectId) {
+    if (!selfAssignForm.classId || !selfAssignForm.subjectIds || selfAssignForm.subjectIds.length === 0) {
       toast({
         title: "Selection Required",
-        description: "Please select both a class and a subject.",
+        description: "Please select a class and at least one subject.",
         variant: "destructive"
       });
       return;
@@ -663,16 +664,18 @@ export default function TeacherPortal() {
         method: 'POST',
         body: JSON.stringify({
           classId: selfAssignForm.classId,
-          subjectId: selfAssignForm.subjectId
+          subjectIds: selfAssignForm.subjectIds
         })
       });
 
       toast({
         title: "Success",
-        description: "Successfully assigned yourself to the subject."
+        description: "Successfully assigned yourself to the subjects."
       });
       
       setIsSelfAssignOpen(false);
+      // Reset form
+      setSelfAssignForm({ classId: '', subjectIds: [] });
       // Refresh dashboard data to reflect new assignment
       fetchDashboardData();
     } catch (error: any) {
@@ -1517,6 +1520,24 @@ export default function TeacherPortal() {
                   <h2 className="text-2xl font-bold text-slate-900 dark:text-white">My Classes</h2>
                   <p className="text-slate-600 dark:text-slate-400">Manage your courses, students, and curriculum.</p>
                 </div>
+                <Button 
+                  onClick={async () => {
+                    // Fetch all classes for the school if not already fetched
+                    if (allClasses.length === 0) {
+                      try {
+                        const data = await fetchWithAuth('/api/teacher/all-school-classes');
+                        setAllClasses(data);
+                      } catch (e) {
+                        console.error('Failed to fetch school classes', e);
+                      }
+                    }
+                    setIsSelfAssignOpen(true);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Class/Subject
+                </Button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -2192,10 +2213,12 @@ export default function TeacherPortal() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-blue-600" />
-              Welcome to Your Portal!
+              {classes.length === 0 ? "Welcome to Your Portal!" : "Add Class/Subject"}
             </DialogTitle>
             <DialogDescription>
-              To get started, please assign yourself to at least one class and subject you teach. This will help you manage your students and grading.
+              {classes.length === 0 
+                ? "To get started, please assign yourself to at least one class and subject you teach. This will help you manage your students and grading."
+                : "Select a class and the subjects you teach to add them to your portal."}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -2218,29 +2241,25 @@ export default function TeacherPortal() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="subject">Select Subject</Label>
-              <Select 
-                value={selfAssignForm.subjectId} 
-                onValueChange={(v) => setSelfAssignForm({ ...selfAssignForm, subjectId: v })}
-              >
-                <SelectTrigger id="subject">
-                  <SelectValue placeholder="Select a subject" />
-                </SelectTrigger>
-                <SelectContent>
-                  {subjects.map((sub) => (
-                    <SelectItem key={sub.id} value={sub.id}>
-                      {sub.name} ({sub.code})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="subject">Select Subjects</Label>
+              <MultiSelect
+                options={subjects.map((sub) => ({
+                  label: `${sub.name} (${sub.code})`,
+                  value: sub.id,
+                }))}
+                onValueChange={(vals) => setSelfAssignForm({ ...selfAssignForm, subjectIds: vals })}
+                defaultValue={selfAssignForm.subjectIds}
+                placeholder="Select subjects"
+                variant="inverted"
+                maxCount={3}
+              />
             </div>
           </div>
           <DialogFooter>
             <Button 
               className="w-full bg-blue-600 hover:bg-blue-700" 
               onClick={handleSelfAssign}
-              disabled={isSubmittingSelfAssign || !selfAssignForm.classId || !selfAssignForm.subjectId}
+              disabled={isSubmittingSelfAssign || !selfAssignForm.classId || selfAssignForm.subjectIds.length === 0}
             >
               {isSubmittingSelfAssign ? (
                 <>
@@ -2248,7 +2267,7 @@ export default function TeacherPortal() {
                   Assigning...
                 </>
               ) : (
-                "Get Started"
+                "Save Assignment"
               )}
             </Button>
           </DialogFooter>

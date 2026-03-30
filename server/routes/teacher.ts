@@ -599,51 +599,60 @@ router.put('/profile', requireTeacher, async (req: Request, res: Response) => {
 });
 
 // POST /api/teacher/self-assign
-// Allow a teacher to self-assign to a subject in a class
+// Allow a teacher to self-assign to one or more subjects in a class
 router.post('/self-assign', requireTeacher, async (req: Request, res: Response) => {
   const profile = (req as any).profile;
   const teacherId = profile.id;
-  const { classId, subjectId } = req.body;
+  const { classId, subjectId, subjectIds } = req.body;
 
-  if (!classId || !subjectId) {
-    return res.status(400).json({ message: 'Class ID and Subject ID are required' });
+  // Support both single subjectId (backward compatibility) and multiple subjectIds
+  const ids = subjectIds || (subjectId ? [subjectId] : []);
+
+  if (!classId || ids.length === 0) {
+    return res.status(400).json({ message: 'Class ID and at least one Subject ID are required' });
   }
 
   try {
-    // Check if the assignment already exists
-    const { data: existing } = await supabaseAdmin
-      .from('class_subjects')
-      .select('id, teacher_id')
-      .eq('class_id', classId)
-      .eq('subject_id', subjectId)
-      .maybeSingle();
+    const results = [];
+    
+    for (const sId of ids) {
+      // Check if the assignment already exists
+      const { data: existing } = await supabaseAdmin
+        .from('class_subjects')
+        .select('id, teacher_id')
+        .eq('class_id', classId)
+        .eq('subject_id', sId)
+        .maybeSingle();
 
-    if (existing) {
-      // If already assigned to someone else, we'll allow overwriting for self-assignment
-      const { data, error } = await supabaseAdmin
-        .from('class_subjects')
-        .update({ teacher_id: teacherId })
-        .eq('id', existing.id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return res.json(data);
-    } else {
-      // Create new assignment
-      const { data, error } = await supabaseAdmin
-        .from('class_subjects')
-        .insert({
-          class_id: classId,
-          subject_id: subjectId,
-          teacher_id: teacherId
-        })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return res.json(data);
+      if (existing) {
+        // If already assigned, update to current teacher (overwrite)
+        const { data, error } = await supabaseAdmin
+          .from('class_subjects')
+          .update({ teacher_id: teacherId })
+          .eq('id', existing.id)
+          .select()
+          .single();
+        
+        if (error) throw error;
+        results.push(data);
+      } else {
+        // Create new assignment
+        const { data, error } = await supabaseAdmin
+          .from('class_subjects')
+          .insert({
+            class_id: classId,
+            subject_id: sId,
+            teacher_id: teacherId
+          })
+          .select()
+          .single();
+        
+        if (error) throw error;
+        results.push(data);
+      }
     }
+    
+    return res.json({ message: `Successfully assigned ${results.length} subjects`, data: results });
   } catch (error: any) {
     console.error('Self-assign Error:', error);
     res.status(500).json({ message: error.message });
