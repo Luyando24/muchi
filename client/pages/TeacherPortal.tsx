@@ -64,6 +64,7 @@ import ThemeToggle from '@/components/navigation/ThemeToggle';
 import { useToast } from "@/components/ui/use-toast";
 import GradebookView from '@/components/school-admin/GradebookView';
 import { MultiSelect } from '@/components/ui/multi-select';
+import { Combobox } from '@/components/ui/combobox';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { OfflineIndicator } from '@/components/navigation/OfflineIndicator';
 import { syncFetch, offlineQuery } from '@/lib/syncService';
@@ -2251,21 +2252,16 @@ export default function TeacherPortal() {
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="class">Select Class</Label>
-              <Select 
-                value={selfAssignForm.classId} 
+              <Combobox
+                options={(allClasses || []).map((cls) => ({
+                  label: cls.name,
+                  value: cls.id,
+                }))}
+                value={selfAssignForm.classId}
                 onValueChange={(v) => setSelfAssignForm({ ...selfAssignForm, classId: v })}
-              >
-                <SelectTrigger id="class">
-                  <SelectValue placeholder="Select a class" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(allClasses || []).map((cls) => (
-                    <SelectItem key={cls.id} value={cls.id}>
-                      {cls.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Select a class"
+                emptyMessage="No classes found."
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="subject">Select Subjects</Label>
