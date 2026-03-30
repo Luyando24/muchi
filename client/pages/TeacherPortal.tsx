@@ -280,6 +280,22 @@ export default function TeacherPortal() {
 
       if (error) throw error;
 
+      // Update Profile to clear temporary password flag if it exists
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          is_temp_password: false,
+          temp_password_expires_at: null,
+          temp_password_set_at: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (profileError) {
+        console.error('Error clearing temp password flag:', profileError);
+        // We don't throw here because the auth password was already updated successfully
+      }
+
       toast({
         title: "Success",
         description: "Password updated successfully."
