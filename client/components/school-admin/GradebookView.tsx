@@ -34,6 +34,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from "@/components/ui/use-toast";
+import { cn } from "@/lib/utils";
 import { supabase } from '@/lib/supabase';
 import { syncFetch } from '@/lib/syncService';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
@@ -93,6 +94,7 @@ export default function GradebookView() {
   const [fetchingStudents, setFetchingStudents] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isInputFocused, setIsInputFocused] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -383,7 +385,10 @@ export default function GradebookView() {
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-20 sm:pb-0">
-      <div className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 -mx-4 px-4 sm:mx-0 sm:px-0 py-3 sm:py-4 border-b mb-2 sm:mb-4">
+      <div className={cn(
+        "sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 -mx-4 px-4 sm:mx-0 sm:px-0 py-3 sm:py-4 border-b mb-2 sm:mb-4 transition-all duration-200",
+        isInputFocused && "hidden sm:block"
+      )}>
         <div className="flex flex-col gap-3 sm:gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center justify-between sm:block">
@@ -613,17 +618,17 @@ export default function GradebookView() {
                                 <div className="text-[10px] text-slate-500 font-mono uppercase tracking-tight">{student.studentNumber}</div>
                               </TableCell>
                               <TableCell className="py-4">
-                                <div className="flex justify-center">
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    className="h-9 w-20 text-center font-bold focus:ring-2 focus:ring-blue-500/20 border-slate-200 dark:border-slate-700"
-                                    value={entry.percentage}
-                                    onChange={(e) => handleGradeChange(student.id, 'percentage', e.target.value)}
-                                  />
-                                </div>
-                              </TableCell>
+                              <div className="flex justify-center">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  className="h-9 w-20 text-center font-bold focus:ring-2 focus:ring-blue-500/20 border-slate-200 dark:border-slate-700"
+                                  value={entry.percentage}
+                                  onChange={(e) => handleGradeChange(student.id, 'percentage', e.target.value)}
+                                />
+                              </div>
+                            </TableCell>
                               <TableCell className="py-4 text-center">
                                 <Badge 
                                   variant={entry.grade === 'F' || entry.grade === '9' ? 'destructive' : 'secondary'}
@@ -633,13 +638,13 @@ export default function GradebookView() {
                                 </Badge>
                               </TableCell>
                               <TableCell className="py-4">
-                                <Input
-                                  placeholder="Add comments..."
-                                  className="h-9 text-sm bg-slate-50/50 focus:bg-white border-slate-200 dark:border-slate-700"
-                                  value={entry.comments}
-                                  onChange={(e) => handleGradeChange(student.id, 'comments', e.target.value)}
-                                />
-                              </TableCell>
+                              <Input
+                                placeholder="Add comments..."
+                                className="h-9 text-sm bg-slate-50/50 focus:bg-white border-slate-200 dark:border-slate-700"
+                                 value={entry.comments}
+                                 onChange={(e) => handleGradeChange(student.id, 'comments', e.target.value)}
+                               />
+                             </TableCell>
                               <TableCell className="py-4">
                                 <div className="flex flex-col gap-1 items-start">
                                   {(() => {
@@ -751,6 +756,8 @@ export default function GradebookView() {
                                 className="h-10 text-center font-bold text-lg border-slate-200 focus:ring-2 focus:ring-blue-500/20"
                                 value={entry.percentage}
                                 onChange={(e) => handleGradeChange(student.id, 'percentage', e.target.value)}
+                                onFocus={() => setIsInputFocused(true)}
+                                onBlur={() => setIsInputFocused(false)}
                               />
                             </div>
                             <div className="col-span-8 space-y-1">
@@ -780,14 +787,16 @@ export default function GradebookView() {
                           </div>
 
                           <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Teacher Comments</Label>
-                            <Input
-                              placeholder="Type a comment for the report card..."
-                              className="h-10 text-sm bg-slate-50/50 border-slate-200 focus:bg-white"
-                              value={entry.comments}
-                              onChange={(e) => handleGradeChange(student.id, 'comments', e.target.value)}
-                            />
-                          </div>
+                          <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Teacher Comments</Label>
+                          <Input
+                            placeholder="Type a comment for the report card..."
+                            className="h-10 text-sm bg-slate-50/50 border-slate-200 focus:bg-white"
+                            value={entry.comments}
+                            onChange={(e) => handleGradeChange(student.id, 'comments', e.target.value)}
+                            onFocus={() => setIsInputFocused(true)}
+                            onBlur={() => setIsInputFocused(false)}
+                          />
+                        </div>
                         </div>
                       );
                     })}
