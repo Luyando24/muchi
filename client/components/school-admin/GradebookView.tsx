@@ -32,6 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { syncFetch } from '@/lib/syncService';
@@ -90,6 +91,8 @@ export default function GradebookView() {
   const [students, setStudents] = useState<Student[]>([]);
   const [grades, setGrades] = useState<Record<string, GradeEntry>>({});
   const [fetchingStudents, setFetchingStudents] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -381,44 +384,71 @@ export default function GradebookView() {
   return (
     <div className="space-y-4 sm:space-y-6 pb-20 sm:pb-0">
       <div className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 -mx-4 px-4 sm:mx-0 sm:px-0 py-3 sm:py-4 border-b mb-2 sm:mb-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-          <div className="flex items-center justify-between sm:block">
-            <div>
-              <h2 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">Gradebook</h2>
-              <p className="hidden sm:block text-sm text-slate-600 dark:text-slate-400">Enter and manage student grades.</p>
+        <div className="flex flex-col gap-3 sm:gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center justify-between sm:block">
+              <div>
+                <h2 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">Gradebook</h2>
+                <p className="hidden sm:block text-sm text-slate-600 dark:text-slate-400">Enter and manage student grades.</p>
+              </div>
+              <div className="sm:hidden flex items-center gap-2">
+                {saving && <span className="text-[10px] text-muted-foreground animate-pulse">Saving...</span>}
+                {!saving && lastSaved && <span className="text-[10px] text-muted-foreground">{lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+              </div>
             </div>
-            <div className="sm:hidden flex items-center gap-2">
-              {saving && <span className="text-[10px] text-muted-foreground animate-pulse">Saving...</span>}
-              {!saving && lastSaved && <span className="text-[10px] text-muted-foreground">{lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+              <div className="hidden sm:flex items-center justify-end gap-2 px-1">
+                {saving && <span className="text-sm text-muted-foreground animate-pulse">Saving...</span>}
+                {!saving && lastSaved && <span className="text-xs text-muted-foreground">Saved {lastSaved.toLocaleTimeString()}</span>}
+              </div>
+              <div className="grid grid-cols-2 sm:flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => handleSaveAll(false)} 
+                  disabled={loading || saving} 
+                  className="w-full sm:w-auto h-10 sm:h-9 font-bold"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                  Save Now
+                </Button>
+                <Button 
+                  size="sm" 
+                  onClick={() => setIsSubmitModalOpen(true)} 
+                  disabled={loading || !selectedClass || !selectedSubject} 
+                  className="w-full sm:w-auto h-10 sm:h-9 font-bold bg-blue-600 hover:bg-blue-700"
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  Submit Results
+                </Button>
+              </div>
             </div>
           </div>
-          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-            <div className="hidden sm:flex items-center justify-end gap-2 px-1">
-              {saving && <span className="text-sm text-muted-foreground animate-pulse">Saving...</span>}
-              {!saving && lastSaved && <span className="text-xs text-muted-foreground">Saved {lastSaved.toLocaleTimeString()}</span>}
+
+          {/* Sticky Tabs and Search */}
+          {selectedClass && selectedSubject && (
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
+                <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
+                  <TabsTrigger value="all" className="text-xs sm:text-sm font-bold">
+                    All ({students.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="pending" className="text-xs sm:text-sm font-bold">
+                    Pending ({students.filter(s => !grades[s.id] || grades[s.id].percentage === '').length})
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <div className="relative w-full md:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  placeholder="Search student..."
+                  className="pl-9 h-9 text-xs sm:text-sm bg-white dark:bg-slate-900 border-slate-200"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
             </div>
-            <div className="grid grid-cols-2 sm:flex gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => handleSaveAll(false)} 
-                disabled={loading || saving} 
-                className="w-full sm:w-auto h-10 sm:h-9 font-bold"
-              >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                Save Now
-              </Button>
-              <Button 
-                size="sm" 
-                onClick={() => setIsSubmitModalOpen(true)} 
-                disabled={loading || !selectedClass || !selectedSubject} 
-                className="w-full sm:w-auto h-10 sm:h-9 font-bold bg-blue-600 hover:bg-blue-700"
-              >
-                <Send className="h-4 w-4 mr-2" />
-                Submit Results
-              </Button>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -554,78 +584,152 @@ export default function GradebookView() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {students.map(student => {
-                        const entry: GradeEntry = grades[student.id] || {
-                          studentId: student.id,
-                          percentage: '',
-                          grade: '-',
-                          comments: '',
-                          status: 'Draft',
-                          isDirty: false
-                        };
-                        return (
-                          <TableRow key={student.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
-                            <TableCell className="py-4">
-                              <div className="font-bold text-slate-900 dark:text-white text-sm">{student.fullName}</div>
-                              <div className="text-[10px] text-slate-500 font-mono uppercase tracking-tight">{student.studentNumber}</div>
-                            </TableCell>
-                            <TableCell className="py-4">
-                              <div className="flex justify-center">
+                      {students
+                        .filter(student => {
+                          const matchesSearch = student.fullName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                              student.studentNumber.toLowerCase().includes(searchQuery.toLowerCase());
+                          
+                          if (!matchesSearch) return false;
+
+                          if (activeTab === 'pending') {
+                            const entry = grades[student.id];
+                            return !entry || entry.percentage === '';
+                          }
+                          return true;
+                        })
+                        .map(student => {
+                          const entry: GradeEntry = grades[student.id] || {
+                            studentId: student.id,
+                            percentage: '',
+                            grade: '-',
+                            comments: '',
+                            status: 'Draft',
+                            isDirty: false
+                          };
+                          return (
+                            <TableRow key={student.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                              <TableCell className="py-4">
+                                <div className="font-bold text-slate-900 dark:text-white text-sm">{student.fullName}</div>
+                                <div className="text-[10px] text-slate-500 font-mono uppercase tracking-tight">{student.studentNumber}</div>
+                              </TableCell>
+                              <TableCell className="py-4">
+                                <div className="flex justify-center">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    className="h-9 w-20 text-center font-bold focus:ring-2 focus:ring-blue-500/20 border-slate-200 dark:border-slate-700"
+                                    value={entry.percentage}
+                                    onChange={(e) => handleGradeChange(student.id, 'percentage', e.target.value)}
+                                  />
+                                </div>
+                              </TableCell>
+                              <TableCell className="py-4 text-center">
+                                <Badge 
+                                  variant={entry.grade === 'F' || entry.grade === '9' ? 'destructive' : 'secondary'}
+                                  className="font-bold min-w-[30px] justify-center h-7"
+                                >
+                                  {entry.grade}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="py-4">
                                 <Input
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  className="h-9 w-20 text-center font-bold focus:ring-2 focus:ring-blue-500/20 border-slate-200 dark:border-slate-700"
-                                  value={entry.percentage}
-                                  onChange={(e) => handleGradeChange(student.id, 'percentage', e.target.value)}
+                                  placeholder="Add comments..."
+                                  className="h-9 text-sm bg-slate-50/50 focus:bg-white border-slate-200 dark:border-slate-700"
+                                  value={entry.comments}
+                                  onChange={(e) => handleGradeChange(student.id, 'comments', e.target.value)}
                                 />
-                              </div>
-                            </TableCell>
-                            <TableCell className="py-4 text-center">
+                              </TableCell>
+                              <TableCell className="py-4">
+                                <div className="flex flex-col gap-1 items-start">
+                                  {(() => {
+                                    let displayStatus = entry.status;
+                                    if (entry.isDirty) displayStatus = 'Draft';
+                                    else if (displayStatus !== 'Published' && displayStatus !== 'Submitted' && entry.percentage === '') displayStatus = 'Absent';
+
+                                    switch (displayStatus) {
+                                      case 'Published':
+                                        return <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-[10px] h-5 px-1.5 font-bold">Published</Badge>;
+                                      case 'Submitted':
+                                        return <Badge variant="default" className="bg-blue-600 hover:bg-blue-700 text-[10px] h-5 px-1.5 font-bold">Submitted</Badge>;
+                                      case 'Absent':
+                                        return <Badge variant="destructive" className="text-[10px] h-5 px-1.5 font-bold">Absent</Badge>;
+                                      default:
+                                        return <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-bold border-slate-300">Draft</Badge>;
+                                    }
+                                  })()}
+                                  {entry.isDirty && <span className="text-[10px] text-amber-500 font-bold italic animate-pulse">Unsaved Changes</span>}
+                                </div>
+                              </TableCell>
+                              <TableCell className="py-4 text-right">
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-blue-50 dark:hover:bg-blue-900/20">
+                                      <Eye className="h-4 w-4 text-blue-600" />
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 sm:p-6">
+                                    <ReportCardPreview
+                                      studentId={student.id}
+                                      term={selectedTerm}
+                                      examType={selectedExamType}
+                                      academicYear={selectedYear}
+                                    />
+                                  </DialogContent>
+                                </Dialog>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Mobile View Cards */}
+                <div className="sm:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                  {students
+                    .filter(student => {
+                      const matchesSearch = student.fullName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                          student.studentNumber.toLowerCase().includes(searchQuery.toLowerCase());
+                      
+                      if (!matchesSearch) return false;
+
+                      if (activeTab === 'pending') {
+                        const entry = grades[student.id];
+                        return !entry || entry.percentage === '';
+                      }
+                      return true;
+                    })
+                    .map(student => {
+                      const entry: GradeEntry = grades[student.id] || {
+                        studentId: student.id,
+                        percentage: '',
+                        grade: '-',
+                        comments: '',
+                        status: 'Draft',
+                        isDirty: false
+                      };
+                      return (
+                        <div key={student.id} className="p-4 space-y-3 bg-white dark:bg-slate-900/40">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="font-bold text-slate-900 dark:text-white text-base leading-tight">{student.fullName}</div>
+                              <div className="text-[10px] text-slate-500 font-mono uppercase mt-0.5">{student.studentNumber}</div>
+                            </div>
+                            <div className="flex items-center gap-2">
                               <Badge 
                                 variant={entry.grade === 'F' || entry.grade === '9' ? 'destructive' : 'secondary'}
-                                className="font-bold min-w-[30px] justify-center h-7"
+                                className="font-bold h-7 min-w-[32px] justify-center text-sm"
                               >
                                 {entry.grade}
                               </Badge>
-                            </TableCell>
-                            <TableCell className="py-4">
-                              <Input
-                                placeholder="Add comments..."
-                                className="h-9 text-sm bg-slate-50/50 focus:bg-white border-slate-200 dark:border-slate-700"
-                                value={entry.comments}
-                                onChange={(e) => handleGradeChange(student.id, 'comments', e.target.value)}
-                              />
-                            </TableCell>
-                            <TableCell className="py-4">
-                              <div className="flex flex-col gap-1 items-start">
-                                {(() => {
-                                  let displayStatus = entry.status;
-                                  if (entry.isDirty) displayStatus = 'Draft';
-                                  else if (displayStatus !== 'Published' && displayStatus !== 'Submitted' && entry.percentage === '') displayStatus = 'Absent';
-
-                                  switch (displayStatus) {
-                                    case 'Published':
-                                      return <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-[10px] h-5 px-1.5 font-bold">Published</Badge>;
-                                    case 'Submitted':
-                                      return <Badge variant="default" className="bg-blue-600 hover:bg-blue-700 text-[10px] h-5 px-1.5 font-bold">Submitted</Badge>;
-                                    case 'Absent':
-                                      return <Badge variant="destructive" className="text-[10px] h-5 px-1.5 font-bold">Absent</Badge>;
-                                    default:
-                                      return <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-bold border-slate-300">Draft</Badge>;
-                                  }
-                                })()}
-                                {entry.isDirty && <span className="text-[10px] text-amber-500 font-bold italic animate-pulse">Unsaved Changes</span>}
-                              </div>
-                            </TableCell>
-                            <TableCell className="py-4 text-right">
                               <Dialog>
                                 <DialogTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-blue-50 dark:hover:bg-blue-900/20">
-                                    <Eye className="h-4 w-4 text-blue-600" />
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600">
+                                    <Eye className="h-5 w-5" />
                                   </Button>
                                 </DialogTrigger>
-                                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 sm:p-6">
+                                <DialogContent className="p-0 max-h-[90vh] overflow-y-auto">
                                   <ReportCardPreview
                                     studentId={student.id}
                                     term={selectedTerm}
@@ -634,107 +738,59 @@ export default function GradebookView() {
                                   />
                                 </DialogContent>
                               </Dialog>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {/* Mobile View Cards */}
-                <div className="sm:hidden divide-y divide-slate-100 dark:divide-slate-800">
-                  {students.map(student => {
-                    const entry: GradeEntry = grades[student.id] || {
-                      studentId: student.id,
-                      percentage: '',
-                      grade: '-',
-                      comments: '',
-                      status: 'Draft',
-                      isDirty: false
-                    };
-                    return (
-                      <div key={student.id} className="p-4 space-y-3 bg-white dark:bg-slate-900/40">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <div className="font-bold text-slate-900 dark:text-white text-base leading-tight">{student.fullName}</div>
-                            <div className="text-[10px] text-slate-500 font-mono uppercase mt-0.5">{student.studentNumber}</div>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Badge 
-                              variant={entry.grade === 'F' || entry.grade === '9' ? 'destructive' : 'secondary'}
-                              className="font-bold h-7 min-w-[32px] justify-center text-sm"
-                            >
-                              {entry.grade}
-                            </Badge>
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600">
-                                  <Eye className="h-5 w-5" />
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent className="p-0 max-h-[90vh] overflow-y-auto">
-                                <ReportCardPreview
-                                  studentId={student.id}
-                                  term={selectedTerm}
-                                  examType={selectedExamType}
-                                  academicYear={selectedYear}
-                                />
-                              </DialogContent>
-                            </Dialog>
-                          </div>
-                        </div>
 
-                        <div className="grid grid-cols-12 gap-3 items-center">
-                          <div className="col-span-4 space-y-1">
-                            <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Score (%)</Label>
+                          <div className="grid grid-cols-12 gap-3 items-center">
+                            <div className="col-span-4 space-y-1">
+                              <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Score (%)</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                max="100"
+                                className="h-10 text-center font-bold text-lg border-slate-200 focus:ring-2 focus:ring-blue-500/20"
+                                value={entry.percentage}
+                                onChange={(e) => handleGradeChange(student.id, 'percentage', e.target.value)}
+                              />
+                            </div>
+                            <div className="col-span-8 space-y-1">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</Label>
+                                {entry.isDirty && <span className="text-[9px] text-amber-500 font-bold uppercase animate-pulse">Unsaved</span>}
+                              </div>
+                              <div className="h-10 flex items-center bg-slate-50 dark:bg-slate-800/50 rounded-md px-3 border border-slate-200 dark:border-slate-800">
+                                {(() => {
+                                  let displayStatus = entry.status;
+                                  if (entry.isDirty) displayStatus = 'Draft';
+                                  else if (displayStatus !== 'Published' && displayStatus !== 'Submitted' && entry.percentage === '') displayStatus = 'Absent';
+
+                                  switch (displayStatus) {
+                                    case 'Published':
+                                      return <div className="flex items-center gap-1.5 text-green-600 font-bold text-xs uppercase"><CheckCircle2 className="h-3.5 w-3.5" /> Published</div>;
+                                    case 'Submitted':
+                                      return <div className="flex items-center gap-1.5 text-blue-600 font-bold text-xs uppercase"><Send className="h-3.5 w-3.5" /> Submitted</div>;
+                                    case 'Absent':
+                                      return <div className="flex items-center gap-1.5 text-rose-600 font-bold text-xs uppercase"><AlertCircle className="h-3.5 w-3.5" /> Absent</div>;
+                                    default:
+                                      return <div className="flex items-center gap-1.5 text-slate-500 font-bold text-xs uppercase"><Filter className="h-3.5 w-3.5" /> Draft</div>;
+                                  }
+                                })()}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Teacher Comments</Label>
                             <Input
-                              type="number"
-                              min="0"
-                              max="100"
-                              className="h-10 text-center font-bold text-lg border-slate-200 focus:ring-2 focus:ring-blue-500/20"
-                              value={entry.percentage}
-                              onChange={(e) => handleGradeChange(student.id, 'percentage', e.target.value)}
+                              placeholder="Type a comment for the report card..."
+                              className="h-10 text-sm bg-slate-50/50 border-slate-200 focus:bg-white"
+                              value={entry.comments}
+                              onChange={(e) => handleGradeChange(student.id, 'comments', e.target.value)}
                             />
                           </div>
-                          <div className="col-span-8 space-y-1">
-                            <div className="flex items-center justify-between">
-                              <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</Label>
-                              {entry.isDirty && <span className="text-[9px] text-amber-500 font-bold uppercase animate-pulse">Unsaved</span>}
-                            </div>
-                            <div className="h-10 flex items-center bg-slate-50 dark:bg-slate-800/50 rounded-md px-3 border border-slate-200 dark:border-slate-800">
-                              {(() => {
-                                let displayStatus = entry.status;
-                                if (entry.isDirty) displayStatus = 'Draft';
-                                else if (displayStatus !== 'Published' && displayStatus !== 'Submitted' && entry.percentage === '') displayStatus = 'Absent';
-
-                                switch (displayStatus) {
-                                  case 'Published':
-                                    return <div className="flex items-center gap-1.5 text-green-600 font-bold text-xs uppercase"><CheckCircle2 className="h-3.5 w-3.5" /> Published</div>;
-                                  case 'Submitted':
-                                    return <div className="flex items-center gap-1.5 text-blue-600 font-bold text-xs uppercase"><Send className="h-3.5 w-3.5" /> Submitted</div>;
-                                  case 'Absent':
-                                    return <div className="flex items-center gap-1.5 text-rose-600 font-bold text-xs uppercase"><AlertCircle className="h-3.5 w-3.5" /> Absent</div>;
-                                  default:
-                                    return <div className="flex items-center gap-1.5 text-slate-500 font-bold text-xs uppercase"><Filter className="h-3.5 w-3.5" /> Draft</div>;
-                                }
-                              })()}
-                            </div>
-                          </div>
                         </div>
-
-                        <div className="space-y-1">
-                          <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Teacher Comments</Label>
-                          <Input
-                            placeholder="Type a comment for the report card..."
-                            className="h-10 text-sm bg-slate-50/50 border-slate-200 focus:bg-white"
-                            value={entry.comments}
-                            onChange={(e) => handleGradeChange(student.id, 'comments', e.target.value)}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
                 </div>
               </>
             ) : (
