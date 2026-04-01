@@ -3177,12 +3177,13 @@ router.post(
 
       // 3. Update the role
       // We'll set primary role to school_admin and current role to secondary_role
+      // This ensures they keep their teacher access while gaining admin access
       const { error: updateError } = await supabaseAdmin
         .from("profiles")
         .update({
           role: "school_admin",
-          secondary_role: targetProfile.role,
-          updated_at: new Date()
+          secondary_role: targetProfile.role || "teacher",
+          updated_at: new Date().toISOString()
         })
         .eq("id", id);
 
