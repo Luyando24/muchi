@@ -4600,9 +4600,64 @@ router.get(
         console.error("[LiveStats] Grades Error:", gradesError);
       }
 
+      // Fetch subjects for real-time mapping
+      const { data: schoolSubjects } = await supabaseAdmin
+        .from("subjects")
+        .select("id, name, department")
+        .eq("school_id", schoolId);
+
+      // NEW: Fetch assignment submissions for real-time analytics if finalized grades are missing
+      let submissionsQuery = supabaseAdmin
+        .from("submissions")
+        .select(`
+          score,
+          max_score,
+          student_id,
+          assignments!inner(id, type, subject_id, class_id)
+        `)
+        .eq("school_id", schoolId);
+      
+      // Since assignments don't always have term/year, we might need to filter assignments first
+      const { data: schoolAssignments } = await supabaseAdmin
+        .from("assignments")
+        .select("id, term, academic_year")
+        .eq("school_id", schoolId);
+      
+      const validAssignmentIds = schoolAssignments
+        ?.filter(a => {
+          const tMatch = !term || String(a.term).toLowerCase() === String(term).toLowerCase();
+          const yMatch = !academic_year || String(a.academic_year).toLowerCase() === String(academic_year).toLowerCase();
+          return tMatch && yMatch;
+        })
+        .map(a => a.id) || [];
+
+      const { data: realTimeSubmissions } = await submissionsQuery.in("assignment_id", validAssignmentIds);
+
+      // Convert submissions to a similar format as student_grades for aggregation
+      const submissionGrades = realTimeSubmissions?.map(s => {
+        const percentage = s.max_score > 0 ? (s.score / s.max_score) * 100 : 0;
+        const student = schoolProfiles?.find(p => p.id === s.student_id);
+        const subjId = (s.assignments as any)?.subject_id;
+        const subject = schoolSubjects?.find(sub => sub.id === subjId);
+        
+        return {
+          percentage,
+          student_id: s.student_id,
+          term: term,
+          academic_year: academic_year,
+          exam_type: (s.assignments as any)?.type || "Assignment",
+          profiles: student,
+          subjects: subject || { id: subjId, name: "Unknown Subject", department: "General" }
+        };
+      }) || [];
+
+      // Combine both sources, but prefer student_grades if they exist for the same student/subject/term/year/examType
+      // Actually, for "real-time", we can just combine them all for a broader average
+      const combinedGrades = [...(grades || []), ...submissionGrades];
+
       // Filter in memory for more robust matching (case-insensitive)
       const filteredGrades =
-        grades?.filter((g) => {
+        combinedGrades?.filter((g) => {
           const termMatch =
             !term ||
             String(g.term).toLowerCase() === String(term).toLowerCase();
@@ -4618,7 +4673,7 @@ router.get(
         }) || [];
 
       console.log(
-        `[LiveStats] Found ${grades?.length || 0} total, ${filteredGrades.length} filtered for Term: ${term}, Year: ${academic_year}, Exam Type: ${examType}`,
+        `[LiveStats] Found ${grades?.length || 0} finalized, ${submissionGrades.length} real-time submissions. Total combined: ${combinedGrades.length}. Filtered: ${filteredGrades.length} for Term: ${term}, Year: ${academic_year}`,
       );
 
       // Group grades by class and department
