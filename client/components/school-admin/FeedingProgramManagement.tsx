@@ -47,6 +47,12 @@ export default function FeedingProgramManagement() {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
+  // Dialog states
+  const [isProcurementModalOpen, setIsProcurementModalOpen] = useState(false);
+  const [procForm, setProcForm] = useState({ itemName: '', quantity: '', unit: '', estimatedCost: '' });
+  const [isMealModalOpen, setIsMealModalOpen] = useState(false);
+  const [mealForm, setMealForm] = useState({ mealType: '', beneficiaries: '', itemsUsed: '' });
+
   // State for data
   const [inventory, setInventory] = useState<any[]>([]);
   const [deliveries, setDeliveries] = useState<any[]>([]);
@@ -82,6 +88,88 @@ export default function FeedingProgramManagement() {
       toast({ title: "Error", description: "Failed to load module data", variant: "destructive" });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleProcurementSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!procForm.itemName || !procForm.quantity || !procForm.unit || !procForm.estimatedCost) {
+      toast({ title: "Error", description: "Please fill in all fields", variant: "destructive" });
+      return;
+    }
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/school/feeding-program/procurements', {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${session?.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          item_name: procForm.itemName, 
+          quantity: Number(procForm.quantity), 
+          unit: procForm.unit, 
+          estimated_cost: Number(procForm.estimatedCost) 
+        })
+      });
+      
+      if (res.ok) {
+        toast({ title: "Success", description: "Procurement request submitted." });
+        setIsProcurementModalOpen(false);
+        setProcForm({ itemName: '', quantity: '', unit: '', estimatedCost: '' });
+        const procRes = await fetch('/api/school/feeding-program/procurements', { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
+        if (procRes.ok) setProcurements(await procRes.json());
+      } else {
+        toast({ title: "Error", description: "Failed to submit request.", variant: "destructive" });
+      }
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error", description: "An error occurred.", variant: "destructive" });
+    }
+  };
+
+  const handleMealSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mealForm.mealType || !mealForm.beneficiaries || !mealForm.itemsUsed) {
+      toast({ title: "Error", description: "Please fill in all fields", variant: "destructive" });
+      return;
+    }
+
+    const items_used: any = {};
+    mealForm.itemsUsed.split(',').forEach(i => {
+      const [k, v] = i.split(':');
+      if (k && v) items_used[k.trim()] = v.trim();
+    });
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/school/feeding-program/meals', {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${session?.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          date: new Date().toISOString().split('T')[0],
+          meal_type: mealForm.mealType, 
+          beneficiaries_count: Number(mealForm.beneficiaries), 
+          items_used 
+        })
+      });
+      
+      if (res.ok) {
+        toast({ title: "Success", description: "Meal record added." });
+        setIsMealModalOpen(false);
+        setMealForm({ mealType: '', beneficiaries: '', itemsUsed: '' });
+        const mealsRes = await fetch('/api/school/feeding-program/meals', { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
+        if (mealsRes.ok) setMeals(await mealsRes.json());
+      } else {
+        toast({ title: "Error", description: "Failed to add meal record.", variant: "destructive" });
+      }
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error", description: "An error occurred.", variant: "destructive" });
     }
   };
 
@@ -311,7 +399,23 @@ export default function FeedingProgramManagement() {
                              </Badge>
                              <p className="text-sm font-bold">{delivery.quantity} {delivery.unit}</p>
                              {delivery.status !== 'Received' && (
-                                <Button size="sm" variant="outline" className="h-8 text-[10px] font-bold uppercase tracking-wider">Confirm Receipt</Button>
+                                <Button size="sm" variant="outline" className="h-8 text-[10px] font-bold uppercase tracking-wider" onClick={async () => {
+                                   try {
+                                      const res = await fetch(`/api/school/feeding-program/deliveries/${delivery.id}/receive`, {
+                                         method: 'POST',
+                                         headers: { 'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` }
+                                      });
+                                      if (res.ok) {
+                                         // Refresh data
+                                         const [invRes, delRes] = await Promise.all([
+                                            fetch('/api/school/feeding-program/inventory', { headers: { 'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` } }),
+                                            fetch('/api/school/feeding-program/deliveries', { headers: { 'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` } })
+                                         ]);
+                                         if (invRes.ok) setInventory(await invRes.json());
+                                         if (delRes.ok) setDeliveries(await delRes.json());
+                                      }
+                                   } catch (e) { console.error(e); }
+                                }}>Confirm Receipt</Button>
                              )}
                           </div>
                        </div>
@@ -330,7 +434,9 @@ export default function FeedingProgramManagement() {
         <TabsContent value="procurement" className="space-y-4">
            <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold">Supply Requests</h3>
-              <Button size="sm" className="shadow-lg shadow-primary/20"><Plus className="h-4 w-4 mr-2" /> Request Supplies</Button>
+              <Button size="sm" className="shadow-lg shadow-primary/20" onClick={() => setIsProcurementModalOpen(true)}>
+                 <Plus className="h-4 w-4 mr-2" /> Request Supplies
+              </Button>
            </div>
            
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -371,7 +477,9 @@ export default function FeedingProgramManagement() {
                     <CardTitle>Daily Meal Records</CardTitle>
                     <CardDescription>Historical log of student meal distribution.</CardDescription>
                  </div>
-                 <Button size="sm"><Plus className="h-4 w-4 mr-2" /> New Entry</Button>
+                 <Button size="sm" onClick={() => setIsMealModalOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" /> New Entry
+                 </Button>
               </CardHeader>
               <CardContent>
                  <div className="rounded-xl border overflow-hidden">
@@ -406,6 +514,79 @@ export default function FeedingProgramManagement() {
            </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Procurement Modal */}
+      <Dialog open={isProcurementModalOpen} onOpenChange={setIsProcurementModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Request Supplies</DialogTitle>
+            <DialogDescription>Submit a new procurement request for feeding program supplies.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleProcurementSubmit} className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Item Name</label>
+              <Input placeholder="e.g. Maize, Beans, Cooking Oil" value={procForm.itemName} onChange={e => setProcForm({...procForm, itemName: e.target.value})} required />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Quantity</label>
+                <Input type="number" min="1" step="0.01" placeholder="e.g. 50" value={procForm.quantity} onChange={e => setProcForm({...procForm, quantity: e.target.value})} required />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Unit</label>
+                <Input placeholder="e.g. bags, kg, liters" value={procForm.unit} onChange={e => setProcForm({...procForm, unit: e.target.value})} required />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Estimated Cost (ZK)</label>
+              <Input type="number" min="0" step="0.01" placeholder="e.g. 1500" value={procForm.estimatedCost} onChange={e => setProcForm({...procForm, estimatedCost: e.target.value})} required />
+            </div>
+            <DialogFooter className="pt-4">
+              <Button type="button" variant="outline" onClick={() => setIsProcurementModalOpen(false)}>Cancel</Button>
+              <Button type="submit">Submit Request</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Meal Entry Modal */}
+      <Dialog open={isMealModalOpen} onOpenChange={setIsMealModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Log Daily Meal</DialogTitle>
+            <DialogDescription>Record a meal distribution and the stock items used.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleMealSubmit} className="space-y-4 pt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Meal Type</label>
+                <Select value={mealForm.mealType} onValueChange={v => setMealForm({...mealForm, mealType: v})}>
+                  <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Breakfast">Breakfast</SelectItem>
+                    <SelectItem value="Lunch">Lunch</SelectItem>
+                    <SelectItem value="Dinner">Dinner</SelectItem>
+                    <SelectItem value="Snack">Snack</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Beneficiaries</label>
+                <Input type="number" min="1" placeholder="Number of students" value={mealForm.beneficiaries} onChange={e => setMealForm({...mealForm, beneficiaries: e.target.value})} required />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Items Used</label>
+              <Input placeholder="e.g. Maize: 5kg, Beans: 1kg" value={mealForm.itemsUsed} onChange={e => setMealForm({...mealForm, itemsUsed: e.target.value})} required />
+              <p className="text-[10px] text-muted-foreground">Format: ItemName: Quantity, ItemName: Quantity</p>
+            </div>
+            <DialogFooter className="pt-4">
+              <Button type="button" variant="outline" onClick={() => setIsMealModalOpen(false)}>Cancel</Button>
+              <Button type="submit">Save Record</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

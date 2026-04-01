@@ -33,6 +33,19 @@ import { School } from '@shared/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AdminManagement from './AdminManagement';
 
+const ZAMBIAN_REGIONS = {
+  "Central": ["Chibombo", "Chisamba", "Chitambo", "Itezhi-Tezhi", "Kabwe", "Kapiri Mposhi", "Luano", "Mkushi", "Mumbwa", "Ngabwe", "Serenje", "Shibuyunji"],
+  "Copperbelt": ["Chililabombwe", "Chingola", "Kalulushi", "Kitwe", "Luanshya", "Lufwanyama", "Masaiti", "Mpongwe", "Mufulira", "Ndola"],
+  "Eastern": ["Chadiza", "Chama", "Chasefu", "Chipata", "Chipangali", "Katete", "Lundazi", "Mambwe", "Nyimba", "Petauke", "Sinda", "Vubwi"],
+  "Luapula": ["Chembe", "Chienge", "Chifunabuli", "Chipili", "Kawambwa", "Lunga", "Mansa", "Milenge", "Mwansabombwe", "Mwense", "Nchelenge", "Samfya"],
+  "Lusaka": ["Chilanga", "Chirundu", "Chongwe", "Kafue", "Luangwa", "Lusaka", "Rufunsa", "Shibuyunji"],
+  "Muchinga": ["Chama", "Chinsali", "Isoka", "Kanchibiya", "Lavushimanda", "Mafinga", "Mpika", "Nakonde", "Shiwang'andu"],
+  "Northern": ["Chilubi", "Kaputa", "Kasama", "Lunte", "Lupososhi", "Luwingu", "Mbala", "Mporokoso", "Mpulungu", "Mungwi", "Nsama", "Senga Hill"],
+  "North-Western": ["Chavuma", "Ikelenge", "Kabompo", "Kalumbila", "Kasempa", "Manyinga", "Mufumbwe", "Mushindamo", "Mwinilunga", "Solwezi", "Zambezi"],
+  "Southern": ["Chikankata", "Choma", "Gwembe", "Kalomo", "Kazungula", "Livingstone", "Mazabuka", "Monze", "Namwala", "Pemba", "Siavonga", "Sinazongwe", "Zimba"],
+  "Western": ["Kalabo", "Kaoma", "Limulunga", "Luampa", "Lukulu", "Mitete", "Mongu", "Mulobezi", "Mwandi", "Nalolo", "Nkeyema", "Senanga", "Sesheke", "Shang'ombo", "Sikongo", "Sioma"]
+};
+
 export default function SchoolSettings() {
   const [school, setSchool] = useState<School | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -47,6 +60,8 @@ export default function SchoolSettings() {
     email: '',
     phone: '',
     address: '',
+    province: '',
+    district: '',
     website: '',
     logo_url: '',
     signature_url: '',
@@ -78,6 +93,8 @@ export default function SchoolSettings() {
         email: data.email || '',
         phone: data.phone || '',
         address: data.address || '',
+        province: data.province || '',
+        district: data.district || '',
         website: data.website || '',
         logo_url: data.logo_url || '',
         signature_url: data.signature_url || '',
@@ -348,6 +365,45 @@ export default function SchoolSettings() {
                           placeholder="+260..."
                         />
                       </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="province">Province</Label>
+                      <Select
+                        value={formData.province}
+                        onValueChange={(value) =>
+                          setFormData(prev => ({ ...prev, province: value, district: '' }))
+                        }
+                      >
+                        <SelectTrigger id="province" className="w-full">
+                          <SelectValue placeholder="Select Province" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.keys(ZAMBIAN_REGIONS).map(province => (
+                            <SelectItem key={province} value={province}>{province}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="district">District</Label>
+                      <Select
+                        value={formData.district}
+                        onValueChange={(value) =>
+                          setFormData(prev => ({ ...prev, district: value }))
+                        }
+                        disabled={!formData.province}
+                      >
+                        <SelectTrigger id="district" className="w-full">
+                          <SelectValue placeholder="Select District" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {formData.province && ZAMBIAN_REGIONS[formData.province as keyof typeof ZAMBIAN_REGIONS]?.map(district => (
+                            <SelectItem key={district} value={district}>{district}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="space-y-2 md:col-span-2">

@@ -14,20 +14,56 @@ const requireGovernmentAccess = async (req: Request, res: Response, next: any) =
 
   const { data: profile } = await supabaseAdmin
     .from('profiles')
-    .select('role')
+    .select('role, secondary_role')
     .eq('id', user.id)
     .single();
 
-  if (!profile || (profile.role !== 'system_admin' && profile.role !== 'government')) {
+  if (!profile || (profile.role !== 'system_admin' && profile.role !== 'government' && profile.secondary_role !== 'government')) {
     return res.status(403).json({ message: 'Forbidden: Requires Government or System Admin privileges' });
   }
 
   next();
 };
 
+// GET /api/government/regions
+router.get('/regions', requireGovernmentAccess, async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('schools')
+      .select('province, district');
+
+    if (error) throw error;
+
+    const provinces = new Set<string>();
+    const districtsByProvince: Record<string, Set<string>> = {};
+
+    data?.forEach(school => {
+      if (school.province) {
+        provinces.add(school.province);
+        if (!districtsByProvince[school.province]) {
+          districtsByProvince[school.province] = new Set<string>();
+        }
+        if (school.district) {
+          districtsByProvince[school.province].add(school.district);
+        }
+      }
+    });
+
+    const regions = Array.from(provinces).map(province => ({
+      province,
+      districts: Array.from(districtsByProvince[province] || [])
+    }));
+
+    res.json(regions);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // GET /api/government/overview
 router.get('/overview', requireGovernmentAccess, async (req: Request, res: Response) => {
   const { province, district } = req.query;
+  console.log("GOV OVERVIEW API HIT. query:", req.query);
   try {
     // 1. Basic Counts (Filtered by region if provided)
     let schoolQuery = supabaseAdmin.from('schools').select('*', { count: 'exact', head: true });
@@ -194,6 +230,57 @@ router.get('/school/:id', requireGovernmentAccess, async (req: Request, res: Res
       .order('date', { ascending: false });
 
     res.json({ inventory, deliveries, meals });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/government/feeding-program/procurements/:id/approve
+router.post('/feeding-program/procurements/:id/approve', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const userId = (req as any).userId;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('feeding_program_procurements')
+      .update({ status: 'Approved', approved_by: userId })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/government/feeding-program/procurements/:id/reject
+router.post('/feeding-program/procurements/:id/reject', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const userId = (req as any).userId;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('feeding_program_procurements')
+      .update({ status: 'Rejected', approved_by: userId })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/government/feeding-program/procurements/pending
+router.get('/feeding-program/procurements/pending', requireGovernmentAccess, async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('feeding_program_procurements')
+      .select('*, requested_by:profiles(full_name), school:schools(name, district, province)')
+      .eq('status', 'Pending')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }

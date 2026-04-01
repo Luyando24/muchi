@@ -43,17 +43,42 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 
+import GovernmentNavbar from '@/components/government/GovernmentNavbar';
+
 // --- SUB-COMPONENTS --- //
 
 function OverviewDashboard() {
   const [stats, setStats] = useState({ totalSchools: 0, totalStudents: 0, totalTeachers: 0, avgAttendance: 0, nationalPassRate: 0 });
   const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({ province: 'All', district: 'All' });
+  const [regions, setRegions] = useState<{ province: string, districts: string[] }[]>([]);
+
+  useEffect(() => {
+    async function fetchRegions() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch('/api/government/regions', {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` }
+        });
+        if (res.ok) setRegions(await res.json());
+      } catch (err) {
+        console.error("Failed to fetch regions", err);
+      }
+    }
+    fetchRegions();
+  }, []);
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch('/api/government/overview', {
+        
+        let url = '/api/government/overview?';
+        if (filters.province !== 'All') url += `province=${encodeURIComponent(filters.province)}&`;
+        if (filters.district !== 'All') url += `district=${encodeURIComponent(filters.district)}`;
+
+        const res = await fetch(url, {
           headers: { 'Authorization': `Bearer ${session?.access_token}` }
         });
         if (res.ok) setStats(await res.json());
@@ -64,9 +89,11 @@ function OverviewDashboard() {
       }
     }
     load();
-  }, []);
+  }, [filters]);
 
-  if (loading) return (
+  const selectedProvinceData = regions.find(r => r.province === filters.province);
+
+  if (loading && stats.totalSchools === 0) return (
     <div className="flex items-center justify-center p-12">
       <Loader2 className="h-8 w-8 animate-spin text-blue-600 opacity-20" />
     </div>
@@ -80,9 +107,33 @@ function OverviewDashboard() {
           <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tight">National Overview</h2>
           <p className="text-slate-500 font-medium">Key indicators across the educational ecosystem.</p>
         </div>
-        <Button className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-100 dark:shadow-none font-bold h-11 px-8 transition-all hover:translate-y-[-1px]">
-          <Download className="mr-2 h-4 w-4" /> Export Report
-        </Button>
+        <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+          <Select value={filters.province} onValueChange={(val) => setFilters({ ...filters, province: val, district: 'All' })}>
+            <SelectTrigger className="w-full md:w-[180px] bg-white dark:bg-slate-800 rounded-xl">
+              <SelectValue placeholder="Province" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All Provinces</SelectItem>
+              {regions.map(r => (
+                <SelectItem key={r.province} value={r.province}>{r.province}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={filters.district} onValueChange={(val) => setFilters({ ...filters, district: val })} disabled={filters.province === 'All'}>
+            <SelectTrigger className="w-full md:w-[180px] bg-white dark:bg-slate-800 rounded-xl">
+              <SelectValue placeholder="District" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All Districts</SelectItem>
+              {selectedProvinceData?.districts.map(d => (
+                <SelectItem key={d} value={d}>{d}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-100 dark:shadow-none font-bold h-11 px-8 transition-all hover:translate-y-[-1px]">
+            <Download className="mr-2 h-4 w-4" /> Export Report
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -142,7 +193,12 @@ function OverviewDashboard() {
           </CardHeader>
           <CardContent className="h-72 flex flex-col items-center justify-center text-slate-400 bg-slate-50/50 dark:bg-slate-900/50 p-6">
              <Map className="h-12 w-12 mb-3 opacity-20 text-blue-500" />
-             <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Interactive Map Visualization</p>
+             <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Interactive Map Visualization Coming Soon</p>
+             <div className="text-center w-full max-w-sm">
+                <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                  Data points configured for <span className="font-bold text-blue-600 dark:text-blue-400">{regions.length}</span> provinces. Map plotting is currently offline pending geospatial data update.
+                </p>
+             </div>
           </CardContent>
         </Card>
 
@@ -152,24 +208,45 @@ function OverviewDashboard() {
             <CardDescription className="text-[10px] font-black uppercase tracking-widest text-slate-400">System anomalies requiring observation</CardDescription>
           </CardHeader>
           <CardContent className="p-6 space-y-4">
-             <div className="flex items-start gap-4 p-4 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30 transition-all hover:bg-orange-100/50 dark:hover:bg-orange-900/30">
-                <div className="h-10 w-10 rounded-lg bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center text-orange-600 shrink-0">
-                  <AlertTriangle className="h-5 w-5" />
-                </div>
-                <div>
-                   <h4 className="font-black text-orange-900 dark:text-orange-300 uppercase tracking-tight text-sm">Low Attendance Warning</h4>
-                   <p className="text-xs text-orange-700 dark:text-orange-400/80 mt-1 font-medium leading-relaxed">Lusaka District reports &lt; 75% attendance in 4 institutions over the past 72 hours.</p>
-                </div>
-             </div>
+             {stats.avgAttendance < 75 ? (
+               <div className="flex items-start gap-4 p-4 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30 transition-all hover:bg-orange-100/50 dark:hover:bg-orange-900/30">
+                  <div className="h-10 w-10 rounded-lg bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center text-orange-600 shrink-0">
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                  <div>
+                     <h4 className="font-black text-orange-900 dark:text-orange-300 uppercase tracking-tight text-sm">Low Attendance Warning</h4>
+                     <p className="text-xs text-orange-700 dark:text-orange-400/80 mt-1 font-medium leading-relaxed">
+                       {filters.province !== 'All' ? filters.province : 'National'} average attendance is critical ({stats.avgAttendance}%). Immediate intervention required.
+                     </p>
+                  </div>
+               </div>
+             ) : (
+               <div className="flex items-start gap-4 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 transition-all hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30">
+                  <div className="h-10 w-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center text-emerald-600 shrink-0">
+                    <TrendingUp className="h-5 w-5" />
+                  </div>
+                  <div>
+                     <h4 className="font-black text-emerald-900 dark:text-emerald-300 uppercase tracking-tight text-sm">Stable Attendance</h4>
+                     <p className="text-xs text-emerald-700 dark:text-emerald-400/80 mt-1 font-medium leading-relaxed">
+                       {filters.province !== 'All' ? filters.province : 'National'} attendance metrics are stable at {stats.avgAttendance}%.
+                     </p>
+                  </div>
+               </div>
+             )}
+             
+             {stats.totalStudents > 0 && (
              <div className="flex items-start gap-4 p-4 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 transition-all hover:bg-blue-100/50 dark:hover:bg-blue-900/30">
                 <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 shrink-0">
                   <Users className="h-5 w-5" />
                 </div>
                 <div>
-                   <h4 className="font-black text-blue-900 dark:text-blue-300 uppercase tracking-tight text-sm">Enrollment Spike</h4>
-                   <p className="text-xs text-blue-700 dark:text-blue-400/80 mt-1 font-medium leading-relaxed">Copperbelt region exhibiting a 5.2% incline in standard year secondary enrollments.</p>
+                   <h4 className="font-black text-blue-900 dark:text-blue-300 uppercase tracking-tight text-sm">Enrollment Tracking</h4>
+                   <p className="text-xs text-blue-700 dark:text-blue-400/80 mt-1 font-medium leading-relaxed">
+                     Currently tracking {stats.totalStudents.toLocaleString()} active students across {stats.totalSchools} registered institutions.
+                   </p>
                 </div>
              </div>
+             )}
           </CardContent>
         </Card>
       </div>
@@ -179,14 +256,89 @@ function OverviewDashboard() {
 
 
 function PerformanceDashboard() {
+  const [stats, setStats] = useState({ nationalPassRate: 0 });
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({ province: 'All', district: 'All' });
+  const [regions, setRegions] = useState<{ province: string, districts: string[] }[]>([]);
+
+  useEffect(() => {
+    async function fetchRegions() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch('/api/government/regions', {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` }
+        });
+        if (res.ok) setRegions(await res.json());
+      } catch (err) {
+        console.error("Failed to fetch regions", err);
+      }
+    }
+    fetchRegions();
+  }, []);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        let url = '/api/government/overview?';
+        if (filters.province !== 'All') url += `province=${encodeURIComponent(filters.province)}&`;
+        if (filters.district !== 'All') url += `district=${encodeURIComponent(filters.district)}`;
+
+        const res = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` }
+        });
+        if (res.ok) setStats(await res.json());
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [filters]);
+
+  const selectedProvinceData = regions.find(r => r.province === filters.province);
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
         <div>
           <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Academic Performance</h2>
           <p className="text-slate-500 font-medium">Analyze grades, subject pass rates, and historical trends.</p>
         </div>
+        <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+          <Select value={filters.province} onValueChange={(val) => setFilters({ ...filters, province: val, district: 'All' })}>
+            <SelectTrigger className="w-full md:w-[180px] bg-white dark:bg-slate-800 rounded-xl">
+              <SelectValue placeholder="Province" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All Provinces</SelectItem>
+              {regions.map(r => (
+                <SelectItem key={r.province} value={r.province}>{r.province}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={filters.district} onValueChange={(val) => setFilters({ ...filters, district: val })} disabled={filters.province === 'All'}>
+            <SelectTrigger className="w-full md:w-[180px] bg-white dark:bg-slate-800 rounded-xl">
+              <SelectValue placeholder="District" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All Districts</SelectItem>
+              {selectedProvinceData?.districts.map(d => (
+                <SelectItem key={d} value={d}>{d}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
+      
+      {loading ? (
+        <div className="flex items-center justify-center p-12">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600 opacity-20" />
+        </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="col-span-1 md:col-span-2 border-none shadow-sm bg-white dark:bg-slate-800 rounded-2xl overflow-hidden">
           <CardHeader className="border-b border-slate-50 dark:border-slate-700/50 p-6">
@@ -201,11 +353,13 @@ function PerformanceDashboard() {
         <div className="space-y-6">
           <Card className="border-none shadow-sm bg-blue-600 text-white rounded-2xl transition-all duration-300 hover:shadow-xl hover:translate-y-[-4px]">
             <CardHeader className="pb-2">
-              <CardDescription className="text-blue-100 font-black uppercase tracking-widest text-[10px]">Top Performing Subject</CardDescription>
-              <CardTitle className="text-3xl font-black tracking-tight">Science (84%)</CardTitle>
+              <CardDescription className="text-blue-100 font-black uppercase tracking-widest text-[10px]">Average Pass Rate</CardDescription>
+              <CardTitle className="text-3xl font-black tracking-tight">{stats.nationalPassRate}%</CardTitle>
             </CardHeader>
              <CardContent>
-               <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">National Average • Grade 12</p>
+               <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">
+                 {filters.province === 'All' && filters.district === 'All' ? 'National Average' : `${filters.district !== 'All' ? filters.district : filters.province} Average`}
+               </p>
              </CardContent>
           </Card>
           <Card className="border-none shadow-sm bg-white dark:bg-slate-800 rounded-2xl border-l-4 border-l-orange-500 transition-all duration-300 hover:shadow-xl hover:translate-y-[-4px]">
@@ -219,6 +373,7 @@ function PerformanceDashboard() {
           </Card>
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -227,8 +382,25 @@ function PerformanceDashboard() {
 function FeedingDashboard() {
   const [stats, setStats] = useState<any>(null);
   const [schools, setSchools] = useState<any[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filters, setFilters] = useState({ province: 'All', district: 'All' });
+  const [regions, setRegions] = useState<{ province: string, districts: string[] }[]>([]);
+
+  useEffect(() => {
+    async function fetchRegions() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch('/api/government/regions', {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` }
+        });
+        if (res.ok) setRegions(await res.json());
+      } catch (err) {
+        console.error("Failed to fetch regions", err);
+      }
+    }
+    fetchRegions();
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -236,13 +408,15 @@ function FeedingDashboard() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         
-        const [statsRes, schoolsRes] = await Promise.all([
+        const [statsRes, schoolsRes, reqRes] = await Promise.all([
           fetch('/api/government/feeding-program/stats', { headers: { 'Authorization': `Bearer ${session?.access_token}` } }),
-          fetch(`/api/government/feeding-program/schools?province=${filters.province !== 'All' ? filters.province : ''}&district=${filters.district !== 'All' ? filters.district : ''}`, { headers: { 'Authorization': `Bearer ${session?.access_token}` } })
+          fetch(`/api/government/feeding-program/schools?province=${filters.province !== 'All' ? filters.province : ''}&district=${filters.district !== 'All' ? filters.district : ''}`, { headers: { 'Authorization': `Bearer ${session?.access_token}` } }),
+          fetch('/api/government/feeding-program/procurements/pending', { headers: { 'Authorization': `Bearer ${session?.access_token}` } })
         ]);
 
         if (statsRes.ok) setStats(await statsRes.json());
         if (schoolsRes.ok) setSchools(await schoolsRes.json());
+        if (reqRes.ok) setPendingRequests(await reqRes.json());
       } catch (err) {
         console.error(err);
       } finally {
@@ -251,6 +425,8 @@ function FeedingDashboard() {
     }
     load();
   }, [filters]);
+
+  const selectedProvinceData = regions.find(r => r.province === filters.province);
 
   return (
     <div className="space-y-6">
@@ -343,33 +519,33 @@ function FeedingDashboard() {
             <CardContent className="p-6 space-y-6">
                <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Province Selection</label>
-                  <Select value={filters.province} onValueChange={(val) => setFilters({...filters, province: val})}>
+                  <Select value={filters.province} onValueChange={(val) => setFilters({...filters, province: val, district: 'All'})}>
                      <SelectTrigger className="rounded-xl bg-slate-50 dark:bg-slate-900 border-none h-12 text-sm font-bold shadow-inner">
                         <SelectValue />
                      </SelectTrigger>
                      <SelectContent>
                         <SelectItem value="All" className="font-bold">All Provinces</SelectItem>
-                        <SelectItem value="Lusaka">Lusaka</SelectItem>
-                        <SelectItem value="Copperbelt">Copperbelt</SelectItem>
-                        <SelectItem value="Central">Central</SelectItem>
+                        {regions.map(r => (
+                          <SelectItem key={r.province} value={r.province}>{r.province}</SelectItem>
+                        ))}
                      </SelectContent>
                   </Select>
                </div>
                <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">District Focus</label>
-                  <Select value={filters.district} onValueChange={(val) => setFilters({...filters, district: val})}>
+                  <Select value={filters.district} onValueChange={(val) => setFilters({...filters, district: val})} disabled={filters.province === 'All'}>
                      <SelectTrigger className="rounded-xl bg-slate-50 dark:bg-slate-900 border-none h-12 text-sm font-bold shadow-inner">
                         <SelectValue />
                      </SelectTrigger>
                      <SelectContent>
                         <SelectItem value="All" className="font-bold">All Districts</SelectItem>
-                        <SelectItem value="Lusaka District">Lusaka District</SelectItem>
-                        <SelectItem value="Ndola">Ndola</SelectItem>
-                        <SelectItem value="Kitwe">Kitwe</SelectItem>
+                        {selectedProvinceData?.districts.map(d => (
+                          <SelectItem key={d} value={d}>{d}</SelectItem>
+                        ))}
                      </SelectContent>
                   </Select>
                </div>
-               <Button className="w-full rounded-xl bg-slate-900 dark:bg-slate-700 text-white hover:bg-black dark:hover:bg-slate-600 h-12 font-black uppercase tracking-widest text-[10px] transition-all">
+               <Button className="w-full rounded-xl bg-slate-900 dark:bg-slate-700 text-white hover:bg-black dark:hover:bg-slate-600 h-12 font-black uppercase tracking-widest text-[10px] transition-all" onClick={() => setFilters({...filters})}>
                   Refresh Live Data
                </Button>
             </CardContent>
@@ -430,6 +606,40 @@ function FeedingDashboard() {
                   ))
                )}
             </div>
+
+            <div className="pt-6 border-t">
+               <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight mb-6">Pending Procurement Requests</h3>
+               <div className="grid gap-4">
+                  {pendingRequests.map(req => (
+                     <Card key={req.id} className="p-4 border-none shadow-sm rounded-xl">
+                        <div className="flex justify-between items-center mb-2">
+                           <h4 className="font-bold text-sm">{req.school?.name}</h4>
+                           <span className="text-xs font-bold text-orange-500">ZK {req.estimated_cost}</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-4">{req.quantity} {req.unit} of {req.item_name}</p>
+                        <div className="flex gap-2">
+                           <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={async () => {
+                              const res = await fetch(`/api/government/feeding-program/procurements/${req.id}/approve`, {
+                                 method: 'POST',
+                                 headers: { 'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` }
+                              });
+                              if(res.ok) setPendingRequests(prev => prev.filter(p => p.id !== req.id));
+                           }}>Approve</Button>
+                           <Button size="sm" variant="destructive" onClick={async () => {
+                              const res = await fetch(`/api/government/feeding-program/procurements/${req.id}/reject`, {
+                                 method: 'POST',
+                                 headers: { 'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` }
+                              });
+                              if(res.ok) setPendingRequests(prev => prev.filter(p => p.id !== req.id));
+                           }}>Reject</Button>
+                        </div>
+                     </Card>
+                  ))}
+                  {pendingRequests.length === 0 && (
+                     <div className="p-8 text-center text-muted-foreground italic bg-slate-50 rounded-xl">No pending requests.</div>
+                  )}
+               </div>
+            </div>
          </div>
       </div>
     </div>
@@ -477,128 +687,66 @@ export default function GovernmentPortal() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex">
-      {/* Sidebar - Desktop */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 transition-transform duration-300 lg:translate-x-0 lg:static lg:inset-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex flex-col h-full">
-          {/* Sidebar Header */}
-          <div className="h-16 flex items-center px-6 border-b border-slate-200 dark:border-slate-700">
-            <div className="bg-blue-600 p-1.5 rounded-lg mr-3">
-              <Building2 className="h-5 w-5 text-white" />
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+      <GovernmentNavbar
+        isSidebarOpen={isSidebarOpen}
+        setIsSidebarOpen={setIsSidebarOpen}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onLogout={handleLogout}
+        userProfile={userProfile}
+      />
+
+      <div className="flex">
+        {/* Sidebar */}
+        <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:static inset-y-0 left-0 z-40 w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 transition-transform duration-300 ease-in-out`}>
+          <div className="flex flex-col h-full pt-16 lg:pt-0">
+            <nav className="flex-1 px-4 py-6 space-y-2">
+              <div className="mb-4 px-2">
+                <p className="text-[10px] font-black tracking-widest text-slate-400 uppercase">Core Monitoring</p>
+              </div>
+              {sidebarItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Button
+                    key={item.id}
+                    variant={activeTab === item.id ? "default" : "ghost"}
+                    className="w-full justify-start"
+                    onClick={() => {
+                      setActiveTab(item.id);
+                      setIsSidebarOpen(false);
+                    }}
+                  >
+                    <Icon className="h-5 w-5 mr-3" />
+                    {item.label}
+                  </Button>
+                );
+              })}
+            </nav>
+
+            <div className="p-4 border-t border-slate-200 dark:border-slate-700">
+              <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">National Support</p>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="h-2 w-2 rounded-full bg-green-500"></span>
+                  <p className="text-xs text-blue-600 dark:text-blue-300">All Systems Operational</p>
+                </div>
+                <Button size="sm" variant="outline" className="w-full text-xs">Support Center</Button>
+              </div>
             </div>
-            <span className="font-black text-sm text-slate-900 dark:text-white uppercase tracking-tight">Ministry of Education</span>
           </div>
+        </aside>
 
-          <nav className="flex-1 px-4 py-6 space-y-1">
-            <div className="mb-4 px-2">
-              <p className="text-[10px] font-black tracking-widest text-slate-400 uppercase">Core Monitoring</p>
-            </div>
-            {sidebarItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Button
-                  key={item.id}
-                  variant={activeTab === item.id ? "default" : "ghost"}
-                  className={`w-full justify-start font-bold h-11 transition-all ${activeTab === item.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400'}`}
-                  onClick={() => {
-                    setActiveTab(item.id);
-                    setIsSidebarOpen(false);
-                  }}
-                >
-                  <Icon className="h-5 w-5 mr-3" />
-                  {item.label}
-                </Button>
-              );
-            })}
-          </nav>
+        {/* Overlay for mobile */}
+        {isSidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
+            onClick={() => setIsSidebarOpen(false)}
+          />
+        )}
 
-          <div className="p-4 border-t border-slate-200 dark:border-slate-700">
-            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl">
-              <p className="text-sm font-bold text-blue-800 dark:text-blue-200 mb-1">National Support</p>
-              <p className="text-xs text-blue-600 dark:text-blue-300 mb-3">Priority helpdesk for Ministry staff.</p>
-              <Button size="sm" variant="outline" className="w-full text-xs font-bold rounded-xl border-blue-200 dark:border-blue-800 bg-white dark:bg-slate-800">Support Center</Button>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Container */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Header */}
-        <header className="h-16 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-4 sm:px-8 sticky top-0 z-40">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="lg:hidden h-10 w-10 text-slate-500"
-            onClick={() => setIsSidebarOpen(true)}
-          >
-            <Menu className="h-6 w-6" />
-          </Button>
-
-          <div className="flex items-center gap-2 md:gap-4 ml-auto">
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 rounded-full border border-slate-200 dark:border-slate-700">
-               <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-               <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">System Live</span>
-            </div>
-            
-            <ThemeToggle />
-
-            {/* Profile Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center gap-2 px-2 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                  <Avatar className="h-9 w-9 border-2 border-slate-100 dark:border-slate-700 shadow-sm">
-                    <AvatarImage src="" />
-                    <AvatarFallback className="bg-blue-100 text-blue-700 font-bold uppercase">
-                      {userProfile?.full_name?.substring(0, 2) || 'MO'}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="hidden md:block text-left">
-                    <p className="text-sm font-bold text-slate-900 dark:text-white leading-none">
-                      {userProfile?.full_name || 'Official'}
-                    </p>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-1">
-                      {userProfile?.role?.replace('_', ' ') || 'Government'}
-                    </p>
-                  </div>
-                  <ChevronDown className="h-4 w-4 text-slate-400 hidden sm:block" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64 p-2 shadow-xl border-slate-200 dark:border-slate-700">
-                <DropdownMenuLabel className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Management</DropdownMenuLabel>
-                <DropdownMenuSeparator className="my-1" />
-                <DropdownMenuItem onClick={() => setActiveTab('settings')} className="rounded-lg h-10 cursor-pointer">
-                  <Settings className="mr-3 h-4 w-4 text-slate-500" />
-                  <span className="font-medium">Portal Settings</span>
-                </DropdownMenuItem>
-                
-                {userProfile?.role === 'school_admin' || userProfile?.secondary_role === 'school_admin' ? (
-                  <>
-                    <DropdownMenuSeparator className="my-1" />
-                    <DropdownMenuItem 
-                      className="rounded-lg h-10 cursor-pointer bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
-                      onClick={() => {
-                        window.location.href = '/school-admin';
-                      }}
-                    >
-                      <ShieldAlert className="mr-3 h-4 w-4" />
-                      <span className="font-bold">Switch to Admin Portal</span>
-                    </DropdownMenuItem>
-                  </>
-                ) : null}
-
-                <DropdownMenuSeparator className="my-1" />
-                <DropdownMenuItem onClick={handleLogout} className="rounded-lg h-10 cursor-pointer text-red-600 focus:text-red-700 focus:bg-red-50 dark:focus:bg-red-900/10">
-                  <LogOut className="mr-3 h-4 w-4" />
-                  <span className="font-bold">Sign out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </header>
-
-        {/* Main Content Area */}
-        <main className="flex-1 p-4 md:p-8 overflow-y-auto bg-slate-50 dark:bg-slate-900/50">
+        {/* Main Content */}
+        <main className="flex-1 p-4 sm:p-6 overflow-y-auto h-[calc(100vh-64px)] pb-24 lg:pb-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full space-y-8">
             <TabsContent value="overview" className="m-0 focus-visible:outline-none">
                <OverviewDashboard />
@@ -641,13 +789,28 @@ export default function GovernmentPortal() {
         </main>
       </div>
 
-      {/* Mobile Sidebar Overlay */}
-      {isSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 lg:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
+      {/* Mobile Bottom Navigation */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-40 px-2 py-2 safe-area-bottom shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+        <div className="flex justify-around items-center">
+          {sidebarItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`flex flex-col items-center justify-center p-2 rounded-lg transition-all duration-200 min-w-[64px] ${
+                  activeTab === item.id 
+                    ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20" 
+                    : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                }`}
+              >
+                <Icon className={`h-5 w-5 mb-1 ${activeTab === item.id ? "scale-110" : "scale-100"} transition-transform`} />
+                <span className="text-[10px] font-medium truncate max-w-full">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
