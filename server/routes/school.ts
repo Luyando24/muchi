@@ -3147,6 +3147,55 @@ router.delete(
   },
 );
 
+// POST /api/school/teachers/:id/promote
+// Promote a teacher to school admin role
+router.post(
+  "/teachers/:id/promote",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { id } = req.params;
+
+    try {
+      // 1. Get the current user profile
+      const { data: targetProfile, error: fetchError } = await supabaseAdmin
+        .from("profiles")
+        .select("role, secondary_role")
+        .eq("id", id)
+        .eq("school_id", schoolId)
+        .single();
+
+      if (fetchError || !targetProfile) {
+        return res.status(404).json({ message: "Teacher not found" });
+      }
+
+      // 2. Check if they are already an admin
+      if (targetProfile.role === "school_admin" || targetProfile.secondary_role === "school_admin") {
+        return res.status(400).json({ message: "User already has school admin role" });
+      }
+
+      // 3. Update the role
+      // We'll set primary role to school_admin and current role to secondary_role
+      const { error: updateError } = await supabaseAdmin
+        .from("profiles")
+        .update({
+          role: "school_admin",
+          secondary_role: targetProfile.role,
+          updated_at: new Date()
+        })
+        .eq("id", id);
+
+      if (updateError) throw updateError;
+
+      res.json({ message: "Teacher promoted to School Admin successfully" });
+    } catch (error: any) {
+      console.error("Promote Teacher Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  },
+);
+
 // --- ACADEMIC MANAGEMENT ENDPOINTS ---
 
 // GET /api/school/departments

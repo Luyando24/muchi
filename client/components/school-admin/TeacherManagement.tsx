@@ -11,7 +11,8 @@ import {
   Loader2,
   Eye,
   EyeOff,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ShieldCheck
 } from 'lucide-react';
 import TeacherDetailsView from './TeacherDetailsView';
 import BulkTeacherImport from './BulkTeacherImport';
@@ -83,6 +84,7 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
   const [viewTeacherId, setViewTeacherId] = useState<string | null>(initialViewId || null);
   const [teacherViewMode, setTeacherViewMode] = useState<'view' | 'edit'>('view');
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [promoteTargetId, setPromoteTargetId] = useState<string | null>(null);
   const [selectedTeachers, setSelectedTeachers] = useState<string[]>([]);
   const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -286,6 +288,40 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
   const handleEditClick = (teacher: Teacher) => {
     setViewTeacherId(teacher.id);
     setTeacherViewMode('edit');
+  };
+
+  const handlePromote = async () => {
+    if (!promoteTargetId) return;
+    setIsLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/school/teachers/${promoteTargetId}/promote`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to promote teacher');
+
+      toast({
+        title: "Success",
+        description: "Teacher promoted to School Admin successfully",
+      });
+      setPromoteTargetId(null);
+      fetchTeachers();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
 
@@ -647,6 +683,10 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
                               <Edit className="h-4 w-4 mr-2" />
                               Edit Details
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setPromoteTargetId(teacher.id)}>
+                              <ShieldCheck className="h-4 w-4 mr-2 text-blue-600" />
+                              Promote to Admin
+                            </DropdownMenuItem>
                             <DropdownMenuItem className="text-red-600" onClick={() => setDeleteTargetId(teacher.id)}>
                               <Trash2 className="h-4 w-4 mr-2" />
                               Delete Account
@@ -678,6 +718,16 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
         </CardContent>
       </Card>
 
+      <ConfirmDialog
+        open={!!promoteTargetId}
+        onOpenChange={(open) => !open && setPromoteTargetId(null)}
+        title="Promote to School Admin?"
+        description="This will grant this teacher full administrative privileges. They will be able to manage all aspects of the school portal."
+        confirmLabel="Confirm Promotion"
+        variant="default"
+        loading={isLoading}
+        onConfirm={handlePromote}
+      />
       <ConfirmDialog
         open={!!deleteTargetId}
         onOpenChange={(open) => !open && setDeleteTargetId(null)}
