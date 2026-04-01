@@ -423,7 +423,7 @@ export default function TeacherPortal() {
       }
 
       // 2. Classes
-      let classesData = [];
+      let classesData: any = [];
       try {
         classesData = await fetchWithAuth('/api/teacher/classes');
         const finalClasses = Array.isArray(classesData) ? classesData : (classesData?.data || []);

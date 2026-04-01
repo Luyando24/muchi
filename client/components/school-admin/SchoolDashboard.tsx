@@ -348,20 +348,20 @@ export default function SchoolDashboard() {
           </CardContent>
         </Card>
 
-        {/* Revenue */}
+        {/* Active Classes */}
         <Card className="hover:shadow-md transition-shadow border-l-4 border-l-orange-500">
           <CardContent className="p-5 sm:p-6">
             <div className="flex flex-col gap-2">
               <div className="flex justify-between items-center">
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Total Revenue</p>
-                <div className={`p-1.5 rounded-full ${overview.revenue.status === 'up' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                  {overview.revenue.status === 'up' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Active Classes</p>
+                <div className={`p-1.5 rounded-full ${overview.activeClasses.status === 'up' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                  {overview.activeClasses.status === 'up' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
                 </div>
               </div>
               <div className="flex items-end justify-between">
-                <h3 className="text-2xl sm:text-3xl font-black">{overview.revenue.value}</h3>
-                <span className={`text-xs font-bold ${overview.revenue.status === 'up' ? 'text-green-600' : 'text-red-600'}`}>
-                  {overview.revenue.trend}
+                <h3 className="text-2xl sm:text-3xl font-black">{overview.activeClasses.value}</h3>
+                <span className={`text-xs font-bold ${overview.activeClasses.status === 'up' ? 'text-green-600' : 'text-red-600'}`}>
+                  {overview.activeClasses.trend}
                 </span>
               </div>
             </div>

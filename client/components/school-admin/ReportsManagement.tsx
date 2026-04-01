@@ -172,6 +172,7 @@ export default function ReportsManagement() {
                 <SelectValue placeholder="Term" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="All">All Terms</SelectItem>
                 <SelectItem value="Term 1">Term 1</SelectItem>
                 <SelectItem value="Term 2">Term 2</SelectItem>
                 <SelectItem value="Term 3">Term 3</SelectItem>
@@ -186,6 +187,7 @@ export default function ReportsManagement() {
               <SelectValue placeholder="Year" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="All">All Years</SelectItem>
               {[2024, 2025, 2026, 2027].map(year => (
                 <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
               ))}
@@ -205,10 +207,9 @@ export default function ReportsManagement() {
       </div>
 
       <Tabs value={activeScreen} onValueChange={setActiveScreen} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 md:grid-cols-7 lg:w-[1000px]">
+        <TabsList className="grid w-full grid-cols-4 md:grid-cols-6 lg:w-[900px]">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="academic">Academic</TabsTrigger>
-          <TabsTrigger value="teachers">Teacher Performance</TabsTrigger>
           <TabsTrigger value="top-students">Top Students</TabsTrigger>
           <TabsTrigger value="support">Support Needed</TabsTrigger>
           <TabsTrigger value="finance">Finance</TabsTrigger>
@@ -221,11 +222,11 @@ export default function ReportsManagement() {
             <Card className="bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/20 shadow-none">
               <CardContent className="p-6 flex items-center gap-4">
                 <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400">
-                  <Users className="h-6 w-6" />
+                  <Building2 className="h-6 w-6" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Students</p>
-                  <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{liveStats?.summary?.totalStudents || 0}</h3>
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Active Classes</p>
+                  <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{liveStats?.performance?.byClass?.length || 0}</h3>
                 </div>
               </CardContent>
             </Card>
@@ -422,189 +423,7 @@ export default function ReportsManagement() {
         </TabsContent>
 
         {/* Teacher Performance Tab */}
-        <TabsContent value="teachers" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle className="text-lg">Teacher Performance Analysis</CardTitle>
-                    <CardDescription>Average performance and student grade distribution by teacher</CardDescription>
-                  </div>
-                  {selectedTeacher && (
-                    <Button variant="ghost" size="sm" onClick={() => setSelectedTeacher(null)} className="h-8 gap-1.5 font-bold">
-                      <RefreshCcw className="h-3.5 w-3.5" />
-                      View All
-                    </Button>
-                  )}
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {!selectedTeacher ? (
-                      liveStats?.performance?.teacherPerformance?.map((teacher: any, idx: number) => (
-                        <div
-                          key={teacher.id}
-                          onClick={() => setSelectedTeacher(teacher)}
-                          className="p-4 rounded-xl border bg-white dark:bg-slate-800 shadow-sm hover:shadow-md transition-all cursor-pointer group"
-                        >
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center font-extrabold text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                                {idx + 1}
-                              </div>
-                              <div>
-                                <h4 className="font-bold text-slate-900 dark:text-white">{teacher.name}</h4>
-                                <div className="flex items-center gap-3 mt-0.5">
-                                  <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded font-bold text-slate-500 uppercase">
-                                    {teacher.workload?.classesCount || 0} Classes
-                                  </span>
-                                  <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded font-bold text-slate-500 uppercase">
-                                    {teacher.workload?.subjectsCount || 0} Subjects
-                                  </span>
-                                  <span className="text-[10px] text-slate-400 font-medium">
-                                    {teacher.count} Grades
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="text-right flex items-center gap-4">
-                              <div>
-                                <div className="text-2xl font-black text-blue-600">{teacher.average}%</div>
-                                <span className="text-[10px] uppercase text-slate-400 font-bold">Average</span>
-                              </div>
-                              <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-blue-500 transition-colors" />
-                            </div>
-                          </div>
 
-                          <div className="space-y-2">
-                            <div className="flex gap-1 h-2 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700">
-                              {Object.entries(teacher.grades).map(([label, count]: any, itIdx) => {
-                                const totalCount: number = Object.values(teacher.grades).reduce((a: any, b: any) => a + b, 0) as number;
-                                const width = (count / totalCount) * 100;
-                                return (
-                                  <div
-                                    key={label}
-                                    title={`${label}: ${count}`}
-                                    className="h-full"
-                                    style={{ width: `${width}%`, backgroundColor: COLORS[itIdx % COLORS.length] }}
-                                  />
-                                );
-                              })}
-                            </div>
-                            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
-                              {Object.entries(teacher.grades).map(([label, count]: any, itIdx) => (
-                                <div key={label} className="flex items-center gap-1.5">
-                                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[itIdx % COLORS.length] }} />
-                                  <span className="text-[10px] text-slate-500 font-medium">{label}: {count}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="space-y-6">
-                        <div className="bg-slate-50 dark:bg-slate-900 rounded-xl p-4 border flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center text-white font-black text-xl">
-                              {selectedTeacher.name.charAt(0)}
-                            </div>
-                            <div>
-                              <h3 className="text-xl font-black">{selectedTeacher.name}</h3>
-                              <p className="text-sm text-slate-500 font-medium">Performance Breakdown for current session</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-3xl font-black text-blue-600">{selectedTeacher.average}%</div>
-                            <p className="text-[10px] uppercase font-bold text-slate-400">Section Average</p>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="p-4 bg-white dark:bg-slate-800 rounded-xl border">
-                            <p className="text-xs font-bold text-slate-400 uppercase mb-1">Subjects Taught</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {selectedTeacher.workload?.subjects?.map((s: string) => (
-                                <Badge key={s} variant="secondary" className="text-[10px]">{s}</Badge>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="p-4 bg-white dark:bg-slate-800 rounded-xl border">
-                            <p className="text-xs font-bold text-slate-400 uppercase mb-1">Classes Managed</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {selectedTeacher.workload?.classes?.map((c: string) => (
-                                <Badge key={c} variant="outline" className="text-[10px]">{c}</Badge>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="space-y-3">
-                          <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-tight">Breakdown by Class & Subject</h4>
-                          {selectedTeacher.breakdown?.map((item: any) => (
-                            <div key={item.name} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border rounded-lg hover:border-blue-200 transition-colors">
-                              <span className="font-bold text-sm">{item.name}</span>
-                              <div className="flex items-center gap-4">
-                                <span className="text-[11px] text-slate-500 font-bold">{item.count} students</span>
-                                <Badge className={item.average >= 70 ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}>
-                                  {item.average}%
-                                </Badge>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {(!liveStats?.performance?.teacherPerformance || liveStats.performance.teacherPerformance.length === 0) && (
-                      <div className="text-center py-20 bg-slate-50/50 dark:bg-slate-900/50 rounded-2xl border-2 border-dashed">
-                        <Users2 className="h-10 w-10 text-slate-400 mx-auto mb-4" />
-                        <h4 className="text-lg font-bold">No Teacher Data</h4>
-                        <p className="text-slate-500">Assign teachers to class subjects to see performance analytics.</p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="space-y-6">
-              <Card className="bg-blue-600 text-white border-none shadow-lg">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Trophy className="h-5 w-5" />
-                    Top Performing Teacher
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {liveStats?.performance?.teacherPerformance?.[0] ? (
-                    <>
-                      <div className="text-center py-4">
-                        <div className="text-4xl font-black mb-1">{liveStats.performance.teacherPerformance[0].average}%</div>
-                        <p className="text-blue-100 text-sm font-medium">{liveStats.performance.teacherPerformance[0].name}</p>
-                      </div>
-                      <div className="p-4 bg-white/10 rounded-xl border border-white/20">
-                        <p className="text-xs uppercase text-blue-100 font-bold mb-3">Strongest Grades</p>
-                        <div className="space-y-2">
-                          {Object.entries(liveStats.performance.teacherPerformance[0].grades)
-                            .sort((a: any, b: any) => b[1] - a[1])
-                            .slice(0, 3)
-                            .map(([label, count]: any) => (
-                              <div key={label} className="flex justify-between items-center text-sm">
-                                <span>{label}</span>
-                                <span className="font-bold">{count} students</span>
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-white/60 text-center py-10">Waiting for data...</p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </TabsContent>
 
         {/* Top Students Tab */}
         <TabsContent value="top-students" className="space-y-6">

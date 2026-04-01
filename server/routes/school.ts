@@ -506,8 +506,8 @@ router.get(
         overview: {
           totalStudents: { value: studentCount, trend: "+5%", status: "up" },
           totalTeachers: { value: teacherCount, trend: "+0%", status: "up" },
-          revenue: {
-            value: `K${totalRevenueValue.toLocaleString()}`,
+          activeClasses: {
+            value: classes.count || 0,
             trend: "+0%",
             status: "up",
           },
@@ -4498,11 +4498,33 @@ router.get(
     const { term, academic_year, examType } = req.query;
 
     try {
-      // 1. Student & Staff Stats
-      const { data: schoolProfiles } = await supabaseAdmin
+      // 1. Student & Staff Stats - FECH ALL ROBUSTLY
+      const { data: schoolProfilesData, error: profileError } = await supabaseAdmin
         .from("profiles")
-        .select("id, role, gender, enrollment_status, full_name, grade")
+        .select(`
+          id, 
+          role, 
+          gender, 
+          enrollment_status, 
+          full_name, 
+          grade,
+          department,
+          enrollments(class_id, classes(name))
+        `)
         .eq("school_id", schoolId);
+
+      if (profileError) throw profileError;
+
+      const studentClassMap = new Map();
+      const studentProfileMap = new Map();
+      schoolProfilesData?.forEach(p => {
+        if (p.role === "student") {
+          const enrollment = p.enrollments && Array.isArray(p.enrollments) && p.enrollments.length > 0 ? p.enrollments[0] : null;
+          const className = (enrollment as any)?.classes?.name || p.grade || "Unassigned";
+          studentClassMap.set(p.id, className);
+          studentProfileMap.set(p.id, p);
+        }
+      });
 
       // Fetch grading scales for label mapping
       const { data: scales } = await supabaseAdmin
@@ -4517,15 +4539,10 @@ router.get(
           class_id,
           subject_id,
           teacher_id,
-          classes!class_id(name),
+          classes!inner(name, school_id),
           profiles!teacher_id(full_name, id)
-        `);
-
-      // Fetch student_subjects for robust mapping
-      const { data: studentSubjectMap } = await supabaseAdmin
-        .from("student_subjects")
-        .select("student_id, subject_id, class_id")
-        .eq("academic_year", academic_year || ""); // Filter by year if possible
+        `)
+        .eq("classes.school_id", schoolId);
 
       // Fetch classes to map UUIDs to names
       const { data: schoolClasses } = await supabaseAdmin
@@ -4540,9 +4557,9 @@ router.get(
       schoolClasses?.forEach((c) => (classNameToId[c.name] = c.id));
 
       const students =
-        schoolProfiles?.filter((p) => p.role === "student") || [];
+        schoolProfilesData?.filter((p) => p.role === "student") || [];
       const staff =
-        schoolProfiles?.filter(
+        schoolProfilesData?.filter(
           (p) => p.role === "teacher" || p.role === "staff",
         ) || [];
       const totalStudents = students.length;
@@ -4562,8 +4579,8 @@ router.get(
         .select("status")
         .eq("school_id", schoolId);
 
-      if (term) attendanceQuery = attendanceQuery.eq("term", term);
-      if (academic_year)
+      if (term && term !== "All") attendanceQuery = attendanceQuery.eq("term", term);
+      if (academic_year && academic_year !== "All")
         attendanceQuery = attendanceQuery.eq("academic_year", academic_year);
 
       const { data: attendance } = await attendanceQuery;
@@ -4574,32 +4591,43 @@ router.get(
         attendance?.filter((a) => a.status === "absent").length || 0;
       const late = attendance?.filter((a) => a.status === "late").length || 0;
 
-      // 3. Academic Performance
+      // 3. Academic Performance - ROBUST REAL-TIME DATA
+
+      // Fetch grades from student_grades table (includes Draft, Submitted, Published)
       let gradesQuery = supabaseAdmin
         .from("student_grades")
-        .select(
-          `
-        percentage,
-        student_id,
-        term,
-        academic_year,
-        exam_type,
-        profiles!student_id(full_name, grade, gender),
-        subjects(name, department, id)
-      `,
-        )
+        .select(`
+          percentage,
+          student_id,
+          term,
+          academic_year,
+          exam_type,
+          status,
+          subjects(name, department, id)
+        `)
         .eq("school_id", schoolId);
 
-      if (term) gradesQuery = gradesQuery.eq("term", term);
-      if (academic_year)
-        gradesQuery = gradesQuery.eq("academic_year", academic_year);
-      if (examType) gradesQuery = gradesQuery.eq("exam_type", examType);
+      if (term && term !== "All") gradesQuery = gradesQuery.eq("term", term);
+      if (academic_year && academic_year !== "All") gradesQuery = academic_year === "All" ? gradesQuery : gradesQuery.eq("academic_year", academic_year);
+      
+      const { data: grades } = await gradesQuery;
 
-      const { data: grades, error: gradesError } = await gradesQuery;
+      // Map profiles to student_grades
+      const mappedGrades = grades?.map(g => ({
+        ...g,
+        profiles: studentProfileMap.get(g.student_id)
+      })) || [];
 
-      if (gradesError) {
-        console.error("[LiveStats] Grades Error:", gradesError);
-      }
+      // Fetch graded assignment submissions for real-time analytics
+      const { data: realTimeSubmissions } = await supabaseAdmin
+        .from("submissions")
+        .select(`
+          score,
+          max_score,
+          student_id,
+          assignments!inner(id, type, subject_id, class_id, term, academic_year)
+        `)
+        .eq("status", "graded");
 
       // Fetch subjects for real-time mapping
       const { data: schoolSubjects } = await supabaseAdmin
@@ -4607,77 +4635,47 @@ router.get(
         .select("id, name, department")
         .eq("school_id", schoolId);
 
-      // NEW: Fetch assignment submissions for real-time analytics if finalized grades are missing
-      let submissionsQuery = supabaseAdmin
-        .from("submissions")
-        .select(`
-          score,
-          max_score,
-          student_id,
-          assignments!inner(id, type, subject_id, class_id)
-        `)
-        .eq("school_id", schoolId);
-      
-      // Since assignments don't always have term/year, we might need to filter assignments first
-      const { data: schoolAssignments } = await supabaseAdmin
-        .from("assignments")
-        .select("id, term, academic_year")
-        .eq("school_id", schoolId);
-      
-      const validAssignmentIds = schoolAssignments
-        ?.filter(a => {
-          const tMatch = !term || String(a.term).toLowerCase() === String(term).toLowerCase();
-          const yMatch = !academic_year || String(a.academic_year).toLowerCase() === String(academic_year).toLowerCase();
-          return tMatch && yMatch;
+      const submissionGrades = realTimeSubmissions
+        ?.filter(s => {
+          const a = s.assignments as any;
+          const tMatch = !term || term === "All" || String(a.term).toLowerCase() === String(term).toLowerCase();
+          const yMatch = !academic_year || academic_year === "All" || String(a.academic_year).toLowerCase() === String(academic_year).toLowerCase();
+          const isOurSchool = studentProfileMap.has(s.student_id);
+          return tMatch && yMatch && isOurSchool;
         })
-        .map(a => a.id) || [];
-
-      const { data: realTimeSubmissions } = await submissionsQuery.in("assignment_id", validAssignmentIds);
-
-      // Convert submissions to a similar format as student_grades for aggregation
-      const submissionGrades = realTimeSubmissions?.map(s => {
-        const percentage = s.max_score > 0 ? (s.score / s.max_score) * 100 : 0;
-        const student = schoolProfiles?.find(p => p.id === s.student_id);
-        const subjId = (s.assignments as any)?.subject_id;
-        const subject = schoolSubjects?.find(sub => sub.id === subjId);
-        
-        return {
-          percentage,
-          student_id: s.student_id,
-          term: term,
-          academic_year: academic_year,
-          exam_type: (s.assignments as any)?.type || "Assignment",
-          profiles: student,
-          subjects: subject || { id: subjId, name: "Unknown Subject", department: "General" }
-        };
-      }) || [];
-
-      // Combine both sources, but prefer student_grades if they exist for the same student/subject/term/year/examType
-      // Actually, for "real-time", we can just combine them all for a broader average
-      const combinedGrades = [...(grades || []), ...submissionGrades];
-
-      // Filter in memory for more robust matching (case-insensitive)
-      const filteredGrades =
-        combinedGrades?.filter((g) => {
-          const termMatch =
-            !term ||
-            String(g.term).toLowerCase() === String(term).toLowerCase();
-          const yearMatch =
-            !academic_year ||
-            String(g.academic_year).toLowerCase() ===
-              String(academic_year).toLowerCase();
-          const examTypeMatch =
-            !examType ||
-            String(g.exam_type).toLowerCase() ===
-              String(examType).toLowerCase();
-          return termMatch && yearMatch && examTypeMatch;
+        .map(s => {
+          const a = s.assignments as any;
+          const percentage = s.max_score > 0 ? (s.score / s.max_score) * 100 : 0;
+          const student = studentProfileMap.get(s.student_id);
+          const subject = schoolSubjects?.find(sub => sub.id === a.subject_id);
+          
+          return {
+            percentage,
+            student_id: s.student_id,
+            term: a.term || term,
+            academic_year: a.academic_year || academic_year,
+            exam_type: a.type || "Assignment",
+            profiles: student,
+            subjects: subject || { id: a.subject_id, name: "Assignment", department: "General" }
+          };
         }) || [];
 
-      console.log(
-        `[LiveStats] Found ${grades?.length || 0} finalized, ${submissionGrades.length} real-time submissions. Total combined: ${combinedGrades.length}. Filtered: ${filteredGrades.length} for Term: ${term}, Year: ${academic_year}`,
-      );
+      const combinedGrades = [...mappedGrades, ...submissionGrades];
 
-      // Group grades by class and department
+      const filteredGrades = combinedGrades?.filter((g) => {
+        // MUST ONLY BE FROM THIS SCHOOL
+        if (!studentProfileMap.has(g.student_id)) return false;
+
+        if (examType && examType !== "All") {
+          const isMatch = String(g.exam_type).toLowerCase() === String(examType).toLowerCase();
+          if (!isMatch) return false;
+        }
+        return true;
+      }) || [];
+
+      console.log(`[LiveStats] aggregated: ${grades?.length || 0} gradebook, ${submissionGrades.length} assignments. Total: ${filteredGrades.length}`);
+
+      // Grouping and Aggregation
       const classData: any = {};
       const subjectData: any = {};
       const departmentData: any = {};
@@ -4688,79 +4686,54 @@ router.get(
         female: { total: 0, count: 0, grades: {} },
         other: { total: 0, count: 0, grades: {} },
       };
-      const gradeDistribution: any = {
-        school: {},
-        byClass: {},
-        bySubject: {},
-      };
+      const gradeDistribution: any = { school: {}, byClass: {}, bySubject: {} };
 
       const getGradeLabel = (pct: number) => {
         if (!scales || scales.length === 0) return "N/A";
-        const scale = scales.find(
-          (s) => pct >= s.min_percentage && pct <= s.max_percentage,
-        );
+        const scale = scales.find((s) => pct >= s.min_percentage && pct <= s.max_percentage);
         return scale ? scale.description || scale.grade : "N/A";
       };
 
       filteredGrades.forEach((g: any) => {
-        const percentage = g.percentage || 0;
+        const percentage = Number(g.percentage) || 0;
         const gradeLabel = getGradeLabel(percentage);
 
-        // Update school-wide distribution
-        gradeDistribution.school[gradeLabel] =
-          (gradeDistribution.school[gradeLabel] || 0) + 1;
+        gradeDistribution.school[gradeLabel] = (gradeDistribution.school[gradeLabel] || 0) + 1;
 
-        // Update gender-wise distribution
         const gender = (g.profiles?.gender || "other").toLowerCase();
         const targetGender = gender === "male" || gender === "female" ? gender : "other";
         genderPerformance[targetGender].total += percentage;
         genderPerformance[targetGender].count += 1;
-        genderPerformance[targetGender].grades[gradeLabel] =
-          (genderPerformance[targetGender].grades[gradeLabel] || 0) + 1;
+        genderPerformance[targetGender].grades[gradeLabel] = (genderPerformance[targetGender].grades[gradeLabel] || 0) + 1;
 
-        // 1. Group by Class
-        const className = g.profiles?.grade || "Unassigned";
-        if (!classData[className])
-          classData[className] = { total: 0, count: 0 };
+        const className = studentClassMap.get(g.student_id) || "Unassigned";
+        if (!classData[className]) classData[className] = { total: 0, count: 0 };
         classData[className].total += percentage;
         classData[className].count += 1;
 
-        if (!gradeDistribution.byClass[className])
-          gradeDistribution.byClass[className] = {};
-        gradeDistribution.byClass[className][gradeLabel] =
-          (gradeDistribution.byClass[className][gradeLabel] || 0) + 1;
+        if (!gradeDistribution.byClass[className]) gradeDistribution.byClass[className] = {};
+        gradeDistribution.byClass[className][gradeLabel] = (gradeDistribution.byClass[className][gradeLabel] || 0) + 1;
 
-        // 2. Group by Subject
         const subjectName = g.subjects?.name || "Unknown";
-        const subjectId = g.subjects?.id;
-        if (!subjectData[subjectName])
-          subjectData[subjectName] = { total: 0, count: 0, id: subjectId };
+        if (!subjectData[subjectName]) subjectData[subjectName] = { total: 0, count: 0, id: g.subjects?.id };
         subjectData[subjectName].total += percentage;
         subjectData[subjectName].count += 1;
 
-        if (!gradeDistribution.bySubject[subjectName])
-          gradeDistribution.bySubject[subjectName] = {};
-        gradeDistribution.bySubject[subjectName][gradeLabel] =
-          (gradeDistribution.bySubject[subjectName][gradeLabel] || 0) + 1;
+        if (!gradeDistribution.bySubject[subjectName]) gradeDistribution.bySubject[subjectName] = {};
+        gradeDistribution.bySubject[subjectName][gradeLabel] = (gradeDistribution.bySubject[subjectName][gradeLabel] || 0) + 1;
 
-        // 3. Group by Department
         const deptName = g.subjects?.department || "General";
-        if (!departmentData[deptName])
-          departmentData[deptName] = { total: 0, count: 0 };
+        if (!departmentData[deptName]) departmentData[deptName] = { total: 0, count: 0 };
         departmentData[deptName].total += percentage;
         departmentData[deptName].count += 1;
 
-        // 4. Group by Student
         const studentId = g.student_id;
         if (studentId) {
           if (!studentPerformance[studentId]) {
-            const profile = g.profiles;
-            const displayName = profile?.full_name || "Unknown Student";
-
             studentPerformance[studentId] = {
               id: studentId,
-              name: displayName,
-              class: profile?.grade || "Unassigned",
+              name: g.profiles?.full_name || "Unknown Student",
+              class: className,
               total: 0,
               count: 0,
             };
@@ -4769,97 +4742,49 @@ router.get(
           studentPerformance[studentId].count += 1;
         }
 
-        // 5. Group by Teacher
-        // Robust Mapping: First try student_subjects table
-        let classId = studentSubjectMap?.find(
-          (sm) => sm.student_id === g.student_id && sm.subject_id === g.subjects?.id
-        )?.class_id;
-
-        // Fallback: Use profiles.grade string mapping
-        if (!classId) {
-          const className = g.profiles?.grade || "Unassigned";
-          classId = classNameToId[className];
-        }
-
-        const teacherMatch = classTeacherMap?.find(
-          (m) => m.class_id === classId && m.subject_id === g.subjects?.id,
-        );
-
+        const teacherMatch = classTeacherMap?.find(m => m.classes?.name === className && m.subject_id === g.subjects?.id);
         if (teacherMatch && teacherMatch.teacher_id) {
           const tId = teacherMatch.teacher_id;
-          const tName = teacherMatch.profiles?.full_name || "Unknown Teacher";
-
           if (!teacherPerformance[tId]) {
             teacherPerformance[tId] = {
               id: tId,
-              name: tName,
+              name: teacherMatch.profiles?.full_name || "Unknown Teacher",
               total: 0,
               count: 0,
               grades: {},
-              details: {
-                classes: new Set(),
-                subjects: new Set(),
-                breakdown: {}
-              }
+              details: { classes: new Set(), subjects: new Set(), breakdown: {} }
             };
           }
           teacherPerformance[tId].total += percentage;
           teacherPerformance[tId].count += 1;
-          teacherPerformance[tId].grades[gradeLabel] =
-            (teacherPerformance[tId].grades[gradeLabel] || 0) + 1;
-          
-          // Track detailed breakdown
-          const cName = classIdToName[classId] || "Unknown Class";
-          const sName = g.subjects?.name || "Unknown Subject";
-          teacherPerformance[tId].details.classes.add(cName);
-          teacherPerformance[tId].details.subjects.add(sName);
-          
-          const detailKey = `${cName} - ${sName}`;
-          if (!teacherPerformance[tId].details.breakdown[detailKey]) {
-            teacherPerformance[tId].details.breakdown[detailKey] = { total: 0, count: 0 };
-          }
+          teacherPerformance[tId].grades[gradeLabel] = (teacherPerformance[tId].grades[gradeLabel] || 0) + 1;
+          teacherPerformance[tId].details.classes.add(className);
+          teacherPerformance[tId].details.subjects.add(subjectName);
+          const detailKey = `${className} - ${subjectName}`;
+          if (!teacherPerformance[tId].details.breakdown[detailKey]) teacherPerformance[tId].details.breakdown[detailKey] = { total: 0, count: 0 };
           teacherPerformance[tId].details.breakdown[detailKey].total += percentage;
           teacherPerformance[tId].details.breakdown[detailKey].count += 1;
         }
       });
 
       const studentStats = Object.values(studentPerformance)
-        .map((s: any) => ({
-          ...s,
-          average: Math.round(s.total / s.count),
-        }))
+        .map((s: any) => ({ ...s, average: Math.round(s.total / s.count) }))
         .sort((a: any, b: any) => b.average - a.average);
 
-      // Only include students with a minimum of 70% as average score
-      const topStudents = studentStats
-        .filter((s) => s.average >= 70)
-        .slice(0, 10);
+      const topStudents = studentStats.filter((s) => s.average >= 70).slice(0, 10);
       const lowStudents = [...studentStats].reverse().slice(0, 10);
 
-      console.log(
-        `[LiveStats] Top Students (>=70%): ${topStudents.length}, Low Students: ${lowStudents.length}`,
-      );
-
       const performanceByClass = Object.entries(classData)
-        .map(([name, stats]: any) => ({
-          name,
-          average: Math.round(stats.total / stats.count),
-        }))
+        .map(([name, stats]: any) => ({ name, average: Math.round(stats.total / stats.count) }))
         .sort((a, b) => a.name.localeCompare(b.name));
 
       const performanceBySubject = Object.entries(subjectData)
-        .map(([name, stats]: any) => ({
-          name,
-          average: Math.round(stats.total / stats.count),
-        }))
+        .map(([name, stats]: any) => ({ name, average: Math.round(stats.total / stats.count) }))
         .sort((a, b) => b.average - a.average)
         .slice(0, 10);
 
       const performanceByDept = Object.entries(departmentData)
-        .map(([name, stats]: any) => ({
-          name,
-          average: Math.round(stats.total / stats.count),
-        }))
+        .map(([name, stats]: any) => ({ name, average: Math.round(stats.total / stats.count) }))
         .sort((a, b) => b.average - a.average);
 
       const teacherStats = Object.values(teacherPerformance)
@@ -4883,15 +4808,14 @@ router.get(
       // Subject rankings by class
       const subjectRankingsByClass: any = {};
       Object.keys(gradeDistribution.byClass).forEach((cls) => {
-        const clsId = classNameToId[cls];
         const clsGrades = filteredGrades.filter(
-          (g) => (g.profiles?.grade || "Unassigned") === cls,
+          (g) => (studentClassMap.get(g.student_id) || "Unassigned") === cls,
         );
         const clsSubjects: any = {};
         clsGrades.forEach((g) => {
           const sName = g.subjects?.name || "Unknown";
           if (!clsSubjects[sName]) clsSubjects[sName] = { total: 0, count: 0 };
-          clsSubjects[sName].total += g.percentage || 0;
+          clsSubjects[sName].total += Number(g.percentage) || 0;
           clsSubjects[sName].count += 1;
         });
 
@@ -4966,7 +4890,7 @@ router.get(
           averageGrade: filteredGrades.length
             ? Math.round(
                 filteredGrades.reduce(
-                  (sum, g) => sum + (g.percentage || 0),
+                  (sum, g) => sum + (Number(g.percentage) || 0),
                   0,
                 ) / filteredGrades.length,
               )
@@ -6650,7 +6574,7 @@ router.get(
       // 1. Fetch profiles
       const { data: profiles, error: profileError } = await supabaseAdmin
         .from("profiles")
-        .select("id, full_name, role, created_at")
+        .select("id, full_name, role, secondary_role, created_at")
         .eq("school_id", schoolId)
         .in("role", ADMIN_ROLES)
         .order("full_name", { ascending: true });
@@ -6868,6 +6792,57 @@ router.post(
       res.json({ message: "Password reset successfully" });
     } catch (error: any) {
       console.error("Reset Admin Password Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// POST /api/school/admins/:id/assign-teacher
+// Assign teacher role to an existing school admin
+router.post(
+  "/admins/:id/assign-teacher",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { id } = req.params;
+
+    try {
+      // 1. Verify target is an admin in the same school
+      const { data: target, error: targetError } = await supabaseAdmin
+        .from("profiles")
+        .select("id, role, secondary_role")
+        .eq("id", id)
+        .eq("school_id", schoolId)
+        .single();
+
+      if (targetError || !target) {
+        return res.status(404).json({ message: "Admin not found" });
+      }
+
+      if (!ADMIN_ROLES.includes(target.role)) {
+        return res.status(400).json({ message: "Target user is not an administrator" });
+      }
+
+      // 2. Check if they already have teacher role
+      if (target.secondary_role === "teacher") {
+        return res.status(400).json({ message: "User already has teacher role" });
+      }
+
+      // 3. Update the profile
+      const { error: updateError } = await supabaseAdmin
+        .from("profiles")
+        .update({
+          secondary_role: "teacher",
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", id);
+
+      if (updateError) throw updateError;
+
+      res.json({ message: "Teacher role assigned successfully" });
+    } catch (error: any) {
+      console.error("Assign Teacher Role Error:", error);
       res.status(500).json({ message: error.message });
     }
   }

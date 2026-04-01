@@ -724,7 +724,7 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
         title="Promote to School Admin?"
         description="This will grant this teacher full administrative privileges. They will be able to manage all aspects of the school portal."
         confirmLabel="Confirm Promotion"
-        variant="default"
+        variant="info"
         loading={isLoading}
         onConfirm={handlePromote}
       />

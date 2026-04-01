@@ -10,7 +10,8 @@ import {
   ShieldAlert,
   Info,
   ShieldCheck,
-  KeyRound
+  KeyRound,
+  UserPlus
 } from 'lucide-react';
 import {
   Select,
@@ -78,6 +79,7 @@ interface AdminProfile {
   full_name: string;
   email?: string;
   role: string;
+  secondary_role?: string | null;
   created_at?: string;
 }
 
@@ -88,9 +90,11 @@ export default function AdminManagement() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [resetTargetId, setResetTargetId] = useState<string | null>(null);
+  const [assignTeacherTargetId, setAssignTeacherTargetId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [isAssigning, setIsAssigning] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof adminSchema>>({
@@ -235,6 +239,34 @@ export default function AdminManagement() {
       toast({ title: "Error", description: error.message || "Failed to reset password.", variant: "destructive" });
     } finally {
       setIsResetting(false);
+    }
+  };
+
+  const handleAssignTeacher = async () => {
+    if (!assignTeacherTargetId) return;
+    setIsAssigning(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/school/admins/${assignTeacherTargetId}/assign-teacher`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to assign teacher role');
+      }
+
+      toast({ title: "Success", description: "Teacher role assigned successfully." });
+      setAssignTeacherTargetId(null);
+      fetchAdmins();
+    } catch (error: any) {
+      console.error('Error assigning teacher role:', error);
+      toast({ title: "Error", description: error.message || "Failed to assign teacher role.", variant: "destructive" });
+    } finally {
+      setIsAssigning(false);
     }
   };
 
@@ -435,6 +467,15 @@ export default function AdminManagement() {
                                <KeyRound className="mr-2 h-4 w-4" />
                                Reset Password
                              </DropdownMenuItem>
+                             {admin.secondary_role !== 'teacher' && (
+                               <DropdownMenuItem
+                                 className="cursor-pointer"
+                                 onClick={() => setAssignTeacherTargetId(admin.id)}
+                               >
+                                 <UserPlus className="mr-2 h-4 w-4 text-blue-600" />
+                                 Assign Teacher Role
+                               </DropdownMenuItem>
+                             )}
                              <DropdownMenuSeparator />
                              <DropdownMenuItem
                                className="text-red-600 focus:text-red-600 cursor-pointer"
@@ -463,6 +504,17 @@ export default function AdminManagement() {
         variant="danger"
         loading={isDeleting}
         onConfirm={handleDelete}
+      />
+
+      <ConfirmDialog
+        open={!!assignTeacherTargetId}
+        onOpenChange={(open) => !open && setAssignTeacherTargetId(null)}
+        title="Assign Teacher Role?"
+        description={`This will allow ${admins.find(a => a.id === assignTeacherTargetId)?.full_name} to also access the teacher portal and be assigned to classes/subjects.`}
+        confirmLabel="Assign Role"
+        variant="info"
+        loading={isAssigning}
+        onConfirm={handleAssignTeacher}
       />
 
        <Dialog open={!!resetTargetId} onOpenChange={(open) => !open && setResetTargetId(null)}>

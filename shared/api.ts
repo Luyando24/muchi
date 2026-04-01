@@ -122,10 +122,10 @@ export interface Notification {
 
 export interface SchoolDashboardStats {
   overview: {
-    totalStudents: { value: number; trend: string; status: 'up' | 'down' };
-    totalTeachers: { value: number; trend: string; status: 'up' | 'down' };
-    revenue: { value: string; trend: string; status: 'up' | 'down' };
-    attendanceRate: { value: string; trend: string; status: 'up' | 'down' };
+    totalStudents: { value: number | string; trend: string; status: 'up' | 'down' };
+    totalTeachers: { value: number | string; trend: string; status: 'up' | 'down' };
+    activeClasses: { value: number | string; trend: string; status: 'up' | 'down' };
+    attendanceRate: { value: string | number; trend: string; status: 'up' | 'down' };
   };
   recentActivities: {
     id: string | number;
