@@ -2318,10 +2318,11 @@ router.get(
 
       const { data: classAssignedTeachers } = await classAssignedTeachersQuery;
 
-      const subjectTeacherMap = new Map();
+      const subjectTeacherMap = new Map<string, Set<string>>();
       classAssignedTeachers?.forEach((cs: any) => {
+        let teacherName = null;
         if (cs.teacher && cs.teacher.full_name) {
-          subjectTeacherMap.set(cs.subject_id, cs.teacher.full_name);
+          teacherName = cs.teacher.full_name;
         } else if (
           cs.teacher &&
           Array.isArray(cs.teacher) &&
@@ -2329,7 +2330,14 @@ router.get(
           cs.teacher[0].full_name
         ) {
           // In case it's an array due to foreign key mapping
-          subjectTeacherMap.set(cs.subject_id, cs.teacher[0].full_name);
+          teacherName = cs.teacher[0].full_name;
+        }
+
+        if (teacherName) {
+          if (!subjectTeacherMap.has(cs.subject_id)) {
+            subjectTeacherMap.set(cs.subject_id, new Set());
+          }
+          subjectTeacherMap.get(cs.subject_id)?.add(teacherName);
         }
       });
 
@@ -2361,10 +2369,16 @@ router.get(
           overallStatus = "Submitted";
         }
 
+        let teacherDisplay = "Unassigned";
+        const teachersSet = subjectTeacherMap.get(subjId);
+        if (teachersSet && teachersSet.size > 0) {
+          teacherDisplay = Array.from(teachersSet).join(", ");
+        }
+
         statusReport.push({
           id: subjId,
           name: subjectNameMap.get(subjId) || "Unknown Subject",
-          teacher: subjectTeacherMap.get(subjId) || "Unassigned",
+          teacher: teacherDisplay,
           status: overallStatus,
         });
       }
