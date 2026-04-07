@@ -104,26 +104,54 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
     const presentDays = attendanceData?.filter(a => a.status === 'present').length || 0;
     const avgAttendanceValue = totalAttendanceDays > 0 ? (presentDays / totalAttendanceDays) * 100 : 0;
 
-    // 3. Aggregate national pass rate (%) - Based on average grade percentage
-    let passRateQuery = supabaseAdmin.from('student_grades').select('percentage');
-    if (province || district) {
-      const { data: schoolIds } = await supabaseAdmin.from('schools').select('id')
-        .match({ ...(province && { province }), ...(district && { district }) });
-      passRateQuery = passRateQuery.in('school_id', schoolIds?.map(s => s.id) || []);
-    }
-    const { data: gradeData } = await passRateQuery;
-    const totalGrades = gradeData?.length || 0;
-    const avgPassRate = totalGrades > 0 
-      ? gradeData?.reduce((acc, curr) => acc + curr.percentage, 0) / totalGrades 
-      : 0;
+    // 3. Aggregate national pass rate (%) and Top Performing Schools
+      let passRateQuery = supabaseAdmin.from('student_grades').select('school_id, percentage');
+      
+      let filteredSchoolIds: string[] | undefined = undefined;
+      if (province || district) {
+        const { data: schoolIds } = await supabaseAdmin.from('schools').select('id, name, district, province')
+          .match({ ...(province && { province }), ...(district && { district }) });
+        filteredSchoolIds = schoolIds?.map(s => s.id) || [];
+        passRateQuery = passRateQuery.in('school_id', filteredSchoolIds);
+      }
+      
+      // Fetch all schools to map names (if not already fetched for filtering)
+      const { data: allSchools } = await supabaseAdmin.from('schools').select('id, name, district, province');
+      const schoolMap = new Map<string, any>(allSchools?.map(s => [s.id, s]) || []);
 
-    res.json({
-      totalSchools: totalSchools || 0,
-      totalStudents: totalStudents || 0,
-      totalTeachers: totalTeachers || 0,
-      avgAttendance: Number(avgAttendanceValue.toFixed(1)),
-      nationalPassRate: Number(avgPassRate.toFixed(1))
-    });
+      const { data: gradeData } = await passRateQuery;
+      const totalGrades = gradeData?.length || 0;
+      const avgPassRate = totalGrades > 0 
+        ? gradeData?.reduce((acc, curr) => acc + curr.percentage, 0) / totalGrades 
+        : 0;
+
+      // Calculate Top Schools
+      const schoolGrades = new Map<string, { total: number, count: number }>();
+      gradeData?.forEach(g => {
+        if (!g.school_id || g.percentage == null) return;
+        const current = schoolGrades.get(g.school_id) || { total: 0, count: 0 };
+        schoolGrades.set(g.school_id, { total: current.total + g.percentage, count: current.count + 1 });
+      });
+
+      const topSchools = Array.from(schoolGrades.entries())
+        .map(([id, stats]) => ({
+          id,
+          name: schoolMap.get(id)?.name || 'Unknown School',
+          district: schoolMap.get(id)?.district || 'Unknown District',
+          province: schoolMap.get(id)?.province || 'Unknown Province',
+          passRate: Number((stats.total / stats.count).toFixed(1))
+        }))
+        .sort((a, b) => b.passRate - a.passRate)
+        .slice(0, 3); // Get top 3 schools
+
+      res.json({
+        totalSchools: totalSchools || 0,
+        totalStudents: totalStudents || 0,
+        totalTeachers: totalTeachers || 0,
+        avgAttendance: Number(avgAttendanceValue.toFixed(1)),
+        nationalPassRate: Number(avgPassRate.toFixed(1)),
+        topSchools
+      });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }

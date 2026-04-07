@@ -2225,70 +2225,44 @@ router.get(
     }
 
     try {
-      // 1. Get all subjects for this class (from assignments or student_subjects?)
-      // Using student_subjects gives us the subjects students are enrolled in.
-      // We want to know: For each subject, what is the status of grades?
-
-      // Get unique subjects for the class(es)
-      let classSubjectsQuery = supabaseAdmin
-        .from("student_subjects")
-        .select("subject_id, subjects(name)")
-        .eq("academic_year", academicYear);
-
-      if (classId && classId !== "all") {
-        classSubjectsQuery = classSubjectsQuery.eq("class_id", classId);
-      }
-
-      if (subjectId && subjectId !== "all") {
-        classSubjectsQuery = classSubjectsQuery.eq("subject_id", subjectId);
-      }
-
-      const { data: classSubjects, error: subjError } =
-        await classSubjectsQuery;
-
-      if (subjError) throw subjError;
-
-      // Deduplicate subjects
-      const uniqueSubjects = Array.from(
-        new Set(classSubjects?.map((s) => JSON.stringify(s.subjects)) || []),
-      )
-        .map((s: string) => JSON.parse(s))
-        .filter((s) => s); // Ensure valid subjects
-
       // 2. Check grade status for each subject
       const statusReport = [];
-
-      // Get all grades for this class/term
-      let enrollmentsQuery = supabaseAdmin
-        .from("enrollments")
-        .select("student_id")
-        .eq("academic_year", academicYear);
-
-      if (classId && classId !== "all") {
-        enrollmentsQuery = enrollmentsQuery.eq("class_id", classId);
-      }
-
-      const { data: enrollments } = await enrollmentsQuery;
-
-      const studentIds = enrollments?.map((e) => e.student_id) || [];
-
-      if (studentIds.length === 0) {
-        return res.json([]);
-      }
 
       let gradesQuery = supabaseAdmin
         .from("student_grades")
         .select("subject_id, status")
-        .in("student_id", studentIds)
+        .eq("school_id", schoolId)
         .eq("term", term)
         .eq("exam_type", examType)
-        .eq("academic_year", academicYear);
+        .eq("academic_year", academicYear)
+        .limit(100000);
+
+      if (classId && classId !== "all") {
+        const { data: enrollments } = await supabaseAdmin
+          .from("enrollments")
+          .select("student_id")
+          .eq("academic_year", academicYear)
+          .eq("class_id", classId);
+
+        const studentIds = enrollments?.map((e) => e.student_id) || [];
+
+        if (studentIds.length === 0) {
+          return res.json([]);
+        }
+        
+        gradesQuery = gradesQuery.in("student_id", studentIds);
+      }
 
       if (subjectId && subjectId !== "all") {
         gradesQuery = gradesQuery.eq("subject_id", subjectId);
       }
 
-      const { data: grades } = await gradesQuery;
+      const { data: grades, error: gradesError } = await gradesQuery;
+      
+      if (gradesError) {
+        console.error("Grades query error:", gradesError);
+        throw gradesError;
+      }
 
       // Analyze status per subject
       // We can map subject_id -> status set
@@ -2319,13 +2293,27 @@ router.get(
       // Fetch teachers assigned to subjects for this class
       let classAssignedTeachersQuery = supabaseAdmin
         .from("class_subjects")
-        .select("subject_id, teacher:profiles(full_name)");
+        .select("subject_id, teacher:profiles(full_name)")
+        .limit(100000);
 
       if (classId && classId !== "all") {
         classAssignedTeachersQuery = classAssignedTeachersQuery.eq(
           "class_id",
           classId,
         );
+      } else {
+        const { data: schoolClasses } = await supabaseAdmin
+          .from("classes")
+          .select("id")
+          .eq("school_id", schoolId);
+        
+        const targetClassIds = (schoolClasses || []).map((c: any) => c.id);
+        if (targetClassIds.length > 0) {
+          classAssignedTeachersQuery = classAssignedTeachersQuery.in("class_id", targetClassIds);
+        } else {
+          // No classes in school, return empty
+          return res.json([]);
+        }
       }
 
       const { data: classAssignedTeachers } = await classAssignedTeachersQuery;
@@ -5970,10 +5958,15 @@ router.post(
             let publishedGradesQuery = supabaseAdmin
               .from("student_grades")
               .select("student_id, subject_id")
-              .in("student_id", studentIds)
+              .eq("school_id", schoolId)
               .eq("term", term)
               .eq("academic_year", academicYear)
-              .in("status", ["Published", "Submitted"]);
+              .in("status", ["Published", "Submitted"])
+              .limit(100000);
+
+            if (classId && classId !== "all") {
+              publishedGradesQuery = publishedGradesQuery.in("student_id", studentIds);
+            }
 
             if (subjectId && subjectId !== "all") {
               publishedGradesQuery = publishedGradesQuery.eq(
@@ -5992,10 +5985,15 @@ router.post(
             let draftGradesQuery = supabaseAdmin
               .from("student_grades")
               .select("student_id, subject_id, status")
-              .in("student_id", studentIds)
+              .eq("school_id", schoolId)
               .eq("term", term)
               .eq("academic_year", academicYear)
-              .not("status", "in", '("Published","Submitted")');
+              .not("status", "in", '("Published","Submitted")')
+              .limit(100000);
+
+            if (classId && classId !== "all") {
+              draftGradesQuery = draftGradesQuery.in("student_id", studentIds);
+            }
 
             if (subjectId && subjectId !== "all") {
               draftGradesQuery = draftGradesQuery.eq("subject_id", subjectId);
@@ -6089,12 +6087,13 @@ router.post(
           .eq("school_id", schoolId)
           .eq("term", term)
           .eq("exam_type", examType)
-          .eq("academic_year", academicYear);
+          .eq("academic_year", academicYear)
+          .limit(100000);
 
         if (subjectId && subjectId !== "all") {
           gradesQuery = gradesQuery.eq("subject_id", subjectId);
         }
-        if (studentIds.length > 0) {
+        if (classId && classId !== "all" && studentIds.length > 0) {
           gradesQuery = gradesQuery.in("student_id", studentIds);
         }
 

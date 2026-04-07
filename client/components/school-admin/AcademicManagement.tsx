@@ -2046,7 +2046,7 @@ export default function AcademicManagement() {
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                  {gradeStatus.map(s => (
+                                  {gradeStatus.filter(s => s.status === 'Submitted').map(s => (
                                     <TableRow key={s.id}>
                                       <TableCell>{s.name}</TableCell>
                                       <TableCell className="text-muted-foreground">{s.teacher}</TableCell>
@@ -2060,6 +2060,13 @@ export default function AcademicManagement() {
                                       </TableCell>
                                     </TableRow>
                                   ))}
+                                  {gradeStatus.filter(s => s.status === 'Submitted').length === 0 && (
+                                    <TableRow>
+                                      <TableCell colSpan={3} className="text-center py-4 text-muted-foreground">
+                                        No submitted subjects found.
+                                      </TableCell>
+                                    </TableRow>
+                                  )}
                                 </TableBody>
                               </Table>
                             </div>

@@ -256,7 +256,7 @@ function OverviewDashboard() {
 
 
 function PerformanceDashboard() {
-  const [stats, setStats] = useState({ nationalPassRate: 0 });
+  const [stats, setStats] = useState({ nationalPassRate: 0, topSchools: [] as any[] });
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ province: 'All', district: 'All' });
   const [regions, setRegions] = useState<{ province: string, districts: string[] }[]>([]);
@@ -342,12 +342,43 @@ function PerformanceDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="col-span-1 md:col-span-2 border-none shadow-sm bg-white dark:bg-slate-800 rounded-2xl overflow-hidden">
           <CardHeader className="border-b border-slate-50 dark:border-slate-700/50 p-6">
-            <CardTitle className="text-base font-black uppercase tracking-tight">Historical Pass Rates</CardTitle>
-            <CardDescription className="text-[10px] font-black uppercase tracking-widest text-slate-400">Comparison across last 4 academic cycles</CardDescription>
+            <CardTitle className="text-base font-black uppercase tracking-tight">Top Performing Schools</CardTitle>
+            <CardDescription className="text-[10px] font-black uppercase tracking-widest text-slate-400">Institutions with the highest average pass rates</CardDescription>
           </CardHeader>
-          <CardContent className="h-80 flex flex-col items-center justify-center text-slate-300 bg-slate-50/30 dark:bg-slate-900/50 p-6">
-             <TrendingUp className="h-12 w-12 mb-3 opacity-10 text-blue-500" />
-             <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Longitudinal Data Visualization</p>
+          <CardContent className="p-0">
+             {stats.topSchools && stats.topSchools.length > 0 ? (
+               <div className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                 {stats.topSchools.map((school, index) => (
+                   <div key={school.id} className="flex items-center justify-between p-6 transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
+                     <div className="flex items-center gap-4">
+                       <div className="flex items-center justify-center h-10 w-10 rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-black text-sm border border-blue-100 dark:border-blue-800">
+                         #{index + 1}
+                       </div>
+                       <div>
+                         <h4 className="font-bold text-slate-900 dark:text-white">{school.name}</h4>
+                         <div className="flex items-center gap-2 mt-1">
+                           <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-none">
+                             {school.province}
+                           </Badge>
+                           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{school.district}</span>
+                         </div>
+                       </div>
+                     </div>
+                     <div className="text-right">
+                       <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">
+                         {school.passRate}%
+                       </div>
+                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Avg Score</p>
+                     </div>
+                   </div>
+                 ))}
+               </div>
+             ) : (
+               <div className="h-80 flex flex-col items-center justify-center text-slate-300 bg-slate-50/30 dark:bg-slate-900/50 p-6">
+                 <School className="h-12 w-12 mb-3 opacity-20 text-blue-500" />
+                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">No performance data available</p>
+               </div>
+             )}
           </CardContent>
         </Card>
         <div className="space-y-6">
