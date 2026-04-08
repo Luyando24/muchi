@@ -16,7 +16,8 @@ import {
   ClipboardList,
   Printer,
   FileSpreadsheet,
-  Building
+  Building,
+  ArrowRightLeft
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -164,6 +165,9 @@ export default function AcademicManagement() {
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [isMigrateModalOpen, setIsMigrateModalOpen] = useState(false);
+  const [targetExamType, setTargetExamType] = useState('');
+  const [isMigrating, setIsMigrating] = useState(false);
 
   // Unpublished Grades / Readiness Report State
   const [unpublishedGrades, setUnpublishedGrades] = useState<any[]>([]);
@@ -868,6 +872,63 @@ export default function AcademicManagement() {
       default: setConfirmState({ type: null });
     }
   };
+  const handleMigrateGrades = async () => {
+    if (!calcForm.classId || !calcForm.subjectId || !calcForm.term || !calcForm.examType || !calcForm.academicYear || !targetExamType) {
+      toast({ title: "Error", description: "Please ensure Class, Subject, Term, Year, and Assessment Types are all selected.", variant: "destructive" });
+      return;
+    }
+    
+    if (calcForm.classId === 'all') {
+      toast({ title: "Error", description: "Bulk migration must be done one class at a time to prevent accidental school-wide changes.", variant: "destructive" });
+      return;
+    }
+    
+    if (calcForm.subjectId === 'all') {
+      toast({ title: "Error", description: "Bulk migration must be done one subject at a time.", variant: "destructive" });
+      return;
+    }
+
+    if (calcForm.examType === targetExamType) {
+      toast({ title: "Error", description: "Source and destination assessment types must be different.", variant: "destructive" });
+      return;
+    }
+
+    setIsMigrating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch('/api/school/grades/migrate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          term: calcForm.term,
+          fromExamType: calcForm.examType,
+          toExamType: targetExamType,
+          academicYear: calcForm.academicYear,
+          classId: calcForm.classId,
+          subjectId: calcForm.subjectId
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to move grades');
+
+      toast({ title: "Success", description: data.message });
+      setIsMigrateModalOpen(false);
+      setTargetExamType('');
+      // Force refresh the readiness/status checks if they were open
+      setCalcForm(prev => ({ ...prev, examType: targetExamType }));
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsMigrating(false);
+    }
+  };
+
   const initiatePublish = () => {
     if (!calcForm.classId || !calcForm.term || !calcForm.academicYear) return;
 
@@ -1997,83 +2058,136 @@ export default function AcademicManagement() {
                   </Dialog>
 
                   <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
-                    <h3 className="font-semibold mb-2">Publish Results</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Review subject status and publish final grades to the student dashboard.
-                    </p>
-                    <Dialog open={isPublishModalOpen} onOpenChange={setIsPublishModalOpen}>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          disabled={!calcForm.term || !calcForm.academicYear}
-                        >
-                          Review & Publish Results
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
-                        <DialogHeader>
-                          <DialogTitle>Publish Results</DialogTitle>
-                          <DialogDescription>
-                            Check if all subjects are submitted before publishing to students.
-                          </DialogDescription>
-                        </DialogHeader>
-
-                        <div className="py-4 space-y-4">
-                          <div className="flex gap-2">
-                            <Button variant="outline" onClick={handleCheckStatus} disabled={isCheckingStatus}>
-                              {isCheckingStatus ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                              Check Status
-                            </Button>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <h3 className="font-semibold mb-2">Publish Results</h3>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          Review subject status and publish final grades to the student dashboard.
+                        </p>
+                        <Dialog open={isPublishModalOpen} onOpenChange={setIsPublishModalOpen}>
+                          <DialogTrigger asChild>
                             <Button
-                              onClick={initiatePublish}
-                              disabled={isActionLoading || gradeStatus.length === 0}
-                              className="bg-green-600 hover:bg-green-700"
+                              variant="outline"
+                              className="w-full"
+                              disabled={!calcForm.term || !calcForm.academicYear}
                             >
-                              {isPublishing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                              Publish Results
+                              Review & Publish Results
                             </Button>
-                          </div>
+                          </DialogTrigger>
+                          <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
+                            <DialogHeader>
+                              <DialogTitle>Publish Results</DialogTitle>
+                              <DialogDescription>
+                                Check if all subjects are submitted before publishing to students.
+                              </DialogDescription>
+                            </DialogHeader>
 
-                          {gradeStatus.length > 0 && (
-                            <div className="border rounded-md">
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Subject</TableHead>
-                                    <TableHead>Teacher</TableHead>
-                                    <TableHead>Status</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {gradeStatus.filter(s => s.status === 'Submitted').map(s => (
-                                    <TableRow key={s.id}>
-                                      <TableCell>{s.name}</TableCell>
-                                      <TableCell className="text-muted-foreground">{s.teacher}</TableCell>
-                                      <TableCell>
-                                        <span className={`px-2 py-1 rounded text-xs font-medium ${s.status === 'Published' ? 'bg-green-100 text-green-800' :
-                                          s.status === 'Submitted' ? 'bg-blue-100 text-blue-800' :
-                                            'bg-yellow-100 text-yellow-800'
-                                          }`}>
-                                          {s.status}
-                                        </span>
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                  {gradeStatus.filter(s => s.status === 'Submitted').length === 0 && (
-                                    <TableRow>
-                                      <TableCell colSpan={3} className="text-center py-4 text-muted-foreground">
-                                        No submitted subjects found.
-                                      </TableCell>
-                                    </TableRow>
-                                  )}
-                                </TableBody>
-                              </Table>
+                            <div className="py-4 space-y-4">
+                              <div className="flex gap-2">
+                                <Button variant="outline" onClick={handleCheckStatus} disabled={isCheckingStatus}>
+                                  {isCheckingStatus ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                  Check Status
+                                </Button>
+                                <Button
+                                  onClick={initiatePublish}
+                                  disabled={isActionLoading || gradeStatus.length === 0}
+                                  className="bg-green-600 hover:bg-green-700"
+                                >
+                                  {isPublishing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                  Publish Results
+                                </Button>
+                              </div>
+
+                              {gradeStatus.length > 0 && (
+                                <div className="border rounded-md">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>Subject</TableHead>
+                                        <TableHead>Teacher</TableHead>
+                                        <TableHead>Status</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {gradeStatus.filter(s => s.status === 'Submitted').map(s => (
+                                        <TableRow key={s.id}>
+                                          <TableCell>{s.name}</TableCell>
+                                          <TableCell className="text-muted-foreground">{s.teacher}</TableCell>
+                                          <TableCell>
+                                            <span className={`px-2 py-1 rounded text-xs font-medium ${s.status === 'Published' ? 'bg-green-100 text-green-800' :
+                                              s.status === 'Submitted' ? 'bg-blue-100 text-blue-800' :
+                                                'bg-yellow-100 text-yellow-800'
+                                              }`}>
+                                              {s.status}
+                                            </span>
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                      {gradeStatus.filter(s => s.status === 'Submitted').length === 0 && (
+                                        <TableRow>
+                                          <TableCell colSpan={3} className="text-center py-4 text-muted-foreground">
+                                            No submitted subjects found.
+                                          </TableCell>
+                                        </TableRow>
+                                      )}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+
+                      <div>
+                        <h3 className="font-semibold mb-2">Move Grades</h3>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          Move entered grades from one assessment type to another.
+                        </p>
+                        <Dialog open={isMigrateModalOpen} onOpenChange={setIsMigrateModalOpen}>
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="w-full text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-900 dark:hover:bg-blue-950"
+                              disabled={!calcForm.classId || calcForm.classId === 'all' || !calcForm.subjectId || calcForm.subjectId === 'all'}
+                            >
+                              <ArrowRightLeft className="mr-2 h-4 w-4" /> Move Grades
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Bulk Move Grades</DialogTitle>
+                              <DialogDescription>
+                                Moving grades for <strong>{calcForm.examType}</strong> to a different assessment type.
+                                You must select a specific Class and Subject.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="py-4 space-y-4">
+                              <div className="space-y-2">
+                                <Label>Destination Assessment Type</Label>
+                                <Select value={targetExamType} onValueChange={setTargetExamType}>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select destination..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {availableExamTypes.filter(t => t !== calcForm.examType).map(type => (
+                                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <DialogFooter>
+                              <Button variant="outline" onClick={() => setIsMigrateModalOpen(false)}>Cancel</Button>
+                              <Button onClick={handleMigrateGrades} disabled={isMigrating || !targetExamType} className="bg-blue-600 hover:bg-blue-700">
+                                {isMigrating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRightLeft className="mr-2 h-4 w-4" />}
+                                Confirm Move
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+                    </div>
                   </div>
                 </div>
 

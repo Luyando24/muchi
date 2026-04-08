@@ -2006,6 +2006,62 @@ router.post(
   },
 );
 
+// POST /api/school/grades/migrate
+// Migrate grades from one exam type to another
+router.post(
+  "/grades/migrate",
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { term, fromExamType, toExamType, academicYear, classId, subjectId } = req.body;
+
+    if (!term || !fromExamType || !toExamType || !academicYear || !classId || !subjectId) {
+      return res.status(400).json({ message: "Missing required fields for migration" });
+    }
+
+    try {
+      // Get students in this class
+      const { data: enrollments } = await supabaseAdmin
+        .from("enrollments")
+        .select("student_id")
+        .eq("class_id", classId)
+        .eq("academic_year", academicYear);
+
+      const studentIds = enrollments?.map((e) => e.student_id) || [];
+
+      if (studentIds.length === 0) {
+        return res.json({ message: "No students found in this class." });
+      }
+
+      // Update the exam type for these students' grades in this subject/term/year
+      const { data, error, count } = await supabaseAdmin
+        .from("student_grades")
+        .update({ exam_type: toExamType })
+        .eq("school_id", schoolId)
+        .eq("term", term)
+        .eq("exam_type", fromExamType)
+        .eq("academic_year", academicYear)
+        .eq("subject_id", subjectId)
+        .in("student_id", studentIds)
+        .select("id", { count: "exact" });
+
+      if (error) {
+        // If there's a unique constraint violation, it means grades already exist in the destination.
+        if (error.code === '23505') {
+          return res.status(400).json({ message: "Cannot move grades because some grades already exist in the destination assessment type. Please clear them first." });
+        }
+        throw error;
+      }
+
+      res.json({ message: `Successfully moved ${count || 0} grade records to ${toExamType}.` });
+    } catch (error: any) {
+      console.error("Migrate Grades Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
 // POST /api/school/results/submit
 // Teachers submit their grades to the admin
 router.post(
@@ -2217,6 +2273,7 @@ router.get(
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
     const { classId, term, examType, academicYear, subjectId } = req.query;
+    const isAllClasses = !classId || classId === "all";
 
     if (!term || !examType || !academicYear) {
       return res
@@ -2230,14 +2287,14 @@ router.get(
 
       let gradesQuery = supabaseAdmin
         .from("student_grades")
-        .select("subject_id, status")
+        .select("student_id, subject_id, status")
         .eq("school_id", schoolId)
         .eq("term", term)
         .eq("exam_type", examType)
         .eq("academic_year", academicYear)
         .limit(100000);
 
-      if (classId && classId !== "all") {
+      if (!isAllClasses) {
         const { data: enrollments } = await supabaseAdmin
           .from("enrollments")
           .select("student_id")
@@ -2264,23 +2321,35 @@ router.get(
         throw gradesError;
       }
 
-      // Analyze status per subject
-      // We can map subject_id -> status set
-      const subjectStatusMap = new Map<string, Set<string>>();
-
-      grades?.forEach((g) => {
-        if (!subjectStatusMap.has(g.subject_id)) {
-          subjectStatusMap.set(g.subject_id, new Set());
+      // Fetch all enrollments to map student_id -> class_id
+      const { data: allEnrollments } = await supabaseAdmin
+        .from("enrollments")
+        .select("student_id, class_id, classes(name)")
+        .eq("academic_year", academicYear);
+      
+      const studentClassMap = new Map<string, string>();
+      const classNameMap = new Map<string, string>();
+      
+      allEnrollments?.forEach(e => {
+        studentClassMap.set(e.student_id, e.class_id);
+        if (e.classes && (e.classes as any).name) {
+          classNameMap.set(e.class_id, (e.classes as any).name);
         }
-        subjectStatusMap.get(g.subject_id)?.add(g.status);
       });
 
-      // Build report
-      // We need to fetch subject names for the IDs in grades if not in classSubjects
-      // But let's use the classSubjects we fetched earlier as the base list of "Expected Subjects"
-      // Wait, student_subjects might be empty if not populated.
-      // Let's use the subjects found in grades + subjects found in assignments?
-      // For now, use subjects found in grades as "Active Subjects".
+      // Analyze status per subject per class
+      const classSubjectStatusMap = new Map<string, Set<string>>();
+
+      grades?.forEach((g) => {
+        const classIdForStudent = studentClassMap.get(g.student_id);
+        if (!classIdForStudent) return; // Skip if we can't find the class
+
+        const key = `${classIdForStudent}_${g.subject_id}`;
+        if (!classSubjectStatusMap.has(key)) {
+          classSubjectStatusMap.set(key, new Set());
+        }
+        classSubjectStatusMap.get(key)?.add(g.status);
+      });
 
       // Let's fetch all subjects to map IDs to names
       const { data: allSubjects } = await supabaseAdmin
@@ -2293,10 +2362,10 @@ router.get(
       // Fetch teachers assigned to subjects for this class
       let classAssignedTeachersQuery = supabaseAdmin
         .from("class_subjects")
-        .select("subject_id, teacher:profiles(full_name)")
+        .select("class_id, subject_id, teacher:profiles(full_name)")
         .limit(100000);
 
-      if (classId && classId !== "all") {
+      if (!isAllClasses) {
         classAssignedTeachersQuery = classAssignedTeachersQuery.eq(
           "class_id",
           classId,
@@ -2318,7 +2387,7 @@ router.get(
 
       const { data: classAssignedTeachers } = await classAssignedTeachersQuery;
 
-      const subjectTeacherMap = new Map<string, Set<string>>();
+      const classSubjectTeacherMap = new Map<string, Set<string>>();
       classAssignedTeachers?.forEach((cs: any) => {
         let teacherName = null;
         if (cs.teacher && cs.teacher.full_name) {
@@ -2329,33 +2398,30 @@ router.get(
           cs.teacher.length > 0 &&
           cs.teacher[0].full_name
         ) {
-          // In case it's an array due to foreign key mapping
           teacherName = cs.teacher[0].full_name;
         }
 
         if (teacherName) {
-          if (!subjectTeacherMap.has(cs.subject_id)) {
-            subjectTeacherMap.set(cs.subject_id, new Set());
+          const key = `${cs.class_id}_${cs.subject_id}`;
+          if (!classSubjectTeacherMap.has(key)) {
+            classSubjectTeacherMap.set(key, new Set());
           }
-          subjectTeacherMap.get(cs.subject_id)?.add(teacherName);
+          classSubjectTeacherMap.get(key)?.add(teacherName);
         }
       });
 
       // Iterate over all subjects that have grades
-      const subjectsWithGrades = Array.from(subjectStatusMap.keys());
+      const subjectsWithGrades = Array.from(classSubjectStatusMap.keys());
 
-      for (const subjId of subjectsWithGrades) {
-        const statuses = subjectStatusMap.get(subjId)!;
+      for (const key of subjectsWithGrades) {
+        const [cId, subjId] = key.split('_');
+        const statuses = classSubjectStatusMap.get(key)!;
         let overallStatus = "Draft";
 
         if (statuses.has("Draft")) overallStatus = "Draft";
         else if (statuses.has("Submitted") && !statuses.has("Published"))
           overallStatus = "Submitted";
         else if (statuses.has("Published")) overallStatus = "Published"; // Mixed?
-
-        // If ALL are published, then Published.
-        // If ALL are Submitted (or Published), then Submitted.
-        // If ANY is Draft, then Draft (incomplete).
 
         if (statuses.has("Draft")) {
           overallStatus = "Draft";
@@ -2370,14 +2436,17 @@ router.get(
         }
 
         let teacherDisplay = "Unassigned";
-        const teachersSet = subjectTeacherMap.get(subjId);
+        const teachersSet = classSubjectTeacherMap.get(key);
         if (teachersSet && teachersSet.size > 0) {
           teacherDisplay = Array.from(teachersSet).join(", ");
         }
 
+        const subjName = subjectNameMap.get(subjId) || "Unknown Subject";
+        const cName = classNameMap.get(cId) || "Unknown Class";
+
         statusReport.push({
-          id: subjId,
-          name: subjectNameMap.get(subjId) || "Unknown Subject",
+          id: key,
+          name: isAllClasses ? `${subjName} (${cName})` : subjName,
           teacher: teacherDisplay,
           status: overallStatus,
         });
