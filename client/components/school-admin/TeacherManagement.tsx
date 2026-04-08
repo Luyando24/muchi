@@ -59,6 +59,7 @@ interface Teacher {
   firstName: string;
   lastName: string;
   fullName: string;
+  staffNumber: string;
   email: string;
   department: string;
   subjects: string[];
@@ -597,7 +598,7 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
                       }}
                     />
                   </TableHead>
-                  <TableHead>Staff ID</TableHead>
+                  <TableHead>Staff Number</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Department</TableHead>
                   <TableHead>Subjects</TableHead>
@@ -625,8 +626,8 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
                           }}
                         />
                       </TableCell>
-                      <TableCell className="font-medium text-xs text-slate-500">
-                        {teacher.id.substring(0, 8)}...
+                      <TableCell className="font-medium text-slate-700 dark:text-slate-300">
+                        {teacher.staffNumber || 'N/A'}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
