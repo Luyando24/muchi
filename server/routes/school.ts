@@ -3039,23 +3039,32 @@ router.post(
       if (user.user) {
         const { error: profileError } = await supabaseAdmin
           .from("profiles")
-          .update({
+          .upsert({
+            id: user.user.id,
+            school_id: schoolId,
+            role: "teacher",
+            full_name: name,
+            email: emailToUse,
             username: username || null,
             department,
-            subjects, // Assumes text[] or jsonb in DB
+            subjects: Array.isArray(subjects) ? subjects : [],
             staff_number: staffNumber,
-            join_date: joinDate,
+            join_date: joinDate || new Date().toISOString().split("T")[0],
             employment_status: "Active",
             is_temp_password: true,
             temp_password_set_at: new Date().toISOString(),
             temp_password_expires_at: new Date(
               Date.now() + 100 * 365 * 24 * 60 * 60 * 1000,
             ).toISOString(),
-          })
-          .eq("id", user.user.id);
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'id' });
 
-        if (profileError)
+        if (profileError) {
           console.error("Error updating teacher profile:", profileError);
+          // Rollback user creation if profile upsert fails
+          await supabaseAdmin.auth.admin.deleteUser(user.user.id);
+          throw profileError;
+        }
       }
 
       res
