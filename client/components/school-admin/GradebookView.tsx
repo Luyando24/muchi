@@ -11,7 +11,8 @@ import {
   AlertCircle,
   Eye,
   Users,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Trash2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -235,6 +236,43 @@ export default function GradebookView() {
     return () => clearTimeout(timeoutId);
   }, [grades, handleSaveAll]);
 
+  const handleClearGrades = async () => {
+    if (!selectedClass || !selectedSubject || !selectedTerm || !selectedExamType || !selectedYear) return;
+    
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch('/api/school/grades/clear', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          term: selectedTerm,
+          examType: selectedExamType,
+          academicYear: selectedYear,
+          classId: selectedClass,
+          subjectId: selectedSubject
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to clear grades');
+
+      toast({ title: "Success", description: data.message });
+      setIsClearModalOpen(false);
+      // Reload gradebook
+      loadGradebookData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const loadGradebookData = async () => {
     setFetchingStudents(true);
     setStudents([]);
@@ -346,6 +384,7 @@ export default function GradebookView() {
 
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
   const [isMigrateModalOpen, setIsMigrateModalOpen] = useState(false);
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
   const [targetExamType, setTargetExamType] = useState<string>('');
 
   const handleSubmit = async () => {
@@ -462,6 +501,16 @@ export default function GradebookView() {
                 >
                   <ArrowRightLeft className="h-4 w-4 mr-2" />
                   Move Grades
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setIsClearModalOpen(true)}
+                  disabled={!selectedClass || !selectedSubject || !selectedTerm || students.length === 0}
+                  className="w-full sm:w-auto h-10 sm:h-9 font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950 border-red-200"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Clear Grades
                 </Button>
                 <div className="grid grid-cols-2 sm:flex gap-2">
                   <Button 
@@ -653,6 +702,31 @@ export default function GradebookView() {
               <Button onClick={handleMigrate} disabled={loading || !targetExamType} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700">
                 {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ArrowRightLeft className="h-4 w-4 mr-2" />}
                 Confirm Move
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Clear Grades Dialog */}
+      <Dialog open={isClearModalOpen} onOpenChange={setIsClearModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 text-red-600">
+              <div className="bg-red-100 dark:bg-red-900/30 p-2 rounded-full">
+                <Trash2 className="h-6 w-6" />
+              </div>
+              <h3 className="font-bold text-lg text-slate-900 dark:text-white">Clear Grades?</h3>
+            </div>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Are you sure you want to permanently delete all grades for <strong>{selectedExamType}</strong> in this subject? 
+              This action cannot be undone, and it will also reverse any "Submitted" or "Published" statuses.
+            </p>
+            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setIsClearModalOpen(false)} className="w-full sm:w-auto">Cancel</Button>
+              <Button onClick={handleClearGrades} disabled={loading} className="w-full sm:w-auto bg-red-600 hover:bg-red-700">
+                {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                Confirm Delete
               </Button>
             </div>
           </div>

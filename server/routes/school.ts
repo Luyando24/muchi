@@ -2026,7 +2026,8 @@ router.post(
         .from("enrollments")
         .select("student_id")
         .eq("class_id", classId)
-        .eq("academic_year", academicYear);
+        .eq("academic_year", academicYear)
+        .limit(100000);
 
       const studentIds = enrollments?.map((e) => e.student_id) || [];
 
@@ -2057,6 +2058,58 @@ router.post(
       res.json({ message: `Successfully moved ${count || 0} grade records to ${toExamType}.` });
     } catch (error: any) {
       console.error("Migrate Grades Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// POST /api/school/grades/clear
+// Clear grades for a specific class, subject, term, and exam type
+router.post(
+  "/grades/clear",
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { term, examType, academicYear, classId, subjectId } = req.body;
+
+    if (!term || !examType || !academicYear || !classId || !subjectId) {
+      return res.status(400).json({ message: "Missing required fields for clearing grades" });
+    }
+
+    try {
+      // Get students in this class
+      const { data: enrollments } = await supabaseAdmin
+        .from("enrollments")
+        .select("student_id")
+        .eq("class_id", classId)
+        .eq("academic_year", academicYear)
+        .limit(100000);
+
+      const studentIds = enrollments?.map((e) => e.student_id) || [];
+
+      if (studentIds.length === 0) {
+        return res.json({ message: "No students found in this class." });
+      }
+
+      // Delete the grades for these students in this subject/term/year/examType
+      const { error, count } = await supabaseAdmin
+        .from("student_grades")
+        .delete({ count: "exact" })
+        .eq("school_id", schoolId)
+        .eq("term", term)
+        .eq("exam_type", examType)
+        .eq("academic_year", academicYear)
+        .eq("subject_id", subjectId)
+        .in("student_id", studentIds);
+
+      if (error) {
+        throw error;
+      }
+
+      res.json({ message: `Successfully cleared ${count || 0} grade records from ${examType}.` });
+    } catch (error: any) {
+      console.error("Clear Grades Error:", error);
       res.status(500).json({ message: error.message });
     }
   }
@@ -2097,7 +2150,8 @@ router.post(
           .from("enrollments")
           .select("student_id")
           .eq("class_id", classId)
-          .eq("academic_year", academicYear);
+          .eq("academic_year", academicYear)
+          .limit(100000);
 
         if (enrollments && enrollments.length > 0) {
           const studentIds = enrollments.map((e) => e.student_id);
@@ -2175,7 +2229,8 @@ router.post(
           .from("enrollments")
           .select("student_id")
           .eq("class_id", classId)
-          .eq("academic_year", academicYear);
+          .eq("academic_year", academicYear)
+          .limit(100000);
 
         if (enrollments && enrollments.length > 0) {
           const studentIds = enrollments.map((e) => e.student_id);
@@ -2292,14 +2347,15 @@ router.get(
         .eq("term", term)
         .eq("exam_type", examType)
         .eq("academic_year", academicYear)
-        .limit(100000);
+        .limit(200000);
 
       if (!isAllClasses) {
         const { data: enrollments } = await supabaseAdmin
           .from("enrollments")
           .select("student_id")
           .eq("academic_year", academicYear)
-          .eq("class_id", classId);
+          .eq("class_id", classId)
+          .limit(100000);
 
         const studentIds = enrollments?.map((e) => e.student_id) || [];
 
@@ -2326,7 +2382,7 @@ router.get(
         .from("enrollments")
         .select("student_id, class_id, classes(name)")
         .eq("academic_year", academicYear)
-        .limit(100000);
+        .limit(200000);
       
       const studentClassMap = new Map<string, string>();
       const classNameMap = new Map<string, string>();
@@ -2365,7 +2421,7 @@ router.get(
       let classAssignedTeachersQuery = supabaseAdmin
         .from("class_subjects")
         .select("class_id, subject_id, teacher:profiles(full_name)")
-        .limit(100000);
+        .limit(200000);
 
       if (!isAllClasses) {
         classAssignedTeachersQuery = classAssignedTeachersQuery.eq(
