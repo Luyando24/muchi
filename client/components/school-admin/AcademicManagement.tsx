@@ -37,7 +37,7 @@ import { supabase } from '@/lib/supabase';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { syncFetch } from '@/lib/syncService';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import BulkAcademicImport from './BulkAcademicImport';
 import { Combobox } from "@/components/ui/combobox";
 
@@ -929,22 +929,51 @@ export default function AcademicManagement() {
     doc.setTextColor(100);
     doc.text(`Class: ${className} | Term: ${calcForm.term} | Year: ${calcForm.academicYear}`, 14, 22);
 
-    const submittedSubjects = gradeStatus.filter(s => s.status === 'Submitted');
+    const submittedList = gradeStatus.filter(s => s.status === 'Submitted' || s.status === 'Published');
+    const pendingList = gradeStatus.filter(s => s.status !== 'Submitted' && s.status !== 'Published');
+    
+    const getUniqueTeachers = (list: any[]) => {
+      const teachers = new Set<string>();
+      list.forEach(s => {
+        if (s.teacher && s.teacher !== 'Unassigned') {
+          s.teacher.split(', ').forEach((t: string) => teachers.add(t));
+        }
+      });
+      return teachers.size;
+    };
 
-    const tableData = submittedSubjects.map(s => [
-      s.name,
-      s.teacher || 'Unassigned',
-      s.status
-    ]);
+    doc.setFontSize(11);
+    doc.setTextColor(0);
+    doc.text(`Submitted Subjects: ${submittedList.length} | Submitted Teachers: ${getUniqueTeachers(submittedList)}`, 14, 32);
 
-    (doc as any).autoTable({
-      startY: 30,
+    const submittedData = submittedList.map(s => [s.name, s.teacher || 'Unassigned', s.status]);
+
+    autoTable(doc, {
+      startY: 36,
       head: [['Subject', 'Teacher', 'Status']],
-      body: tableData,
+      body: submittedData,
       theme: 'grid',
       headStyles: { fillColor: [59, 130, 246] }, // Blue-600
       styles: { fontSize: 9 },
       alternateRowStyles: { fillColor: [248, 250, 252] }, // Slate-50
+    });
+
+    const finalY = (doc as any).lastAutoTable.finalY || 40;
+
+    doc.setFontSize(11);
+    doc.setTextColor(0);
+    doc.text(`Pending Subjects: ${pendingList.length} | Pending Teachers: ${getUniqueTeachers(pendingList)}`, 14, finalY + 10);
+
+    const pendingData = pendingList.map(s => [s.name, s.teacher || 'Unassigned', s.status]);
+
+    autoTable(doc, {
+      startY: finalY + 14,
+      head: [['Subject', 'Teacher', 'Status']],
+      body: pendingData,
+      theme: 'grid',
+      headStyles: { fillColor: [239, 68, 68] }, // Red-500
+      styles: { fontSize: 9 },
+      alternateRowStyles: { fillColor: [254, 242, 242] }, // Red-50
     });
 
     doc.save(`Readiness_Status_${className}_${calcForm.term}_${calcForm.academicYear}.pdf`);
@@ -2119,50 +2148,123 @@ export default function AcademicManagement() {
                                     Publish Results
                                   </Button>
                                 </div>
-                                {gradeStatus.length > 0 && (
-                                  <Button variant="ghost" size="sm" onClick={handleDownloadPDF} className="text-blue-600 w-full sm:w-auto">
-                                    <Download className="h-4 w-4 mr-2" />
-                                    Download PDF
-                                  </Button>
-                                )}
                               </div>
+                              {gradeStatus.length > 0 && (() => {
+                                const submittedList = gradeStatus.filter(s => s.status === 'Submitted' || s.status === 'Published');
+                                const pendingList = gradeStatus.filter(s => s.status !== 'Submitted' && s.status !== 'Published');
+                                
+                                const getUniqueTeachers = (list: any[]) => {
+                                  const teachers = new Set<string>();
+                                  list.forEach(s => {
+                                    if (s.teacher && s.teacher !== 'Unassigned') {
+                                      s.teacher.split(', ').forEach((t: string) => teachers.add(t));
+                                    }
+                                  });
+                                  return teachers.size;
+                                };
 
-                              {gradeStatus.length > 0 && (
-                                <div className="border rounded-md">
-                                  <Table>
-                                    <TableHeader>
-                                      <TableRow>
-                                        <TableHead>Subject</TableHead>
-                                        <TableHead>Teacher</TableHead>
-                                        <TableHead>Status</TableHead>
-                                      </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                      {gradeStatus.filter(s => s.status === 'Submitted').map(s => (
-                                        <TableRow key={s.id}>
-                                          <TableCell>{s.name}</TableCell>
-                                          <TableCell className="text-muted-foreground">{s.teacher}</TableCell>
-                                          <TableCell>
-                                            <span className={`px-2 py-1 rounded text-xs font-medium ${s.status === 'Published' ? 'bg-green-100 text-green-800' :
-                                              s.status === 'Submitted' ? 'bg-blue-100 text-blue-800' :
-                                                'bg-yellow-100 text-yellow-800'
-                                              }`}>
-                                              {s.status}
-                                            </span>
-                                          </TableCell>
-                                        </TableRow>
-                                      ))}
-                                      {gradeStatus.filter(s => s.status === 'Submitted').length === 0 && (
-                                        <TableRow>
-                                          <TableCell colSpan={3} className="text-center py-4 text-muted-foreground">
-                                            No submitted subjects found.
-                                          </TableCell>
-                                        </TableRow>
-                                      )}
-                                    </TableBody>
-                                  </Table>
-                                </div>
-                              )}
+                                const submittedTeachersCount = getUniqueTeachers(submittedList);
+                                const pendingTeachersCount = getUniqueTeachers(pendingList);
+
+                                return (
+                                  <Tabs defaultValue="submitted" className="w-full">
+                                    <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2 border-b pb-2 dark:border-slate-800">
+                                      <TabsList>
+                                        <TabsTrigger value="submitted">Submitted</TabsTrigger>
+                                        <TabsTrigger value="pending">Not Submitted</TabsTrigger>
+                                      </TabsList>
+                                      <Button variant="ghost" size="sm" onClick={handleDownloadPDF} className="text-blue-600">
+                                        <Download className="h-4 w-4 mr-2" />
+                                        Download PDF
+                                      </Button>
+                                    </div>
+
+                                    <TabsContent value="submitted" className="space-y-4 mt-0">
+                                      <div className="flex flex-wrap gap-3">
+                                        <div className="text-sm font-semibold bg-green-50 text-green-700 px-3 py-1.5 rounded-md dark:bg-green-950 dark:text-green-400">
+                                          Submitted Subjects: {submittedList.length}
+                                        </div>
+                                        <div className="text-sm font-semibold bg-blue-50 text-blue-700 px-3 py-1.5 rounded-md dark:bg-blue-950 dark:text-blue-400">
+                                          Submitted Teachers: {submittedTeachersCount}
+                                        </div>
+                                      </div>
+                                      <div className="border rounded-md max-h-[50vh] overflow-y-auto">
+                                        <Table>
+                                          <TableHeader className="sticky top-0 bg-white dark:bg-slate-900 shadow-sm z-10">
+                                            <TableRow>
+                                              <TableHead>Subject</TableHead>
+                                              <TableHead>Teacher</TableHead>
+                                              <TableHead>Status</TableHead>
+                                            </TableRow>
+                                          </TableHeader>
+                                          <TableBody>
+                                            {submittedList.map(s => (
+                                              <TableRow key={s.id}>
+                                                <TableCell>{s.name}</TableCell>
+                                                <TableCell className="text-muted-foreground">{s.teacher}</TableCell>
+                                                <TableCell>
+                                                  <span className={`px-2 py-1 rounded text-xs font-medium ${s.status === 'Published' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                                                    {s.status}
+                                                  </span>
+                                                </TableCell>
+                                              </TableRow>
+                                            ))}
+                                            {submittedList.length === 0 && (
+                                              <TableRow>
+                                                <TableCell colSpan={3} className="text-center py-4 text-muted-foreground">
+                                                  No submitted subjects found.
+                                                </TableCell>
+                                              </TableRow>
+                                            )}
+                                          </TableBody>
+                                        </Table>
+                                      </div>
+                                    </TabsContent>
+
+                                    <TabsContent value="pending" className="space-y-4 mt-0">
+                                      <div className="flex flex-wrap gap-3">
+                                        <div className="text-sm font-semibold bg-red-50 text-red-700 px-3 py-1.5 rounded-md dark:bg-red-950 dark:text-red-400">
+                                          Pending Subjects: {pendingList.length}
+                                        </div>
+                                        <div className="text-sm font-semibold bg-orange-50 text-orange-700 px-3 py-1.5 rounded-md dark:bg-orange-950 dark:text-orange-400">
+                                          Pending Teachers: {pendingTeachersCount}
+                                        </div>
+                                      </div>
+                                      <div className="border rounded-md max-h-[50vh] overflow-y-auto">
+                                        <Table>
+                                          <TableHeader className="sticky top-0 bg-white dark:bg-slate-900 shadow-sm z-10">
+                                            <TableRow>
+                                              <TableHead>Subject</TableHead>
+                                              <TableHead>Teacher</TableHead>
+                                              <TableHead>Status</TableHead>
+                                            </TableRow>
+                                          </TableHeader>
+                                          <TableBody>
+                                            {pendingList.map(s => (
+                                              <TableRow key={s.id}>
+                                                <TableCell>{s.name}</TableCell>
+                                                <TableCell className="text-muted-foreground">{s.teacher}</TableCell>
+                                                <TableCell>
+                                                  <span className={`px-2 py-1 rounded text-xs font-medium ${s.status === 'Draft' ? 'bg-yellow-100 text-yellow-800' : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'}`}>
+                                                    {s.status}
+                                                  </span>
+                                                </TableCell>
+                                              </TableRow>
+                                            ))}
+                                            {pendingList.length === 0 && (
+                                              <TableRow>
+                                                <TableCell colSpan={3} className="text-center py-4 text-muted-foreground">
+                                                  All subjects have been submitted!
+                                                </TableCell>
+                                              </TableRow>
+                                            )}
+                                          </TableBody>
+                                        </Table>
+                                      </div>
+                                    </TabsContent>
+                                  </Tabs>
+                                );
+                              })()}
                             </div>
                           </DialogContent>
                         </Dialog>

@@ -5,6 +5,32 @@ import { requireActiveLicense } from "../middleware/license.js";
 import { ensureSchoolSettings } from "../lib/school-settings.js";
 import { findBestClassMatch, normalizeClassName } from "../lib/class-matching.js";
 
+// Helper function to bypass Supabase's max_rows limit by paginating
+async function fetchAll(queryBuilder: any, limit = 1000) {
+  let allData: any[] = [];
+  let from = 0;
+  let to = limit - 1;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await queryBuilder.range(from, to);
+    if (error) throw error;
+    
+    if (data && data.length > 0) {
+      allData = allData.concat(data);
+      if (data.length < limit) {
+        hasMore = false;
+      } else {
+        from += limit;
+        to += limit;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+  return allData;
+}
+
 const router = Router();
 
 // --- PUBLIC ENDPOINTS ---
@@ -2346,17 +2372,16 @@ router.get(
         .eq("school_id", schoolId)
         .eq("term", term)
         .eq("exam_type", examType)
-        .eq("academic_year", academicYear)
-        .limit(200000);
+        .eq("academic_year", academicYear);
 
       if (!isAllClasses) {
-        const { data: enrollments } = await supabaseAdmin
+        const enrollmentsQuery = supabaseAdmin
           .from("enrollments")
           .select("student_id")
           .eq("academic_year", academicYear)
-          .eq("class_id", classId)
-          .limit(100000);
+          .eq("class_id", classId);
 
+        const enrollments = await fetchAll(enrollmentsQuery);
         const studentIds = enrollments?.map((e) => e.student_id) || [];
 
         if (studentIds.length === 0) {
@@ -2370,19 +2395,15 @@ router.get(
         gradesQuery = gradesQuery.eq("subject_id", subjectId);
       }
 
-      const { data: grades, error: gradesError } = await gradesQuery;
-      
-      if (gradesError) {
-        console.error("Grades query error:", gradesError);
-        throw gradesError;
-      }
+      const grades = await fetchAll(gradesQuery);
 
       // Fetch all enrollments to map student_id -> class_id
-      const { data: allEnrollments } = await supabaseAdmin
+      const allEnrollmentsQuery = supabaseAdmin
         .from("enrollments")
         .select("student_id, class_id, classes(name)")
-        .eq("academic_year", academicYear)
-        .limit(200000);
+        .eq("academic_year", academicYear);
+      
+      const allEnrollments = await fetchAll(allEnrollmentsQuery);
       
       const studentClassMap = new Map<string, string>();
       const classNameMap = new Map<string, string>();
@@ -2409,19 +2430,18 @@ router.get(
       });
 
       // Let's fetch all subjects to map IDs to names
-      const { data: allSubjects } = await supabaseAdmin
+      const allSubjectsQuery = supabaseAdmin
         .from("subjects")
         .select("id, name")
-        .eq("school_id", schoolId)
-        .limit(100000);
+        .eq("school_id", schoolId);
 
+      const allSubjects = await fetchAll(allSubjectsQuery);
       const subjectNameMap = new Map(allSubjects?.map((s) => [s.id, s.name]));
 
       // Fetch teachers assigned to subjects for this class
       let classAssignedTeachersQuery = supabaseAdmin
         .from("class_subjects")
-        .select("class_id, subject_id, teacher:profiles(full_name)")
-        .limit(200000);
+        .select("class_id, subject_id, teacher:profiles(full_name)");
 
       if (!isAllClasses) {
         classAssignedTeachersQuery = classAssignedTeachersQuery.eq(
@@ -2429,13 +2449,16 @@ router.get(
           classId,
         );
       } else {
-        const { data: schoolClasses } = await supabaseAdmin
+        const schoolClassesQuery = supabaseAdmin
           .from("classes")
           .select("id")
           .eq("school_id", schoolId);
         
+        const schoolClasses = await fetchAll(schoolClassesQuery);
         const targetClassIds = (schoolClasses || []).map((c: any) => c.id);
+        
         if (targetClassIds.length > 0) {
+          // If there are many classes, .in() might still be too large, but usually a school has < 100 classes.
           classAssignedTeachersQuery = classAssignedTeachersQuery.in("class_id", targetClassIds);
         } else {
           // No classes in school, return empty
@@ -2443,10 +2466,15 @@ router.get(
         }
       }
 
-      const { data: classAssignedTeachers } = await classAssignedTeachersQuery;
+      const classAssignedTeachers = await fetchAll(classAssignedTeachersQuery);
 
       const classSubjectTeacherMap = new Map<string, Set<string>>();
+      const assignedClassSubjects = new Set<string>();
+
       classAssignedTeachers?.forEach((cs: any) => {
+        const key = `${cs.class_id}_${cs.subject_id}`;
+        assignedClassSubjects.add(key);
+
         let teacherName = null;
         if (cs.teacher && cs.teacher.full_name) {
           teacherName = cs.teacher.full_name;
@@ -2460,7 +2488,6 @@ router.get(
         }
 
         if (teacherName) {
-          const key = `${cs.class_id}_${cs.subject_id}`;
           if (!classSubjectTeacherMap.has(key)) {
             classSubjectTeacherMap.set(key, new Set());
           }
@@ -2468,29 +2495,31 @@ router.get(
         }
       });
 
-      // Iterate over all subjects that have grades
-      const subjectsWithGrades = Array.from(classSubjectStatusMap.keys());
+      // Iterate over all assigned subjects + any subjects that have grades
+      const allClassSubjects = new Set([
+        ...Array.from(assignedClassSubjects),
+        ...Array.from(classSubjectStatusMap.keys())
+      ]);
 
-      for (const key of subjectsWithGrades) {
+      for (const key of allClassSubjects) {
         const [cId, subjId] = key.split('_');
-        const statuses = classSubjectStatusMap.get(key)!;
-        let overallStatus = "Draft";
+        const statuses = classSubjectStatusMap.get(key);
+        let overallStatus = "Not Entered";
 
-        if (statuses.has("Draft")) overallStatus = "Draft";
-        else if (statuses.has("Submitted") && !statuses.has("Published"))
-          overallStatus = "Submitted";
-        else if (statuses.has("Published")) overallStatus = "Published"; // Mixed?
-
-        if (statuses.has("Draft")) {
-          overallStatus = "Draft";
-        } else if (Array.from(statuses).every((s) => s === "Published")) {
-          overallStatus = "Published";
-        } else if (
-          Array.from(statuses).every(
-            (s) => s === "Submitted" || s === "Published",
-          )
-        ) {
-          overallStatus = "Submitted";
+        if (statuses && statuses.size > 0) {
+          if (statuses.has("Draft")) {
+            overallStatus = "Draft";
+          } else if (Array.from(statuses).every((s) => s === "Published")) {
+            overallStatus = "Published";
+          } else if (
+            Array.from(statuses).every(
+              (s) => s === "Submitted" || s === "Published",
+            )
+          ) {
+            overallStatus = "Submitted";
+          } else {
+            overallStatus = "Draft";
+          }
         }
 
         let teacherDisplay = "Unassigned";
@@ -6018,13 +6047,15 @@ router.post(
 
       if (targetClassIds.length > 0) {
         // 1. Get enrolled students
-        const { data: enrollments } = await supabaseAdmin
+        const enrollmentsQuery = supabaseAdmin
           .from("enrollments")
           .select(
             "student_id, class_id, profiles!enrollments_student_id_fkey(full_name), classes(name)",
           )
           .in("class_id", targetClassIds)
           .eq("status", "Active");
+
+        const enrollments = await fetchAll(enrollmentsQuery);
 
         if (enrollments && enrollments.length > 0) {
           allEnrollments = enrollments;
@@ -6049,15 +6080,17 @@ router.post(
               subjectId,
             );
           }
-          const { data: classSubjectRows } = await classSubjectRowsQuery;
+          const classSubjectRows = await fetchAll(classSubjectRowsQuery);
 
           if (classSubjectRows && classSubjectRows.length > 0) {
             // 3. Collect teacher IDs
-            const { data: assignmentTeacherRows } = await supabaseAdmin
+            const assignmentTeacherRowsQuery = supabaseAdmin
               .from("assignments")
               .select("class_id, subject_id, teacher_id")
               .in("class_id", targetClassIds)
               .not("teacher_id", "is", null);
+
+            const assignmentTeacherRows = await fetchAll(assignmentTeacherRowsQuery);
 
             const assignmentTeacherMap = new Map<string, string>();
             for (const a of assignmentTeacherRows || []) {
@@ -6086,10 +6119,11 @@ router.post(
 
             const teacherMap = new Map<string, string>();
             if (allTeacherIds.length > 0) {
-              const { data: teachers } = await supabaseAdmin
+              const teachersQuery = supabaseAdmin
                 .from("profiles")
                 .select("id, full_name")
                 .in("id", allTeacherIds);
+              const teachers = await fetchAll(teachersQuery);
               (teachers || []).forEach((t: any) =>
                 teacherMap.set(t.id, t.full_name),
               );
@@ -6102,8 +6136,7 @@ router.post(
               .eq("school_id", schoolId)
               .eq("term", term)
               .eq("academic_year", academicYear)
-              .in("status", ["Published", "Submitted"])
-              .limit(100000);
+              .in("status", ["Published", "Submitted"]);
 
             if (classId && classId !== "all") {
               publishedGradesQuery = publishedGradesQuery.in("student_id", studentIds);
@@ -6115,7 +6148,7 @@ router.post(
                 subjectId,
               );
             }
-            const { data: publishedGrades } = await publishedGradesQuery;
+            const publishedGrades = await fetchAll(publishedGradesQuery);
 
             const publishedSet = new Set(
               (publishedGrades || []).map(
@@ -6129,8 +6162,7 @@ router.post(
               .eq("school_id", schoolId)
               .eq("term", term)
               .eq("academic_year", academicYear)
-              .not("status", "in", '("Published","Submitted")')
-              .limit(100000);
+              .not("status", "in", '("Published","Submitted")');
 
             if (classId && classId !== "all") {
               draftGradesQuery = draftGradesQuery.in("student_id", studentIds);
@@ -6139,7 +6171,7 @@ router.post(
             if (subjectId && subjectId !== "all") {
               draftGradesQuery = draftGradesQuery.eq("subject_id", subjectId);
             }
-            const { data: draftGrades } = await draftGradesQuery;
+            const draftGrades = await fetchAll(draftGradesQuery);
 
             const draftMap = new Map(
               (draftGrades || []).map((g: any) => [
