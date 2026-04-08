@@ -2325,7 +2325,8 @@ router.get(
       const { data: allEnrollments } = await supabaseAdmin
         .from("enrollments")
         .select("student_id, class_id, classes(name)")
-        .eq("academic_year", academicYear);
+        .eq("academic_year", academicYear)
+        .limit(100000);
       
       const studentClassMap = new Map<string, string>();
       const classNameMap = new Map<string, string>();
@@ -2355,7 +2356,8 @@ router.get(
       const { data: allSubjects } = await supabaseAdmin
         .from("subjects")
         .select("id, name")
-        .eq("school_id", schoolId);
+        .eq("school_id", schoolId)
+        .limit(100000);
 
       const subjectNameMap = new Map(allSubjects?.map((s) => [s.id, s.name]));
 
