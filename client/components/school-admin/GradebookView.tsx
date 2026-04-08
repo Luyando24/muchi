@@ -120,7 +120,7 @@ export default function GradebookView() {
           setSelectedYear(settings.academic_year || new Date().getFullYear().toString());
           if (settings.exam_types && settings.exam_types.length > 0) {
             setAvailableExamTypes(settings.exam_types);
-            setSelectedExamType(settings.exam_types[0]);
+            setSelectedExamType(settings.exam_types.includes('End of Term') ? 'End of Term' : settings.exam_types[0]);
           }
         } else {
           // Fallback

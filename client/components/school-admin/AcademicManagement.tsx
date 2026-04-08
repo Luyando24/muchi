@@ -212,7 +212,7 @@ export default function AcademicManagement() {
         setCalcForm(prev => ({
           ...prev,
           term: settingsData.current_term || 'Term 1',
-          examType: examTypes[0],
+          examType: examTypes.includes('End of Term') ? 'End of Term' : examTypes[0],
           academicYear: settingsData.academic_year || new Date().getFullYear().toString()
         }));
       }
