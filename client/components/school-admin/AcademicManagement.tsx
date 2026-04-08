@@ -1,24 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import {
-  Search,
-  Filter,
-  MoreVertical,
-  Plus,
-  Trash2,
-  Edit,
-  Loader2,
-  BookOpen,
-  Layers,
-  Calendar,
-  AlertTriangle,
-  CheckCircle2,
-  ClipboardList,
-  Printer,
-  FileSpreadsheet,
-  Building,
-  ArrowRightLeft
-} from 'lucide-react';
+import { Plus, Trash2, Edit, Save, Search, Settings, BookOpen, Calculator, CheckCircle2, AlertTriangle, Loader2, ClipboardList, Send, ArrowRightLeft, Download, Layers, Building, Calendar, Printer, FileSpreadsheet } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -54,6 +36,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { syncFetch } from '@/lib/syncService';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 import BulkAcademicImport from './BulkAcademicImport';
 import { Combobox } from "@/components/ui/combobox";
 
@@ -927,6 +911,43 @@ export default function AcademicManagement() {
     } finally {
       setIsMigrating(false);
     }
+  };
+
+  const handleDownloadPDF = () => {
+    if (gradeStatus.length === 0) {
+      toast({ title: "Error", description: "No data available to download.", variant: "destructive" });
+      return;
+    }
+
+    const doc = new jsPDF();
+    const className = calcForm.classId === 'all' ? 'All Classes' : classes.find(c => c.id === calcForm.classId)?.name || 'Unknown Class';
+    
+    doc.setFontSize(16);
+    doc.text(`Publish Readiness Status`, 14, 15);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Class: ${className} | Term: ${calcForm.term} | Year: ${calcForm.academicYear}`, 14, 22);
+
+    const submittedSubjects = gradeStatus.filter(s => s.status === 'Submitted');
+
+    const tableData = submittedSubjects.map(s => [
+      s.name,
+      s.teacher || 'Unassigned',
+      s.status
+    ]);
+
+    (doc as any).autoTable({
+      startY: 30,
+      head: [['Subject', 'Teacher', 'Status']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [59, 130, 246] }, // Blue-600
+      styles: { fontSize: 9 },
+      alternateRowStyles: { fillColor: [248, 250, 252] }, // Slate-50
+    });
+
+    doc.save(`Readiness_Status_${className}_${calcForm.term}_${calcForm.academicYear}.pdf`);
   };
 
   const initiatePublish = () => {
@@ -2083,19 +2104,27 @@ export default function AcademicManagement() {
                             </DialogHeader>
 
                             <div className="py-4 space-y-4">
-                              <div className="flex gap-2">
-                                <Button variant="outline" onClick={handleCheckStatus} disabled={isCheckingStatus}>
-                                  {isCheckingStatus ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                                  Check Status
-                                </Button>
-                                <Button
-                                  onClick={initiatePublish}
-                                  disabled={isActionLoading || gradeStatus.length === 0}
-                                  className="bg-green-600 hover:bg-green-700"
-                                >
-                                  {isPublishing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                                  Publish Results
-                                </Button>
+                              <div className="flex flex-col sm:flex-row gap-2 justify-between items-center">
+                                <div className="flex gap-2 w-full sm:w-auto">
+                                  <Button variant="outline" onClick={handleCheckStatus} disabled={isCheckingStatus}>
+                                    {isCheckingStatus ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                    Check Status
+                                  </Button>
+                                  <Button
+                                    onClick={initiatePublish}
+                                    disabled={isActionLoading || gradeStatus.length === 0}
+                                    className="bg-green-600 hover:bg-green-700"
+                                  >
+                                    {isPublishing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                    Publish Results
+                                  </Button>
+                                </div>
+                                {gradeStatus.length > 0 && (
+                                  <Button variant="ghost" size="sm" onClick={handleDownloadPDF} className="text-blue-600 w-full sm:w-auto">
+                                    <Download className="h-4 w-4 mr-2" />
+                                    Download PDF
+                                  </Button>
+                                )}
                               </div>
 
                               {gradeStatus.length > 0 && (
