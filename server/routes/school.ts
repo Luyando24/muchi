@@ -98,6 +98,81 @@ const router = Router();
 
 // --- PUBLIC ENDPOINTS ---
 
+// GET /api/public/verify-report
+// Verifies a report card based on the QR code hash
+router.get("/verify-report", async (req: Request, res: Response) => {
+  const { studentNumber, term, academicYear, average } = req.query;
+
+  if (!studentNumber || !term || !academicYear || !average) {
+    return res.status(400).json({ message: "Missing required verification parameters" });
+  }
+
+  try {
+    // 1. Find the student profile by student number
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .select("id, full_name, school_id")
+      .eq("student_number", studentNumber)
+      .eq("role", "student")
+      .single();
+
+    if (profileError || !profile) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    // 2. Fetch the school name
+    const { data: school, error: schoolError } = await supabaseAdmin
+      .from("schools")
+      .select("name")
+      .eq("id", profile.school_id)
+      .single();
+
+    if (schoolError || !school) {
+      return res.status(404).json({ message: "School not found" });
+    }
+
+    // 3. Verify the grades and calculate the average
+    // We check if the provided average loosely matches the actual database average
+    const { data: grades, error: gradesError } = await supabaseAdmin
+      .from("student_grades")
+      .select("percentage, grade")
+      .eq("student_id", profile.id)
+      .eq("term", term)
+      .eq("academic_year", academicYear);
+
+    if (gradesError || !grades || grades.length === 0) {
+      return res.status(404).json({ message: "No grades found for this term" });
+    }
+
+    // Calculate actual average from DB
+    const totalPercentage = grades.reduce((sum: number, g: any) => sum + (g.percentage || 0), 0);
+    const actualAverage = grades.length > 0 ? (totalPercentage / grades.length).toFixed(1) : "0.0";
+
+    // Compare averages (allow a tiny margin of error for floating point rounding)
+    const providedAvgNum = parseFloat(average as string);
+    const actualAvgNum = parseFloat(actualAverage);
+
+    if (Math.abs(providedAvgNum - actualAvgNum) > 0.5) {
+      return res.status(400).json({ 
+        message: "Grade verification failed. The overall average does not match the official records." 
+      });
+    }
+
+    res.json({
+      valid: true,
+      studentName: profile.full_name,
+      schoolName: school.name,
+      term,
+      academicYear,
+      average: actualAverage
+    });
+
+  } catch (error: any) {
+    console.error("Verification Error:", error);
+    res.status(500).json({ message: "Internal server error during verification" });
+  }
+});
+
 // POST /api/school/teacher/reset-password
 // Allows a teacher to reset their own password by providing their Email and Staff Number
 router.post("/teacher/reset-password", async (req: Request, res: Response) => {
@@ -2851,7 +2926,7 @@ router.get(
       const { data: schoolDetails } = await supabaseAdmin
         .from("schools")
         .select(
-          "name, address, email, phone, website, logo_url, signature_url, seal_url, school_type, headteacher_name, headteacher_title",
+          "name, address, email, phone, website, logo_url, signature_url, seal_url, coat_of_arms_url, school_type, headteacher_name, headteacher_title",
         )
         .eq("id", schoolId)
         .single();
@@ -2917,7 +2992,7 @@ router.get(
       const { data: schoolDetails } = await supabaseAdmin
         .from("schools")
         .select(
-          "name, address, email, phone, website, logo_url, signature_url, seal_url, school_type, headteacher_name, headteacher_title",
+          "name, address, email, phone, website, logo_url, signature_url, seal_url, coat_of_arms_url, school_type, headteacher_name, headteacher_title",
         )
         .eq("id", schoolId)
         .single();

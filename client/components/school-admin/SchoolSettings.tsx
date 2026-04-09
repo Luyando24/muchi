@@ -66,6 +66,7 @@ export default function SchoolSettings() {
     logo_url: '',
     signature_url: '',
     seal_url: '',
+    coat_of_arms_url: '',
     headteacher_name: '',
     headteacher_title: 'Headteacher',
     school_type: 'Secondary' as 'Secondary' | 'Basic'
@@ -101,6 +102,7 @@ export default function SchoolSettings() {
         logo_url: data.logo_url || '',
         signature_url: data.signature_url || '',
         seal_url: data.seal_url || '',
+        coat_of_arms_url: data.coat_of_arms_url || '',
         headteacher_name: data.headteacher_name || '',
         headteacher_title: data.headteacher_title || 'Headteacher',
         school_type: data.school_type || 'Secondary'
@@ -534,11 +536,12 @@ export default function SchoolSettings() {
         </TabsContent>
 
         <TabsContent value="certification">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
               { id: 'logo_url', label: 'School Logo', description: 'Appears on headers and website' },
               { id: 'signature_url', label: 'Headteacher Signature', description: 'Official digitized signature' },
-              { id: 'seal_url', label: 'Official School Seal', description: 'Used for report card authenticity' }
+              { id: 'seal_url', label: 'Official School Seal', description: 'Used for report card authenticity' },
+              { id: 'coat_of_arms_url', label: 'Coat of Arms Logo', description: 'Appears on top right of report card' }
             ].map((asset) => (
               <Card key={asset.id} className="asset-upload-card overflow-hidden">
                 <CardHeader className="pb-3">

@@ -77,12 +77,19 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
             </div>
           </div>
 
-          <div className="text-right space-y-2">
-            <div className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold tracking-widest uppercase">
-              Official Report
+          <div className="text-right flex items-start gap-8">
+            <div className="space-y-2 flex flex-col items-end">
+              <div className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold tracking-widest uppercase">
+                Official Report
+              </div>
+              <p className="text-xs font-bold text-slate-900">{term} - {examType}</p>
+              <p className="text-xs text-slate-500">Academic Year {academicYear}</p>
             </div>
-            <p className="text-xs font-bold text-slate-900">{term} - {examType}</p>
-            <p className="text-xs text-slate-500">Academic Year {academicYear}</p>
+            {school?.coat_of_arms_url && (
+              <div className="h-24 w-24 bg-white rounded-full shadow-sm border border-slate-100 p-4 flex items-center justify-center text-slate-400">
+                <img src={school.coat_of_arms_url} alt="Coat of Arms" className="max-h-full max-w-full object-contain" />
+              </div>
+            )}
           </div>
         </div>
 

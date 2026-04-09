@@ -24,6 +24,7 @@ import SchoolAdminPortal from "./pages/SchoolAdminPortal";
 import SchoolWebsite from "./pages/SchoolWebsite";
 import GovernmentPortal from "./pages/GovernmentPortal";
 import SystemAdminPortal from "./pages/SystemAdminPortal";
+import VerifyReport from "./pages/VerifyReport";
 
 const App = () => {
   // --- SUBDOMAIN DETECTION ---
@@ -110,6 +111,7 @@ const App = () => {
                 <GovernmentPortal />
               </ProtectedRoute>
             } />
+            <Route path="/verify/:hash" element={<VerifyReport />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
