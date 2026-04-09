@@ -227,100 +227,12 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
         {/* Summary Analytics */}
         <div className="grid grid-cols-12 gap-6 print:gap-4 print:space-y-0">
           <div className="col-span-8 print:col-span-8 flex flex-col gap-4">
-            {/* Grade Teacher's Remark Box */}
             <div className="flex-1 py-4 print:py-2">
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 print:mb-1">
-                Grade Teacher's Remark
+                Class Insights
               </h4>
-              <p className="text-sm leading-relaxed text-slate-800 font-medium font-serif italic border-l-2 border-slate-900 pl-4">
-                "{(() => {
-                  if (!grades || grades.length === 0) return "Academic data unavailable for this period.";
-                  
-                  // Helper for student reference
-                  const firstName = student.name.split(' ')[0];
-                  
-                  // Analysis Variables
-                  const avg = parseFloat(average as string);
-                  const validGrades = grades.filter((g: any) => g.percentage !== null && g.percentage !== undefined && g.percentage !== '' && g.grade !== 'ABSENT');
-                  
-                  const position = student.position || 0;
-                  const totalStudents = student.totalStudents || 0;
-                  const classAvg = student.classAverage || 0;
-                  const percentile = (position > 0 && totalStudents > 0) ? (position / totalStudents) * 100 : 0;
-                  
-                  const isTopRank = percentile > 0 && percentile <= 25;
-                  const isBottomRank = percentile >= 75;
-                  const isPassing = avg >= 50;
-                  const isExcellent = avg >= 75;
-                  
-                  // 1. Opening Statement based on combining absolute and relative class-level performance
-                  let opening = "";
-                  if (position > 0 && totalStudents > 0) {
-                    if (isExcellent) {
-                      if (isTopRank) {
-                        opening = `${firstName} has demonstrated an outstanding grasp of the curriculum, ranking ${position} out of ${totalStudents} and setting a high benchmark for the class.`;
-                      } else {
-                        opening = `${firstName} has achieved excellent individual results (${avg}%), maintaining high academic standards within a highly competitive cohort.`;
-                      }
-                    } else if (isPassing) {
-                      if (isTopRank) {
-                        opening = `${firstName} secured a commendable position of ${position} out of ${totalStudents}. While this relative standing is strong, pushing for higher absolute scores will unlock their full potential.`;
-                      } else if (!isBottomRank) {
-                        if (avg >= classAvg) {
-                          opening = `${firstName} has shown satisfactory progress, performing slightly above the class average of ${classAvg.toFixed(1)}%. Continuous effort will help elevate their overall grade.`;
-                        } else {
-                          opening = `${firstName} has maintained a passing grade but fell slightly below the class average. A more focused approach during lessons would yield better results.`;
-                        }
-                      } else {
-                        opening = `${firstName} managed to pass overall, but ranking ${position} out of ${totalStudents} suggests they are finding the competitive pace challenging. More active participation is encouraged.`;
-                      }
-                    } else {
-                      if (isTopRank) {
-                        opening = `Although ${firstName} ranks ${position} out of ${totalStudents}, the overall score of ${avg}% indicates significant challenges with this term's material. A much stronger academic focus is needed.`;
-                      } else {
-                        opening = `${firstName} has struggled significantly this term, placing below the class average with ${avg}%. Urgent attention to study habits and seeking extra help is highly recommended.`;
-                      }
-                    }
-                  } else {
-                    // Fallback if ranking data is missing
-                    if (isExcellent) opening = `${firstName} has demonstrated an excellent grasp of the curriculum this term, standing out as a highly dedicated student.`;
-                    else if (avg >= 60) opening = `${firstName} is a very capable student who actively participates and maintains a good standard of work.`;
-                    else if (isPassing) opening = `${firstName} has shown steady progress this term, though a more focused approach would yield better results.`;
-                    else opening = `${firstName} has found the term's concepts challenging. An urgent review of study habits is necessary.`;
-                  }
-
-                  // 2. Advice & Strengths Analysis
-                  let advice = "";
-                  const strongSubjectsCount = validGrades.filter((g: any) => (g.percentage || 0) >= 70).length;
-                  const totalSubjects = validGrades.length;
-                  
-                  if (strongSubjectsCount >= totalSubjects * 0.7 && totalSubjects > 0) {
-                    advice = `Consistency across most subjects is a major strength. `;
-                  } else if (strongSubjectsCount > 0) {
-                    advice = `They show promising capability in their stronger subjects, which should be used as motivation to improve weaker areas. `;
-                  } else {
-                    advice = `We need to work on building foundational understanding across all core subjects. `;
-                  }
-
-                  if (avg < classAvg && avg >= 50) {
-                    advice += `To improve their class standing, ${firstName} should focus on daily revision and completing all assignments promptly.`;
-                  } else if (avg < 50) {
-                    advice += `Attending remedial sessions and asking more questions during class will be crucial steps toward recovery.`;
-                  } else if (isExcellent) {
-                    advice += `Maintaining this level of intellectual curiosity will serve them very well in the future.`;
-                  } else {
-                    advice += `Staying organized and maintaining current study routines will ensure continued success.`;
-                  }
-
-                  // 3. Closing Encouragement
-                  let closing = "";
-                  if (avg >= 65) closing = "A joy to have in class. Keep up the excellent work!";
-                  else if (avg >= 50) closing = "I believe in their potential to achieve much more next term.";
-                  else closing = "We will work closely together next term to turn these results around.";
-
-                  // Combine parts
-                  return [opening, advice, closing].filter(Boolean).join(" ");
-                })()}"
+              <p className="text-sm leading-relaxed text-slate-600 font-medium italic border-l-2 border-slate-300 pl-4">
+                 Position {student.position || '-'} out of {student.totalStudents || '-'} students. Class Average: {student.classAverage ? student.classAverage.toFixed(1) : '-'}%.
               </p>
             </div>
           </div>
@@ -336,6 +248,103 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Grade Teacher's Remark Box - Full Width */}
+        <div className="w-full py-4 print:py-2 border-t border-slate-100 mt-2">
+          <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 print:mb-1">
+            Grade Teacher's Remark
+          </h4>
+          <p className="text-sm leading-relaxed text-slate-800 font-medium font-serif italic border-l-2 border-slate-900 pl-4">
+            "{(() => {
+              if (!grades || grades.length === 0) return "Academic data unavailable for this period.";
+              
+              // Helper for student reference
+              const firstName = student.name.split(' ')[0];
+              
+              // Analysis Variables
+              const avg = parseFloat(average as string);
+              const validGrades = grades.filter((g: any) => g.percentage !== null && g.percentage !== undefined && g.percentage !== '' && g.grade !== 'ABSENT');
+              
+              const position = student.position || 0;
+              const totalStudents = student.totalStudents || 0;
+              const classAvg = student.classAverage || 0;
+              const percentile = (position > 0 && totalStudents > 0) ? (position / totalStudents) * 100 : 0;
+              
+              const isTopRank = percentile > 0 && percentile <= 25;
+              const isBottomRank = percentile >= 75;
+              const isPassing = avg >= 50;
+              const isExcellent = avg >= 75;
+              
+              // 1. Opening Statement based on combining absolute and relative class-level performance
+              let opening = "";
+              if (position > 0 && totalStudents > 0) {
+                if (isExcellent) {
+                  if (isTopRank) {
+                    opening = `${firstName} has demonstrated an outstanding grasp of the curriculum, ranking ${position} out of ${totalStudents} and setting a high benchmark for the class.`;
+                  } else {
+                    opening = `${firstName} has achieved excellent individual results (${avg}%), maintaining high academic standards within a highly competitive cohort.`;
+                  }
+                } else if (isPassing) {
+                  if (isTopRank) {
+                    opening = `${firstName} secured a commendable position of ${position} out of ${totalStudents}. While this relative standing is strong, pushing for higher absolute scores will unlock their full potential.`;
+                  } else if (!isBottomRank) {
+                    if (avg >= classAvg) {
+                      opening = `${firstName} has shown satisfactory progress, performing slightly above the class average of ${classAvg.toFixed(1)}%. Continuous effort will help elevate their overall grade.`;
+                    } else {
+                      opening = `${firstName} has maintained a passing grade but fell slightly below the class average. A more focused approach during lessons would yield better results.`;
+                    }
+                  } else {
+                    opening = `${firstName} managed to pass overall, but ranking ${position} out of ${totalStudents} suggests they are finding the competitive pace challenging. More active participation is encouraged.`;
+                  }
+                } else {
+                  if (isTopRank) {
+                    opening = `Although ${firstName} ranks ${position} out of ${totalStudents}, the overall score of ${avg}% indicates significant challenges with this term's material. A much stronger academic focus is needed.`;
+                  } else {
+                    opening = `${firstName} has struggled significantly this term, placing below the class average with ${avg}%. Urgent attention to study habits and seeking extra help is highly recommended.`;
+                  }
+                }
+              } else {
+                // Fallback if ranking data is missing
+                if (isExcellent) opening = `${firstName} has demonstrated an excellent grasp of the curriculum this term, standing out as a highly dedicated student.`;
+                else if (avg >= 60) opening = `${firstName} is a very capable student who actively participates and maintains a good standard of work.`;
+                else if (isPassing) opening = `${firstName} has shown steady progress this term, though a more focused approach would yield better results.`;
+                else opening = `${firstName} has found the term's concepts challenging. An urgent review of study habits is necessary.`;
+              }
+
+              // 2. Advice & Strengths Analysis
+              let advice = "";
+              const strongSubjectsCount = validGrades.filter((g: any) => (g.percentage || 0) >= 70).length;
+              const totalSubjects = validGrades.length;
+              
+              if (strongSubjectsCount >= totalSubjects * 0.7 && totalSubjects > 0) {
+                advice = `Consistency across most subjects is a major strength. `;
+              } else if (strongSubjectsCount > 0) {
+                advice = `They show promising capability in their stronger subjects, which should be used as motivation to improve weaker areas. `;
+              } else {
+                advice = `We need to work on building foundational understanding across all core subjects. `;
+              }
+
+              if (avg < classAvg && avg >= 50) {
+                advice += `To improve their class standing, ${firstName} should focus on daily revision and completing all assignments promptly.`;
+              } else if (avg < 50) {
+                advice += `Attending remedial sessions and asking more questions during class will be crucial steps toward recovery.`;
+              } else if (isExcellent) {
+                advice += `Maintaining this level of intellectual curiosity will serve them very well in the future.`;
+              } else {
+                advice += `Staying organized and maintaining current study routines will ensure continued success.`;
+              }
+
+              // 3. Closing Encouragement
+              let closing = "";
+              if (avg >= 65) closing = "A joy to have in class. Keep up the excellent work!";
+              else if (avg >= 50) closing = "I believe in their potential to achieve much more next term.";
+              else closing = "We will work closely together next term to turn these results around.";
+
+              // Combine parts
+              return [opening, advice, closing].filter(Boolean).join(" ");
+            })()}"
+          </p>
         </div>
 
         {/* Head Teacher's Remark Box - Full Width */}
