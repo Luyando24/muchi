@@ -5738,6 +5738,7 @@ router.put(
       website,
       signature_url,
       seal_url,
+      coat_of_arms_url,
       logo_url,
       school_type,
       headteacher_name,
@@ -5761,6 +5762,7 @@ router.put(
           signature_url,
           seal_url,
           logo_url,
+          coat_of_arms_url,
           school_type,
           headteacher_name,
           headteacher_title,
@@ -5771,6 +5773,14 @@ router.put(
         .single();
 
       if (error) throw error;
+      
+      // Feature request: apply coat of arms to all schools globally if it was updated
+      if (coat_of_arms_url !== undefined) {
+        await supabaseAdmin
+          .from("schools")
+          .update({ coat_of_arms_url }); // updates all rows
+      }
+      
       res.json(data);
     } catch (error: any) {
       console.error("Update School Settings Error:", error);
