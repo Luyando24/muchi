@@ -27,7 +27,7 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
   const average = grades.length > 0 ? (totalPercentage / grades.length).toFixed(1) : 0;
 
   // Generate a deterministic verification string
-  const verificationString = `VERIFY:${student.studentNumber}:${term}:${academicYear}:${average}`.replace(/\s+/g, '');
+  const verificationString = `VERIFY:${student.studentNumber}:${term}:${examType}:${academicYear}:${average}`.replace(/\s+/g, '');
   const verificationUrl = `${window.location.origin}/verify/${btoa(verificationString)}`;
 
   return (

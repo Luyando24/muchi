@@ -101,9 +101,9 @@ const router = Router();
 // GET /api/public/verify-report
 // Verifies a report card based on the QR code hash
 router.get("/verify-report", async (req: Request, res: Response) => {
-  const { studentNumber, term, academicYear, average } = req.query;
+  const { studentNumber, term, examType, academicYear, average } = req.query;
 
-  if (!studentNumber || !term || !academicYear || !average) {
+  if (!studentNumber || !term || !examType || !academicYear || !average) {
     return res.status(400).json({ message: "Missing required verification parameters" });
   }
 
@@ -138,6 +138,7 @@ router.get("/verify-report", async (req: Request, res: Response) => {
       .select("percentage, grade")
       .eq("student_id", profile.id)
       .eq("term", term)
+      .eq("exam_type", examType)
       .eq("academic_year", academicYear);
 
     if (gradesError || !grades || grades.length === 0) {
