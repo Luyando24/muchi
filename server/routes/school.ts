@@ -4701,6 +4701,24 @@ router.get(
       
       const scales = await fetchAll(scalesQuery);
 
+      // Fetch classes to map UUIDs to names
+      const schoolClassesQuery = supabaseAdmin
+        .from("classes")
+        .select("id, name, school_id")
+        .eq("school_id", schoolId);
+      
+      const schoolClasses = await fetchAll(schoolClassesQuery);
+
+      const classIdToName: any = {};
+      const schoolClassIds: string[] = [];
+      schoolClasses?.forEach((c: any) => {
+        classIdToName[c.id] = c.name;
+        schoolClassIds.push(c.id);
+      });
+
+      const classNameToId: any = {};
+      schoolClasses?.forEach((c: any) => (classNameToId[c.name] = c.id));
+
       // Fetch class_subjects for teacher mapping
       const classTeacherMapQuery = supabaseAdmin
         .from("class_subjects")
@@ -4708,26 +4726,13 @@ router.get(
           class_id,
           subject_id,
           teacher_id,
-          classes!inner(name, school_id),
           profiles!teacher_id(full_name, id)
-        `)
-        .eq("classes.school_id", schoolId);
+        `);
       
-      const classTeacherMap = await fetchAll(classTeacherMapQuery);
-
-      // Fetch classes to map UUIDs to names
-      const schoolClassesQuery = supabaseAdmin
-        .from("classes")
-        .select("id, name")
-        .eq("school_id", schoolId);
+      const rawClassTeacherMap = await fetchAll(classTeacherMapQuery);
       
-      const schoolClasses = await fetchAll(schoolClassesQuery);
-
-      const classIdToName: any = {};
-      schoolClasses?.forEach((c: any) => (classIdToName[c.id] = c.name));
-
-      const classNameToId: any = {};
-      schoolClasses?.forEach((c: any) => (classNameToId[c.name] = c.id));
+      // Filter manually to avoid PGRST200 join error
+      const classTeacherMap = rawClassTeacherMap?.filter((ct: any) => schoolClassIds.includes(ct.class_id)) || [];
 
       const students =
         schoolProfilesData?.filter((p: any) => p.role === "student") || [];
