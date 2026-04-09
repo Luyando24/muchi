@@ -261,6 +261,11 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
               
               // Helper for student reference
               const firstName = student.name.split(' ')[0];
+              const gender = student.gender?.toLowerCase() || '';
+              const subjPronoun = gender === 'male' ? 'He' : (gender === 'female' ? 'She' : 'They');
+              const objPronoun = gender === 'male' ? 'him' : (gender === 'female' ? 'her' : 'them');
+              const possAdj = gender === 'male' ? 'his' : (gender === 'female' ? 'her' : 'their');
+              const shows = gender === 'male' || gender === 'female' ? 'shows' : 'show';
               
               // Analysis Variables
               const avg = parseFloat(average as string);
@@ -287,10 +292,10 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
                   }
                 } else if (isPassing) {
                   if (isTopRank) {
-                    opening = `${firstName} secured a commendable position of ${position} out of ${totalStudents}. While this relative standing is strong, pushing for higher absolute scores will unlock their full potential.`;
+                    opening = `${firstName} secured a commendable position of ${position} out of ${totalStudents}. While this relative standing is strong, pushing for higher absolute scores will unlock ${possAdj} full potential.`;
                   } else if (!isBottomRank) {
                     if (avg >= classAvg) {
-                      opening = `${firstName} has shown satisfactory progress, performing slightly above the class average of ${classAvg.toFixed(1)}%. Continuous effort will help elevate their overall grade.`;
+                      opening = `${firstName} has shown satisfactory progress, performing slightly above the class average of ${classAvg.toFixed(1)}%. Continuous effort will help elevate ${possAdj} overall grade.`;
                     } else {
                       opening = `${firstName} has maintained a passing grade but fell slightly below the class average. A more focused approach during lessons would yield better results.`;
                     }
@@ -320,17 +325,17 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
               if (strongSubjectsCount >= totalSubjects * 0.7 && totalSubjects > 0) {
                 advice = `Consistency across most subjects is a major strength. `;
               } else if (strongSubjectsCount > 0) {
-                advice = `They show promising capability in their stronger subjects, which should be used as motivation to improve weaker areas. `;
+                advice = `${subjPronoun} ${shows} promising capability in ${possAdj} stronger subjects, which should be used as motivation to improve weaker areas. `;
               } else {
                 advice = `We need to work on building foundational understanding across all core subjects. `;
               }
 
               if (avg < classAvg && avg >= 50) {
-                advice += `To improve their class standing, ${firstName} should focus on daily revision and completing all assignments promptly.`;
+                advice += `To improve ${possAdj} class standing, ${firstName} should focus on daily revision and completing all assignments promptly.`;
               } else if (avg < 50) {
                 advice += `Attending remedial sessions and asking more questions during class will be crucial steps toward recovery.`;
               } else if (isExcellent) {
-                advice += `Maintaining this level of intellectual curiosity will serve them very well in the future.`;
+                advice += `Maintaining this level of intellectual curiosity will serve ${objPronoun} very well in the future.`;
               } else {
                 advice += `Staying organized and maintaining current study routines will ensure continued success.`;
               }
@@ -338,7 +343,7 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
               // 3. Closing Encouragement
               let closing = "";
               if (avg >= 65) closing = "A joy to have in class. Keep up the excellent work!";
-              else if (avg >= 50) closing = "I believe in their potential to achieve much more next term.";
+              else if (avg >= 50) closing = `I believe in ${possAdj} potential to achieve much more next term.`;
               else closing = "We will work closely together next term to turn these results around.";
 
               // Combine parts
@@ -358,6 +363,11 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
               
               // Helper for student reference
               const firstName = student.name.split(' ')[0];
+              const gender = student.gender?.toLowerCase() || '';
+              const subjPronoun = gender === 'male' ? 'He' : (gender === 'female' ? 'She' : 'They');
+              const objPronoun = gender === 'male' ? 'him' : (gender === 'female' ? 'her' : 'them');
+              const possAdj = gender === 'male' ? 'his' : (gender === 'female' ? 'her' : 'their');
+              const shows = gender === 'male' || gender === 'female' ? 'shows' : 'show';
               
               // Analysis Variables
               const avg = parseFloat(average as string);
@@ -374,8 +384,8 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
               let opening = "";
               if (avg >= 75) opening = `${student.name} has produced an outstanding set of results this term, demonstrating exceptional academic maturity and diligence.`;
               else if (avg >= 65) opening = `${student.name} has achieved a very good standard of performance, showing consistent effort across most subjects.`;
-              else if (avg >= 55) opening = `${student.name} has performed satisfactorily, though there is room for greater consistency in their application.`;
-              else if (avg >= 45) opening = `${student.name} has made a fair attempt this term, but will need to significantly increase their study hours to reach their full potential.`;
+              else if (avg >= 55) opening = `${student.name} has performed satisfactorily, though there is room for greater consistency in ${possAdj} application.`;
+              else if (avg >= 45) opening = `${student.name} has made a fair attempt this term, but will need to significantly increase ${possAdj} study hours to reach ${possAdj} full potential.`;
               else opening = `${student.name}'s performance is below the expected standard. An urgent review of study habits and class engagement is recommended.`;
 
               // 2. Strengths Analysis
@@ -383,7 +393,7 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
               if (bestSubjects.length > 0) {
                 const subjectText = bestSubjects.join(', ').replace(/, ([^,]*)$/, ' and $1');
                 if (avg >= 65) strengths = `Particular aptitude is noted in ${subjectText}, where ${firstName} displays keen insight and mastery.`;
-                else strengths = `${firstName} shows encouraging promise in ${subjectText}, which should serve as a motivation for other areas.`;
+                else strengths = `${firstName} ${shows} encouraging promise in ${subjectText}, which should serve as a motivation for other areas.`;
               }
 
               // 3. Areas for Improvement (only if relevant)

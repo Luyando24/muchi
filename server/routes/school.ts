@@ -2874,6 +2874,7 @@ router.get(
           id: student.id,
           name: student.full_name,
           studentNumber: student.student_number,
+          gender: student.gender,
           class: student.enrollments?.[0]?.classes?.name || "N/A",
           attendance: 0, // Placeholder
           position,
@@ -2931,7 +2932,7 @@ router.get(
       const { data: enrollments, error: enrollmentError } = await supabaseAdmin
         .from("enrollments")
         .select(
-          "student_id, profiles!enrollments_student_id_fkey(full_name, student_number), classes(name)",
+          "student_id, profiles!enrollments_student_id_fkey(full_name, student_number, gender), classes(name)",
         )
         .eq("class_id", classId)
         .eq("academic_year", academicYear);
@@ -3014,6 +3015,7 @@ router.get(
             id: enrollment.student_id,
             name: (enrollment.profiles as any)?.full_name,
             studentNumber: (enrollment.profiles as any)?.student_number,
+            gender: (enrollment.profiles as any)?.gender,
             class: (enrollment.classes as any)?.name || "N/A",
             attendance: 0,
             position: rankingsData.rankings[studentId] || 0,
