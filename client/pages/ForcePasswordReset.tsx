@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { supabase } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
+import { syncFetch } from '@/lib/syncService';
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -77,22 +78,18 @@ export default function ForcePasswordReset() {
 
       if (authError) throw authError;
 
-      // 2. Update Profile status
-      const { data: updatedProfile, error: profileError } = await supabase
-        .from("profiles")
-        .update({ 
-          is_temp_password: false,
-          temp_password_expires_at: null,
-          temp_password_set_at: null,
-          temp_password: null // Clear the plain text temp password
-        })
-        .eq("id", session.user.id)
-        .select()
-        .single();
+      // 2. Update Profile status via secure backend endpoint
+      const headers = session?.access_token ? {
+        'Authorization': `Bearer ${session.access_token}`
+      } : undefined;
 
-      if (profileError) {
-         console.error("Profile update error during password reset:", profileError);
-         throw profileError;
+      const updatedProfile = await syncFetch('/api/school/user/clear-temp-password', {
+        method: 'POST',
+        headers
+      });
+
+      if (!updatedProfile) {
+         throw new Error("Profile update returned no data");
       }
       
       console.log("Profile successfully updated during password reset:", updatedProfile);

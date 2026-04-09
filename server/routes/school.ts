@@ -404,6 +404,35 @@ export const requireSchoolRole = (allowedRoles: string[]) => {
   };
 };
 
+// POST /api/school/user/clear-temp-password
+router.post(
+  "/user/clear-temp-password",
+  requireSchoolRole([...ADMIN_ROLES, "teacher", "student", "parent"]),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("profiles")
+        .update({ 
+          is_temp_password: false,
+          temp_password_expires_at: null,
+          temp_password_set_at: null,
+          temp_password: null
+        })
+        .eq("id", profile.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.json(data);
+    } catch (error: any) {
+      console.error("Clear Temp Password Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
 // --- DASHBOARD ENDPOINTS ---
 
 // GET /api/school/dashboard
