@@ -255,7 +255,7 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
           <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 print:mb-1">
             Grade Teacher's Remark
           </h4>
-          <p className="text-sm leading-relaxed text-slate-800 font-medium font-serif italic border-l-2 border-slate-900 pl-4">
+          <p className="text-[13px] print:text-[11px] leading-relaxed text-slate-800 font-medium font-serif italic border-l-2 border-slate-900 pl-4">
             "{(() => {
               if (!grades || grades.length === 0) return "Academic data unavailable for this period.";
               
@@ -286,35 +286,34 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
               if (position > 0 && totalStudents > 0) {
                 if (isExcellent) {
                   if (isTopRank) {
-                    opening = `${firstName} has demonstrated an outstanding grasp of the curriculum, ranking ${position} out of ${totalStudents} and setting a high benchmark for the class.`;
+                    opening = `${firstName} has demonstrated an outstanding grasp of the curriculum, ranking ${position} out of ${totalStudents}.`;
                   } else {
-                    opening = `${firstName} has achieved excellent individual results (${avg}%), maintaining high academic standards within a highly competitive cohort.`;
+                    opening = `${firstName} has achieved excellent results (${avg}%) in a competitive cohort.`;
                   }
                 } else if (isPassing) {
                   if (isTopRank) {
-                    opening = `${firstName} secured a commendable position of ${position} out of ${totalStudents}. While this relative standing is strong, pushing for higher absolute scores will unlock ${possAdj} full potential.`;
+                    opening = `${firstName} secured a commendable rank of ${position} out of ${totalStudents}.`;
                   } else if (!isBottomRank) {
                     if (avg >= classAvg) {
-                      opening = `${firstName} has shown satisfactory progress, performing slightly above the class average of ${classAvg.toFixed(1)}%. Continuous effort will help elevate ${possAdj} overall grade.`;
+                      opening = `${firstName} performed above the class average (${classAvg.toFixed(1)}%).`;
                     } else {
-                      opening = `${firstName} has maintained a passing grade but fell slightly below the class average. A more focused approach during lessons would yield better results.`;
+                      opening = `${firstName} passed but fell slightly below the class average.`;
                     }
                   } else {
-                    opening = `${firstName} managed to pass overall, but ranking ${position} out of ${totalStudents} suggests they are finding the competitive pace challenging. More active participation is encouraged.`;
+                    opening = `${firstName} passed overall, but ranking ${position} out of ${totalStudents} suggests the pace is challenging.`;
                   }
                 } else {
                   if (isTopRank) {
-                    opening = `Although ${firstName} ranks ${position} out of ${totalStudents}, the overall score of ${avg}% indicates significant challenges with this term's material. A much stronger academic focus is needed.`;
+                    opening = `Despite ranking ${position}, ${firstName}'s score of ${avg}% indicates challenges with the material.`;
                   } else {
-                    opening = `${firstName} has struggled significantly this term, placing below the class average with ${avg}%. Urgent attention to study habits and seeking extra help is highly recommended.`;
+                    opening = `${firstName} struggled this term, placing below the class average (${avg}%).`;
                   }
                 }
               } else {
-                // Fallback if ranking data is missing
-                if (isExcellent) opening = `${firstName} has demonstrated an excellent grasp of the curriculum this term, standing out as a highly dedicated student.`;
-                else if (avg >= 60) opening = `${firstName} is a very capable student who actively participates and maintains a good standard of work.`;
-                else if (isPassing) opening = `${firstName} has shown steady progress this term, though a more focused approach would yield better results.`;
-                else opening = `${firstName} has found the term's concepts challenging. An urgent review of study habits is necessary.`;
+                if (isExcellent) opening = `${firstName} demonstrated an excellent grasp of the curriculum.`;
+                else if (avg >= 60) opening = `${firstName} is a capable student who actively participates.`;
+                else if (isPassing) opening = `${firstName} showed steady progress this term.`;
+                else opening = `${firstName} found the term's concepts challenging.`;
               }
 
               // 2. Advice & Strengths Analysis
@@ -323,31 +322,25 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
               const totalSubjects = validGrades.length;
               
               if (strongSubjectsCount >= totalSubjects * 0.7 && totalSubjects > 0) {
-                advice = `Consistency across most subjects is a major strength. `;
+                advice = `Consistency is a major strength. `;
               } else if (strongSubjectsCount > 0) {
-                advice = `${subjPronoun} ${shows} promising capability in ${possAdj} stronger subjects, which should be used as motivation to improve weaker areas. `;
+                advice = `${subjPronoun} ${shows} promise in ${possAdj} stronger subjects, which should motivate improvement in weaker areas. `;
               } else {
-                advice = `We need to work on building foundational understanding across all core subjects. `;
+                advice = `Focus on building foundational understanding is needed. `;
               }
 
               if (avg < classAvg && avg >= 50) {
-                advice += `To improve ${possAdj} class standing, ${firstName} should focus on daily revision and completing all assignments promptly.`;
+                advice += `Daily revision will improve ${possAdj} standing.`;
               } else if (avg < 50) {
-                advice += `Attending remedial sessions and asking more questions during class will be crucial steps toward recovery.`;
+                advice += `Remedial sessions are crucial for recovery.`;
               } else if (isExcellent) {
-                advice += `Maintaining this level of intellectual curiosity will serve ${objPronoun} very well in the future.`;
+                advice += `Maintain this intellectual curiosity.`;
               } else {
-                advice += `Staying organized and maintaining current study routines will ensure continued success.`;
+                advice += `Consistent study routines will ensure success.`;
               }
 
-              // 3. Closing Encouragement
-              let closing = "";
-              if (avg >= 65) closing = "A joy to have in class. Keep up the excellent work!";
-              else if (avg >= 50) closing = `I believe in ${possAdj} potential to achieve much more next term.`;
-              else closing = "We will work closely together next term to turn these results around.";
-
               // Combine parts
-              return [opening, advice, closing].filter(Boolean).join(" ");
+              return [opening, advice].filter(Boolean).join(" ");
             })()}"
           </p>
         </div>
@@ -357,7 +350,7 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
           <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 print:mb-1">
             Head Teacher's Remark
           </h4>
-          <p className="text-sm leading-relaxed text-slate-800 font-medium font-serif italic border-l-2 border-slate-900 pl-4">
+          <p className="text-[13px] print:text-[11px] leading-relaxed text-slate-800 font-medium font-serif italic border-l-2 border-slate-900 pl-4">
             "{(() => {
               if (!grades || grades.length === 0) return "Academic data unavailable for this period.";
               
@@ -382,43 +375,37 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
               
               // 1. Opening Statement based on Average
               let opening = "";
-              if (avg >= 75) opening = `${student.name} has produced an outstanding set of results this term, demonstrating exceptional academic maturity and diligence.`;
-              else if (avg >= 65) opening = `${student.name} has achieved a very good standard of performance, showing consistent effort across most subjects.`;
-              else if (avg >= 55) opening = `${student.name} has performed satisfactorily, though there is room for greater consistency in ${possAdj} application.`;
-              else if (avg >= 45) opening = `${student.name} has made a fair attempt this term, but will need to significantly increase ${possAdj} study hours to reach ${possAdj} full potential.`;
-              else opening = `${student.name}'s performance is below the expected standard. An urgent review of study habits and class engagement is recommended.`;
+              if (avg >= 75) opening = `${student.name} produced an outstanding set of results, demonstrating exceptional diligence.`;
+              else if (avg >= 65) opening = `${student.name} achieved a very good standard, showing consistent effort.`;
+              else if (avg >= 55) opening = `${student.name} performed satisfactorily, though greater consistency is needed.`;
+              else if (avg >= 45) opening = `${student.name} made a fair attempt, but must significantly increase study hours.`;
+              else opening = `${student.name}'s performance is below standard. An urgent review of study habits is recommended.`;
 
               // 2. Strengths Analysis
               let strengths = "";
               if (bestSubjects.length > 0) {
                 const subjectText = bestSubjects.join(', ').replace(/, ([^,]*)$/, ' and $1');
-                if (avg >= 65) strengths = `Particular aptitude is noted in ${subjectText}, where ${firstName} displays keen insight and mastery.`;
-                else strengths = `${firstName} ${shows} encouraging promise in ${subjectText}, which should serve as a motivation for other areas.`;
+                if (avg >= 65) strengths = `Particular aptitude is noted in ${subjectText}.`;
+                else strengths = `${firstName} ${shows} promise in ${subjectText}.`;
               }
 
               // 3. Areas for Improvement (only if relevant)
               let improvements = "";
               if (weakSubjects.length > 0) {
                 const weakText = weakSubjects.join(', ').replace(/, ([^,]*)$/, ' and $1');
-                improvements = `However, urgent attention is required in ${weakText} to prevent these subjects from pulling down the overall grade.`;
+                improvements = `Urgent attention is required in ${weakText}.`;
               } else if (weakSubjects.length === 0 && bestSubjects.length > 0 && bestSubjects.length !== sortedGrades.length) {
-                 improvements = `Performance across all subjects was generally consistent.`;
+                 improvements = `Performance across subjects was consistent.`;
               }
 
-              // 4. Closing Encouragement
-              let closing = "";
-              if (avg >= 60) closing = "An excellent term overall. Keep up this high standard!";
-              else if (avg >= 50) closing = "With consistent effort, better results can be achieved next term.";
-              else closing = "We encourage more dedicated study time and seeking help in difficult subjects.";
-
               // Combine parts
-              return [opening, strengths, improvements, closing].filter(Boolean).join(" ");
+              return [opening, strengths, improvements].filter(Boolean).join(" ");
             })()}"
           </p>
         </div>
 
         {/* Minimal Footer / Authenticity Section */}
-        <div className="pt-16 print:pt-4 mt-auto">
+        <div className="pt-8 print:pt-4 mt-auto">
           <div className="grid grid-cols-2 gap-12">
             <div className="space-y-2 print:space-y-1">
               <div className="h-16 print:h-12 flex items-end">
@@ -432,19 +419,19 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
             </div>
             
             <div className="space-y-2 print:space-y-1 text-right flex flex-col items-end">
-              <div className="h-24 print:h-20 flex items-end justify-end">
+              <div className="h-20 print:h-16 flex items-end justify-end">
                  {/* Seal Placeholder or Image */}
                  {school?.seal_url ? (
-                    <img src={school.seal_url} alt="Seal" className="max-h-24 print:max-h-20 object-contain" />
+                    <img src={school.seal_url} alt="Seal" className="max-h-20 print:max-h-16 object-contain" />
                  ) : (
-                    <div className="h-16 w-16 border-2 border-slate-200 border-dashed rounded-full"></div>
+                    <div className="h-12 w-12 border-2 border-slate-200 border-dashed rounded-full"></div>
                  )}
               </div>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Official Seal</p>
             </div>
           </div>
 
-          <div className="flex justify-between items-end mt-12 print:mt-4 pt-4 border-t border-slate-100 text-[10px] font-bold text-slate-300 uppercase tracking-widest">
+          <div className="flex justify-between items-end mt-8 print:mt-4 pt-4 border-t border-slate-100 text-[10px] font-bold text-slate-300 uppercase tracking-widest">
             <p>© {new Date().getFullYear()} {school?.name}</p>
             <p>Generated on {new Date().toLocaleDateString()}</p>
           </div>
