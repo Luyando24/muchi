@@ -92,13 +92,22 @@ export default function ForcePasswordReset() {
          throw profileError;
       }
 
+      // Force a session refresh so the JWT gets updated metadata (if any) and components detect the change
+      await supabase.auth.refreshSession();
+
       toast({
         title: "Success",
         description: "Your password has been set successfully. You can now access your dashboard.",
       });
 
       // Redirect based on role instead of just going to root "/"
-      const role = session.user.user_metadata?.role;
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", session.user.id)
+        .single();
+        
+      const role = profile?.role || session.user.user_metadata?.role;
       if (role === 'teacher') {
         navigate("/teacher-portal");
       } else if (role === 'student') {

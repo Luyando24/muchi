@@ -39,6 +39,9 @@ import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { supabase } from '@/lib/supabase';
 import { syncFetch } from '@/lib/syncService';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { useLocation } from 'react-router-dom';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import ReportCardPreview from './ReportCardPreview';
 
@@ -77,17 +80,26 @@ interface GradingScale {
 
 export default function GradebookView() {
   const { toast } = useToast();
+  const location = useLocation();
   const [loading, setLoading] = useState(false);
   const [classes, setClasses] = useState<Class[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [gradingScales, setGradingScales] = useState<GradingScale[]>([]);
 
+  const defaultState = location.state as {
+    defaultClassId?: string;
+    defaultSubjectId?: string;
+    defaultExamType?: string;
+    defaultTerm?: string;
+    defaultYear?: string;
+  } || {};
+
   // Selection State
-  const [selectedClass, setSelectedClass] = useState<string>('');
-  const [selectedSubject, setSelectedSubject] = useState<string>('');
-  const [selectedTerm, setSelectedTerm] = useState<string>('');
-  const [selectedExamType, setSelectedExamType] = useState<string>('End of Term');
-  const [selectedYear, setSelectedYear] = useState<string>('');
+  const [selectedClass, setSelectedClass] = useState<string>(defaultState.defaultClassId || '');
+  const [selectedSubject, setSelectedSubject] = useState<string>(defaultState.defaultSubjectId || '');
+  const [selectedTerm, setSelectedTerm] = useState<string>(defaultState.defaultTerm || '');
+  const [selectedExamType, setSelectedExamType] = useState<string>(defaultState.defaultExamType || 'End of Term');
+  const [selectedYear, setSelectedYear] = useState<string>(defaultState.defaultYear || '');
   const [availableExamTypes, setAvailableExamTypes] = useState<string[]>(['Mid Term', 'End of Term']);
 
   // Data State
@@ -116,16 +128,16 @@ export default function GradebookView() {
         });
         
         if (settings) {
-          setSelectedTerm(settings.current_term || 'Term 1');
-          setSelectedYear(settings.academic_year || new Date().getFullYear().toString());
+          if (!defaultState.defaultTerm) setSelectedTerm(settings.current_term || 'Term 1');
+          if (!defaultState.defaultYear) setSelectedYear(settings.academic_year || new Date().getFullYear().toString());
           if (settings.exam_types && settings.exam_types.length > 0) {
             setAvailableExamTypes(settings.exam_types);
-            setSelectedExamType(settings.exam_types.includes('End of Term') ? 'End of Term' : settings.exam_types[0]);
+            if (!defaultState.defaultExamType) setSelectedExamType(settings.exam_types.includes('End of Term') ? 'End of Term' : settings.exam_types[0]);
           }
         } else {
           // Fallback
-          setSelectedTerm('Term 1');
-          setSelectedYear(new Date().getFullYear().toString());
+          if (!defaultState.defaultTerm) setSelectedTerm('Term 1');
+          if (!defaultState.defaultYear) setSelectedYear(new Date().getFullYear().toString());
         }
 
         const [classesData, subjectsData, scalesData] = await Promise.all([

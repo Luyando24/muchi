@@ -53,6 +53,160 @@ const requireTeacher = async (req: Request, res: Response, next: any) => {
   }
 };
 
+// GET /api/teacher/verify-status
+// Get gradebook submission status for all of the teacher's assigned subjects
+router.get('/verify-status', requireTeacher, async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const teacherId = profile.id;
+  const schoolId = profile.school_id;
+
+  try {
+    const settings = await ensureSchoolSettings(schoolId);
+    const term = settings?.current_term || 'Term 1';
+    const academicYear = settings?.academic_year || new Date().getFullYear().toString();
+    const examTypes = settings?.exam_types || ['Mid Term', 'End of Term'];
+
+    // 1. Get all subjects assigned to this teacher (or all for admin)
+    let assignmentsQuery = supabaseAdmin
+      .from('class_subjects')
+      .select(`
+        class_id,
+        subject_id,
+        subjects(name, code)
+      `);
+
+    // Filter by teacher_id only if they are strictly a teacher
+    if (profile.role === 'teacher' || profile.secondary_role === 'teacher') {
+      assignmentsQuery = assignmentsQuery.eq('teacher_id', teacherId);
+    }
+
+    const { data: rawAssignments, error: assignmentsError } = await assignmentsQuery;
+
+    if (assignmentsError || !rawAssignments || rawAssignments.length === 0) {
+      return res.json([]);
+    }
+
+    const classIds = Array.from(new Set(rawAssignments.map(a => a.class_id)));
+
+    // Fetch classes to filter by school_id and get names
+    const { data: classesData, error: classesError } = await supabaseAdmin
+      .from('classes')
+      .select('id, name')
+      .eq('school_id', schoolId)
+      .in('id', classIds);
+
+    if (classesError || !classesData || classesData.length === 0) {
+      return res.json([]);
+    }
+
+    const classMap = new Map<string, string>();
+    classesData.forEach(c => classMap.set(c.id, c.name));
+
+    // Filter assignments to only include those that belong to the school's classes
+    const assignments = rawAssignments.filter(a => classMap.has(a.class_id));
+
+    if (assignments.length === 0) {
+      return res.json([]);
+    }
+
+    // 2. For each assignment and each exam type, determine the status
+    // We need to fetch grades for these classes/subjects
+    const filteredClassIds = Array.from(new Set(assignments.map(a => a.class_id)));
+    const subjectIds = Array.from(new Set(assignments.map(a => a.subject_id)));
+
+    // Fetch enrollments to know which students are in which class
+    const { data: enrollments } = await supabaseAdmin
+      .from('enrollments')
+      .select('student_id, class_id')
+      .in('class_id', filteredClassIds)
+      .eq('academic_year', academicYear)
+      .eq('status', 'Active');
+
+    const studentClassMap = new Map<string, string>();
+    const classStudentCount = new Map<string, number>();
+    
+    enrollments?.forEach(e => {
+      studentClassMap.set(e.student_id, e.class_id);
+      classStudentCount.set(e.class_id, (classStudentCount.get(e.class_id) || 0) + 1);
+    });
+
+    const studentIds = enrollments?.map(e => e.student_id) || [];
+
+    // Fetch grades
+    let grades: any[] = [];
+    if (studentIds.length > 0) {
+      const { data: fetchedGrades } = await supabaseAdmin
+        .from('student_grades')
+        .select('student_id, subject_id, exam_type, status')
+        .eq('school_id', schoolId)
+        .eq('term', term)
+        .eq('academic_year', academicYear)
+        .in('subject_id', subjectIds)
+        .in('student_id', studentIds);
+      
+      if (fetchedGrades) grades = fetchedGrades;
+    }
+
+    const results: any[] = [];
+
+    // Build the status matrix
+    assignments.forEach(assignment => {
+      const cId = assignment.class_id;
+      const sId = assignment.subject_id;
+      const expectedStudents = classStudentCount.get(cId) || 0;
+
+      examTypes.forEach((examType: string) => {
+        // Find grades for this class, subject, and examType
+        const relevantGrades = grades.filter(g => 
+          g.subject_id === sId && 
+          g.exam_type === examType && 
+          studentClassMap.get(g.student_id) === cId
+        );
+
+        let status = 'Not Entered';
+        
+        if (relevantGrades.length > 0) {
+          const statuses = new Set(relevantGrades.map(g => g.status));
+          
+          if (statuses.has('Draft')) {
+            status = 'Draft';
+          } else if (Array.from(statuses).every(s => s === 'Published')) {
+            status = 'Published';
+          } else if (Array.from(statuses).every(s => s === 'Submitted' || s === 'Published')) {
+            status = 'Submitted';
+          } else {
+            status = 'Draft'; // Mixed states with missing students
+          }
+          
+          // Check if all students have grades
+          if (status !== 'Not Entered' && relevantGrades.length < expectedStudents) {
+            status = 'Draft'; // Incomplete
+          }
+        }
+
+        results.push({
+          id: `${cId}_${sId}_${examType}`,
+          classId: cId,
+          className: classMap.get(cId) || 'Unknown Class',
+          subjectId: sId,
+          subjectName: (assignment.subjects as any)?.name || 'Unknown Subject',
+          examType,
+          status,
+          term,
+          academicYear,
+          completedCount: relevantGrades.length,
+          expectedCount: expectedStudents
+        });
+      });
+    });
+
+    res.json(results);
+  } catch (error: any) {
+    console.error('Get Verify Status Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // GET /api/teacher/classes
 // Get classes assigned to the teacher
 router.get('/classes', requireTeacher, async (req: Request, res: Response) => {

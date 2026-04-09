@@ -227,8 +227,55 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
         {/* Summary Analytics */}
         <div className="grid grid-cols-12 gap-6 print:gap-4 print:space-y-0">
           <div className="col-span-8 print:col-span-8 flex flex-col gap-4">
-            {/* Minimal Remark Box */}
+            {/* Grade Teacher's Remark Box */}
             <div className="flex-1 py-4 print:py-2">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 print:mb-1">
+                Grade Teacher's Remark
+              </h4>
+              <p className="text-sm leading-relaxed text-slate-800 font-medium font-serif italic border-l-2 border-slate-900 pl-4">
+                "{(() => {
+                  if (!grades || grades.length === 0) return "Academic data unavailable for this period.";
+                  
+                  // Helper for student reference
+                  const firstName = student.name.split(' ')[0];
+                  
+                  // Analysis Variables
+                  const avg = parseFloat(average as string);
+                  const validGrades = grades.filter((g: any) => g.percentage !== null && g.percentage !== undefined && g.percentage !== '' && g.grade !== 'ABSENT');
+                  
+                  // Calculate how many subjects the student scored above 70%
+                  const strongSubjectsCount = validGrades.filter((g: any) => (g.percentage || 0) >= 70).length;
+                  const totalSubjects = validGrades.length;
+                  
+                  // 1. Opening Statement based on class-level performance context
+                  let opening = "";
+                  if (avg >= 80) opening = `${firstName} has demonstrated an excellent grasp of the curriculum this term, standing out as a highly dedicated student in the class.`;
+                  else if (avg >= 65) opening = `${firstName} is a very capable student who actively participates in class activities and maintains a good standard of work.`;
+                  else if (avg >= 50) opening = `${firstName} has shown steady progress this term, though a more focused approach during lessons would yield even better results.`;
+                  else opening = `${firstName} has found some of the term's concepts challenging and would benefit from asking more questions during class.`;
+
+                  // 2. Strengths Analysis within the classroom context
+                  let strengths = "";
+                  if (strongSubjectsCount >= totalSubjects * 0.7 && totalSubjects > 0) {
+                    strengths = `Their ability to maintain high scores across the majority of subjects sets a positive example for their peers.`;
+                  } else if (strongSubjectsCount > 0) {
+                    strengths = `They show particular enthusiasm and capability in their strongest subjects, which is wonderful to see.`;
+                  }
+
+                  // 3. Closing Encouragement
+                  let closing = "";
+                  if (avg >= 65) closing = "A joy to have in class. Keep up the excellent work!";
+                  else if (avg >= 50) closing = "I encourage them to stay focused and keep pushing forward next term.";
+                  else closing = "We will work closely together next term to improve these results.";
+
+                  // Combine parts
+                  return [opening, strengths, closing].filter(Boolean).join(" ");
+                })()}"
+              </p>
+            </div>
+
+            {/* Head Teacher's Remark Box */}
+            <div className="flex-1 py-4 print:py-2 border-t border-slate-100">
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 print:mb-1">
                 Head Teacher's Remark
               </h4>

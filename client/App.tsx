@@ -19,6 +19,7 @@ import SchoolRegister from "./pages/SchoolRegister";
 import NotFound from "./pages/NotFound";
 import StudentPortal from "./pages/StudentPortal";
 import TeacherPortal from "./pages/TeacherPortal";
+import TeacherVerifyGrades from "./pages/TeacherVerifyGrades";
 import SchoolAdminPortal from "./pages/SchoolAdminPortal";
 import SchoolWebsite from "./pages/SchoolWebsite";
 import GovernmentPortal from "./pages/GovernmentPortal";
@@ -84,7 +85,12 @@ const App = () => {
                 <StudentPortal />
               </ProtectedRoute>
             } />
-            <Route path="/teacher-portal" element={
+            <Route path="/teacher-portal/verify" element={
+              <ProtectedRoute allowedRoles={['teacher', 'school_admin']}>
+                <TeacherVerifyGrades />
+              </ProtectedRoute>
+            } />
+            <Route path="/teacher-portal/*" element={
               <ProtectedRoute allowedRoles={['teacher', 'school_admin', 'bursar', 'registrar', 'exam_officer', 'academic_auditor', 'accounts', 'content_manager', 'system_admin']}>
                 <TeacherPortal />
               </ProtectedRoute>

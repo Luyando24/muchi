@@ -510,13 +510,51 @@ export default function StudentPortal() {
                   </CardContent>
                 </Card>
 
-                {/* Head Teacher's Remark (Mini) */}
+                {/* Teacher's Remark (Mini) */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Teacher's Remark</CardTitle>
-                    <CardDescription>Term Summary</CardDescription>
+                    <CardTitle>Grade Teacher's Remark</CardTitle>
+                    <CardDescription>Class-level Summary</CardDescription>
                   </CardHeader>
                   <CardContent>
+                    <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg border border-slate-100 dark:border-slate-700 mb-4">
+                      <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300 italic">
+                        {(() => {
+                          if (!currentGrades || currentGrades.length === 0) return "No grades available for analysis.";
+
+                          const avg = parseFloat(currentAverage as string);
+                          const firstName = student?.firstName || "Student";
+                          
+                          const validGrades = currentGrades.filter((g: any) => g.percentage !== null && g.percentage !== undefined && g.percentage !== '' && g.grade !== 'ABSENT');
+                          const strongSubjectsCount = validGrades.filter((g: any) => (g.percentage || 0) >= 70).length;
+                          const totalSubjects = validGrades.length;
+
+                          let opening = "";
+                          if (avg >= 80) opening = `${firstName} has demonstrated an excellent grasp of the curriculum this term, standing out as a highly dedicated student in the class.`;
+                          else if (avg >= 65) opening = `${firstName} is a very capable student who actively participates in class activities and maintains a good standard of work.`;
+                          else if (avg >= 50) opening = `${firstName} has shown steady progress this term, though a more focused approach during lessons would yield even better results.`;
+                          else opening = `${firstName} has found some of the term's concepts challenging and would benefit from asking more questions during class.`;
+
+                          let strengths = "";
+                          if (strongSubjectsCount >= totalSubjects * 0.7 && totalSubjects > 0) {
+                            strengths = `Their ability to maintain high scores across the majority of subjects sets a positive example for their peers.`;
+                          } else if (strongSubjectsCount > 0) {
+                            strengths = `They show particular enthusiasm and capability in their strongest subjects, which is wonderful to see.`;
+                          }
+
+                          let closing = "";
+                          if (avg >= 65) closing = "A joy to have in class. Keep up the excellent work!";
+                          else if (avg >= 50) closing = "I encourage them to stay focused and keep pushing forward next term.";
+                          else closing = "We will work closely together next term to improve these results.";
+
+                          return [opening, strengths, closing].filter(Boolean).join(" ");
+                        })()}
+                      </p>
+                    </div>
+                    
+                    <CardTitle className="text-lg mb-1">Head Teacher's Remark</CardTitle>
+                    <CardDescription className="mb-4">School-level Summary</CardDescription>
+                    
                     <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg border border-slate-100 dark:border-slate-700">
                       <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300 italic">
                         {(() => {

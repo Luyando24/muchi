@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import StudentDetailsView from '@/components/school-admin/StudentDetailsView';
 import {
@@ -34,7 +34,9 @@ import {
   ChevronDown,
   ChevronRight,
   AlertCircle,
-  ShieldAlert
+  ShieldAlert,
+  Trophy,
+  Sparkles
 } from 'lucide-react';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -164,9 +166,13 @@ const formatTime = (time: string) => {
 
 export default function TeacherPortal() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   // UI State
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("tab") || "dashboard";
+  });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isCreateAssignmentOpen, setIsCreateAssignmentOpen] = useState(false);
@@ -832,6 +838,7 @@ export default function TeacherPortal() {
     { id: "classes", label: "My Classes", icon: BookOpen },
     { id: "students", label: "Students", icon: Users },
     { id: "gradebook", label: "Gradebook", icon: BookOpen },
+    { id: "verify", label: "Verify Grades", icon: Trophy, external: true, path: "/teacher-portal/verify" },
     { id: "timetable", label: "Timetable", icon: Calendar },
     { id: "attendance", label: "Attendance", icon: ClipboardCheck },
     { id: "profile", label: "Profile", icon: User },
@@ -1170,15 +1177,17 @@ export default function TeacherPortal() {
                   <Button
                     key={item.id}
                     variant={activeTab === item.id ? "default" : "ghost"}
-                    className="w-full justify-start"
+                    className={`w-full justify-start ${item.id === 'verify' ? 'text-emerald-600 dark:text-emerald-400 font-bold hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20' : ''}`}
                     onClick={() => {
-                      setActiveTab(item.id);
+                      if (item.external) {
+                        navigate(item.path);
+                      } else {
+                        setActiveTab(item.id);
+                      }
                       setIsSidebarOpen(false);
                     }}
-
-
                   >
-                    <Icon className="h-5 w-5 mr-3" />
+                    <Icon className={`h-5 w-5 mr-3 ${item.id === 'verify' ? 'text-emerald-500' : ''}`} />
                     {item.label}
                   </Button>
                 );
@@ -1217,6 +1226,13 @@ export default function TeacherPortal() {
                   </p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                  <Button 
+                    onClick={() => navigate('/teacher-portal/verify')}
+                    className="w-full sm:w-auto bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 h-11 sm:h-10 text-base sm:text-sm font-bold shadow-md text-white border-0"
+                  >
+                    <Trophy className="h-5 w-5 sm:h-4 sm:w-4 mr-2" />
+                    Verify Grades
+                  </Button>
                   <Button 
                     onClick={() => setActiveTab("attendance")}
                     className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 h-11 sm:h-10 text-base sm:text-sm font-bold shadow-md"
