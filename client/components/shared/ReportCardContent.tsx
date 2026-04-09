@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   Table,
   TableBody,
@@ -24,6 +25,10 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
   // Calculate Metrics
   const totalPercentage = grades.reduce((sum: number, g: any) => sum + (g.percentage || 0), 0);
   const average = grades.length > 0 ? (totalPercentage / grades.length).toFixed(1) : 0;
+
+  // Generate a deterministic verification string
+  const verificationString = `VERIFY:${student.studentNumber}:${term}:${academicYear}:${average}`.replace(/\s+/g, '');
+  const verificationUrl = `${window.location.origin}/verify/${btoa(verificationString)}`;
 
   return (
     <div className={`relative flex flex-col bg-white overflow-hidden print:overflow-hidden print:w-[210mm] print:h-[297mm] mx-auto my-8 print:my-0 shadow-2xl print:shadow-none rounded-3xl print:rounded-none ${className}`}>
@@ -439,7 +444,8 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
               </div>
             </div>
             
-            <div className="flex flex-col justify-end items-end pb-1">
+            <div className="flex flex-col justify-end items-end pb-1 gap-2">
+              <QRCodeSVG value={verificationUrl} size={64} className="opacity-80" />
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Official Document</p>
             </div>
           </div>
