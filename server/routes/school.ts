@@ -2273,6 +2273,40 @@ router.post(
 
         if (enrollments && enrollments.length > 0) {
           const studentIds = enrollments.map((e) => e.student_id);
+          
+          // Find existing records
+          const { data: existingGrades } = await supabaseAdmin
+            .from("student_grades")
+            .select("student_id")
+            .eq("school_id", schoolId)
+            .eq("term", term)
+            .eq("exam_type", examType)
+            .eq("academic_year", academicYear)
+            .eq("subject_id", subjectId)
+            .in("student_id", studentIds);
+            
+          const existingStudentIds = new Set(existingGrades?.map(g => g.student_id) || []);
+          
+          // Create records for missing students
+          const missingStudentIds = studentIds.filter(id => !existingStudentIds.has(id));
+          
+          if (missingStudentIds.length > 0) {
+            const missingRecords = missingStudentIds.map(id => ({
+              school_id: schoolId,
+              student_id: id,
+              subject_id: subjectId,
+              term: term,
+              exam_type: examType,
+              academic_year: academicYear,
+              percentage: null,
+              grade: "ABSENT",
+              status: "Submitted",
+              comments: "Absent"
+            }));
+            
+            await supabaseAdmin.from("student_grades").insert(missingRecords);
+          }
+
           query = query.in("student_id", studentIds);
         } else {
           return res.json({ message: "No students found in this class" });
@@ -2352,6 +2386,40 @@ router.post(
 
         if (enrollments && enrollments.length > 0) {
           const studentIds = enrollments.map((e) => e.student_id);
+          
+          // Find existing records
+          const { data: existingGrades } = await supabaseAdmin
+            .from("student_grades")
+            .select("student_id")
+            .eq("school_id", schoolId)
+            .eq("term", term)
+            .eq("exam_type", examType)
+            .eq("academic_year", academicYear)
+            .eq("subject_id", subjectId)
+            .in("student_id", studentIds);
+            
+          const existingStudentIds = new Set(existingGrades?.map(g => g.student_id) || []);
+          
+          // Create records for missing students
+          const missingStudentIds = studentIds.filter(id => !existingStudentIds.has(id));
+          
+          if (missingStudentIds.length > 0) {
+            const missingRecords = missingStudentIds.map(id => ({
+              school_id: schoolId,
+              student_id: id,
+              subject_id: subjectId,
+              term: term,
+              exam_type: examType,
+              academic_year: academicYear,
+              percentage: null,
+              grade: "ABSENT",
+              status: targetStatus,
+              comments: "Absent"
+            }));
+            
+            await supabaseAdmin.from("student_grades").insert(missingRecords);
+          }
+
           query = query.in("student_id", studentIds);
         } else {
           return res.json({ message: "No students found in this class" });

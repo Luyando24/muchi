@@ -110,10 +110,13 @@ export default function ResultPrinter() {
                 }
                 setAvailableExamTypes(examTypes);
 
+                // Set 'End of Term' as default if it exists in the available options, otherwise fallback to the first option
+                const defaultExamType = examTypes.includes('End of Term') ? 'End of Term' : examTypes[0];
+
                 setFilters(prev => ({
                     ...prev,
                     term: settings.current_term,
-                    examType: examTypes[0],
+                    examType: defaultExamType,
                     academicYear: settings.academic_year
                 }));
             }
