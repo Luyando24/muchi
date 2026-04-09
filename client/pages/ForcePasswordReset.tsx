@@ -78,44 +78,47 @@ export default function ForcePasswordReset() {
       if (authError) throw authError;
 
       // 2. Update Profile status
-      const { error: profileError } = await supabase
+      const { data: updatedProfile, error: profileError } = await supabase
         .from("profiles")
         .update({ 
           is_temp_password: false,
           temp_password_expires_at: null,
-          temp_password_set_at: null
+          temp_password_set_at: null,
+          temp_password: null // Clear the plain text temp password
         })
-        .eq("id", session.user.id);
+        .eq("id", session.user.id)
+        .select()
+        .single();
 
       if (profileError) {
          console.error("Profile update error during password reset:", profileError);
          throw profileError;
       }
+      
+      console.log("Profile successfully updated during password reset:", updatedProfile);
 
       // Force a session refresh so the JWT gets updated metadata (if any) and components detect the change
       await supabase.auth.refreshSession();
-
+      
       toast({
         title: "Success",
         description: "Your password has been set successfully. You can now access your dashboard.",
       });
-
-      // Redirect based on role instead of just going to root "/"
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", session.user.id)
-        .single();
-        
-      const role = profile?.role || session.user.user_metadata?.role;
-      if (role === 'teacher') {
-        navigate("/teacher-portal");
-      } else if (role === 'student') {
-        navigate("/student-portal");
-      } else {
-        // Fallback for admins or others
-        navigate("/school-admin");
-      }
+      
+      // Delay navigation slightly to ensure the database update has fully committed and propagated
+      // before the Login or Portal components re-fetch the profile data
+      setTimeout(() => {
+        // Redirect based on role instead of just going to root "/"
+        const role = updatedProfile?.role || session.user.user_metadata?.role;
+        if (role === 'teacher') {
+          navigate("/teacher-portal");
+        } else if (role === 'student') {
+          navigate("/student-portal");
+        } else {
+          // Fallback for admins or others
+          navigate("/school-admin");
+        }
+      }, 500);
     } catch (error: any) {
       toast({
         variant: "destructive",
