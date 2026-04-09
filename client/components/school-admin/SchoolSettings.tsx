@@ -66,6 +66,8 @@ export default function SchoolSettings() {
     logo_url: '',
     signature_url: '',
     seal_url: '',
+    headteacher_name: '',
+    headteacher_title: 'Headteacher',
     school_type: 'Secondary' as 'Secondary' | 'Basic'
   });
 
@@ -99,6 +101,8 @@ export default function SchoolSettings() {
         logo_url: data.logo_url || '',
         signature_url: data.signature_url || '',
         seal_url: data.seal_url || '',
+        headteacher_name: data.headteacher_name || '',
+        headteacher_title: data.headteacher_title || 'Headteacher',
         school_type: data.school_type || 'Secondary'
       });
     } catch (error: any) {
@@ -292,6 +296,28 @@ export default function SchoolSettings() {
                           <SelectItem value="Basic">Basic School (Grades 1-9)</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="headteacher_title">Headteacher Title</Label>
+                      <Input
+                        id="headteacher_title"
+                        name="headteacher_title"
+                        value={formData.headteacher_title}
+                        onChange={handleInputChange}
+                        placeholder="e.g. Headteacher, Principal"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="headteacher_name">Headteacher Name</Label>
+                      <Input
+                        id="headteacher_name"
+                        name="headteacher_name"
+                        value={formData.headteacher_name}
+                        onChange={handleInputChange}
+                        placeholder="e.g. Mr. John Doe"
+                      />
                     </div>
 
                     <div className="space-y-2 md:col-span-2">

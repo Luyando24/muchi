@@ -2851,7 +2851,7 @@ router.get(
       const { data: schoolDetails } = await supabaseAdmin
         .from("schools")
         .select(
-          "name, address, email, phone, website, logo_url, signature_url, seal_url, school_type",
+          "name, address, email, phone, website, logo_url, signature_url, seal_url, school_type, headteacher_name, headteacher_title",
         )
         .eq("id", schoolId)
         .single();
@@ -2917,7 +2917,7 @@ router.get(
       const { data: schoolDetails } = await supabaseAdmin
         .from("schools")
         .select(
-          "name, address, email, phone, website, logo_url, signature_url, seal_url, school_type",
+          "name, address, email, phone, website, logo_url, signature_url, seal_url, school_type, headteacher_name, headteacher_title",
         )
         .eq("id", schoolId)
         .single();

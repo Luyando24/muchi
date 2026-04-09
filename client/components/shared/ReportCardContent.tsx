@@ -225,7 +225,7 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
         </div>
 
         {/* Summary Analytics */}
-        <div className="grid grid-cols-12 gap-6 print:gap-4 print:space-y-0">
+        <div className="grid grid-cols-12 gap-6 print:gap-4 print:space-y-0 relative">
           <div className="col-span-8 print:col-span-8 flex flex-col gap-4">
             <div className="flex-1 py-4 print:py-2">
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 print:mb-1">
@@ -240,11 +240,11 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
           <div className="col-span-4 print:col-span-4 space-y-4 print:space-y-2 pt-4 print:pt-2">
             <div className="flex flex-col items-end text-right">
               {school?.seal_url && (
-                 <div className="mb-2 print:mb-1">
-                    <img src={school.seal_url} alt="Seal" className="h-16 w-16 print:h-12 print:w-12 object-contain opacity-80" />
+                 <div className="mb-2 print:mb-1 absolute right-0 -top-6 print:-top-8">
+                    <img src={school.seal_url} alt="Seal" className="h-24 w-24 print:h-20 print:w-20 object-contain opacity-80 mix-blend-multiply" />
                  </div>
               )}
-              <div className="flex justify-end items-center mb-2 print:mb-1 gap-4">
+              <div className="flex justify-end items-center mb-2 print:mb-1 gap-4 mt-6 print:mt-4">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Attendance</span>
                 <span className="text-sm font-bold text-slate-900">100%</span>
               </div>
@@ -421,7 +421,16 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
                   <div className="w-full border-b border-slate-300"></div>
                 )}
               </div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Headteacher's Signature</p>
+              <div className="flex flex-col">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  {school?.headteacher_title || "Headteacher"}'s Signature
+                </p>
+                {school?.headteacher_name && (
+                  <p className="text-xs font-semibold text-slate-800 uppercase mt-1">
+                    {school.headteacher_name}
+                  </p>
+                )}
+              </div>
             </div>
             
             <div className="flex flex-col justify-end items-end pb-1">
