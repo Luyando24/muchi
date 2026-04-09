@@ -27,8 +27,9 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
   const average = grades.length > 0 ? (totalPercentage / grades.length).toFixed(1) : 0;
 
   // Generate a deterministic verification string
-  const verificationString = `VERIFY:${student.studentNumber}:${term}:${examType}:${academicYear}:${average}`.replace(/\s+/g, '');
-  const verificationUrl = `${window.location.origin}/verify/${btoa(verificationString)}`;
+  // Payload structure: VERIFY|studentNumber|studentName|term|examType|academicYear|average|schoolName
+  const rawData = `VERIFY|${student.studentNumber}|${student.name}|${term}|${examType}|${academicYear}|${average}|${school?.name || 'School'}`;
+  const verificationUrl = `${window.location.origin}/verify/${btoa(encodeURIComponent(rawData))}`;
 
   return (
     <div className={`relative flex flex-col bg-white overflow-hidden print:overflow-hidden print:w-[210mm] print:h-[297mm] mx-auto my-8 print:my-0 shadow-2xl print:shadow-none rounded-3xl print:rounded-none ${className}`}>

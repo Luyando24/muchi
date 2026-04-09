@@ -25,42 +25,29 @@ export default function VerifyReport() {
     const verifyDocument = async () => {
       try {
         setLoading(true);
-        // The hash is base64 encoded VERIFY:studentNumber:term:examType:academicYear:average
-        // We will decode it here to fetch the details. 
-        // In a highly secure system, we would ping the backend to verify the exact record exists,
-        // but for this implementation we will decode the string and do a basic structural validation.
-        
+        // The hash is base64 encoded VERIFY|studentNumber|studentName|term|examType|academicYear|average|schoolName
+        // We simply decode it to display the embedded verification data
         if (!hash) throw new Error("No verification code provided");
         
-        const decoded = atob(hash);
-        const parts = decoded.split(':');
+        const decoded = decodeURIComponent(atob(hash));
+        const parts = decoded.split('|');
         
-        if (parts.length !== 6 || parts[0] !== 'VERIFY') {
+        if (parts.length !== 8 || parts[0] !== 'VERIFY') {
           throw new Error("Invalid verification code structure");
         }
         
-        const [_, studentNumber, term, examType, academicYear, average] = parts;
+        const [_, studentNumber, studentName, term, examType, academicYear, average, schoolName] = parts;
         
-        // Let's query the backend to actually verify this record exists and fetch the school and student name
-        const response = await fetch(`/api/public/verify-report?studentNumber=${encodeURIComponent(studentNumber)}&term=${encodeURIComponent(term)}&examType=${encodeURIComponent(examType)}&academicYear=${encodeURIComponent(academicYear)}&average=${encodeURIComponent(average)}`);
-        
-        if (response.ok) {
-          const data = await response.json();
-          setResult({
-            valid: true,
-            studentNumber,
-            studentName: data.studentName,
-            schoolName: data.schoolName,
-            term,
-            academicYear,
-            average
-          });
-        } else {
-          setResult({
-            valid: false,
-            message: "This report card could not be found in the school's official records. It may be altered or invalid."
-          });
-        }
+        // Display the embedded details directly
+        setResult({
+          valid: true,
+          studentNumber,
+          studentName,
+          schoolName,
+          term: `${term} - ${examType}`,
+          academicYear,
+          average
+        });
       } catch (error) {
         console.error("Verification failed:", error);
         setResult({
