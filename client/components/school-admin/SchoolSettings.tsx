@@ -299,13 +299,13 @@ export default function SchoolSettings() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="headteacher_title">Headteacher Title</Label>
+                      <Label htmlFor="headteacher_title">Headteacher Qualifications (Title)</Label>
                       <Input
                         id="headteacher_title"
                         name="headteacher_title"
                         value={formData.headteacher_title}
                         onChange={handleInputChange}
-                        placeholder="e.g. Headteacher, Principal"
+                        placeholder="e.g. MA(Edn Mgt), BA(Edn)"
                       />
                     </div>
 

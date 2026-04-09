@@ -240,15 +240,15 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
           <div className="col-span-4 print:col-span-4 space-y-4 print:space-y-2 pt-4 print:pt-2">
             <div className="flex flex-col items-end text-right">
               {school?.seal_url && (
-                 <div className="mb-2 print:mb-1 absolute right-0 -top-6 print:-top-8">
-                    <img src={school.seal_url} alt="Seal" className="h-24 w-24 print:h-20 print:w-20 object-contain opacity-80 mix-blend-multiply" />
+                 <div className="mb-2 print:mb-1 absolute right-0 -top-8 print:-top-10">
+                    <img src={school.seal_url} alt="Seal" className="h-28 w-28 print:h-24 print:w-24 object-contain opacity-80 mix-blend-multiply" />
                  </div>
               )}
-              <div className="flex justify-end items-center mb-2 print:mb-1 gap-4 mt-6 print:mt-4">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Attendance</span>
-                <span className="text-sm font-bold text-slate-900">100%</span>
+              <div className="flex justify-end items-center mb-2 print:mb-1 gap-4 mt-8 print:mt-6 z-10">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-white/80 dark:bg-slate-950/80 px-1 rounded">Attendance</span>
+                <span className="text-sm font-bold text-slate-900 bg-white/80 dark:bg-slate-950/80 px-1 rounded">100%</span>
               </div>
-              <div className="h-1 w-32 bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-1 w-32 bg-slate-100 rounded-full overflow-hidden z-10">
                 <div className="h-full bg-slate-900 rounded-full" style={{ width: '100%' }}></div>
               </div>
             </div>
@@ -422,14 +422,20 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
                 )}
               </div>
               <div className="flex flex-col">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                  {school?.headteacher_title || "Headteacher"}'s Signature
+                <div className="flex items-end gap-2 mt-1 border-b border-slate-800 w-fit pb-0.5">
+                  <span className="text-sm font-serif font-semibold text-slate-900 border-b border-slate-900 pb-0.5 inline-block min-w-[80px]">
+                    {school?.headteacher_name || ""}
+                  </span>
+                  {school?.headteacher_name && (
+                     <span className="text-sm font-serif text-slate-800">,</span>
+                  )}
+                  <span className="text-sm font-serif italic text-slate-700">
+                    {school?.headteacher_title || ""}
+                  </span>
+                </div>
+                <p className="text-[12px] font-black text-slate-900 uppercase tracking-widest mt-1">
+                  HEADTEACHER
                 </p>
-                {school?.headteacher_name && (
-                  <p className="text-xs font-semibold text-slate-800 uppercase mt-1">
-                    {school.headteacher_name}
-                  </p>
-                )}
               </div>
             </div>
             
