@@ -5664,6 +5664,8 @@ router.put(
       seal_url,
       logo_url,
       school_type,
+      headteacher_name,
+      headteacher_title,
     } = req.body;
 
     try {
@@ -5684,6 +5686,8 @@ router.put(
           seal_url,
           logo_url,
           school_type,
+          headteacher_name,
+          headteacher_title,
           updated_at: new Date(),
         })
         .eq("id", schoolId)

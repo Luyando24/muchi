@@ -240,15 +240,15 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
           <div className="col-span-4 print:col-span-4 space-y-4 print:space-y-2 pt-4 print:pt-2">
             <div className="flex flex-col items-end text-right">
               {school?.seal_url && (
-                 <div className="mb-2 print:mb-1 absolute right-0 -top-8 print:-top-10">
-                    <img src={school.seal_url} alt="Seal" className="h-28 w-28 print:h-24 print:w-24 object-contain opacity-80 mix-blend-multiply" />
+                 <div className="mb-2 print:mb-1 absolute right-0 -top-12 print:-top-16 z-0">
+                    <img src={school.seal_url} alt="Seal" className="h-28 w-28 print:h-28 print:w-28 object-contain opacity-80 mix-blend-multiply" />
                  </div>
               )}
-              <div className="flex justify-end items-center mb-2 print:mb-1 gap-4 mt-8 print:mt-6 z-10">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-white/80 dark:bg-slate-950/80 px-1 rounded">Attendance</span>
-                <span className="text-sm font-bold text-slate-900 bg-white/80 dark:bg-slate-950/80 px-1 rounded">100%</span>
+              <div className="flex justify-end items-center mb-2 print:mb-1 gap-4 mt-8 print:mt-6 relative z-10">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-white/90 dark:bg-slate-950/90 px-1 rounded shadow-sm">Attendance</span>
+                <span className="text-sm font-bold text-slate-900 bg-white/90 dark:bg-slate-950/90 px-1 rounded shadow-sm">100%</span>
               </div>
-              <div className="h-1 w-32 bg-slate-100 rounded-full overflow-hidden z-10">
+              <div className="h-1 w-32 bg-slate-100 rounded-full overflow-hidden relative z-10 shadow-sm">
                 <div className="h-full bg-slate-900 rounded-full" style={{ width: '100%' }}></div>
               </div>
             </div>
