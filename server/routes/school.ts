@@ -31,6 +31,69 @@ async function fetchAll(queryBuilder: any, limit = 1000) {
   return allData;
 }
 
+// Helper to calculate class rankings and averages
+async function getClassRankings(classId: string, term: string, examType: string, academicYear: string) {
+  const { data: enrollments } = await supabaseAdmin
+    .from('enrollments')
+    .select('student_id')
+    .eq('class_id', classId)
+    .eq('academic_year', academicYear);
+    
+  if (!enrollments || enrollments.length === 0) return { rankings: {}, classAverage: 0, totalStudents: 0 };
+  
+  const studentIds = enrollments.map(e => e.student_id);
+  
+  // Need to use fetchAll to bypass 1000 row limit for grades if class is large
+  const gradesQuery = supabaseAdmin
+    .from('student_grades')
+    .select('student_id, percentage')
+    .in('student_id', studentIds)
+    .eq('term', term)
+    .eq('exam_type', examType)
+    .eq('academic_year', academicYear);
+    
+  const grades = await fetchAll(gradesQuery);
+  
+  const studentAverages: Record<string, { total: number, count: number, avg: number }> = {};
+  studentIds.forEach(id => studentAverages[id] = { total: 0, count: 0, avg: 0 });
+  
+  if (grades) {
+    grades.forEach((g: any) => {
+      if (g.percentage !== null && g.percentage !== undefined && g.percentage !== '') {
+         studentAverages[g.student_id].total += Number(g.percentage);
+         studentAverages[g.student_id].count += 1;
+      }
+    });
+  }
+  
+  let classTotal = 0;
+  let classCount = 0;
+  
+  const averagesList = Object.entries(studentAverages).map(([id, data]) => {
+     const avg = data.count > 0 ? data.total / data.count : 0;
+     if (data.count > 0) {
+       classTotal += avg;
+       classCount += 1;
+     }
+     return { id, avg };
+  });
+  
+  averagesList.sort((a, b) => b.avg - a.avg);
+  
+  const rankings: Record<string, number> = {};
+  averagesList.forEach((item, index) => {
+    rankings[item.id] = index + 1; // 1-based rank
+  });
+  
+  const classAverage = classCount > 0 ? classTotal / classCount : 0;
+  
+  return {
+    rankings,
+    classAverage,
+    totalStudents: studentIds.length
+  };
+}
+
 const router = Router();
 
 // --- PUBLIC ENDPOINTS ---
@@ -2696,6 +2759,18 @@ router.get(
         .eq("id", schoolId)
         .single();
 
+      // 5. Fetch Class Rankings and Average
+      let position = 0;
+      let totalStudents = 0;
+      let classAverage = 0;
+      
+      if (classId) {
+        const rankingsData = await getClassRankings(classId, term, examType, academicYear);
+        position = rankingsData.rankings[studentId] || 0;
+        totalStudents = rankingsData.totalStudents;
+        classAverage = rankingsData.classAverage;
+      }
+
       res.json({
         school: schoolDetails,
         student: {
@@ -2704,6 +2779,9 @@ router.get(
           studentNumber: student.student_number,
           class: student.enrollments?.[0]?.classes?.name || "N/A",
           attendance: 0, // Placeholder
+          position,
+          totalStudents,
+          classAverage
         },
         term,
         academicYear,
@@ -2789,6 +2867,9 @@ router.get(
 
       if (gradesError) throw gradesError;
 
+      // 3b. Calculate rankings and class average
+      const rankingsData = await getClassRankings(classId, term, examType, academicYear);
+
       // 4. Group data by student
       const reportCards = enrollments.map((enrollment) => {
         const studentId = enrollment.student_id;
@@ -2838,6 +2919,9 @@ router.get(
             studentNumber: (enrollment.profiles as any)?.student_number,
             class: (enrollment.classes as any)?.name || "N/A",
             attendance: 0,
+            position: rankingsData.rankings[studentId] || 0,
+            totalStudents: rankingsData.totalStudents,
+            classAverage: rankingsData.classAverage
           },
           term,
           academicYear,

@@ -528,16 +528,37 @@ export default function StudentPortal() {
                           const validGrades = currentGrades.filter((g: any) => g.percentage !== null && g.percentage !== undefined && g.percentage !== '' && g.grade !== 'ABSENT');
                           const strongSubjectsCount = validGrades.filter((g: any) => (g.percentage || 0) >= 70).length;
                           const totalSubjects = validGrades.length;
+                          
+                          const position = student?.position || 0;
+                          const totalStudents = student?.totalStudents || 0;
+                          const classAvg = student?.classAverage || 0;
 
                           let opening = "";
-                          if (avg >= 80) opening = `${firstName} has demonstrated an excellent grasp of the curriculum this term, standing out as a highly dedicated student in the class.`;
-                          else if (avg >= 65) opening = `${firstName} is a very capable student who actively participates in class activities and maintains a good standard of work.`;
-                          else if (avg >= 50) opening = `${firstName} has shown steady progress this term, though a more focused approach during lessons would yield even better results.`;
-                          else opening = `${firstName} has found some of the term's concepts challenging and would benefit from asking more questions during class.`;
+                          if (position > 0 && totalStudents > 0) {
+                            const percentile = (position / totalStudents) * 100;
+                            if (percentile <= 10) {
+                              opening = `${firstName} has demonstrated an excellent grasp of the curriculum this term, ranking ${position} out of ${totalStudents} students and standing out as a top performer in the class.`;
+                            } else if (percentile <= 30) {
+                              opening = `${firstName} is a very capable student who actively participates in class, achieving a commendable position of ${position} out of ${totalStudents} students.`;
+                            } else if (percentile <= 70) {
+                              if (avg >= classAvg && classAvg > 0) {
+                                opening = `${firstName} has shown steady progress this term, performing above the class average of ${classAvg.toFixed(1)}%.`;
+                              } else {
+                                opening = `${firstName} has maintained a steady pace with their peers this term, ranking ${position} out of ${totalStudents}.`;
+                              }
+                            } else {
+                              opening = `${firstName} has found some of the term's concepts challenging, placing below the class average. They would benefit from asking more questions during class.`;
+                            }
+                          } else {
+                            if (avg >= 80) opening = `${firstName} has demonstrated an excellent grasp of the curriculum this term, standing out as a highly dedicated student in the class.`;
+                            else if (avg >= 65) opening = `${firstName} is a very capable student who actively participates in class activities and maintains a good standard of work.`;
+                            else if (avg >= 50) opening = `${firstName} has shown steady progress this term, though a more focused approach during lessons would yield even better results.`;
+                            else opening = `${firstName} has found some of the term's concepts challenging and would benefit from asking more questions during class.`;
+                          }
 
                           let strengths = "";
                           if (strongSubjectsCount >= totalSubjects * 0.7 && totalSubjects > 0) {
-                            strengths = `Their ability to maintain high scores across the majority of subjects sets a positive example for their peers.`;
+                            strengths = `Their ability to maintain high scores across the majority of subjects sets a positive benchmark for their classmates.`;
                           } else if (strongSubjectsCount > 0) {
                             strengths = `They show particular enthusiasm and capability in their strongest subjects, which is wonderful to see.`;
                           }

@@ -243,21 +243,42 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
                   const avg = parseFloat(average as string);
                   const validGrades = grades.filter((g: any) => g.percentage !== null && g.percentage !== undefined && g.percentage !== '' && g.grade !== 'ABSENT');
                   
-                  // Calculate how many subjects the student scored above 70%
-                  const strongSubjectsCount = validGrades.filter((g: any) => (g.percentage || 0) >= 70).length;
-                  const totalSubjects = validGrades.length;
+                  const position = student.position || 0;
+                  const totalStudents = student.totalStudents || 0;
+                  const classAvg = student.classAverage || 0;
                   
                   // 1. Opening Statement based on class-level performance context
                   let opening = "";
-                  if (avg >= 80) opening = `${firstName} has demonstrated an excellent grasp of the curriculum this term, standing out as a highly dedicated student in the class.`;
-                  else if (avg >= 65) opening = `${firstName} is a very capable student who actively participates in class activities and maintains a good standard of work.`;
-                  else if (avg >= 50) opening = `${firstName} has shown steady progress this term, though a more focused approach during lessons would yield even better results.`;
-                  else opening = `${firstName} has found some of the term's concepts challenging and would benefit from asking more questions during class.`;
+                  if (position > 0 && totalStudents > 0) {
+                    const percentile = (position / totalStudents) * 100;
+                    if (percentile <= 10) {
+                      opening = `${firstName} has demonstrated an excellent grasp of the curriculum this term, ranking ${position} out of ${totalStudents} students and standing out as a top performer in the class.`;
+                    } else if (percentile <= 30) {
+                      opening = `${firstName} is a very capable student who actively participates in class, achieving a commendable position of ${position} out of ${totalStudents} students.`;
+                    } else if (percentile <= 70) {
+                      if (avg >= classAvg && classAvg > 0) {
+                        opening = `${firstName} has shown steady progress this term, performing above the class average of ${classAvg.toFixed(1)}%.`;
+                      } else {
+                        opening = `${firstName} has maintained a steady pace with their peers this term, ranking ${position} out of ${totalStudents}.`;
+                      }
+                    } else {
+                      opening = `${firstName} has found some of the term's concepts challenging, placing below the class average. They would benefit from asking more questions during class.`;
+                    }
+                  } else {
+                    // Fallback if ranking data is missing
+                    if (avg >= 80) opening = `${firstName} has demonstrated an excellent grasp of the curriculum this term, standing out as a highly dedicated student in the class.`;
+                    else if (avg >= 65) opening = `${firstName} is a very capable student who actively participates in class activities and maintains a good standard of work.`;
+                    else if (avg >= 50) opening = `${firstName} has shown steady progress this term, though a more focused approach during lessons would yield even better results.`;
+                    else opening = `${firstName} has found some of the term's concepts challenging and would benefit from asking more questions during class.`;
+                  }
 
                   // 2. Strengths Analysis within the classroom context
                   let strengths = "";
+                  const strongSubjectsCount = validGrades.filter((g: any) => (g.percentage || 0) >= 70).length;
+                  const totalSubjects = validGrades.length;
+                  
                   if (strongSubjectsCount >= totalSubjects * 0.7 && totalSubjects > 0) {
-                    strengths = `Their ability to maintain high scores across the majority of subjects sets a positive example for their peers.`;
+                    strengths = `Their ability to maintain high scores across the majority of subjects sets a positive benchmark for their classmates.`;
                   } else if (strongSubjectsCount > 0) {
                     strengths = `They show particular enthusiasm and capability in their strongest subjects, which is wonderful to see.`;
                   }
@@ -270,66 +291,6 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
 
                   // Combine parts
                   return [opening, strengths, closing].filter(Boolean).join(" ");
-                })()}"
-              </p>
-            </div>
-
-            {/* Head Teacher's Remark Box */}
-            <div className="flex-1 py-4 print:py-2 border-t border-slate-100">
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 print:mb-1">
-                Head Teacher's Remark
-              </h4>
-              <p className="text-sm leading-relaxed text-slate-800 font-medium font-serif italic border-l-2 border-slate-900 pl-4">
-                "{(() => {
-                  if (!grades || grades.length === 0) return "Academic data unavailable for this period.";
-                  
-                  // Helper for student reference
-                  const firstName = student.name.split(' ')[0];
-                  
-                  // Analysis Variables
-                  const avg = parseFloat(average as string);
-                  // Filter out absent subjects before sorting
-                  const validGrades = grades.filter((g: any) => g.percentage !== null && g.percentage !== undefined && g.percentage !== '' && g.grade !== 'ABSENT');
-                  
-                  const sortedGrades = [...validGrades].sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0));
-                  const bestSubjects = sortedGrades.slice(0, 3).map((g: any) => g.subjects?.name);
-                  
-                  // Expand weak subjects coverage: Take up to 3 subjects with scores < 50%
-                  const weakSubjects = sortedGrades.slice(-3).filter((g: any) => (g.percentage || 0) < 50).map((g: any) => g.subjects?.name);
-                  
-                  // 1. Opening Statement based on Average
-                  let opening = "";
-                  if (avg >= 75) opening = `${student.name} has produced an outstanding set of results this term, demonstrating exceptional academic maturity and diligence.`;
-                  else if (avg >= 65) opening = `${student.name} has achieved a very good standard of performance, showing consistent effort across most subjects.`;
-                  else if (avg >= 55) opening = `${student.name} has performed satisfactorily, though there is room for greater consistency in their application.`;
-                  else if (avg >= 45) opening = `${student.name} has made a fair attempt this term, but will need to significantly increase their study hours to reach their full potential.`;
-                  else opening = `${student.name}'s performance is below the expected standard. An urgent review of study habits and class engagement is recommended.`;
-
-                  // 2. Strengths Analysis
-                  let strengths = "";
-                  if (bestSubjects.length > 0) {
-                    const subjectText = bestSubjects.join(', ').replace(/, ([^,]*)$/, ' and $1');
-                    if (avg >= 65) strengths = `Particular aptitude is noted in ${subjectText}, where ${firstName} displays keen insight and mastery.`;
-                    else strengths = `${firstName} shows encouraging promise in ${subjectText}, which should serve as a motivation for other areas.`;
-                  }
-
-                  // 3. Areas for Improvement (only if relevant)
-                  let improvements = "";
-                  if (weakSubjects.length > 0) {
-                    const weakText = weakSubjects.join(', ').replace(/, ([^,]*)$/, ' and $1');
-                    improvements = `However, urgent attention is required in ${weakText} to prevent these subjects from pulling down the overall grade.`;
-                  } else if (weakSubjects.length === 0 && bestSubjects.length > 0 && bestSubjects.length !== sortedGrades.length) {
-                     improvements = `Performance across all subjects was generally consistent.`;
-                  }
-
-                  // 4. Closing Encouragement
-                  let closing = "";
-                  if (avg >= 60) closing = "An excellent term overall. Keep up this high standard!";
-                  else if (avg >= 50) closing = "With consistent effort, better results can be achieved next term.";
-                  else closing = "We encourage more dedicated study time and seeking help in difficult subjects.";
-
-                  // Combine parts
-                  return [opening, strengths, improvements, closing].filter(Boolean).join(" ");
                 })()}"
               </p>
             </div>
@@ -346,6 +307,66 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Head Teacher's Remark Box - Full Width */}
+        <div className="w-full py-4 print:py-2 border-t border-slate-100 mt-2">
+          <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 print:mb-1">
+            Head Teacher's Remark
+          </h4>
+          <p className="text-sm leading-relaxed text-slate-800 font-medium font-serif italic border-l-2 border-slate-900 pl-4">
+            "{(() => {
+              if (!grades || grades.length === 0) return "Academic data unavailable for this period.";
+              
+              // Helper for student reference
+              const firstName = student.name.split(' ')[0];
+              
+              // Analysis Variables
+              const avg = parseFloat(average as string);
+              // Filter out absent subjects before sorting
+              const validGrades = grades.filter((g: any) => g.percentage !== null && g.percentage !== undefined && g.percentage !== '' && g.grade !== 'ABSENT');
+              
+              const sortedGrades = [...validGrades].sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0));
+              const bestSubjects = sortedGrades.slice(0, 3).map((g: any) => g.subjects?.name);
+              
+              // Expand weak subjects coverage: Take up to 3 subjects with scores < 50%
+              const weakSubjects = sortedGrades.slice(-3).filter((g: any) => (g.percentage || 0) < 50).map((g: any) => g.subjects?.name);
+              
+              // 1. Opening Statement based on Average
+              let opening = "";
+              if (avg >= 75) opening = `${student.name} has produced an outstanding set of results this term, demonstrating exceptional academic maturity and diligence.`;
+              else if (avg >= 65) opening = `${student.name} has achieved a very good standard of performance, showing consistent effort across most subjects.`;
+              else if (avg >= 55) opening = `${student.name} has performed satisfactorily, though there is room for greater consistency in their application.`;
+              else if (avg >= 45) opening = `${student.name} has made a fair attempt this term, but will need to significantly increase their study hours to reach their full potential.`;
+              else opening = `${student.name}'s performance is below the expected standard. An urgent review of study habits and class engagement is recommended.`;
+
+              // 2. Strengths Analysis
+              let strengths = "";
+              if (bestSubjects.length > 0) {
+                const subjectText = bestSubjects.join(', ').replace(/, ([^,]*)$/, ' and $1');
+                if (avg >= 65) strengths = `Particular aptitude is noted in ${subjectText}, where ${firstName} displays keen insight and mastery.`;
+                else strengths = `${firstName} shows encouraging promise in ${subjectText}, which should serve as a motivation for other areas.`;
+              }
+
+              // 3. Areas for Improvement (only if relevant)
+              let improvements = "";
+              if (weakSubjects.length > 0) {
+                const weakText = weakSubjects.join(', ').replace(/, ([^,]*)$/, ' and $1');
+                improvements = `However, urgent attention is required in ${weakText} to prevent these subjects from pulling down the overall grade.`;
+              } else if (weakSubjects.length === 0 && bestSubjects.length > 0 && bestSubjects.length !== sortedGrades.length) {
+                 improvements = `Performance across all subjects was generally consistent.`;
+              }
+
+              // 4. Closing Encouragement
+              let closing = "";
+              if (avg >= 60) closing = "An excellent term overall. Keep up this high standard!";
+              else if (avg >= 50) closing = "With consistent effort, better results can be achieved next term.";
+              else closing = "We encourage more dedicated study time and seeking help in difficult subjects.";
+
+              // Combine parts
+              return [opening, strengths, improvements, closing].filter(Boolean).join(" ");
+            })()}"
+          </p>
         </div>
 
         {/* Minimal Footer / Authenticity Section */}
