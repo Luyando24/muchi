@@ -736,6 +736,31 @@ router.get(
   },
 );
 
+// GET /api/school/details
+router.get(
+  "/details",
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+
+    try {
+      const { data: school, error } = await supabaseAdmin
+        .from("schools")
+        .select("*")
+        .eq("id", schoolId)
+        .single();
+
+      if (error || !school) throw new Error("School details not found");
+
+      res.json(school);
+    } catch (error: any) {
+      console.error("Get School Details Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
 // --- STUDENT MANAGEMENT ENDPOINTS ---
 
 // GET /api/school/students
@@ -766,9 +791,11 @@ router.get(
       const from = (page - 1) * limit;
       const to = from + limit - 1;
 
-      const { data: students, error, count } = await query
-        .order("full_name", { ascending: true })
-        .range(from, to);
+      const results = req.query.all === 'true' 
+        ? { data: await fetchAll(query.order("full_name", { ascending: true })), error: null, count: null }
+        : await query.order("full_name", { ascending: true }).range(from, to);
+
+      const { data: students, error, count } = results;
 
       if (error) throw error;
 

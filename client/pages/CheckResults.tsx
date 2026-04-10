@@ -69,11 +69,20 @@ export default function CheckResults() {
     if (!reportRef.current || !resultData) return;
 
     try {
-      const canvas = await html2canvas(reportRef.current, {
+      // Force desktop layout for capture
+      const element = reportRef.current;
+      const originalWidth = element.style.width;
+      element.style.width = '1200px';
+
+      const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
-        logging: false
+        logging: false,
+        windowWidth: 1200
       });
+
+      // Restore original layout
+      element.style.width = originalWidth;
 
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');

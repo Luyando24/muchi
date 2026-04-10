@@ -13,6 +13,8 @@ import {
   EyeOff,
   FileSpreadsheet
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import StudentDetailsView from './StudentDetailsView';
 import BulkStudentImport from './BulkStudentImport';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -94,6 +96,8 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
   const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isRematching, setIsRematching] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [schoolInfo, setSchoolInfo] = useState<any>(null);
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
 
@@ -191,8 +195,25 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
     }
   };
 
+  const fetchSchoolDetails = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch('/api/school/details', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (response.ok) {
+        setSchoolInfo(await response.json());
+      }
+    } catch (error) {
+      console.error('Error fetching school details:', error);
+    }
+  };
+
   useEffect(() => {
     fetchStudents();
+    fetchSchoolDetails();
   }, [currentPage, pageSize, debouncedSearch]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -425,7 +446,117 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
     }
   };
 
-  // Filtering is now handled entirely server-side via the debouncedSearch query parameter.
+  const handleExportPDF = async () => {
+    setIsExporting(true);
+    const exportToast = toast({
+      title: "Generating Export",
+      description: "Fetching all student data, please wait...",
+    });
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch('/api/school/students?all=true', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch full student list');
+      
+      const result = await response.json();
+      const allStudents = result.data || [];
+
+      if (allStudents.length === 0) {
+        toast({
+          title: "No Data",
+          description: "There are no students to export.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const doc = new jsPDF();
+      
+      // Define Columns (Removed Guardian, Fees, Status)
+      const tableColumn = ["Student Number", "Full Name", "Grade", "Gender"];
+      const tableRows = allStudents.map((student: any) => [
+        student.studentNumber || 'N/A',
+        student.fullName,
+        student.grade,
+        student.gender
+      ]);
+
+      // Header Logic
+      const addHeader = (data: any) => {
+        // School Info Header
+        doc.setFontSize(20);
+        doc.setTextColor(40);
+        doc.text(schoolInfo?.name || "School Enrollment List", 14, 22);
+        
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        if (schoolInfo?.address) {
+          doc.text(schoolInfo.address, 14, 28);
+        }
+        if (schoolInfo?.contact_email || schoolInfo?.phone) {
+          const contactStr = [schoolInfo?.contact_email, schoolInfo?.phone].filter(Boolean).join(" | ");
+          doc.text(contactStr, 14, 33);
+        }
+
+        doc.setFontSize(11);
+        doc.text(`Enrollment Report - Generated on ${new Date().toLocaleDateString()}`, 14, 42);
+        doc.text(`Total Students: ${allStudents.length}`, 14, 47);
+        
+        // HR line
+        doc.setLineWidth(0.5);
+        doc.line(14, 52, 196, 52);
+      };
+
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: 57,
+        styles: { fontSize: 10, cellPadding: 3 },
+        headStyles: { fillColor: [79, 70, 229], fontSize: 11, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        didDrawPage: (data) => {
+          // Add header manually on each page if needed, but startY handles first page
+          if (data.pageNumber === 1) {
+            addHeader(data);
+          }
+
+          // Footer branding
+          const pageSize = doc.internal.pageSize;
+          const pageHeight = pageSize.height ? pageSize.height : pageSize.getHeight();
+          
+          doc.setFontSize(10);
+          doc.setTextColor(150);
+          doc.setLineWidth(0.1);
+          doc.line(14, pageHeight - 15, 196, pageHeight - 15);
+          
+          doc.text("MUCHI LMS - Modern Education Management", 14, pageHeight - 10);
+          doc.text(`Page ${data.pageNumber}`, 180, pageHeight - 10);
+        },
+      });
+
+      const date = new Date().toISOString().split('T')[0];
+      doc.save(`${schoolInfo?.name?.replace(/\s+/g, '_') || 'Student'}_List_${date}.pdf`);
+
+      toast({
+        title: "Export Successful",
+        description: `Exported ${allStudents.length} students to PDF.`,
+      });
+    } catch (error: any) {
+      console.error("Export Error:", error);
+      toast({
+        title: "Export Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   if (viewStudentId) {
     return <StudentDetailsView studentId={viewStudentId} onBack={handleBackFromDetails} userRole="school_admin" />;
@@ -458,8 +589,8 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
             {isRematching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Filter className="h-4 w-4 mr-2" />}
             Fix Assignments
           </Button>
-          <Button variant="outline">
-            <Download className="h-4 w-4 mr-2" />
+          <Button variant="outline" onClick={handleExportPDF} disabled={isExporting}>
+            {isExporting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />}
             Export List
           </Button>
 
