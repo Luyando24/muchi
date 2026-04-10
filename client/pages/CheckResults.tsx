@@ -1,10 +1,11 @@
 import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Search, Download, AlertCircle, ArrowLeft, School, FileText } from 'lucide-react';
+import { Loader2, Search, Download, AlertCircle, ArrowLeft, School, FileText, Printer } from 'lucide-react';
 import { ReportCardContent } from '@/components/shared/ReportCardContent';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -20,6 +21,7 @@ export default function CheckResults() {
   const [examType, setExamType] = useState('End of Term');
 
   const [resultData, setResultData] = useState<any>(null);
+  const [isPrinting, setIsPrinting] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
 
   const availableYears = [
@@ -86,6 +88,23 @@ export default function CheckResults() {
       console.error("PDF generation error:", err);
       setError("Failed to generate PDF. Please try again.");
     }
+  };
+
+  const handlePrint = () => {
+    if (!resultData) return;
+    setIsPrinting(true);
+    
+    // Set document title for a cleaner print filename
+    const originalTitle = document.title;
+    const studentName = (resultData.student.name || 'Student').replace(/\s+/g, '_');
+    document.title = `${studentName}_Report_${resultData.termResults[0].term}`;
+
+    // Small delay to ensure the portal renders
+    setTimeout(() => {
+      window.print();
+      document.title = originalTitle;
+      setIsPrinting(false);
+    }, 500);
   };
 
   return (
@@ -226,6 +245,13 @@ export default function CheckResults() {
                   Download PDF
                 </Button>
                 <Button
+                  onClick={handlePrint}
+                  className="bg-blue-600 hover:bg-blue-500 gap-2 rounded-xl shadow-lg shadow-blue-600/20"
+                >
+                  <Printer className="h-4 w-4" />
+                  Print Report
+                </Button>
+                <Button
                   variant="outline"
                   onClick={() => setResultData(null)}
                   className="border-white/20 text-slate-200 hover:bg-white/10 rounded-xl"
@@ -256,6 +282,47 @@ export default function CheckResults() {
           </div>
         )}
       </main>
+
+      {/* Print Portal */}
+      {isPrinting && resultData && createPortal(
+        <div className="print-portal">
+          <style>
+            {`
+              @media screen {
+                .print-portal { display: none !important; }
+              }
+              @media print {
+                @page { size: A4; margin: 10mm; }
+                #root, header, nav, footer { display: none !important; }
+                body { background: white !important; margin: 0; padding: 0; }
+                .print-portal {
+                  display: block !important;
+                  position: static !important;
+                  width: 100% !important;
+                  background: white !important;
+                  padding: 0 !important;
+                  margin: 0 !important;
+                }
+              }
+            `}
+          </style>
+          <div className="bg-white p-0 m-0">
+            <ReportCardContent
+              data={{
+                student: resultData.student,
+                school: resultData.school,
+                gradingScale: resultData.gradingScale,
+                grades: resultData.termResults[0].grades
+              }}
+              term={resultData.termResults[0].term}
+              examType={resultData.termResults[0].grades?.[0]?.exam_type || examType}
+              academicYear={resultData.termResults[0].academicYear}
+              className="shadow-none border-none m-0 p-0 w-full"
+            />
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
