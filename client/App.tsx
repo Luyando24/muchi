@@ -25,6 +25,7 @@ import SchoolWebsite from "./pages/SchoolWebsite";
 import GovernmentPortal from "./pages/GovernmentPortal";
 import SystemAdminPortal from "./pages/SystemAdminPortal";
 import VerifyReport from "./pages/VerifyReport";
+import DataAuditPage from "./pages/DataAuditPage";
 
 const App = () => {
   // --- SUBDOMAIN DETECTION ---
@@ -99,6 +100,11 @@ const App = () => {
             <Route path="/school-admin" element={
               <ProtectedRoute allowedRoles={['school_admin', 'bursar', 'registrar', 'exam_officer', 'academic_auditor', 'accounts', 'content_manager', 'system_admin']}>
                 <SchoolAdminPortal />
+              </ProtectedRoute>
+            } />
+            <Route path="/school-admin/data-audit" element={
+              <ProtectedRoute allowedRoles={['school_admin', 'bursar', 'registrar', 'exam_officer', 'academic_auditor', 'accounts', 'content_manager', 'system_admin']}>
+                <DataAuditPage />
               </ProtectedRoute>
             } />
             <Route path="/system-admin" element={

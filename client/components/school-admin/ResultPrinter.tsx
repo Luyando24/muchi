@@ -13,6 +13,7 @@ import {
     Settings,
     PlusCircle
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +31,16 @@ import {
     SelectTrigger,
     SelectValue
 } from "@/components/ui/select";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
     Table,
     TableBody,
@@ -54,6 +65,7 @@ interface Student {
 }
 
 export default function ResultPrinter() {
+    const navigate = useNavigate();
     const [classes, setClasses] = useState<Class[]>([]);
     const [students, setStudents] = useState<Student[]>([]);
     const [availableExamTypes, setAvailableExamTypes] = useState<string[]>(['Mid Term', 'End of Term']);
@@ -63,6 +75,10 @@ export default function ResultPrinter() {
     const [previewData, setPreviewData] = useState<any | null>(null);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [printMode, setPrintMode] = useState<'pdf' | 'hardcopy'>('hardcopy');
+    
+    // State for print blocker dialog
+    const [isBlockerOpen, setIsBlockerOpen] = useState(false);
+    const [blockerMessage, setBlockerMessage] = useState("");
 
     const [filters, setFilters] = useState({
         classId: '',
@@ -159,6 +175,34 @@ export default function ResultPrinter() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
 
+            // Check if class has anomalies before printing
+            const anomaliesResponse = await fetch('/api/school/grades/anomalies', {
+                headers: { 'Authorization': `Bearer ${session.access_token}` }
+            });
+            if (anomaliesResponse.ok) {
+                const anomaliesData = await anomaliesResponse.json();
+                // We need to fetch enrollments for these anomalies to check if they belong to the selected class
+                if (anomaliesData && anomaliesData.length > 0) {
+                    const studentIds = [...new Set(anomaliesData.map((a: any) => a.studentId))].filter(Boolean);
+                    
+                    if (studentIds.length > 0) {
+                        const { data: anomalousEnrollments } = await supabase
+                            .from('enrollments')
+                            .select('student_id, class_id')
+                            .in('student_id', studentIds)
+                            .eq('class_id', filters.classId)
+                            .eq('academic_year', filters.academicYear);
+                            
+                        if (anomalousEnrollments && anomalousEnrollments.length > 0) {
+                            setBlockerMessage("Cannot print report cards. There are grade anomalies (scores > 100%) in this class. Please resolve them in the Data Audit section first.");
+                            setIsBlockerOpen(true);
+                            setIsPrinting(false);
+                            return;
+                        }
+                    }
+                }
+            }
+
             const response = await fetch(`/api/school/results/batch-report-cards?classId=${filters.classId}&term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`, {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
@@ -196,6 +240,22 @@ export default function ResultPrinter() {
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
+
+            // Check if student has anomalies before printing
+            const anomaliesResponse = await fetch('/api/school/grades/anomalies', {
+                headers: { 'Authorization': `Bearer ${session.access_token}` }
+            });
+            if (anomaliesResponse.ok) {
+                const anomaliesData = await anomaliesResponse.json();
+                const studentHasAnomaly = anomaliesData.some((a: any) => a.studentId === studentId && a.academicYear === filters.academicYear);
+                
+                if (studentHasAnomaly) {
+                    setBlockerMessage("Cannot print report card. This student has grade anomalies (scores > 100%). Please resolve them in the Data Audit section first.");
+                    setIsBlockerOpen(true);
+                    setIsPrinting(false);
+                    return;
+                }
+            }
 
             const response = await fetch(`/api/school/results/report-card/${studentId}?term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`, {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
@@ -569,6 +629,33 @@ export default function ResultPrinter() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* Print Blocker Dialog */}
+            <AlertDialog open={isBlockerOpen} onOpenChange={setIsBlockerOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+                            <AlertCircle className="h-5 w-5" />
+                            Printing Blocked
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-slate-600">
+                            {blockerMessage}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setIsBlockerOpen(false)}>Close</AlertDialogCancel>
+                        <AlertDialogAction 
+                            onClick={() => {
+                                setIsBlockerOpen(false);
+                                navigate('/school-admin/data-audit');
+                            }}
+                            className="bg-red-600 hover:bg-red-700"
+                        >
+                            Go to Data Audit
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

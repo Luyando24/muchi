@@ -172,8 +172,17 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
                       };
 
                       const subjectsPassed = grades.filter((g: any) => {
+                        const isAbsent = g.percentage === null || g.percentage === undefined || g.percentage === '' || g.grade === 'ABSENT';
+                        if (isAbsent) return false;
+                        
                         const data = getStandardFromScale(g.percentage);
-                        return !['FAIL', 'ABSENT', 'NOT RECORDED', 'UNKNOWN'].includes(data.standard);
+                        // Make sure to include UNSATISFACTORY as a fail state
+                        return !['FAIL', 'ABSENT', 'NOT RECORDED', 'UNKNOWN', 'UNSATISFACTORY'].includes(data.standard.toUpperCase());
+                      }).length;
+                      
+                      const subjectsRecorded = grades.filter((g: any) => {
+                        const isAbsent = g.percentage === null || g.percentage === undefined || g.percentage === '' || g.grade === 'ABSENT';
+                        return !isAbsent;
                       }).length;
 
                       return (
@@ -181,7 +190,7 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
                           {grades.length > 0 ? (
                             grades.map((g: any, i: number) => {
                               const standardData = getStandardFromScale(g.percentage);
-                              const isAbsent = g.percentage === null || g.percentage === undefined || g.percentage === '';
+                              const isAbsent = g.percentage === null || g.percentage === undefined || g.percentage === '' || g.grade === 'ABSENT';
                               
                               return (
                                 <TableRow key={g.id || `missing-${i}`} className="border-b border-slate-100 last:border-0 hover:bg-transparent h-10 print:h-8">
@@ -220,7 +229,7 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
                             <TableRow className="border-t border-slate-900 mt-8 print:mt-4 block">
                               <TableCell colSpan={4} className="p-4 print:p-2 pl-0">
                                 <div className="flex justify-between items-center text-xs font-bold text-slate-900 uppercase tracking-widest gap-4">
-                                  <div>RECORDED: {grades.length}</div>
+                                  <div>RECORDED: {subjectsRecorded}</div>
                                   {school?.school_type === 'Basic' && (
                                     <div className="bg-slate-900 text-white px-3 py-1 rounded-sm">TOTAL MARKS: {totalPercentage}</div>
                                   )}

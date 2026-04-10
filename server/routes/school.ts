@@ -7450,6 +7450,8 @@ router.get(
 
         return {
           id: a.id,
+          studentId: a.student_id,
+          classId: classId,
           studentName: profilesMap[a.student_id]?.full_name || 'Unknown',
           studentNumber: profilesMap[a.student_id]?.student_number || 'Unknown',
           subject: a.subjects?.name || 'Unknown',

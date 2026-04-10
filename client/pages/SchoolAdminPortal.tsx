@@ -53,6 +53,21 @@ export default function SchoolAdminPortal() {
   const [userRole, setUserRole] = useState<string>("");
   const navigate = useNavigate();
 
+  // Listen for hash changes to support direct linking to tabs
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (window.location.hash === '#data-audit') {
+        setActiveTab('academics');
+      }
+    };
+    
+    // Check initial hash
+    handleHashChange();
+    
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
   // Check license and pre-fetch critical data for offline use
   useEffect(() => {
     const initializePortal = async () => {
