@@ -390,14 +390,8 @@ export default function WebsiteManagement() {
             variant="outline" 
             className="flex items-center gap-2 group transition-all hover:border-primary hover:text-primary"
             onClick={() => {
-              const protocol = window.location.protocol;
-              const hostname = window.location.hostname;
-              let url = '';
-              if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
-                url = `${protocol}//${school.slug}.localhost:5173`;
-              } else {
-                url = `${protocol}//${school.slug}.muchi.vercel.app`;
-              }
+              const origin = window.location.origin;
+              const url = `${origin}/school/${school.slug}`;
               window.open(url, '_blank');
             }}
           >

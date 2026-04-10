@@ -77,8 +77,11 @@ export default function Index() {
               <Button size="lg" className="text-lg px-8 py-6 rounded-full bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all">
                 <Link to="/school/register" className="flex items-center gap-2">Register School <ArrowRight className="ml-2" /></Link>
               </Button>
-              <Button size="lg" variant="outline" className="text-lg px-8 py-6 rounded-full bg-white/10 hover:bg-white/20 text-white border-white/30 shadow-lg hover:shadow-xl transition-all">
+              <Button asChild size="lg" variant="outline" className="text-lg px-8 py-6 rounded-full bg-white/10 hover:bg-white/20 text-white border-white/30 shadow-lg hover:shadow-xl transition-all cursor-pointer">
                 <Link to="/login" className="flex items-center gap-2">Log In <UserCheck className="ml-2" /></Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="text-lg px-8 py-6 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-white border-emerald-500/30 shadow-lg hover:shadow-xl transition-all">
+                <Link to="/check-results" className="flex items-center gap-2">Check Results <FileText className="ml-2 h-5 w-5" /></Link>
               </Button>
             </div>
 

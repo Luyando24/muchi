@@ -26,46 +26,9 @@ import GovernmentPortal from "./pages/GovernmentPortal";
 import SystemAdminPortal from "./pages/SystemAdminPortal";
 import VerifyReport from "./pages/VerifyReport";
 import DataAuditPage from "./pages/DataAuditPage";
+import CheckResults from "./pages/CheckResults";
 
 const App = () => {
-  // --- SUBDOMAIN DETECTION ---
-  const hostname = window.location.hostname;
-  const parts = hostname.split('.');
-  
-  // Check if we are on a subdomain (e.g., school-slug.muchi.vercel.app or school-slug.localhost)
-  // We assume the main domain is 'muchi.vercel.app' or 'localhost'
-  let schoolSlug: string | null = null;
-  
-  if (hostname.includes('vercel.app')) {
-    // pattern: [slug].muchi.vercel.app
-    if (parts.length >= 4 && parts[parts.length - 3] === 'muchi') {
-      schoolSlug = parts[0];
-    }
-  } else if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
-    // pattern: [slug].localhost
-    if (parts.length >= 2) {
-      const firstPart = parts[0];
-      if (firstPart !== 'localhost' && firstPart !== 'www' && firstPart !== '127') {
-        schoolSlug = firstPart;
-      }
-    }
-  }
-
-  // If a school slug is detected via subdomain, render the school website directly
-  if (schoolSlug) {
-    return (
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <ThemeProvider attribute="class" defaultTheme="light">
-          <BrowserRouter>
-            <SchoolWebsite subdomainSlug={schoolSlug} />
-          </BrowserRouter>
-        </ThemeProvider>
-      </TooltipProvider>
-    );
-  }
-
   return (
     <TooltipProvider>
       <Toaster />
@@ -118,6 +81,7 @@ const App = () => {
               </ProtectedRoute>
             } />
             <Route path="/verify/:hash" element={<VerifyReport />} />
+            <Route path="/check-results" element={<CheckResults />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

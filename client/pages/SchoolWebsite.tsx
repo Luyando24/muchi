@@ -65,9 +65,9 @@ interface WebsiteContent {
   }>;
 }
 
-export default function SchoolWebsite({ subdomainSlug }: { subdomainSlug?: string }) {
-  const { slug: paramsSlug } = useParams<{ slug: string }>();
-  const slug = subdomainSlug || paramsSlug;
+export default function SchoolWebsite() {
+  const { slug } = useParams<{ slug: string }>();
+  const basePath = `/school/${slug}`;
   const [school, setSchool] = useState<School | null>(null);
   const [websiteContent, setWebsiteContent] = useState<WebsiteContent | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -289,12 +289,12 @@ export default function SchoolWebsite({ subdomainSlug }: { subdomainSlug?: strin
           </Link>
           
           <nav className="hidden md:flex items-center gap-8 text-sm font-medium">
-            <Link to="/#about" className="text-slate-600 hover:text-primary transition-colors">About</Link>
-            <Link to="/#academics" className="text-slate-600 hover:text-primary transition-colors">Academics</Link>
-            <Link to="/news" className="text-slate-600 hover:text-primary transition-colors">News</Link>
-            {tenders.length > 0 && <Link to="/tenders" className="text-slate-600 hover:text-primary transition-colors">Tenders</Link>}
-            <Link to="/#admissions" className="text-slate-600 hover:text-primary transition-colors">Admissions</Link>
-            <Link to="/#contact" className="text-slate-600 hover:text-primary transition-colors">Contact</Link>
+            <Link to={`${basePath}/#about`} className="text-slate-600 hover:text-primary transition-colors">About</Link>
+            <Link to={`${basePath}/#academics`} className="text-slate-600 hover:text-primary transition-colors">Academics</Link>
+            <Link to={`${basePath}/news`} className="text-slate-600 hover:text-primary transition-colors">News</Link>
+            {tenders.length > 0 && <Link to={`${basePath}/tenders`} className="text-slate-600 hover:text-primary transition-colors">Tenders</Link>}
+            <Link to={`${basePath}/#admissions`} className="text-slate-600 hover:text-primary transition-colors">Admissions</Link>
+            <Link to={`${basePath}/#contact`} className="text-slate-600 hover:text-primary transition-colors">Contact</Link>
           </nav>
 
           <div className="flex items-center gap-4">
@@ -340,15 +340,21 @@ export default function SchoolWebsite({ subdomainSlug }: { subdomainSlug?: strin
                   </p>
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                     {websiteContent?.admissions_open !== false && (
-                      <Link to="/#admissions">
+                      <Link to={`${basePath}/#admissions`}>
                         <Button size="lg" className="bg-primary hover:bg-primary/90 min-w-[160px]">
                           {websiteContent?.apply_button_text || "Apply Now"}
                         </Button>
                       </Link>
                     )}
-                    <Link to="/#about">
+                    <Link to={`${basePath}/#about`}>
                       <Button size="lg" variant="outline" className="bg-transparent text-white border-white hover:bg-white/10 min-w-[160px]">
                         Learn More
+                      </Button>
+                    </Link>
+                    <Link to="/check-results">
+                      <Button size="lg" variant="outline" className="bg-emerald-500/20 hover:bg-emerald-500/30 text-white border-emerald-500/40 min-w-[160px] gap-2">
+                        <FileText className="h-5 w-5" />
+                        Check Results
                       </Button>
                     </Link>
                   </div>
@@ -464,11 +470,11 @@ export default function SchoolWebsite({ subdomainSlug }: { subdomainSlug?: strin
                             </div>
                             <h3 className="text-2xl font-bold text-slate-900">Latest News</h3>
                           </div>
-                          <Link to="/news">
-                            <Button variant="ghost" className="text-primary font-medium hover:bg-primary/5">
-                              View All News <ArrowRight className="ml-2 h-4 w-4" />
-                            </Button>
-                          </Link>
+                          <Link to={`${basePath}/news`}>
+                             <Button variant="ghost" className="text-primary font-medium hover:bg-primary/5">
+                               View All News <ArrowRight className="ml-2 h-4 w-4" />
+                             </Button>
+                           </Link>
                         </div>
                         
                         <div className="grid md:grid-cols-2 gap-8">
@@ -492,7 +498,7 @@ export default function SchoolWebsite({ subdomainSlug }: { subdomainSlug?: strin
                                 <p className="text-slate-600 text-sm line-clamp-2 mb-4">
                                   {post.excerpt || 'Read the latest updates from our school.'}
                                 </p>
-                                <Link to={`/news/${post.slug}`}>
+                                <Link to={`${basePath}/news/${post.slug}`}>
                                   <Button variant="outline" className="w-full group-hover:bg-primary group-hover:text-white transition-all">
                                     Read More
                                   </Button>
@@ -656,7 +662,7 @@ export default function SchoolWebsite({ subdomainSlug }: { subdomainSlug?: strin
                         </p>
                       </CardHeader>
                       <CardFooter className="pt-0 pb-6">
-                        <Link to={`/news/${post.slug}`} className="w-full">
+                        <Link to={`${basePath}/news/${post.slug}`} className="w-full">
                           <Button variant="outline" className="w-full group-hover:bg-primary group-hover:text-white transition-all">
                             Read Full Article
                           </Button>
@@ -755,9 +761,9 @@ export default function SchoolWebsite({ subdomainSlug }: { subdomainSlug?: strin
             <div>
               <h4 className="text-white font-bold mb-4">Navigation</h4>
               <ul className="space-y-2 text-sm">
-                <li><Link to="/#about" className="hover:text-white">About Us</Link></li>
-                <li><Link to="/news" className="hover:text-white">Latest News</Link></li>
-                <li><Link to="/#admissions" className="hover:text-white">Admissions</Link></li>
+                <li><Link to={`${basePath}/#about`} className="hover:text-white">About Us</Link></li>
+                <li><Link to={`${basePath}/news`} className="hover:text-white">Latest News</Link></li>
+                <li><Link to={`${basePath}/#admissions`} className="hover:text-white">Admissions</Link></li>
               </ul>
             </div>
             <div>

@@ -468,4 +468,203 @@ router.delete(
   }
 );
 
+// GET /api/school/public-verify-results
+router.get(
+  "/public-verify-results",
+  async (req: Request, res: Response) => {
+    const { studentNumber, term, academicYear, examType } = req.query;
+
+    if (!studentNumber || !term || !academicYear) {
+      return res.status(400).json({ message: "Student Number, term, and academic year are required" });
+    }
+
+    try {
+      // 1. Find profile by student number
+      const { data: profiles, error: profileError } = await supabaseAdmin
+        .from("profiles")
+        .select("*")
+        .eq("student_number", studentNumber)
+        .eq("role", "student")
+        .limit(1);
+
+      if (profileError || !profiles || profiles.length === 0) {
+        return res.status(404).json({ message: "Student not found or invalid student number." });
+      }
+
+      const profile = profiles[0];
+      const studentId = profile.id;
+      const schoolId = profile.school_id;
+
+      // 2. Fetch school details
+      const { data: school, error: schoolError } = await supabaseAdmin
+        .from("schools")
+        .select("*")
+        .eq("id", schoolId)
+        .single();
+
+      // 3. Fetch grading scale
+      const { data: gradingScale } = await supabaseAdmin
+        .from("grading_scales")
+        .select("*")
+        .eq("school_id", schoolId)
+        .order("min_percentage", { ascending: false });
+
+      // 4. Fetch grades for the student, term, and academic year (only Published)
+      // We filter by exam_type if it is provided and the column exists. Otherwise, standard matching.
+      let query = supabaseAdmin
+        .from("student_grades")
+        .select(`
+          *,
+          subjects(name, code, department)
+        `)
+        .eq("student_id", studentId)
+        .eq("academic_year", academicYear)
+        .eq("term", term);
+        
+      if (examType) {
+        // Attempt to match examType on the record if applicable
+        query = query.eq("exam_type", examType);
+      }
+
+      const { data: rawGrades, error: gradesError } = await query;
+
+      if (gradesError) throw gradesError;
+
+      // Deduplicate grades as done in student portal
+      const gradesMap = new Map<string, any>();
+      if (rawGrades && rawGrades.length > 0) {
+        const sortedGrades = [...rawGrades].sort((a, b) => {
+          const timeA = new Date(a.calculated_at || a.created_at).getTime();
+          const timeB = new Date(b.calculated_at || b.created_at).getTime();
+          return timeB - timeA;
+        });
+
+        for (const grade of sortedGrades) {
+          const subjectCode = grade.subjects?.code || grade.subject_id;
+          if (!gradesMap.has(subjectCode)) {
+            gradesMap.set(subjectCode, grade);
+          }
+        }
+      }
+      
+      const grades = Array.from(gradesMap.values());
+      const termResults = [];
+      if (grades.length > 0) {
+        const total = grades.reduce((sum: number, g: any) => sum + (g.percentage || 0), 0);
+        const avg = grades.length > 0 ? (total / grades.length).toFixed(1) : 0;
+        
+        termResults.push({
+           term: term,
+           academicYear: academicYear,
+           average: avg,
+           grades: grades
+        });
+      }
+
+      // 5. Build Class name (using enrollments)
+      const { data: enrollment } = await supabaseAdmin
+        .from("enrollments")
+        .select("*, classes(id, name)")
+        .eq("student_id", studentId)
+        .eq("status", "Active")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const classId = (enrollment?.classes as any)?.id || null;
+
+      // 6. Compute class rankings (same logic as getClassRankings in school.ts)
+      let position = 0;
+      let totalStudents = 0;
+      let classAverage = 0;
+
+      if (classId) {
+        const { data: classEnrollments } = await supabaseAdmin
+          .from("enrollments")
+          .select("student_id")
+          .eq("class_id", classId)
+          .eq("academic_year", academicYear as string);
+
+        if (classEnrollments && classEnrollments.length > 0) {
+          const classStudentIds = classEnrollments.map((e: any) => e.student_id);
+          totalStudents = classStudentIds.length;
+
+          let gradesQuery = supabaseAdmin
+            .from("student_grades")
+            .select("student_id, percentage")
+            .in("student_id", classStudentIds)
+            .eq("term", term as string)
+            .eq("academic_year", academicYear as string);
+
+          if (examType) {
+            gradesQuery = gradesQuery.eq("exam_type", examType as string);
+          }
+
+          const { data: classGrades } = await gradesQuery;
+
+          // Compute per-student average
+          const studentAverages: Record<string, { total: number; count: number }> = {};
+          classStudentIds.forEach((id: string) => {
+            studentAverages[id] = { total: 0, count: 0 };
+          });
+
+          if (classGrades) {
+            classGrades.forEach((g: any) => {
+              if (g.percentage !== null && g.percentage !== undefined && g.percentage !== "") {
+                studentAverages[g.student_id].total += Number(g.percentage);
+                studentAverages[g.student_id].count += 1;
+              }
+            });
+          }
+
+          let classTotal = 0;
+          let classCount = 0;
+
+          const averagesList = Object.entries(studentAverages).map(([id, data]) => {
+            const avg = data.count > 0 ? data.total / data.count : 0;
+            if (data.count > 0) {
+              classTotal += avg;
+              classCount += 1;
+            }
+            return { id, avg };
+          });
+
+          averagesList.sort((a, b) => b.avg - a.avg);
+          averagesList.forEach((item, index) => {
+            if (item.id === studentId) position = index + 1;
+          });
+
+          classAverage = classCount > 0 ? classTotal / classCount : 0;
+        }
+      }
+
+      const normalizedStudent = {
+        id: profile.id,
+        firstName: profile.first_name || profile.firstName || profile.full_name?.split(' ')[0],
+        lastName: profile.last_name || profile.lastName || profile.full_name?.split(' ').slice(1).join(' '),
+        name: profile.full_name,
+        studentNumber: profile.student_number || 'N/A',
+        class: (enrollment?.classes as any)?.name || 'Unassigned',
+        avatarUrl: profile.avatar_url || profile.avatarUrl,
+        position,
+        totalStudents,
+        classAverage,
+      };
+
+      const response = {
+        student: normalizedStudent,
+        school: school,
+        gradingScale: gradingScale || [],
+        termResults: termResults,
+        assignedSubjects: [] 
+      };
+
+      res.json(response);
+    } catch (error: any) {
+      console.error("Public Verify Results Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
 export const websiteRouter = router;
