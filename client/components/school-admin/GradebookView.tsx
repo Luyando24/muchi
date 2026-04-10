@@ -377,7 +377,12 @@ export default function GradebookView() {
           entry.grade = '-';
           entry.comments = '';
         } else {
-          const pct = parseFloat(value) || 0;
+          // Strict validation: Don't allow values greater than 100
+          let pct = parseFloat(value);
+          if (isNaN(pct)) pct = 0;
+          if (pct > 100) pct = 100;
+          if (pct < 0) pct = 0;
+          
           entry.percentage = pct;
           const scale = getScale(pct);
           entry.grade = scale ? scale.grade : '-';

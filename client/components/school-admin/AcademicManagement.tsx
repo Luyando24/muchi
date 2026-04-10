@@ -93,6 +93,7 @@ interface Department {
 
 import TimetableManagement from './TimetableManagement';
 import ResultPrinter from './ResultPrinter';
+import { GradeAnomalies } from './GradeAnomalies';
 
 // Helper function to auto-generate subject codes
 const generateSubjectCode = (name: string) => {
@@ -1029,10 +1030,13 @@ export default function AcademicManagement() {
             <Calendar className="h-4 w-4" /> Timetable
           </TabsTrigger>
           <TabsTrigger value="grading-scales" className="flex items-center gap-2 px-4 py-2">
-            <Layers className="h-4 w-4" /> Grading Scales
+            <Layers className="h-4 w-4" /> Scales
           </TabsTrigger>
           <TabsTrigger value="grading-weights" className="flex items-center gap-2 px-4 py-2">
-            <Layers className="h-4 w-4" /> Assessment Weights
+            <Layers className="h-4 w-4" /> Weights
+          </TabsTrigger>
+          <TabsTrigger value="anomalies" className="flex items-center gap-2 px-4 py-2 text-amber-600 data-[state=active]:bg-amber-100 dark:data-[state=active]:bg-amber-900/30">
+            <AlertTriangle className="h-4 w-4" /> Anomalies
           </TabsTrigger>
 
           <div className="ml-auto flex items-center gap-2 px-1 border-l border-slate-200 dark:border-slate-700 ml-4">
@@ -2340,6 +2344,10 @@ export default function AcademicManagement() {
 
         <TabsContent value="printer" className="space-y-4 mt-4">
           <ResultPrinter />
+        </TabsContent>
+
+        <TabsContent value="anomalies" className="space-y-4 mt-4">
+          <GradeAnomalies />
         </TabsContent>
       </Tabs>
 

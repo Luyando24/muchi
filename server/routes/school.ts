@@ -7337,4 +7337,138 @@ router.post(
   }
 );
 
+// GET /api/school/grades/anomalies
+// Fetch all grades > 100% across the entire school
+router.get(
+  "/grades/anomalies",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+
+    try {
+      const anomaliesQuery = supabaseAdmin
+        .from("student_grades")
+        .select(`
+          id,
+          student_id,
+          subject_id,
+          percentage,
+          grade,
+          term,
+          exam_type,
+          academic_year,
+          subjects(name)
+        `)
+        .eq("school_id", schoolId)
+        .gt("percentage", 100)
+        .order("academic_year", { ascending: false })
+        .order("term", { ascending: false });
+
+      const anomalies = await fetchAll(anomaliesQuery);
+      
+      const studentIds = [...new Set(anomalies.map((a: any) => a.student_id))];
+      let profilesMap: Record<string, any> = {};
+      let enrollmentsMap: Record<string, any> = {};
+      
+      if (studentIds.length > 0) {
+        // Chunk studentIds to avoid 1000 limit
+        const chunkSize = 800;
+        for (let i = 0; i < studentIds.length; i += chunkSize) {
+          const chunk = studentIds.slice(i, i + chunkSize);
+          
+          // Profiles
+          const { data: profilesData } = await supabaseAdmin
+            .from("profiles")
+            .select("id, full_name, student_number")
+            .in("id", chunk);
+            
+          if (profilesData) {
+            profilesData.forEach((p: any) => {
+              profilesMap[p.id] = p;
+            });
+          }
+          
+          // Enrollments
+          const { data: enrollmentsData } = await supabaseAdmin
+            .from("enrollments")
+            .select("student_id, academic_year, class_id, classes(name)")
+            .in("student_id", chunk)
+            .eq("status", "Active");
+            
+          if (enrollmentsData) {
+            enrollmentsData.forEach((e: any) => {
+              enrollmentsMap[`${e.student_id}_${e.academic_year}`] = e;
+              enrollmentsMap[`${e.student_id}`] = e; // fallback
+            });
+          }
+        }
+      }
+      
+      const classIds = [...new Set(Object.values(enrollmentsMap).map((e: any) => e.class_id).filter(Boolean))];
+      const subjectIds = [...new Set(anomalies.map((a: any) => a.subject_id).filter(Boolean))];
+      let teacherMap: Record<string, string> = {};
+      
+      if (classIds.length > 0 && subjectIds.length > 0) {
+        // Chunk class_ids if needed, but typically < 800 classes
+        const { data: classSubjectsData } = await supabaseAdmin
+          .from("class_subjects")
+          .select("class_id, subject_id, teacher_id")
+          .in("class_id", classIds)
+          .in("subject_id", subjectIds);
+          
+        if (classSubjectsData && classSubjectsData.length > 0) {
+          const teacherIds = [...new Set(classSubjectsData.map((cs: any) => cs.teacher_id).filter(Boolean))];
+          let teacherProfilesMap: Record<string, string> = {};
+          
+          if (teacherIds.length > 0) {
+             const { data: teacherProfiles } = await supabaseAdmin
+               .from("profiles")
+               .select("id, full_name")
+               .in("id", teacherIds);
+               
+             if (teacherProfiles) {
+               teacherProfiles.forEach((tp: any) => {
+                 teacherProfilesMap[tp.id] = tp.full_name;
+               });
+             }
+          }
+          
+          classSubjectsData.forEach((cs: any) => {
+             if (cs.teacher_id && teacherProfilesMap[cs.teacher_id]) {
+               teacherMap[`${cs.class_id}_${cs.subject_id}`] = teacherProfilesMap[cs.teacher_id];
+             }
+          });
+        }
+      }
+      
+      const formatted = anomalies.map((a: any) => {
+        const enrollment = enrollmentsMap[`${a.student_id}_${a.academic_year}`] || enrollmentsMap[`${a.student_id}`];
+        const classId = enrollment?.class_id;
+        const className = enrollment?.classes?.name || 'Unknown Class';
+        const teacherName = (classId && a.subject_id) ? teacherMap[`${classId}_${a.subject_id}`] || 'Unassigned' : 'Unknown Teacher';
+
+        return {
+          id: a.id,
+          studentName: profilesMap[a.student_id]?.full_name || 'Unknown',
+          studentNumber: profilesMap[a.student_id]?.student_number || 'Unknown',
+          subject: a.subjects?.name || 'Unknown',
+          term: a.term,
+          examType: a.exam_type,
+          academicYear: a.academic_year,
+          percentage: a.percentage,
+          grade: a.grade,
+          className,
+          teacherName
+        };
+      });
+
+      res.json(formatted);
+    } catch (error: any) {
+      console.error("Fetch Grade Anomalies Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
 export const schoolAdminRouter = router;

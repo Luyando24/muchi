@@ -620,14 +620,34 @@ router.get('/assignment-submissions', requireTeacher, async (req: Request, res: 
             .from('submissions')
             .select(`
                 *,
-                students:profiles!student_id(first_name, last_name, full_name),
                 assignments:assignments(title)
             `)
             .in('assignment_id', assignmentIds)
             .order('submitted_at', { ascending: false });
             
         if (error) throw error;
-        res.json(submissions);
+        
+        // Manually join student profiles to avoid schema cache issues
+        const studentIds = [...new Set(submissions.map((s: any) => s.student_id))].filter(Boolean);
+        let profilesMap: Record<string, any> = {};
+        
+        if (studentIds.length > 0) {
+            const { data: profiles } = await supabaseAdmin
+                .from('profiles')
+                .select('id, first_name, last_name, full_name')
+                .in('id', studentIds);
+                
+            if (profiles) {
+                profiles.forEach((p: any) => profilesMap[p.id] = p);
+            }
+        }
+        
+        const mergedSubmissions = submissions.map((s: any) => ({
+            ...s,
+            students: profilesMap[s.student_id] || null
+        }));
+
+        res.json(mergedSubmissions);
     } catch (error: any) {
         res.status(500).json({ message: error.message });
     }
@@ -659,10 +679,7 @@ router.get('/assignments/:id/submissions', requireTeacher, async (req: Request, 
     // 3. Get existing submissions
     const { data: submissions, error } = await supabaseAdmin
       .from('submissions')
-      .select(`
-        *,
-        profiles(full_name)
-      `)
+      .select('*')
       .eq('assignment_id', id);
 
     if (error) throw error;
