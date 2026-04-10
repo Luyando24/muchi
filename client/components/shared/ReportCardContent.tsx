@@ -52,44 +52,44 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
       )}
 
       {/* Document Content */}
-      <div className="relative z-10 flex-1 flex flex-col p-12 print:p-6 print:pt-4 space-y-8 print:space-y-2 h-full justify-between">
+      <div className="relative z-10 flex-1 flex flex-col p-4 sm:p-12 print:p-6 print:pt-4 space-y-4 sm:space-y-8 print:space-y-2 h-full justify-between">
 
         {/* Minimal Header Section */}
-        <div className="flex justify-between items-start pb-8 print:pb-2">
+        <div className="flex flex-col sm:flex-row justify-between items-center sm:items-start gap-4 sm:gap-0 pb-4 sm:pb-8 print:pb-2">
           {/* Left Side: School Logo */}
-          <div className="w-24">
+          <div className="w-20 sm:w-24">
             {school?.logo_url ? (
-              <div className="h-24 w-24 bg-white rounded-full shadow-sm border border-slate-100 p-4 flex items-center justify-center text-slate-400">
+              <div className="h-20 w-20 sm:h-24 sm:w-24 bg-white rounded-full shadow-sm border border-slate-100 p-3 sm:p-4 flex items-center justify-center text-slate-400">
                 <img src={school.logo_url} alt="School Logo" className="max-h-full max-w-full object-contain" />
               </div>
             ) : (
-              <div className="h-24 w-24 bg-white rounded-full shadow-sm border border-slate-100 p-4 flex items-center justify-center">
+              <div className="h-20 w-20 sm:h-24 sm:w-24 bg-white rounded-full shadow-sm border border-slate-100 p-3 sm:p-4 flex items-center justify-center">
                 <img src="/images/arakan-logo.png" alt="Logo" className="max-h-full max-w-full object-contain" />
               </div>
             )}
           </div>
 
           {/* Center: School Name, Term, Year, Address */}
-          <div className="flex-1 flex flex-col items-center text-center px-4 space-y-2">
-            <h1 className="text-3xl font-black tracking-tight text-slate-900">{school?.name || 'MUCHI ACADEMY'}</h1>
-            <div className="flex items-center justify-center gap-2 text-sm font-bold text-slate-900">
+          <div className="flex-1 flex flex-col items-center text-center px-2 sm:px-4 space-y-1 sm:space-y-2">
+            <h1 className="text-xl sm:text-3xl font-black tracking-tight text-slate-900 leading-tight">{school?.name || 'MUCHI ACADEMY'}</h1>
+            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs sm:text-sm font-bold text-slate-900">
               <span>{term} - {examType}</span>
-              <span className="text-slate-300">•</span>
+              <span className="hidden sm:inline text-slate-300">•</span>
               <span>Academic Year {academicYear}</span>
             </div>
-            <div className="text-sm font-medium text-slate-500 flex flex-col items-center gap-1 mt-1">
+            <div className="text-[10px] sm:text-sm font-medium text-slate-500 flex flex-col items-center gap-0.5 sm:gap-1 mt-1">
               {school?.address && <p>{school.address}</p>}
-              <div className="flex gap-4 text-slate-400 text-xs uppercase tracking-wider">
+              <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-slate-400 text-[10px] uppercase tracking-wider">
                 {school?.email && <p>{school.email}</p>}
                 {school?.phone && <p>{school.phone}</p>}
               </div>
             </div>
           </div>
 
-          {/* Right Side: Coat of Arms (or empty spacer to balance flex layout) */}
-          <div className="w-24 flex justify-end">
+          {/* Right Side: Coat of Arms */}
+          <div className="w-20 sm:w-24 flex justify-center sm:justify-end">
             {school?.coat_of_arms_url && (
-              <div className="h-24 w-24 bg-white rounded-full shadow-sm border border-slate-100 p-4 flex items-center justify-center text-slate-400">
+              <div className="h-20 w-20 sm:h-24 sm:w-24 bg-white rounded-full shadow-sm border border-slate-100 p-3 sm:p-4 flex items-center justify-center text-slate-400">
                 <img src={school.coat_of_arms_url} alt="Coat of Arms" className="max-h-full max-w-full object-contain" />
               </div>
             )}
@@ -97,22 +97,22 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
         </div>
 
         {/* Minimal Student Information */}
-        <div className="flex justify-between items-end pb-4 print:pb-2 border-b border-slate-100">
-          <div className="space-y-4 print:space-y-1">
+        <div className="flex flex-col sm:flex-row justify-between items-center sm:items-end gap-4 pb-4 print:pb-2 border-b border-slate-100">
+          <div className="space-y-1 text-center sm:text-left">
             <div>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Student Name</p>
-              <h2 className="text-3xl font-black text-slate-900 tracking-tight">{student.name}</h2>
+              <h2 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight">{student.name}</h2>
             </div>
           </div>
-          <div className="text-right space-y-4 print:space-y-1">
-            <div className="flex gap-8 justify-end">
+          <div className="w-full sm:w-auto text-center sm:text-right space-y-1">
+            <div className="flex gap-4 sm:gap-8 justify-center sm:justify-end">
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 print:mb-0">Student ID</p>
-                <p className="text-sm font-bold text-slate-700 font-mono">{student.studentNumber}</p>
+                <p className="text-xs sm:text-sm font-bold text-slate-700 font-mono">{student.studentNumber}</p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 print:mb-0">Class</p>
-                <p className="text-sm font-bold text-slate-700">{student.class}</p>
+                <p className="text-xs sm:text-sm font-bold text-slate-700">{student.class}</p>
               </div>
             </div>
           </div>
@@ -249,28 +249,28 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
         </div>
 
         {/* Summary Analytics */}
-        <div className="grid grid-cols-12 gap-6 print:gap-4 print:space-y-0 relative">
-          <div className="col-span-8 print:col-span-8 flex flex-col gap-4">
-            <div className="flex-1 py-4 print:py-2">
+        <div className="grid grid-cols-12 gap-4 sm:gap-6 print:gap-4 print:space-y-0 relative">
+          <div className="col-span-12 sm:col-span-8 print:col-span-8 flex flex-col gap-4">
+            <div className="flex-1 py-2 sm:py-4 print:py-2">
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 print:mb-1">
                 Class Insights
               </h4>
-              <p className="text-sm leading-relaxed text-slate-600 font-medium italic border-l-2 border-slate-300 pl-4">
+              <p className="text-xs sm:text-sm leading-relaxed text-slate-600 font-medium italic border-l-2 border-slate-300 pl-4">
                  Position {student.position || '-'} out of {student.totalStudents || '-'} students. Class Average: {student.classAverage ? student.classAverage.toFixed(1) : '-'}%.
               </p>
             </div>
           </div>
 
-          <div className="col-span-4 print:col-span-4 space-y-4 print:space-y-2 pt-4 print:pt-2">
-            <div className="flex flex-col items-end text-right">
+          <div className="col-span-12 sm:col-span-4 print:col-span-4 space-y-4 print:space-y-2 pt-2 sm:pt-4 print:pt-2">
+            <div className="flex flex-col items-center sm:items-end text-center sm:text-right">
               {school?.seal_url && (
-                 <div className="mb-2 print:mb-1 absolute right-0 -top-12 print:-top-16 z-0">
-                    <img src={school.seal_url} alt="Seal" className="h-28 w-28 print:h-28 print:w-28 object-contain opacity-80 mix-blend-multiply" />
+                 <div className="mb-2 print:mb-1 absolute right-1/2 translate-x-1/2 sm:translate-x-0 sm:right-0 -top-8 sm:-top-12 print:-top-16 z-0">
+                    <img src={school.seal_url} alt="Seal" className="h-20 w-20 sm:h-28 sm:w-28 print:h-28 print:w-28 object-contain opacity-80 mix-blend-multiply" />
                  </div>
               )}
-              <div className="flex justify-end items-center mb-2 print:mb-1 gap-4 mt-8 print:mt-6 relative z-10">
+              <div className="flex justify-center sm:justify-end items-center mb-2 print:mb-1 gap-4 mt-12 sm:mt-8 print:mt-6 relative z-10">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-white/90 dark:bg-slate-950/90 px-1 rounded shadow-sm">Attendance</span>
-                <span className="text-sm font-bold text-slate-900 bg-white/90 dark:bg-slate-950/90 px-1 rounded shadow-sm">100%</span>
+                <span className="text-xs sm:text-sm font-bold text-slate-900 bg-white/90 dark:bg-slate-950/90 px-1 rounded shadow-sm">100%</span>
               </div>
               <div className="h-1 w-32 bg-slate-100 rounded-full overflow-hidden relative z-10 shadow-sm">
                 <div className="h-full bg-slate-900 rounded-full" style={{ width: '100%' }}></div>
@@ -436,36 +436,36 @@ export const ReportCardContent = ({ data, term, examType, academicYear, classNam
 
         {/* Minimal Footer / Authenticity Section */}
         <div className="pt-4 print:pt-2 mt-auto">
-          <div className="grid grid-cols-2 gap-12">
+          <div className="flex flex-col sm:grid sm:grid-cols-2 gap-8 sm:gap-12">
             <div className="space-y-2 print:space-y-1">
-              <div className="h-16 print:h-12 flex items-end">
+              <div className="h-12 sm:h-16 print:h-12 flex items-end justify-center sm:justify-start">
                 {school?.signature_url ? (
-                  <img src={school.signature_url} alt="Signature" className="max-h-16 print:max-h-12 object-contain" />
+                  <img src={school.signature_url} alt="Signature" className="max-h-12 sm:max-h-16 print:max-h-12 object-contain" />
                 ) : (
-                  <div className="w-full border-b border-slate-300"></div>
+                  <div className="w-full sm:w-48 border-b border-slate-300"></div>
                 )}
               </div>
-              <div className="flex flex-col">
+              <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
                 <div className="flex items-end gap-2 mt-1 border-b border-slate-800 w-fit pb-0.5">
-                  <span className="text-sm font-serif font-semibold text-slate-900 border-b border-slate-900 pb-0.5 inline-block min-w-[80px]">
+                  <span className="text-xs sm:text-sm font-serif font-semibold text-slate-900 border-b border-slate-900 pb-0.5 inline-block min-w-[60px] sm:min-w-[80px]">
                     {school?.headteacher_name || ""}
                   </span>
                   {school?.headteacher_name && (
                      <span className="text-sm font-serif text-slate-800">,</span>
                   )}
-                  <span className="text-sm font-serif italic text-slate-700">
+                  <span className="text-xs sm:text-sm font-serif italic text-slate-700">
                     {school?.headteacher_title || ""}
                   </span>
                 </div>
-                <p className="text-[12px] font-black text-slate-900 uppercase tracking-widest mt-1">
+                <p className="text-[10px] font-black text-slate-900 uppercase tracking-widest mt-1">
                   HEADTEACHER
                 </p>
               </div>
             </div>
             
-            <div className="flex flex-col justify-end items-end pb-1 gap-2">
+            <div className="flex flex-col justify-center sm:justify-end items-center sm:items-end pb-1 gap-2">
               <QRCodeSVG value={verificationUrl} size={64} className="opacity-80" />
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Official Document</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center sm:text-right">Official Document</p>
             </div>
           </div>
 

@@ -228,25 +228,25 @@ export default function CheckResults() {
           /* Results View */
           <div className="max-w-5xl mx-auto space-y-6">
             {/* Result Header */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
-              <div>
-                <h2 className="text-2xl font-bold text-white">{resultData.student.name}</h2>
-                <p className="text-slate-400 mt-1">Student No: {resultData.student.studentNumber} · {resultData.student.class}</p>
-                <p className="text-slate-500 text-sm mt-1">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-white/5 border border-white/10 rounded-2xl p-6 sm:p-8 backdrop-blur-sm">
+              <div className="text-center md:text-left">
+                <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">{resultData.student.name}</h2>
+                <p className="text-slate-400 mt-1 text-lg">Student No: {resultData.student.studentNumber} · {resultData.student.class}</p>
+                <p className="text-slate-500 mt-1">
                   {resultData.termResults[0].term} · {examType} · Academic Year {resultData.termResults[0].academicYear}
                 </p>
               </div>
-              <div className="flex gap-3 flex-wrap">
+              <div className="flex flex-col sm:flex-row w-full md:w-auto gap-3">
                 <Button
                   onClick={handleDownloadPDF}
-                  className="bg-emerald-600 hover:bg-emerald-500 gap-2 rounded-xl shadow-lg shadow-emerald-600/20"
+                  className="bg-emerald-600 hover:bg-emerald-500 gap-2 rounded-xl shadow-lg shadow-emerald-600/20 h-12 px-6 flex-1 sm:flex-none"
                 >
                   <Download className="h-4 w-4" />
                   Download PDF
                 </Button>
                 <Button
                   onClick={handlePrint}
-                  className="bg-blue-600 hover:bg-blue-500 gap-2 rounded-xl shadow-lg shadow-blue-600/20"
+                  className="bg-blue-600 hover:bg-blue-500 gap-2 rounded-xl shadow-lg shadow-blue-600/20 h-12 px-6 flex-1 sm:flex-none"
                 >
                   <Printer className="h-4 w-4" />
                   Print Report
@@ -254,7 +254,7 @@ export default function CheckResults() {
                 <Button
                   variant="outline"
                   onClick={() => setResultData(null)}
-                  className="border-white/20 text-slate-200 hover:bg-white/10 rounded-xl"
+                  className="border-white/20 text-slate-200 hover:bg-white/10 rounded-xl h-12 px-6 flex-1 sm:flex-none"
                 >
                   <Search className="h-4 w-4 mr-2" />
                   New Search
@@ -263,8 +263,8 @@ export default function CheckResults() {
             </div>
 
             {/* Report Card Preview */}
-            <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-              <div ref={reportRef} className="w-full bg-white text-black">
+            <div className="bg-white rounded-2xl shadow-2xl overflow-x-auto overflow-y-hidden lg:overflow-hidden">
+              <div ref={reportRef} className="w-full min-w-[350px] sm:min-w-0 bg-white text-black">
                 <ReportCardContent
                   data={{
                     student: resultData.student,

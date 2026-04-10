@@ -44,7 +44,6 @@ const App = () => {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/force-password-reset" element={<ForcePasswordReset />} />
-            <Route path="/school/:slug/*" element={<SchoolWebsite />} />
             <Route path="/student-portal/:id/*" element={
               <ProtectedRoute allowedRoles={['student']}>
                 <StudentPortal />
@@ -82,6 +81,7 @@ const App = () => {
             } />
             <Route path="/verify/:hash" element={<VerifyReport />} />
             <Route path="/check-results" element={<CheckResults />} />
+            <Route path="/:slug/*" element={<SchoolWebsite />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

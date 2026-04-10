@@ -586,7 +586,7 @@ export default function SchoolManagement() {
                           <Building className="mr-2 h-4 w-4" /> Manage License
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => {
-                          const url = `${window.location.origin}/school/${school.slug}`;
+                          const url = `${window.location.origin}/${school.slug}`;
                           window.open(url, '_blank');
                         }}>
                           <ExternalLink className="mr-2 h-4 w-4" /> Visit Website (New)

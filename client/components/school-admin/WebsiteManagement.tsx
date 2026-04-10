@@ -391,7 +391,7 @@ export default function WebsiteManagement() {
             className="flex items-center gap-2 group transition-all hover:border-primary hover:text-primary"
             onClick={() => {
               const origin = window.location.origin;
-              const url = `${origin}/school/${school.slug}`;
+              const url = `${origin}/${school.slug}`;
               window.open(url, '_blank');
             }}
           >

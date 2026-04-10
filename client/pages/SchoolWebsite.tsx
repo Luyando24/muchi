@@ -67,7 +67,7 @@ interface WebsiteContent {
 
 export default function SchoolWebsite() {
   const { slug } = useParams<{ slug: string }>();
-  const basePath = `/school/${slug}`;
+  const basePath = `/${slug}`;
   const [school, setSchool] = useState<School | null>(null);
   const [websiteContent, setWebsiteContent] = useState<WebsiteContent | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
