@@ -7471,4 +7471,70 @@ router.get(
   }
 );
 
+// GET /api/school/grades/clean-classes
+// Fetch all classes that have zero grade anomalies (no scores > 100)
+router.get(
+  "/grades/clean-classes",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+
+    try {
+      // 1. Get all classes in the school
+      const { data: allClasses, error: classesError } = await supabaseAdmin
+        .from("classes")
+        .select("id, name")
+        .eq("school_id", schoolId);
+
+      if (classesError) throw classesError;
+      if (!allClasses || allClasses.length === 0) return res.json([]);
+
+      // 2. Get all anomalies
+      const anomaliesQuery = supabaseAdmin
+        .from("student_grades")
+        .select("student_id, academic_year")
+        .eq("school_id", schoolId)
+        .gt("percentage", 100);
+
+      const anomalies = await fetchAll(anomaliesQuery);
+      
+      // 3. If no anomalies at all, all classes are clean
+      if (anomalies.length === 0) {
+        return res.json(allClasses);
+      }
+
+      // 4. Get enrollments for students with anomalies to find their classes
+      const studentIds = [...new Set(anomalies.map((a: any) => a.student_id))];
+      let anomalousClassIds = new Set<string>();
+
+      if (studentIds.length > 0) {
+        const chunkSize = 800;
+        for (let i = 0; i < studentIds.length; i += chunkSize) {
+          const chunk = studentIds.slice(i, i + chunkSize);
+          const { data: enrollmentsData } = await supabaseAdmin
+            .from("enrollments")
+            .select("class_id")
+            .in("student_id", chunk)
+            .eq("status", "Active");
+            
+          if (enrollmentsData) {
+            enrollmentsData.forEach((e: any) => {
+              if (e.class_id) anomalousClassIds.add(e.class_id);
+            });
+          }
+        }
+      }
+
+      // 5. Filter out classes that have anomalies
+      const cleanClasses = allClasses.filter(c => !anomalousClassIds.has(c.id));
+      
+      res.json(cleanClasses);
+    } catch (error: any) {
+      console.error("Fetch Clean Classes Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
 export const schoolAdminRouter = router;

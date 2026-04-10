@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Loader2, AlertTriangle } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FileText, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useToast } from "@/components/ui/use-toast";
 import { syncFetch } from '@/lib/syncService';
 import { supabase } from '@/lib/supabase';
@@ -23,30 +24,45 @@ interface Anomaly {
   teacherName?: string;
 }
 
+interface CleanClass {
+  id: string;
+  name: string;
+  academic_year: string;
+}
+
 export function GradeAnomalies() {
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
+  const [cleanClasses, setCleanClasses] = useState<CleanClass[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("anomalies");
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchAnomalies();
+    fetchData();
   }, []);
 
-  const fetchAnomalies = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No authorization token");
 
-      const data = await syncFetch('/api/school/grades/anomalies', {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
-      });
-      setAnomalies(data || []);
+      const [anomaliesData, cleanClassesData] = await Promise.all([
+        syncFetch('/api/school/grades/anomalies', {
+          headers: { 'Authorization': `Bearer ${session.access_token}` }
+        }),
+        syncFetch('/api/school/grades/clean-classes', {
+          headers: { 'Authorization': `Bearer ${session.access_token}` }
+        })
+      ]);
+
+      setAnomalies(anomaliesData || []);
+      setCleanClasses(cleanClassesData || []);
     } catch (error) {
-      console.error("Failed to fetch anomalies:", error);
+      console.error("Failed to fetch data:", error);
       toast({
         title: "Error",
-        description: "Failed to load grade anomalies.",
+        description: "Failed to load audit data.",
         variant: "destructive"
       });
     } finally {
@@ -132,6 +148,66 @@ export function GradeAnomalies() {
     </Card>
   );
 
+  const cleanClassesContent = (
+    <Card className="shadow-sm border-slate-200">
+      <CardHeader className="print:block print:pb-4 pb-6 border-b border-slate-100 bg-slate-50/50">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-green-100 rounded-lg print:hidden">
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+            </div>
+            <div>
+              <CardTitle className="text-lg">Clean Classes</CardTitle>
+              <CardDescription>
+                Classes with no grade anomalies detected
+              </CardDescription>
+            </div>
+          </div>
+          {cleanClasses.length > 0 && (
+            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 print:hidden">
+              {cleanClasses.length} Class{cleanClasses.length !== 1 ? 'es' : ''} Clean
+            </Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+            <Loader2 className="h-8 w-8 animate-spin mb-4" />
+            <p>Scanning database for clean classes...</p>
+          </div>
+        ) : cleanClasses.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 text-slate-500 bg-slate-50/30">
+            <div className="p-4 bg-yellow-100 rounded-full mb-4">
+              <AlertTriangle className="h-8 w-8 text-yellow-600" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 mb-1">No Clean Classes Found</h3>
+            <p>All classes currently have at least one grade anomaly.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="font-semibold">Class Name</TableHead>
+                  <TableHead className="font-semibold text-right">Academic Year</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {cleanClasses.map((cleanClass) => (
+                  <TableRow key={cleanClass.id} className="hover:bg-slate-50/50">
+                    <TableCell className="font-medium text-slate-900">{cleanClass.name}</TableCell>
+                    <TableCell className="text-right text-slate-600">{cleanClass.academic_year || '-'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
   return (
     <>
       <div className="space-y-6 print:hidden">
@@ -140,13 +216,30 @@ export function GradeAnomalies() {
             <h2 className="text-3xl font-bold tracking-tight text-slate-900">Data Audit</h2>
             <p className="text-slate-500 mt-1">Review and manage anomalous grades (over 100%) across the school.</p>
           </div>
-          <Button onClick={handlePrint} className="gap-2" disabled={loading || anomalies.length === 0}>
+          <Button onClick={handlePrint} className="gap-2" disabled={loading}>
             <FileText className="h-4 w-4" />
             Export PDF
           </Button>
         </div>
 
-        {reportContent}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="anomalies" className="flex gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              Anomalies ({anomalies.length})
+            </TabsTrigger>
+            <TabsTrigger value="clean" className="flex gap-2">
+              <CheckCircle2 className="h-4 w-4" />
+              Clean Classes ({cleanClasses.length})
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="anomalies" className="mt-0">
+            {reportContent}
+          </TabsContent>
+          <TabsContent value="clean" className="mt-0">
+            {cleanClassesContent}
+          </TabsContent>
+        </Tabs>
       </div>
 
       {typeof document !== 'undefined' && ReactDOM.createPortal(
@@ -154,9 +247,13 @@ export function GradeAnomalies() {
           <div className="p-8 max-w-full">
             <div className="mb-6">
               <h2 className="text-2xl font-bold tracking-tight text-slate-900">Data Audit</h2>
-              <p className="text-slate-500 mt-1">Anomalous grades (over 100%) across the school.</p>
+              <p className="text-slate-500 mt-1">
+                {activeTab === 'anomalies' 
+                  ? 'Anomalous grades (over 100%) across the school.'
+                  : 'Classes with no grade anomalies detected.'}
+              </p>
             </div>
-            {reportContent}
+            {activeTab === 'anomalies' ? reportContent : cleanClassesContent}
           </div>
           <style dangerouslySetInnerHTML={{__html: `
             @media print {
