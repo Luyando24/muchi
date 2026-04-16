@@ -5437,6 +5437,179 @@ router.get(
   },
 );
 
+// GET /api/school/reports/results-analysis
+router.get(
+  "/reports/results-analysis",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { term, academic_year, examType, gradeLevel } = req.query;
+
+    try {
+      // 1. Fetch Grading Scales (Custom Scale)
+      const { data: scales, error: scalesError } = await supabaseAdmin
+        .from("grading_scales")
+        .select("*")
+        .eq("school_id", schoolId)
+        .order("min_percentage", { ascending: false });
+
+      if (scalesError) throw scalesError;
+
+      // 2. Fetch Subjects
+      const { data: subjects, error: subjectsError } = await supabaseAdmin
+        .from("subjects")
+        .select("*")
+        .eq("school_id", schoolId)
+        .order("name", { ascending: true });
+
+      if (subjectsError) throw subjectsError;
+
+      // 3. Fetch Students (Filtered by Grade Level if provided)
+      let studentsQuery = supabaseAdmin
+        .from("profiles")
+        .select("id, gender, grade")
+        .eq("school_id", schoolId)
+        .eq("role", "student");
+
+      if (gradeLevel && String(gradeLevel).toLowerCase() !== "all") {
+        studentsQuery = studentsQuery.ilike("grade", `%${gradeLevel}%`);
+      }
+
+      const studentsData = await fetchAll(studentsQuery);
+
+      if (!studentsData || studentsData.length === 0) {
+        return res.json({ scales, analysis: [] });
+      }
+
+      const studentMap = new Map();
+      studentsData.forEach((s: any) => {
+        studentMap.set(s.id, {
+          gender: (s.gender || "Other").toLowerCase(),
+        });
+      });
+
+      const studentIds = Array.from(studentMap.keys());
+
+      // 4. Fetch Grades
+      let gradesQuery = supabaseAdmin
+        .from("student_grades")
+        .select("student_id, subject_id, percentage")
+        .eq("school_id", schoolId)
+        .in("student_id", studentIds)
+        .in("status", ["Submitted", "Published"]);
+
+      if (term && term !== "All") gradesQuery = gradesQuery.eq("term", term);
+      if (academic_year && academic_year !== "All") gradesQuery = gradesQuery.eq("academic_year", academic_year);
+      if (examType && examType !== "All") gradesQuery = gradesQuery.eq("exam_type", examType);
+
+      const gradesData = await fetchAll(gradesQuery);
+
+      // 5. Initialize Analysis
+      const analysis: Record<string, any> = {};
+      subjects.forEach((subj) => {
+        analysis[subj.id] = {
+          subjectName: subj.name,
+          subjectCode: subj.code,
+          reg: { f: 0, m: 0, tot: 0 },
+          wrote: { f: 0, m: 0, tot: 0 },
+          abs: { f: 0, m: 0, tot: 0 },
+          grades: {},
+          totalPasses: { f: 0, m: 0, tot: 0 },
+          percentagePass: { f: 0, m: 0, tot: 0 }
+        };
+        scales.forEach((scale: any) => {
+          analysis[subj.id].grades[scale.grade] = { f: 0, m: 0, tot: 0 };
+        });
+      });
+
+      // 6. Map Enrollments to track which subjects are offered to which students
+      const { data: enrollments } = await supabaseAdmin
+        .from("enrollments")
+        .select("student_id, class_id")
+        .in("student_id", studentIds)
+        .eq("academic_year", academic_year || new Date().getFullYear().toString());
+
+      const studentClassMap = new Map();
+      enrollments?.forEach(e => studentClassMap.set(e.student_id, e.class_id));
+
+      const { data: classSubjects } = await supabaseAdmin
+        .from("class_subjects")
+        .select("class_id, subject_id");
+
+      const classToSubjects = new Map();
+      classSubjects?.forEach(cs => {
+        if (!classToSubjects.has(cs.class_id)) classToSubjects.set(cs.class_id, new Set());
+        classToSubjects.get(cs.class_id).add(cs.subject_id);
+      });
+
+      // 7. Calculate Counts
+      studentsData.forEach((s: any) => {
+        const gender = (s.gender || "Other").toLowerCase();
+        const classId = studentClassMap.get(s.id);
+        const offeredSubjects = classId ? classToSubjects.get(classId) : null;
+
+        subjects.forEach((subj) => {
+          const hasGrade = gradesData?.some(g => g.student_id === s.id && g.subject_id === subj.id);
+          const isOffered = offeredSubjects?.has(subj.id);
+
+          if (isOffered || hasGrade) {
+            analysis[subj.id].reg.tot++;
+            if (gender === 'male') analysis[subj.id].reg.m++;
+            else if (gender === 'female') analysis[subj.id].reg.f++;
+          }
+        });
+      });
+
+      gradesData?.forEach((g: any) => {
+        const student = studentMap.get(g.student_id);
+        if (!student || !analysis[g.subject_id]) return;
+
+        const gender = student.gender;
+        const percentage = Number(g.percentage) || 0;
+        
+        analysis[g.subject_id].wrote.tot++;
+        if (gender === 'male') analysis[g.subject_id].wrote.m++;
+        else if (gender === 'female') analysis[g.subject_id].wrote.f++;
+
+        const scale = scales.find((s: any) => percentage >= s.min_percentage && percentage <= s.max_percentage);
+        if (scale) {
+          analysis[g.subject_id].grades[scale.grade].tot++;
+          if (gender === 'male') analysis[g.subject_id].grades[scale.grade].m++;
+          else if (gender === 'female') analysis[g.subject_id].grades[scale.grade].f++;
+
+          const isFail = (scale.description?.toLowerCase().includes('fail')) || 
+                         ['9', 'U9', 'U', 'F', 'E'].includes(String(scale.grade).toUpperCase());
+          
+          if (!isFail) {
+             analysis[g.subject_id].totalPasses.tot++;
+             if (gender === 'male') analysis[g.subject_id].totalPasses.m++;
+             else if (gender === 'female') analysis[g.subject_id].totalPasses.f++;
+          }
+        }
+      });
+
+      // Final processing
+      const resultAnalysis = Object.values(analysis)
+        .filter((a: any) => a.reg.tot > 0)
+        .map(a => {
+          a.abs.tot = Math.max(0, a.reg.tot - a.wrote.tot);
+          a.abs.f = Math.max(0, a.reg.f - a.wrote.f);
+          a.abs.m = Math.max(0, a.reg.m - a.wrote.m);
+          a.percentagePass.tot = a.wrote.tot > 0 ? Math.round((a.totalPasses.tot / a.wrote.tot) * 100) : 0;
+          a.percentagePass.f = a.wrote.f > 0 ? Math.round((a.totalPasses.f / a.wrote.f) * 100) : 0;
+          a.percentagePass.m = a.wrote.m > 0 ? Math.round((a.totalPasses.m / a.wrote.m) * 100) : 0;
+          return a;
+        });
+
+      res.json({ scales, analysis: resultAnalysis });
+    } catch (error: any) {
+      console.error("Results Analysis Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
 // GET /api/school/reports/master-scoresheet
 router.get(
   "/reports/master-scoresheet",

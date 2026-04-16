@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ExportMasterSheetModal from './ExportMasterSheetModal';
+import ExportResultsAnalysisModal from './ExportResultsAnalysisModal';
 import {
   FileText,
   Download,
@@ -82,6 +83,9 @@ export default function ReportsManagement() {
   const [selectedClassId, setSelectedClassId] = useState<string>("all");
   const [masterSheetLoading, setMasterSheetLoading] = useState(false);
   const [availableClasses, setAvailableClasses] = useState<any[]>([]);
+  const [resultsAnalysis, setResultsAnalysis] = useState<any>(null);
+  const [selectedGradeLevel, setSelectedGradeLevel] = useState<string>("all");
+  const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
   
   // Pagination States
   const [currentPage, setCurrentPage] = useState(1);
@@ -149,6 +153,9 @@ export default function ReportsManagement() {
         setSelectedYear(new Date().getFullYear().toString());
         setSelectedExamType("End of Term");
       }
+      
+      // Fetch classes to populate filters in multiple tabs
+      fetchClasses();
     } catch (error) {
       console.error('Error fetching initial data:', error);
     }
@@ -249,6 +256,44 @@ export default function ReportsManagement() {
     setCurrentPage(1);
   }, [selectedExamType, selectedClassId, selectedTerm, selectedYear]);
 
+  const fetchResultsAnalysis = async () => {
+    if (!selectedTerm || !selectedYear) return;
+    try {
+      setIsAnalysisLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const queryParams = new URLSearchParams({
+        term: selectedTerm,
+        academic_year: selectedYear,
+        examType: selectedExamType,
+        gradeLevel: selectedGradeLevel
+      });
+
+      const res = await syncFetch(`/api/school/reports/results-analysis?${queryParams.toString()}`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        cacheKey: `results-analysis-${selectedTerm}-${selectedYear}-${selectedExamType}-${selectedGradeLevel}`
+      });
+
+      setResultsAnalysis(res);
+    } catch (error: any) {
+      console.error('Error fetching results analysis:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch results analysis",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAnalysisLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeScreen === 'results-analysis') {
+      fetchResultsAnalysis();
+    }
+  }, [activeScreen, selectedExamType, selectedGradeLevel, selectedTerm, selectedYear]);
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
@@ -309,14 +354,14 @@ export default function ReportsManagement() {
       </div>
 
       <Tabs value={activeScreen} onValueChange={setActiveScreen} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 md:grid-cols-6 lg:w-[900px]">
+        <TabsList className="grid w-full grid-cols-4 md:grid-cols-7 lg:w-[1050px]">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="academic">Academic</TabsTrigger>
           <TabsTrigger value="master-sheet">Master Sheet</TabsTrigger>
+          <TabsTrigger value="results-analysis">Results Analysis</TabsTrigger>
           <TabsTrigger value="top-students">Top Students</TabsTrigger>
           <TabsTrigger value="support">Support Needed</TabsTrigger>
           <TabsTrigger value="finance">Finance</TabsTrigger>
-          <TabsTrigger value="demographics">Students & Staff</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -731,8 +776,152 @@ export default function ReportsManagement() {
           </Card>
         </TabsContent>
 
-        {/* Teacher Performance Tab */}
-
+        {/* Results Analysis Tab */}
+        <TabsContent value="results-analysis" className="space-y-6">
+          <Card>
+            <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-6">
+              <div>
+                <CardTitle className="text-xl">Results Analysis Report</CardTitle>
+                <CardDescription>Subject performance breakdown by gender and custom grade categories</CardDescription>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="w-[180px]">
+                   <Select value={selectedGradeLevel} onValueChange={setSelectedGradeLevel}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Grade Level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Grades</SelectItem>
+                      {Array.from(new Set(
+                        availableClasses
+                          .map((c: any) => c.level || (c.name.includes('Grade') ? c.name.split(' ').slice(0, 2).join(' ') : c.name))
+                          .filter(Boolean)
+                      ))
+                      .sort((a: any, b: any) => String(a).localeCompare(String(b), undefined, { numeric: true }))
+                      .map(g => (
+                        <SelectItem key={g as string} value={g as string}>{g as string}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-[180px]">
+                  <Select value={selectedExamType} onValueChange={setSelectedExamType}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Assessment Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(schoolSettings?.exam_types && schoolSettings.exam_types.length > 0) ? (
+                        schoolSettings.exam_types.map((type: string) => (
+                          <SelectItem key={type} value={type}>{type}</SelectItem>
+                        ))
+                      ) : (
+                        <>
+                          <SelectItem value="Mid Term">Mid Term</SelectItem>
+                          <SelectItem value="End of Term">End of Term</SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <ExportResultsAnalysisModal 
+                  term={selectedTerm}
+                  year={selectedYear}
+                  examType={selectedExamType}
+                  gradeLevel={selectedGradeLevel}
+                  schoolName={schoolSettings?.school_name}
+                  disabled={!resultsAnalysis?.analysis?.length}
+                />
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {isAnalysisLoading ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                  <Loader2 className="h-10 w-10 animate-spin text-emerald-600" />
+                  <p className="text-slate-500 font-medium">Computing results analysis...</p>
+                </div>
+              ) : !resultsAnalysis?.analysis || resultsAnalysis.analysis.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-400">
+                  <BarChart3 className="h-12 w-12 opacity-20" />
+                  <p>No analysis data available for the selected criteria.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                   <Table className="border-separate border-spacing-0">
+                    <TableHeader className="bg-slate-50 dark:bg-slate-900/50">
+                      <TableRow>
+                        <TableHead rowSpan={2} className="min-w-[200px] font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 sticky left-0 z-20">SUBJECTS</TableHead>
+                        <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-blue-50/50">REG</TableHead>
+                        <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-emerald-50/50">WROTE</TableHead>
+                        <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-orange-50/50">ABS</TableHead>
+                        {resultsAnalysis.scales.map((s: any) => (
+                           <TableHead key={s.id} colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700">
+                             {s.grade}
+                           </TableHead>
+                        ))}
+                        <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-indigo-50/50">TOTAL PASSES</TableHead>
+                        <TableHead colSpan={3} className="text-center font-black text-blue-600 border-b border-slate-300 dark:border-slate-700 bg-blue-50/30">% PASS</TableHead>
+                      </TableRow>
+                      <TableRow>
+                        {/* Subheaders for REG to % PASS */}
+                        {[...Array(4 + resultsAnalysis.scales.length)].map((_, i) => (
+                          <React.Fragment key={i}>
+                            <TableHead className="text-center text-[10px] font-bold border-r border-b border-slate-200 dark:border-slate-800">F</TableHead>
+                            <TableHead className="text-center text-[10px] font-bold border-r border-b border-slate-200 dark:border-slate-800">M</TableHead>
+                            <TableHead className="text-center text-[10px] font-bold border-r border-b border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-800/50">TOT</TableHead>
+                          </React.Fragment>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {resultsAnalysis.analysis.map((row: any) => (
+                        <TableRow key={row.subjectName} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                          <TableCell className="font-bold text-slate-900 dark:text-white sticky left-0 bg-white dark:bg-slate-900 z-10 border-r border-b border-slate-200 dark:border-slate-800 shadow-[2px_0_5px_rgba(0,0,0,0.05)]">
+                            {row.subjectName}
+                            <div className="text-[10px] text-slate-500 font-normal uppercase">{row.subjectCode}</div>
+                          </TableCell>
+                          
+                          {/* REG */}
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.reg.f}</TableCell>
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.reg.m}</TableCell>
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-bold bg-slate-50/30">{row.reg.tot}</TableCell>
+                          
+                          {/* WROTE */}
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.wrote.f}</TableCell>
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.wrote.m}</TableCell>
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-bold bg-slate-50/30">{row.wrote.tot}</TableCell>
+                          
+                          {/* ABS */}
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.abs.f}</TableCell>
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.abs.m}</TableCell>
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-bold bg-slate-50/30">{row.abs.tot}</TableCell>
+                          
+                          {/* Grade Columns */}
+                          {resultsAnalysis.scales.map((s: any) => (
+                            <React.Fragment key={s.id}>
+                              <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.grades[s.grade]?.f || 0}</TableCell>
+                              <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.grades[s.grade]?.m || 0}</TableCell>
+                              <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-bold bg-slate-50/30">{row.grades[s.grade]?.tot || 0}</TableCell>
+                            </React.Fragment>
+                          ))}
+                          
+                          {/* TOTAL PASSES */}
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 text-emerald-600">{row.totalPasses.f}</TableCell>
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 text-emerald-600">{row.totalPasses.m}</TableCell>
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-bold bg-emerald-50/30 text-emerald-700">{row.totalPasses.tot}</TableCell>
+                          
+                          {/* % PASS */}
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-medium">{row.percentagePass.f}%</TableCell>
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-medium">{row.percentagePass.m}%</TableCell>
+                          <TableCell className="text-center border-b border-slate-100 dark:border-slate-800 font-black text-blue-600 bg-blue-50/30">{row.percentagePass.tot}%</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Top Students Tab */}
         <TabsContent value="top-students" className="space-y-6">
