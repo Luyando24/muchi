@@ -5533,9 +5533,17 @@ router.get(
       const studentClassMap = new Map();
       enrollments?.forEach(e => studentClassMap.set(e.student_id, e.class_id));
 
-      const { data: classSubjects } = await supabaseAdmin
+      const relevantClassIds = Array.from(new Set(enrollments?.map(e => e.class_id).filter(Boolean) || []));
+      
+      let classSubjectsQuery = supabaseAdmin
         .from("class_subjects")
         .select("class_id, subject_id");
+      
+      if (relevantClassIds.length > 0) {
+        classSubjectsQuery = classSubjectsQuery.in("class_id", relevantClassIds);
+      }
+      
+      const { data: classSubjects } = await classSubjectsQuery;
 
       const classToSubjects = new Map();
       classSubjects?.forEach(cs => {

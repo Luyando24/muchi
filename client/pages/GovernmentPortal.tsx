@@ -567,49 +567,89 @@ function PerformanceDashboard() {
             <CardDescription>Academic outcomes compared across demographics</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-6">
-              {['male', 'female'].map((genderName) => {
-                const genderData = stats.genderGradeDistribution?.[genderName] || {};
-                const totalCount = Object.values(genderData).reduce((a: any, b: any) => a + b, 0) as number;
+            <div className="h-[350px] w-full mt-4">
+              {(() => {
+                const genders = ['male', 'female'];
+                const allLabelsSet = new Set<string>();
+                genders.forEach(g => {
+                  Object.keys(stats.genderGradeDistribution?.[g] || {}).forEach(l => allLabelsSet.add(l));
+                });
                 
-                if (totalCount === 0) return null;
+                const allLabels = Array.from(allLabelsSet);
+                // Custom sort order for Zambian grades if they exist
+                const order = ['Distinction', 'Merit', 'Credit', 'Pass', 'Fail'];
+                allLabels.sort((a, b) => {
+                  const idxA = order.indexOf(a);
+                  const idxB = order.indexOf(b);
+                  if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                  if (idxA !== -1) return -1;
+                  if (idxB !== -1) return 1;
+                  return a.localeCompare(b);
+                });
+
+                const chartData = genders.map(gender => {
+                  const data = stats.genderGradeDistribution?.[gender] || {};
+                  const total = Object.values(data).reduce((a: any, b: any) => a + b, 0) as number;
+                  return {
+                    name: gender.charAt(0).toUpperCase() + gender.slice(1),
+                    total,
+                    ...data
+                  };
+                }).filter(d => d.total > 0);
+
+                if (chartData.length === 0) {
+                  return (
+                    <div className="flex flex-col items-center justify-center h-full text-slate-400 opacity-50 bg-slate-50/30 dark:bg-slate-900/10 rounded-xl border border-dashed">
+                      <BarChart3 className="h-10 w-10 mb-2 opacity-20" />
+                      <p className="text-sm italic">No gender distribution data available</p>
+                    </div>
+                  );
+                }
 
                 return (
-                  <div key={genderName} className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <h4 className="font-bold flex items-center gap-2 capitalize">
-                        <div className={`w-3 h-3 rounded-full ${genderName === 'male' ? 'bg-blue-500' : 'bg-pink-500'}`} />
-                        {genderName}
-                      </h4>
-                      <span className="text-xs font-bold text-slate-500">{totalCount} Students</span>
-                    </div>
-                    <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700">
-                      {Object.entries(genderData).map(([label, count]: any, idx) => {
-                        const width = (count / totalCount) * 100;
-                        return (
-                          <div
-                            key={label}
-                            title={`${label}: ${count}`}
-                            className="h-full"
-                            style={{ width: `${width}%`, backgroundColor: COLORS[idx % COLORS.length] }}
-                          />
-                        );
-                      })}
-                    </div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
-                      {Object.entries(genderData).map(([label, count]: any, idx) => (
-                        <div key={label} className="flex items-center gap-1.5">
-                          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
-                          <span className="text-[10px] text-slate-600 dark:text-slate-400 font-medium">{label}: {count}</span>
-                        </div>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.1} />
+                      <XAxis 
+                        dataKey="name" 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fill: '#94a3b8', fontSize: 12, fontWeight: 600 }}
+                      />
+                      <YAxis 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fill: '#94a3b8', fontSize: 12 }} 
+                      />
+                      <Tooltip 
+                        cursor={{ fill: 'rgba(59, 130, 246, 0.05)' }}
+                        contentStyle={{ 
+                          borderRadius: '12px', 
+                          border: 'none', 
+                          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                          padding: '12px'
+                        }}
+                      />
+                      <Legend 
+                         verticalAlign="top" 
+                         align="right" 
+                         wrapperStyle={{ paddingTop: '0px', paddingBottom: '20px' }}
+                         iconType="circle"
+                         iconSize={8}
+                      />
+                      {allLabels.map((label, idx) => (
+                        <Bar 
+                          key={label} 
+                          dataKey={label} 
+                          stackId="a" 
+                          fill={COLORS[idx % COLORS.length]} 
+                          radius={idx === allLabels.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} 
+                        />
                       ))}
-                    </div>
-                  </div>
+                    </BarChart>
+                  </ResponsiveContainer>
                 );
-              })}
-              {(!stats.genderGradeDistribution || Object.keys(stats.genderGradeDistribution).length === 0) && (
-                <div className="text-center py-20 opacity-50 italic text-sm">No gender distribution data available.</div>
-              )}
+              })()}
             </div>
           </CardContent>
         </Card>
