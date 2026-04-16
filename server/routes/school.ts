@@ -5491,19 +5491,20 @@ router.get(
 
       const studentIds = Array.from(studentMap.keys());
 
-      // 4. Fetch Grades
+      // 4. Fetch Grades (Fetch all for school and filter in-memory to avoid URI length issues)
       let gradesQuery = supabaseAdmin
         .from("student_grades")
         .select("student_id, subject_id, percentage")
         .eq("school_id", schoolId)
-        .in("student_id", studentIds)
         .in("status", ["Submitted", "Published"]);
 
       if (term && term !== "All") gradesQuery = gradesQuery.eq("term", term);
       if (academic_year && academic_year !== "All") gradesQuery = gradesQuery.eq("academic_year", academic_year);
       if (examType && examType !== "All") gradesQuery = gradesQuery.eq("exam_type", examType);
 
-      const gradesData = await fetchAll(gradesQuery);
+      const allGrades = await fetchAll(gradesQuery);
+      const studentIdsSet = new Set(studentIds);
+      const gradesData = allGrades.filter((g: any) => studentIdsSet.has(g.student_id));
 
       // 5. Initialize Analysis
       const analysis: Record<string, any> = {};
@@ -5524,11 +5525,14 @@ router.get(
       });
 
       // 6. Map Enrollments to track which subjects are offered to which students
-      const { data: enrollments } = await supabaseAdmin
+      // Filtering by school_id via profile join to avoid large studentIds list
+      const { data: allEnrollments } = await supabaseAdmin
         .from("enrollments")
-        .select("student_id, class_id")
-        .in("student_id", studentIds)
+        .select("student_id, class_id, profiles!inner(school_id)")
+        .eq("profiles.school_id", schoolId)
         .eq("academic_year", academic_year || new Date().getFullYear().toString());
+
+      const enrollments = allEnrollments?.filter((e: any) => studentIdsSet.has(e.student_id)) || [];
 
       const studentClassMap = new Map();
       enrollments?.forEach(e => studentClassMap.set(e.student_id, e.class_id));
