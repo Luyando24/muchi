@@ -78,7 +78,7 @@ export default function ReportsManagement() {
   const [activeScreen, setActiveScreen] = useState("overview");
   const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
   const [masterSheetData, setMasterSheetData] = useState<{ subjects: any[], students: any[] } | null>(null);
-  const [selectedExamType, setSelectedExamType] = useState<string>("End of Term");
+  const [selectedExamType, setSelectedExamType] = useState<string>("");
   const [selectedClassId, setSelectedClassId] = useState<string>("all");
   const [masterSheetLoading, setMasterSheetLoading] = useState(false);
   const [availableClasses, setAvailableClasses] = useState<any[]>([]);
@@ -105,10 +105,10 @@ export default function ReportsManagement() {
   }, []);
 
   useEffect(() => {
-    if (selectedTerm || selectedYear) {
+    if (selectedTerm || selectedYear || selectedExamType) {
       fetchLiveStats();
     }
-  }, [selectedTerm, selectedYear]);
+  }, [selectedTerm, selectedYear, selectedExamType]);
 
   const fetchInitialData = async () => {
     try {
@@ -125,18 +125,29 @@ export default function ReportsManagement() {
       if (!profile) return;
 
       const { data: settings } = await supabase
-        .from('school_settings')
+        .from('schools')
         .select('*')
-        .eq('school_id', profile.school_id)
+        .eq('id', profile.school_id)
         .maybeSingle();
 
       if (settings) {
         setSchoolSettings(settings);
         setSelectedTerm(settings.current_term || "Term 1");
         setSelectedYear(settings.academic_year || new Date().getFullYear().toString());
+        
+        // Dynamically set default exam type from school settings
+        if (settings.exam_types && settings.exam_types.length > 0) {
+          // If 'End of Term' is available, prefer it as default, otherwise pick the first one
+          const preferredDefault = "End of Term";
+          const hasPreferred = settings.exam_types.some((t: string) => t === preferredDefault);
+          setSelectedExamType(hasPreferred ? preferredDefault : settings.exam_types[0]);
+        } else {
+          setSelectedExamType("End of Term");
+        }
       } else {
         setSelectedTerm("Term 1");
         setSelectedYear(new Date().getFullYear().toString());
+        setSelectedExamType("End of Term");
       }
     } catch (error) {
       console.error('Error fetching initial data:', error);
@@ -152,6 +163,7 @@ export default function ReportsManagement() {
       const queryParams = new URLSearchParams();
       if (selectedTerm) queryParams.append('term', selectedTerm);
       if (selectedYear) queryParams.append('academic_year', selectedYear);
+      if (selectedExamType) queryParams.append('examType', selectedExamType);
 
       const data = await syncFetch(`/api/school/reports/live-stats?${queryParams.toString()}`, {
         headers: {

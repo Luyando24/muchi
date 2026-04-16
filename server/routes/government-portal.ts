@@ -135,7 +135,8 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
     const avgAttendanceValue = totalAttendanceDays > 0 ? (presentDays / totalAttendanceDays) * 100 : 0;
 
     // 5. Aggregate national pass rate (%) and Gender-wise Grade Distribution
-    let passRateQuery = supabaseAdmin.from('student_grades').select('school_id, percentage, student_id, subjects!inner(id, name, department), profiles!student_id(gender)');
+    // NOTE: Using a simpler query and manual joining below to ensure stability against schema cache issues
+    let passRateQuery = supabaseAdmin.from('student_grades').select('school_id, percentage, student_id, subject_id');
 
     let scalesQuery = supabaseAdmin.from('grading_scales').select('grade, min_percentage, max_percentage, description, school_id');
     
@@ -160,6 +161,25 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
       { data: gradeData },
       { data: scalesData }
     ] = await Promise.all([passRateQuery, scalesQuery]);
+
+    // Manual merge for profiles and subjects to ensure data visibility
+    const studentIds = [...new Set(gradeData?.map(g => g.student_id) || [])];
+    const subjectIds = [...new Set(gradeData?.map(g => g.subject_id) || [])];
+
+    const [{ data: profilesData }, { data: subjectsData }] = await Promise.all([
+      supabaseAdmin.from('profiles').select('id, gender').in('id', studentIds),
+      supabaseAdmin.from('subjects').select('id, name').in('id', subjectIds)
+    ]);
+
+    const profileMap = new Map(profilesData?.map(p => [p.id, p]));
+    const subjectMap = new Map(subjectsData?.map(s => [s.id, s]));
+
+    if (gradeData) {
+      gradeData.forEach(g => {
+        g.profiles = profileMap.get(g.student_id);
+        g.subjects = subjectMap.get(g.subject_id);
+      });
+    }
 
     const totalGrades = gradeData?.length || 0;
     const avgPassRate = totalGrades > 0 
