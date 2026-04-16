@@ -710,7 +710,7 @@ router.get(
             trend: attendanceTrend,
             status:
               attendanceRateValue === "--" ||
-              parseInt(attendanceRateValue) >= 90
+              (parseInt(attendanceRateValue) >= 90)
                 ? "up"
                 : "down",
           },
@@ -5432,6 +5432,140 @@ router.get(
       });
     } catch (error: any) {
       console.error("Live Stats Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  },
+);
+
+// GET /api/school/reports/master-scoresheet
+router.get(
+  "/reports/master-scoresheet",
+  requireSchoolRole(["school_admin", "academic_auditor", "registrar"]),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { term, academic_year, examType, classId } = req.query;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const isExport = req.query.export === "true";
+
+    if (!term || !academic_year || !examType) {
+      return res.status(400).json({ message: "Term, Academic Year, and Exam Type are required" });
+    }
+
+    try {
+      // 1. Fetch ALL Active Students for this school
+      const studentsQuery = supabaseAdmin
+        .from("profiles")
+        .select(`
+          id, 
+          full_name, 
+          student_number, 
+          grade,
+          enrollments(class_id, classes(name))
+        `)
+        .eq("school_id", schoolId)
+        .eq("role", "student")
+        .eq("enrollment_status", "Active");
+
+      const studentsData = await fetchAll(studentsQuery);
+
+      // 2. Filter students by class if requested
+      let filteredStudents = studentsData;
+      if (classId && classId !== "all") {
+        filteredStudents = studentsData.filter((s: any) => {
+          const enrollment = s.enrollments?.[0];
+          return enrollment?.class_id === classId;
+        });
+      }
+
+      const totalStudents = filteredStudents.length;
+      if (totalStudents === 0) {
+        return res.json({ subjects: [], students: [], metadata: { total: 0, page, pageSize: limit, totalPages: 0 } });
+      }
+
+      const studentIdsSet = new Set(filteredStudents.map((s: any) => s.id));
+
+      // 3. One efficient query to fetch ALL grades for the school/term/exam
+      // Joining subjects(name) to get header information in one pass
+      const gradesQuery = supabaseAdmin
+        .from("student_grades")
+        .select(`
+          percentage,
+          student_id,
+          subject_id,
+          subjects(name, code)
+        `)
+        .eq("school_id", schoolId)
+        .eq("term", term)
+        .eq("academic_year", academic_year)
+        .eq("exam_type", examType)
+        .in("status", ["Submitted", "Published"]);
+
+      const allGradesData = await fetchAll(gradesQuery);
+
+      // 4. In-memory data aggregation
+      const subjectMap = new Map();
+      const studentPerformanceMap = new Map();
+
+      allGradesData.forEach((g: any) => {
+        // Only process grades for our filtered students
+        if (!studentIdsSet.has(g.student_id)) return;
+
+        // Collect unique subjects for headers
+        if (g.subjects) {
+          subjectMap.set(g.subject_id, g.subjects.name);
+        }
+
+        // Aggregate student scores
+        const stats = studentPerformanceMap.get(g.student_id) || { total: 0, count: 0, grades: {} };
+        const percentage = Number(g.percentage) || 0;
+        stats.total += percentage;
+        stats.count += 1;
+        stats.grades[g.subject_id] = percentage;
+        studentPerformanceMap.set(g.student_id, stats);
+      });
+
+      // 5. Build the Score Sheet Matrix and calculate global ranks
+      const subjectsHeaders = Array.from(subjectMap.entries()).map(([id, name]) => ({ id, name }));
+      const fullScoreSheet = filteredStudents.map((s: any) => {
+        const perf = studentPerformanceMap.get(s.id) || { total: 0, count: 0, grades: {} };
+        const enrollment = s.enrollments?.[0];
+        const className = enrollment?.classes?.name || s.grade || "Unassigned";
+
+        return {
+          id: s.id,
+          name: s.full_name,
+          studentNumber: s.student_number,
+          className: className,
+          grades: perf.grades,
+          total: Math.round(perf.total),
+          average: perf.count > 0 ? Math.round((perf.total / perf.count) * 10) / 10 : 0,
+          participationCount: perf.count
+        };
+      });
+
+      // Sort results by average globally to determine correct rank
+      fullScoreSheet.sort((a, b) => b.average - a.average);
+      fullScoreSheet.forEach((s, idx) => {
+        s.rank = idx + 1;
+      });
+
+      // 6. Paginate or serve full export
+      const paginatedStudents = isExport ? fullScoreSheet : fullScoreSheet.slice((page - 1) * limit, page * limit);
+
+      res.json({
+        subjects: subjectsHeaders,
+        students: paginatedStudents,
+        metadata: {
+          total: totalStudents,
+          page: isExport ? 1 : page,
+          pageSize: isExport ? totalStudents : limit,
+          totalPages: isExport ? 1 : Math.ceil(totalStudents / limit)
+        }
+      });
+    } catch (error: any) {
+      console.error("Master Score Sheet Error:", error);
       res.status(500).json({ message: error.message });
     }
   },

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ExportMasterSheetModal from './ExportMasterSheetModal';
 import {
   FileText,
   Download,
@@ -39,6 +40,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
+import { PaginationControls } from '@/components/ui/pagination-controls';
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { syncFetch } from '@/lib/syncService';
@@ -60,6 +64,8 @@ import {
   Area
 } from 'recharts';
 
+import { cn } from "@/lib/utils";
+
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#71717a'];
 
 export default function ReportsManagement() {
@@ -71,7 +77,28 @@ export default function ReportsManagement() {
   const [selectedYear, setSelectedYear] = useState<string>("");
   const [activeScreen, setActiveScreen] = useState("overview");
   const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
+  const [masterSheetData, setMasterSheetData] = useState<{ subjects: any[], students: any[] } | null>(null);
+  const [selectedExamType, setSelectedExamType] = useState<string>("End of Term");
+  const [selectedClassId, setSelectedClassId] = useState<string>("all");
+  const [masterSheetLoading, setMasterSheetLoading] = useState(false);
+  const [availableClasses, setAvailableClasses] = useState<any[]>([]);
+  
+  // Pagination States
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [isExporting, setIsExporting] = useState(false);
+  
   const { toast } = useToast();
+  
+  const getGradeInfo = (pct: number) => {
+    if (pct >= 75) return { label: 'Distinction', color: 'bg-emerald-500 hover:bg-emerald-600', text: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30' };
+    if (pct >= 60) return { label: 'Merit', color: 'bg-blue-500 hover:bg-blue-600', text: 'text-blue-700 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30' };
+    if (pct >= 50) return { label: 'Credit', color: 'bg-indigo-500 hover:bg-indigo-600', text: 'text-indigo-700 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-950/30' };
+    if (pct >= 40) return { label: 'Pass', color: 'bg-orange-500 hover:bg-orange-600', text: 'text-orange-700 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-950/30' };
+    return { label: 'Fail', color: 'bg-red-500 hover:bg-red-600', text: 'text-red-700 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-950/30' };
+  };
 
   useEffect(() => {
     fetchInitialData();
@@ -147,6 +174,69 @@ export default function ReportsManagement() {
     }
   };
 
+  const fetchMasterSheet = async () => {
+    if (!selectedTerm || !selectedYear || !selectedExamType) return;
+    try {
+      setMasterSheetLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const queryParams = new URLSearchParams({
+        term: selectedTerm,
+        academic_year: selectedYear,
+        examType: selectedExamType,
+        classId: selectedClassId,
+        page: currentPage.toString(),
+        limit: pageSize.toString()
+      });
+
+      const res = await syncFetch(`/api/school/reports/master-scoresheet?${queryParams.toString()}`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        cacheKey: `master-scoresheet-${selectedTerm}-${selectedYear}-${selectedExamType}-${selectedClassId}-${currentPage}-${pageSize}`
+      });
+
+      setMasterSheetData({ subjects: res.subjects, students: res.students });
+      setTotalRecords(res.metadata.total);
+      setTotalPages(res.metadata.totalPages);
+    } catch (error: any) {
+      console.error('Error fetching master sheet:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch master score sheet",
+        variant: "destructive",
+      });
+    } finally {
+      setMasterSheetLoading(false);
+    }
+  };
+
+  const fetchClasses = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      
+      const data = await syncFetch('/api/school/classes?limit=200', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        cacheKey: 'school-classes-brief'
+      });
+      setAvailableClasses(data?.data || data || []);
+    } catch (error) {
+      console.error('Error fetching classes:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (activeScreen === 'master-sheet') {
+      fetchMasterSheet();
+      if (availableClasses.length === 0) fetchClasses();
+    }
+  }, [activeScreen, selectedExamType, selectedClassId, selectedTerm, selectedYear, currentPage, pageSize]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedExamType, selectedClassId, selectedTerm, selectedYear]);
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
@@ -210,6 +300,7 @@ export default function ReportsManagement() {
         <TabsList className="grid w-full grid-cols-4 md:grid-cols-6 lg:w-[900px]">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="academic">Academic</TabsTrigger>
+          <TabsTrigger value="master-sheet">Master Sheet</TabsTrigger>
           <TabsTrigger value="top-students">Top Students</TabsTrigger>
           <TabsTrigger value="support">Support Needed</TabsTrigger>
           <TabsTrigger value="finance">Finance</TabsTrigger>
@@ -328,28 +419,84 @@ export default function ReportsManagement() {
               </CardContent>
             </Card>
 
-            <Card className="lg:col-span-2">
+            <Card className="h-[400px] overflow-y-auto">
               <CardHeader>
-                <CardTitle className="text-lg">School-wide Grade Distribution</CardTitle>
-                <CardDescription>Number of students per grade category (Distinction, Merit, etc.)</CardDescription>
+                <CardTitle className="text-lg">Grade Distribution by Gender</CardTitle>
+                <CardDescription>Academic outcomes compared with population context</CardDescription>
               </CardHeader>
-              <CardContent className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={Object.entries(liveStats?.performance?.gradeDistribution?.school || {}).map(([name, value]) => ({ name, value }))}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]}>
-                      {Object.entries(liveStats?.performance?.gradeDistribution?.school || {}).map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+              <CardContent>
+                <div className="space-y-6">
+                  {liveStats?.performance?.genderPerformance?.filter((g: any) => g.count > 0).map((gender: any) => {
+                    const totalInGender = liveStats?.demographics?.find((d: any) => d.name === gender.name)?.value || 0;
+                    const participationRate = totalInGender > 0 ? Math.round((gender.count / totalInGender) * 100) : 0;
+
+                    return (
+                      <div key={gender.name} className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <h4 className="font-bold flex items-center gap-2">
+                            <div className={`w-3 h-3 rounded-full ${gender.name === 'Male' ? 'bg-blue-500' : gender.name === 'Female' ? 'bg-pink-500' : 'bg-slate-400'}`} />
+                            {gender.name} Students
+                          </h4>
+                          <div className="text-right">
+                            <div className="text-sm font-bold text-slate-900 dark:text-white">{gender.average}% Average</div>
+                            <div className="text-[10px] text-slate-500 font-medium">
+                              {gender.count} of {totalInGender} Students ({participationRate}% Participation)
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700">
+                          {Object.entries(gender.grades).map(([label, count]: any, idx) => {
+                            const width = (count / gender.count) * 100;
+                            return (
+                              <div
+                                key={label}
+                                title={`${label}: ${count}`}
+                                className="h-full"
+                                style={{ width: `${width}%`, backgroundColor: COLORS[idx % COLORS.length] }}
+                              />
+                            );
+                          })}
+                        </div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+                          {Object.entries(gender.grades).map(([label, count]: any, idx) => (
+                            <div key={label} className="flex items-center gap-1.5">
+                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                              <span className="text-[10px] text-slate-600 dark:text-slate-400 font-medium">{label}: {count}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {(!liveStats?.performance?.genderPerformance || liveStats.performance.genderPerformance.filter((g: any) => g.count > 0).length === 0) && (
+                    <div className="text-center py-10 opacity-50">No gendered performance data available.</div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
+
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="text-lg">School-wide Grade Distribution</CardTitle>
+              <CardDescription>Number of students per grade category (Distinction, Merit, etc.)</CardDescription>
+            </CardHeader>
+            <CardContent className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={Object.entries(liveStats?.performance?.gradeDistribution?.school || {}).map(([name, value]) => ({ name, value }))}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                    {Object.entries(liveStats?.performance?.gradeDistribution?.school || {}).map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card>
@@ -420,6 +567,156 @@ export default function ReportsManagement() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Master Score Sheet Tab */}
+        <TabsContent value="master-sheet" className="space-y-6">
+          <Card>
+            <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-6">
+              <div>
+                <CardTitle className="text-xl">Master Score Sheet</CardTitle>
+                <CardDescription>Comprehensive school-wide academic records for {selectedExamType}</CardDescription>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="w-[180px]">
+                  <Select value={selectedExamType} onValueChange={setSelectedExamType}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Assessment Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(schoolSettings?.exam_types && schoolSettings.exam_types.length > 0) ? (
+                        schoolSettings.exam_types.map((type: string) => (
+                          <SelectItem key={type} value={type}>{type}</SelectItem>
+                        ))
+                      ) : (
+                        <>
+                          <SelectItem value="Mid Term">Mid Term</SelectItem>
+                          <SelectItem value="End of Term">End of Term</SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-[180px]">
+                  <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Class" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Entire School</SelectItem>
+                      {availableClasses.map((cls: any) => (
+                        <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <ExportMasterSheetModal 
+                  term={selectedTerm}
+                  year={selectedYear}
+                  examType={selectedExamType}
+                  classId={selectedClassId}
+                  className={selectedClassId === 'all' ? 'Entire School' : availableClasses.find((c: any) => c.id === selectedClassId)?.name || 'Selected Class'}
+                  schoolName={schoolSettings?.school_name}
+                  disabled={!masterSheetData?.students.length}
+                />
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {masterSheetLoading ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                  <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+                  <p className="text-slate-500 font-medium">Preparing master score sheet data...</p>
+                </div>
+              ) : masterSheetData?.students.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-400">
+                  <ClipboardCheck className="h-12 w-12 opacity-20" />
+                  <p>No results found for the selected criteria.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table className="border-separate border-spacing-0">
+                    <TableHeader className="bg-slate-50 dark:bg-slate-900/50">
+                      <TableRow>
+                        <TableHead className="w-16 font-bold text-slate-900 dark:text-white border-r border-b border-dotted border-slate-300 dark:border-slate-700">Rank</TableHead>
+                        <TableHead className="min-w-[200px] font-bold text-slate-900 dark:text-white sticky left-0 bg-slate-50 dark:bg-slate-900/50 z-10 shadow-[2px_0_5px_rgba(0,0,0,0.05)] border-r border-b border-dotted border-slate-300 dark:border-slate-700">Student Name</TableHead>
+                        <TableHead className="min-w-[100px] font-bold text-slate-900 dark:text-white border-r border-b border-dotted border-slate-300 dark:border-slate-700">Class</TableHead>
+                        {masterSheetData?.subjects.map(subject => (
+                          <TableHead key={subject.id} className="text-center font-bold text-slate-900 dark:text-white min-w-[100px] border-r border-b border-dotted border-slate-300 dark:border-slate-700">
+                            {subject.name}
+                          </TableHead>
+                        ))}
+                        <TableHead className="text-center font-bold text-slate-900 dark:text-white border-r border-b border-dotted border-slate-300 dark:border-slate-700">Total</TableHead>
+                        <TableHead className="text-center font-bold text-blue-600 min-w-[100px] border-b border-dotted border-slate-300 dark:border-slate-700">Avg %</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {masterSheetData?.students.map((student) => (
+                        <TableRow key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                          <TableCell className="font-bold text-slate-500 border-r border-b border-dotted border-slate-200 dark:border-slate-800/80">#{student.rank}</TableCell>
+                          <TableCell className="font-medium sticky left-0 bg-white dark:bg-slate-900 z-10 shadow-[2px_0_5px_rgba(0,0,0,0.05)] border-r border-b border-dotted border-slate-200 dark:border-slate-800/80">
+                            <div>
+                              <div className="text-slate-900 dark:text-white">{student.name}</div>
+                              <div className="text-[10px] text-slate-500">{student.studentNumber}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="border-r border-b border-dotted border-slate-200 dark:border-slate-800/80">
+                            <Badge variant="outline" className="font-normal text-xs">{student.className}</Badge>
+                          </TableCell>
+                          {masterSheetData?.subjects.map(subject => {
+                            const score = student.grades[subject.id];
+                            const gradeInfo = score !== undefined ? getGradeInfo(score) : null;
+                            return (
+                              <TableCell key={subject.id} className="text-center border-r border-b border-dotted border-slate-200 dark:border-slate-800/80 p-2">
+                                {score !== undefined ? (
+                                  <div className="flex flex-col items-center gap-1">
+                                    <span className={cn("font-bold text-sm", gradeInfo?.text)}>
+                                      {score}%
+                                    </span>
+                                    <Badge 
+                                      variant="outline" 
+                                      className={cn(
+                                        "text-[8px] px-1 py-0 h-3 leading-none uppercase tracking-tighter border-none font-black",
+                                        gradeInfo?.bg,
+                                        gradeInfo?.text
+                                      )}
+                                    >
+                                      {gradeInfo?.label}
+                                    </Badge>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-300">-</span>
+                                )}
+                              </TableCell>
+                            );
+                          })}
+                          <TableCell className="text-center font-bold text-slate-700 dark:text-slate-300 border-r border-b border-dotted border-slate-200 dark:border-slate-800/80">
+                            {student.total}
+                          </TableCell>
+                          <TableCell className="text-center border-b border-dotted border-slate-200 dark:border-slate-800/80">
+                            <Badge className="bg-blue-600 hover:bg-blue-700 text-white font-bold w-14 justify-center">
+                              {student.average}%
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+            {masterSheetData?.students.length > 0 && !masterSheetLoading && (
+              <div className="border-t border-slate-100 dark:border-slate-800 px-6">
+                <PaginationControls
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  pageSize={pageSize}
+                  totalItems={totalRecords}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={setPageSize}
+                />
+              </div>
+            )}
+          </Card>
         </TabsContent>
 
         {/* Teacher Performance Tab */}
@@ -816,86 +1113,6 @@ export default function ReportsManagement() {
                     </span>
                     <span className="font-bold">{liveStats?.staff?.distribution?.[1]?.value || 0}</span>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Average Performance by Gender</CardTitle>
-                <CardDescription>Comparison of average scores across the school</CardDescription>
-              </CardHeader>
-              <CardContent className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={liveStats?.performance?.genderPerformance}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" />
-                    <YAxis domain={[0, 100]} />
-                    <Tooltip />
-                    <Bar dataKey="average" fill="#3b82f6" radius={[4, 4, 0, 0]}>
-                      {liveStats?.performance?.genderPerformance?.map((entry: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={entry.name === 'Male' ? '#3b82f6' : entry.name === 'Female' ? '#ec4899' : '#94a3b8'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Grade Distribution by Gender</CardTitle>
-                <CardDescription>Academic outcomes compared with population context</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-6">
-                  {liveStats?.performance?.genderPerformance?.filter((g: any) => g.count > 0).map((gender: any) => {
-                    const totalInGender = liveStats?.demographics?.find((d: any) => d.name === gender.name)?.value || 0;
-                    const participationRate = totalInGender > 0 ? Math.round((gender.count / totalInGender) * 100) : 0;
-
-                    return (
-                      <div key={gender.name} className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <h4 className="font-bold flex items-center gap-2">
-                            <div className={`w-3 h-3 rounded-full ${gender.name === 'Male' ? 'bg-blue-500' : gender.name === 'Female' ? 'bg-pink-500' : 'bg-slate-400'}`} />
-                            {gender.name} Students
-                          </h4>
-                          <div className="text-right">
-                            <div className="text-sm font-bold text-slate-900 dark:text-white">{gender.average}% Average</div>
-                            <div className="text-[10px] text-slate-500 font-medium">
-                              {gender.count} of {totalInGender} Students ({participationRate}% Participation)
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700">
-                          {Object.entries(gender.grades).map(([label, count]: any, idx) => {
-                            const width = (count / gender.count) * 100;
-                            return (
-                              <div
-                                key={label}
-                                title={`${label}: ${count}`}
-                                className="h-full"
-                                style={{ width: `${width}%`, backgroundColor: COLORS[idx % COLORS.length] }}
-                              />
-                            );
-                          })}
-                        </div>
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
-                          {Object.entries(gender.grades).map(([label, count]: any, idx) => (
-                            <div key={label} className="flex items-center gap-1.5">
-                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
-                              <span className="text-[10px] text-slate-600 dark:text-slate-400 font-medium">{label}: {count}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {(!liveStats?.performance?.genderPerformance || liveStats.performance.genderPerformance.filter((g: any) => g.count > 0).length === 0) && (
-                    <div className="text-center py-10 opacity-50">No gendered performance data available.</div>
-                  )}
                 </div>
               </CardContent>
             </Card>

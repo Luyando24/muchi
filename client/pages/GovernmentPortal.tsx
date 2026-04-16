@@ -22,8 +22,30 @@ import {
   GraduationCap,
   ShieldAlert,
   ChevronDown,
-  Loader2
+  Loader2,
+  PieChart as PieChartIcon,
+  ClipboardList,
+  Target,
+  BarChart3,
+  CheckCircle2,
+  ArrowDownRight,
+  RefreshCcw,
+  Users2,
+  AlertCircle
 } from 'lucide-react';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  ResponsiveContainer, 
+  Cell,
+  PieChart,
+  Pie
+} from 'recharts';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -44,13 +66,27 @@ import {
 
 
 import GovernmentNavbar from '@/components/government/GovernmentNavbar';
+import { cn } from '@/lib/utils';
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#71717a'];
 
 // --- SUB-COMPONENTS --- //
 
 function OverviewDashboard() {
-  const [stats, setStats] = useState({ totalSchools: 0, totalStudents: 0, totalTeachers: 0, avgAttendance: 0, nationalPassRate: 0 });
+  const [stats, setStats] = useState({ 
+    totalSchools: 0, 
+    totalStudents: 0, 
+    totalTeachers: 0, 
+    avgAttendance: 0, 
+    nationalPassRate: 0,
+    studentTeacherRatio: 0,
+    schoolTypeBreakdown: {} as Record<string, number>,
+    schoolCategoryBreakdown: {} as Record<string, number>,
+    genderBreakdown: { Male: 0, Female: 0, Other: 0 } as Record<string, number>,
+    schoolPerformanceMetrics: [] as any[]
+  });
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ province: 'All', district: 'All' });
+  const [searchQuery, setSearchQuery] = useState('');
   const [regions, setRegions] = useState<{ province: string, districts: string[] }[]>([]);
 
   useEffect(() => {
@@ -101,26 +137,33 @@ function OverviewDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Premium Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+      {/* Insights Style Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tight">National Overview</h2>
-          <p className="text-slate-500 font-medium">Key indicators across the educational ecosystem.</p>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">National Overview</h2>
+          <p className="text-slate-600 dark:text-slate-400">Key indicators across the educational ecosystem.</p>
         </div>
-        <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
-          <Select value={filters.province} onValueChange={(val) => setFilters({ ...filters, province: val, district: 'All' })}>
-            <SelectTrigger className="w-full md:w-[180px] bg-white dark:bg-slate-800 rounded-xl">
-              <SelectValue placeholder="Province" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="All">All Provinces</SelectItem>
-              {regions.map(r => (
-                <SelectItem key={r.province} value={r.province}>{r.province}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+
+        <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-800 p-2 rounded-xl border shadow-sm">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-slate-400" />
+            <Select value={filters.province} onValueChange={(val) => setFilters({ ...filters, province: val, district: 'All' })}>
+              <SelectTrigger className="w-[140px] h-9 border-none focus:ring-0 shadow-none">
+                <SelectValue placeholder="Province" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Provinces</SelectItem>
+                {regions.map(r => (
+                  <SelectItem key={r.province} value={r.province}>{r.province}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700" />
+
           <Select value={filters.district} onValueChange={(val) => setFilters({ ...filters, district: val })} disabled={filters.province === 'All'}>
-            <SelectTrigger className="w-full md:w-[180px] bg-white dark:bg-slate-800 rounded-xl">
+            <SelectTrigger className="w-[130px] h-9 border-none focus:ring-0 shadow-none">
               <SelectValue placeholder="District" />
             </SelectTrigger>
             <SelectContent>
@@ -130,58 +173,195 @@ function OverviewDashboard() {
               ))}
             </SelectContent>
           </Select>
-          <Button className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-100 dark:shadow-none font-bold h-11 px-8 transition-all hover:translate-y-[-1px]">
-            <Download className="mr-2 h-4 w-4" /> Export Report
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-full"
+            onClick={() => setFilters({ ...filters })}
+          >
+            <RefreshCcw className="h-4 w-4" />
+          </Button>
+          
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-full text-blue-600"
+          >
+            <Download className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="border-none shadow-sm bg-white dark:bg-slate-800 rounded-2xl transition-all duration-300 hover:shadow-xl hover:translate-y-[-4px]">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-              <School className="h-3.5 w-3.5 text-blue-500"/> Total Schools
-            </CardDescription>
-            <CardTitle className="text-4xl font-black tracking-tight text-slate-900 dark:text-white">{stats.totalSchools.toLocaleString()}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest">+12 Expansion Schools</p>
+        <Card className="bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/20 shadow-none">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400">
+              <School className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Schools</p>
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{stats.totalSchools.toLocaleString()}</h3>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-sm bg-white dark:bg-slate-800 rounded-2xl transition-all duration-300 hover:shadow-xl hover:translate-y-[-4px]">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-              <Users className="h-3.5 w-3.5 text-emerald-500"/> Active Students
-            </CardDescription>
-            <CardTitle className="text-4xl font-black tracking-tight text-slate-900 dark:text-white">{stats.totalStudents.toLocaleString()}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">National Enrollment</p>
+        <Card className="bg-purple-50/50 dark:bg-purple-900/10 border-purple-100 dark:border-purple-900/20 shadow-none">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-full text-purple-600 dark:text-purple-400">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">S-T Ratio</p>
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{stats.studentTeacherRatio}:1</h3>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-sm bg-white dark:bg-slate-800 rounded-2xl transition-all duration-300 hover:shadow-xl hover:translate-y-[-4px]">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-              <TrendingUp className="h-3.5 w-3.5 text-orange-500"/> Avg. Attendance
-            </CardDescription>
-            <CardTitle className="text-4xl font-black tracking-tight text-slate-900 dark:text-white">{stats.avgAttendance}%</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">+2.4% Momentum</p>
+        <Card className="bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/20 shadow-none">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-full text-emerald-600 dark:text-emerald-400">
+              <ClipboardList className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Avg. Attendance</p>
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{stats.avgAttendance}%</h3>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-sm bg-blue-600 text-white rounded-2xl relative overflow-hidden transition-all duration-300 hover:shadow-xl hover:translate-y-[-4px]">
-          <div className="absolute top-0 right-0 p-4 opacity-10"><GraduationCap className="h-20 w-20" /></div>
-          <CardHeader className="pb-2 relative z-10">
-            <CardDescription className="text-blue-100 font-black uppercase tracking-widest text-[10px]">National Pass Rate</CardDescription>
-            <CardTitle className="text-4xl font-black tracking-tight">{stats.nationalPassRate}%</CardTitle>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <p className="text-[10px] text-blue-100 font-black uppercase tracking-widest">Composite Exams Result</p>
+        <Card className="bg-orange-50/50 dark:bg-orange-900/10 border-orange-100 dark:border-orange-900/20 shadow-none">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-full text-orange-600 dark:text-orange-400">
+              <GraduationCap className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Pass Rate</p>
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{stats.nationalPassRate}%</h3>
+            </div>
           </CardContent>
+        </Card>
+      </div>
+
+    <div className="grid lg:grid-cols-2 gap-6 mt-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Institutional Types</CardTitle>
+          <CardDescription>Breakdown of schools by level</CardDescription>
+        </CardHeader>
+        <CardContent className="h-[300px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={Object.entries(stats.schoolTypeBreakdown).map(([name, value]) => ({ name, value }))}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Ownership Categories</CardTitle>
+          <CardDescription>Distribution by institutional category</CardDescription>
+        </CardHeader>
+        <CardContent className="h-[300px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={Object.entries(stats.schoolCategoryBreakdown).map(([name, value]) => ({ name, value }))}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={100}
+                paddingAngle={5}
+                dataKey="value"
+              >
+                {Object.entries(stats.schoolCategoryBreakdown).map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+    </div>
+
+    <div className="mt-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div>
+          <h3 className="text-xl font-bold text-slate-900 dark:text-white">School Metrics Explorer</h3>
+          <p className="text-slate-600 dark:text-slate-400 text-sm">Drill-down into individual institution data</p>
+        </div>
+        <div className="flex items-center gap-3 bg-white dark:bg-slate-800 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all focus-within:ring-2 focus-within:ring-blue-500/20">
+          <Search className="h-4 w-4 text-slate-400" />
+          <input 
+            placeholder="Search school name..." 
+            className="bg-transparent border-none outline-none text-sm font-medium w-48 text-slate-900 dark:text-white placeholder:text-slate-400" 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <Card>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b bg-slate-50/50 dark:bg-slate-900/50">
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">School Name</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Level / Category</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500 text-center">S-T Ratio</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500 text-center">Attendance</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500 text-center">Pass Rate</th>
+              </tr>
+            </thead>
+              <tbody className="divide-y">
+                {stats.schoolPerformanceMetrics
+                  .filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .map(school => (
+                  <tr key={school.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors cursor-pointer group">
+                    <td className="px-6 py-4">
+                      <p className="font-bold text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors">{school.name}</p>
+                      <p className="text-xs text-slate-500 font-medium">{school.district}, {school.province}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col gap-1">
+                        <Badge variant="secondary" className="w-fit text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-none">
+                          {school.type}
+                        </Badge>
+                        <Badge variant="secondary" className="w-fit text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-none">
+                          {school.category}
+                        </Badge>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={cn(
+                        "text-sm font-bold",
+                        school.studentTeacherRatio > 40 ? "text-orange-600" : "text-slate-900 dark:text-white"
+                      )}>{school.studentTeacherRatio}:1</span>
+                      <p className="text-[10px] text-slate-500 font-medium">{school.teacherCount} Staff</p>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className="text-sm font-bold text-slate-900 dark:text-white">{school.attendanceRate}%</span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className="text-xl font-bold text-blue-600 dark:text-blue-400">{school.passRate}%</span>
+                    </td>
+                  </tr>
+                ))}
+                {stats.schoolPerformanceMetrics.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-12 text-center text-slate-400 italic">No school performance data found</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </Card>
       </div>
 
@@ -256,7 +436,13 @@ function OverviewDashboard() {
 
 
 function PerformanceDashboard() {
-  const [stats, setStats] = useState({ nationalPassRate: 0, topSchools: [] as any[] });
+  const [stats, setStats] = useState({ 
+    nationalPassRate: 0, 
+    topSchools: [] as any[], 
+    topSubjects: [] as any[], 
+    genderGradeDistribution: {} as any,
+    genderBreakdown: { Male: 0, Female: 0, Other: 0 } as any
+  });
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ province: 'All', district: 'All' });
   const [regions, setRegions] = useState<{ province: string, districts: string[] }[]>([]);
@@ -303,25 +489,32 @@ function PerformanceDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Academic Performance</h2>
-          <p className="text-slate-500 font-medium">Analyze grades, subject pass rates, and historical trends.</p>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Academic Performance</h2>
+          <p className="text-slate-600 dark:text-slate-400">Analyze grades, subject pass rates, and historical trends.</p>
         </div>
-        <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
-          <Select value={filters.province} onValueChange={(val) => setFilters({ ...filters, province: val, district: 'All' })}>
-            <SelectTrigger className="w-full md:w-[180px] bg-white dark:bg-slate-800 rounded-xl">
-              <SelectValue placeholder="Province" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="All">All Provinces</SelectItem>
-              {regions.map(r => (
-                <SelectItem key={r.province} value={r.province}>{r.province}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+
+        <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-800 p-2 rounded-xl border shadow-sm">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-slate-400" />
+            <Select value={filters.province} onValueChange={(val) => setFilters({ ...filters, province: val, district: 'All' })}>
+              <SelectTrigger className="w-[140px] h-9 border-none focus:ring-0 shadow-none">
+                <SelectValue placeholder="Province" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Provinces</SelectItem>
+                {regions.map(r => (
+                  <SelectItem key={r.province} value={r.province}>{r.province}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700" />
+
           <Select value={filters.district} onValueChange={(val) => setFilters({ ...filters, district: val })} disabled={filters.province === 'All'}>
-            <SelectTrigger className="w-full md:w-[180px] bg-white dark:bg-slate-800 rounded-xl">
+            <SelectTrigger className="w-[130px] h-9 border-none focus:ring-0 shadow-none">
               <SelectValue placeholder="District" />
             </SelectTrigger>
             <SelectContent>
@@ -331,6 +524,15 @@ function PerformanceDashboard() {
               ))}
             </SelectContent>
           </Select>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-full"
+            onClick={() => setFilters({ ...filters })}
+          >
+            <RefreshCcw className="h-4 w-4" />
+          </Button>
         </div>
       </div>
       
@@ -339,36 +541,110 @@ function PerformanceDashboard() {
           <Loader2 className="h-8 w-8 animate-spin text-blue-600 opacity-20" />
         </div>
       ) : (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Top 10 Subjects</CardTitle>
+            <CardDescription>Highest average scores across all regions</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[400px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={stats.topSubjects} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" domain={[0, 100]} />
+                <YAxis dataKey="name" type="category" width={120} />
+                <Tooltip />
+                <Bar dataKey="average" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Grade Distribution by Gender</CardTitle>
+            <CardDescription>Academic outcomes compared across demographics</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {['male', 'female'].map((genderName) => {
+                const genderData = stats.genderGradeDistribution?.[genderName] || {};
+                const totalCount = Object.values(genderData).reduce((a: any, b: any) => a + b, 0) as number;
+                
+                if (totalCount === 0) return null;
+
+                return (
+                  <div key={genderName} className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <h4 className="font-bold flex items-center gap-2 capitalize">
+                        <div className={`w-3 h-3 rounded-full ${genderName === 'male' ? 'bg-blue-500' : 'bg-pink-500'}`} />
+                        {genderName}
+                      </h4>
+                      <span className="text-xs font-bold text-slate-500">{totalCount} Students</span>
+                    </div>
+                    <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700">
+                      {Object.entries(genderData).map(([label, count]: any, idx) => {
+                        const width = (count / totalCount) * 100;
+                        return (
+                          <div
+                            key={label}
+                            title={`${label}: ${count}`}
+                            className="h-full"
+                            style={{ width: `${width}%`, backgroundColor: COLORS[idx % COLORS.length] }}
+                          />
+                        );
+                      })}
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+                      {Object.entries(genderData).map(([label, count]: any, idx) => (
+                        <div key={label} className="flex items-center gap-1.5">
+                          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                          <span className="text-[10px] text-slate-600 dark:text-slate-400 font-medium">{label}: {count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              {(!stats.genderGradeDistribution || Object.keys(stats.genderGradeDistribution).length === 0) && (
+                <div className="text-center py-20 opacity-50 italic text-sm">No gender distribution data available.</div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
         <Card className="col-span-1 md:col-span-2 border-none shadow-sm bg-white dark:bg-slate-800 rounded-2xl overflow-hidden">
           <CardHeader className="border-b border-slate-50 dark:border-slate-700/50 p-6">
-            <CardTitle className="text-base font-black uppercase tracking-tight">Top Performing Schools</CardTitle>
-            <CardDescription className="text-[10px] font-black uppercase tracking-widest text-slate-400">Institutions with the highest average pass rates</CardDescription>
+            <CardTitle className="text-lg">Top Performing Schools</CardTitle>
+            <CardDescription>Institutions with the highest average pass rates</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-             {stats.topSchools && stats.topSchools.length > 0 ? (
+             {(stats as any).topSchools && (stats as any).topSchools.length > 0 ? (
                <div className="divide-y divide-slate-50 dark:divide-slate-700/50">
-                 {stats.topSchools.map((school, index) => (
+                 {(stats as any).topSchools.map((school, index) => (
                    <div key={school.id} className="flex items-center justify-between p-6 transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
                      <div className="flex items-center gap-4">
-                       <div className="flex items-center justify-center h-10 w-10 rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-black text-sm border border-blue-100 dark:border-blue-800">
+                       <div className="flex items-center justify-center h-10 w-10 rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold text-sm border border-blue-100 dark:border-blue-800">
                          #{index + 1}
                        </div>
                        <div>
                          <h4 className="font-bold text-slate-900 dark:text-white">{school.name}</h4>
                          <div className="flex items-center gap-2 mt-1">
-                           <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-none">
+                           <Badge variant="secondary" className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-none">
                              {school.province}
                            </Badge>
-                           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{school.district}</span>
+                           <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">{school.district}</span>
                          </div>
                        </div>
                      </div>
                      <div className="text-right">
-                       <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">
+                       <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 tracking-tight">
                          {school.passRate}%
                        </div>
-                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Avg Score</p>
+                       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Avg Score</p>
                      </div>
                    </div>
                  ))}
@@ -376,34 +652,49 @@ function PerformanceDashboard() {
              ) : (
                <div className="h-80 flex flex-col items-center justify-center text-slate-300 bg-slate-50/30 dark:bg-slate-900/50 p-6">
                  <School className="h-12 w-12 mb-3 opacity-20 text-blue-500" />
-                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">No performance data available</p>
+                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 text-center">No performance data available</p>
                </div>
              )}
           </CardContent>
         </Card>
+        
         <div className="space-y-6">
           <Card className="border-none shadow-sm bg-blue-600 text-white rounded-2xl transition-all duration-300 hover:shadow-xl hover:translate-y-[-4px]">
             <CardHeader className="pb-2">
-              <CardDescription className="text-blue-100 font-black uppercase tracking-widest text-[10px]">Average Pass Rate</CardDescription>
-              <CardTitle className="text-3xl font-black tracking-tight">{stats.nationalPassRate}%</CardTitle>
+              <CardDescription className="text-blue-100 font-bold uppercase tracking-wider text-[10px]">Average Pass Rate</CardDescription>
+              <CardTitle className="text-3xl font-bold tracking-tight">{stats.nationalPassRate}%</CardTitle>
             </CardHeader>
              <CardContent>
-               <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">
+               <p className="text-[10px] font-bold uppercase tracking-wider text-blue-100">
                  {filters.province === 'All' && filters.district === 'All' ? 'National Average' : `${filters.district !== 'All' ? filters.district : filters.province} Average`}
                </p>
              </CardContent>
           </Card>
-          <Card className="border-none shadow-sm bg-white dark:bg-slate-800 rounded-2xl border-l-4 border-l-orange-500 transition-all duration-300 hover:shadow-xl hover:translate-y-[-4px]">
-            <CardHeader className="pb-2">
-              <CardDescription className="text-orange-600 dark:text-orange-400 font-black uppercase tracking-widest text-[10px]">Critical Attention Required</CardDescription>
-              <CardTitle className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Mathematics (42%)</CardTitle>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Category Ranking</CardTitle>
+              <CardDescription>Institutional performance by category</CardDescription>
             </CardHeader>
-             <CardContent>
-               <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest leading-relaxed">Fell 5% below target in primary rural districts</p>
-             </CardContent>
+            <CardContent className="p-0">
+              <div className="divide-y">
+                {(stats as any).categoryPerformance?.map((cat, idx) => (
+                  <div key={cat.category} className="p-4 flex items-center justify-between hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-slate-400">#{idx + 1}</span>
+                      <span className="font-medium">{cat.category}</span>
+                    </div>
+                    <Badge className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 border-none">
+                      {cat.avgPassRate}% Avg
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
           </Card>
         </div>
       </div>
+      </>
       )}
     </div>
   );
@@ -462,77 +753,108 @@ function FeedingDashboard() {
   return (
     <div className="space-y-6">
       {/* Premium Header Banner */}
-      <div className="relative overflow-hidden bg-white dark:bg-slate-800 p-8 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all duration-300">
-        <div className="absolute top-0 right-0 p-8 opacity-[0.03] dark:opacity-[0.05] pointer-events-none">
-          <Package className="h-48 w-48 text-emerald-600 dark:text-emerald-400 rotate-12" />
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">National Feeding Portal</h2>
+          <p className="text-slate-600 dark:text-slate-400">Logistics, Supply Chain & Program Monitoring</p>
         </div>
-        
-        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div className="flex items-center gap-4">
-            <div className="h-14 w-14 rounded-2xl bg-emerald-600 flex items-center justify-center text-white shadow-lg shadow-emerald-200 dark:shadow-none shrink-0 transition-transform hover:scale-105 duration-300">
-               <Package className="h-8 w-8" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white uppercase">National Feeding Portal</h1>
-              <p className="text-slate-500 font-medium text-sm md:text-base mt-0.5">Logistics, Supply Chain & Program Monitoring</p>
-            </div>
+
+        <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-800 p-2 rounded-xl border shadow-sm">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-slate-400" />
+            <Select value={filters.province} onValueChange={(val) => setFilters({ ...filters, province: val, district: 'All' })}>
+              <SelectTrigger className="w-[140px] h-9 border-none focus:ring-0 shadow-none">
+                <SelectValue placeholder="Province" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Provinces</SelectItem>
+                {regions.map(r => (
+                  <SelectItem key={r.province} value={r.province}>{r.province}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <div className="flex items-center gap-3 w-full md:w-auto">
-             <Button variant="outline" className="flex-1 md:flex-none h-11 rounded-xl border-slate-200 dark:border-slate-700 font-bold px-6 bg-white dark:bg-slate-800 transition-colors hover:bg-slate-50 dark:hover:bg-slate-700">
-               <Download className="h-4 w-4 mr-2" /> Export Data
-             </Button>
-             <Button className="flex-1 md:flex-none h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 shadow-lg shadow-emerald-100 dark:shadow-none transition-all hover:translate-y-[-1px]">
-               Live Monitor
-             </Button>
-          </div>
+
+          <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700" />
+
+          <Select value={filters.district} onValueChange={(val) => setFilters({ ...filters, district: val })} disabled={filters.province === 'All'}>
+            <SelectTrigger className="w-[130px] h-9 border-none focus:ring-0 shadow-none">
+              <SelectValue placeholder="District" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All Districts</SelectItem>
+              {selectedProvinceData?.districts.map(d => (
+                <SelectItem key={d} value={d}>{d}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-full"
+            onClick={() => setFilters({ ...filters })}
+          >
+            <RefreshCcw className="h-4 w-4" />
+          </Button>
+          
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-full text-blue-600"
+          >
+            <Download className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
       {/* Stats Grid - Aligned with Overview styles */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="border-none shadow-sm bg-emerald-600 text-white rounded-2xl overflow-hidden group transition-all duration-300 hover:shadow-xl hover:translate-y-[-4px]">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-emerald-100 font-black uppercase tracking-widest text-[10px]">Total Beneficiaries</CardDescription>
-            <CardTitle className="text-4xl font-black tracking-tight">{stats?.totalBeneficiaries?.toLocaleString() || '0'}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2 text-emerald-100 text-[10px] font-black uppercase tracking-widest">
-              <TrendingUp className="h-4 w-4 text-white" />
-              <span>National Daily Average</span>
+        <Card className="bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/20 shadow-none">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-full text-emerald-600 dark:text-emerald-400">
+              <Users2 className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Beneficiaries</p>
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{stats?.totalBeneficiaries?.toLocaleString() || '0'}</h3>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-sm bg-white dark:bg-slate-800 rounded-2xl transition-all duration-300 hover:shadow-xl hover:translate-y-[-4px]">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-[10px] font-black uppercase tracking-widest text-slate-400">Participating Schools</CardDescription>
-            <CardTitle className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">{schools.length}</CardTitle>
-          </CardHeader>
-          <CardContent>
-             <p className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">Active Enrollment</p>
+        <Card className="bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/20 shadow-none">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400">
+              <Building2 className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Active Schools</p>
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{schools.length}</h3>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-sm bg-white dark:bg-slate-800 rounded-2xl transition-all duration-300 hover:shadow-xl hover:translate-y-[-4px]">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-[10px] font-black uppercase tracking-widest text-blue-500">Maize Stock (Bags)</CardDescription>
-            <CardTitle className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">{stats?.stockSummary?.Maize?.toLocaleString() || '0'}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Aggregate Inventory</p>
+        <Card className="bg-orange-50/50 dark:bg-orange-900/10 border-orange-100 dark:border-orange-900/20 shadow-none">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-full text-orange-600 dark:text-orange-400">
+              <Package className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Maize Stock (Bags)</p>
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{stats?.stockSummary?.Maize?.toLocaleString() || '0'}</h3>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-sm bg-white dark:bg-slate-800 rounded-2xl border-l-4 border-l-orange-500 transition-all duration-300 hover:shadow-xl hover:translate-y-[-4px]">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-[10px] font-black uppercase tracking-widest text-orange-500">Pending Procurements</CardDescription>
-            <CardTitle className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">{stats?.pendingProcurements || '0'}</CardTitle>
-          </CardHeader>
-          <CardContent>
-             <div className="flex items-center gap-2 text-orange-600 text-[10px] font-black uppercase tracking-widest">
-               <AlertTriangle className="h-3.5 w-3.5" />
-               <span>Logistics Attention</span>
-             </div>
+        <Card className="bg-red-50/50 dark:bg-red-900/10 border-red-100 dark:border-red-900/20 shadow-none">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full text-red-600 dark:text-red-400">
+              <AlertCircle className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Pending Requests</p>
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{stats?.pendingProcurements || '0'}</h3>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -609,23 +931,23 @@ function FeedingDashboard() {
                                  <School className="h-8 w-8" />
                               </div>
                               <div>
-                                 <h4 className="text-lg font-black group-hover:text-emerald-600 transition-colors text-slate-900 dark:text-white leading-tight uppercase tracking-tight">{school.name}</h4>
+                                 <h4 className="text-lg font-bold group-hover:text-emerald-600 transition-colors text-slate-900 dark:text-white leading-tight">{school.name}</h4>
                                  <div className="flex items-center gap-3 mt-1.5 focus-visible:outline-none">
-                                    <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-none">{school.province || 'National'}</Badge>
+                                    <Badge variant="secondary" className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-none">{school.province || 'National'}</Badge>
                                     <span className="text-slate-300 dark:text-slate-700">•</span>
                                     <div className="flex items-center gap-1.5">
                                        <Map className="h-3 w-3 text-emerald-500" />
-                                       <span className="text-[10px] text-slate-500 dark:text-slate-400 font-black uppercase tracking-widest leading-none">{school.district || 'Unassigned'}</span>
+                                       <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider leading-none">{school.district || 'Unassigned'}</span>
                                     </div>
                                  </div>
                               </div>
                            </div>
                            <div className="flex items-center gap-8">
                               <div className="text-right hidden sm:block">
-                                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Stock Status</p>
+                                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Stock Status</p>
                                  <div className="flex items-center gap-2 justify-end">
-                                    <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Stable</span>
+                                    <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Stable</span>
                                  </div>
                               </div>
                               <div className="h-10 w-10 flex items-center justify-center rounded-full bg-slate-50 dark:bg-slate-900 transition-all group-hover:bg-emerald-50 dark:group-hover:bg-emerald-950 group-hover:translate-x-1">
@@ -638,8 +960,8 @@ function FeedingDashboard() {
                )}
             </div>
 
-            <div className="pt-6 border-t">
-               <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight mb-6">Pending Procurement Requests</h3>
+            <div className="pt-6 border-t mt-8">
+               <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6">Pending Procurement Requests</h3>
                <div className="grid gap-4">
                   {pendingRequests.map(req => (
                      <Card key={req.id} className="p-4 border-none shadow-sm rounded-xl">
@@ -734,7 +1056,7 @@ export default function GovernmentPortal() {
           <div className="flex flex-col h-full pt-16 lg:pt-0">
             <nav className="flex-1 px-4 py-6 space-y-2">
               <div className="mb-4 px-2">
-                <p className="text-[10px] font-black tracking-widest text-slate-400 uppercase">Core Monitoring</p>
+                <p className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Core Monitoring</p>
               </div>
               {sidebarItems.map((item) => {
                 const Icon = item.icon;
@@ -792,11 +1114,11 @@ export default function GovernmentPortal() {
             </TabsContent>
 
             <TabsContent value="settings" className="m-0 focus-visible:outline-none">
-              <div className="max-w-3xl">
-                 <div className="mb-8">
-                    <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Portal Settings</h2>
-                    <p className="text-slate-500 mt-2">Manage your ministry official profile and portal preferences.</p>
-                 </div>
+                <div className="max-w-3xl">
+                  <div className="mb-8">
+                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Portal Settings</h2>
+                    <p className="text-slate-600 mt-1">Manage your ministry official profile and portal preferences.</p>
+                  </div>
                  <Card className="border-none shadow-xl bg-white dark:bg-slate-800 rounded-3xl overflow-hidden">
                     <CardHeader className="border-b dark:border-slate-700 p-8 bg-slate-50/50 dark:bg-slate-900/50">
                        <CardTitle className="text-xl font-bold">Account Preferences</CardTitle>
