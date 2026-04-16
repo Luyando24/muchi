@@ -1062,6 +1062,211 @@ router.put('/settings', requireSystemAdmin, async (req: Request, res: Response) 
   }
 });
 
+// --- METADATA CONFIGURATION ENDPOINTS ---
+
+// GET /api/admin/configurations/categories
+router.get('/configurations/categories', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('school_categories')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) {
+      // If table doesn't exist yet, return empty array gracefully
+      if (error.code === '42P01' || error.message?.includes('relation "school_categories" does not exist')) {
+        return res.json([]);
+      }
+      throw error;
+    }
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/admin/configurations/types
+router.get('/configurations/types', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('school_types')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) {
+      if (error.code === '42P01' || error.message?.includes('relation "school_types" does not exist')) {
+        return res.json([]);
+      }
+      throw error;
+    }
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/admin/configurations/types
+router.post('/configurations/types', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { name, description } = req.body;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('school_types')
+      .insert({ name, description })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// PUT /api/admin/configurations/types/:id
+router.put('/configurations/types/:id', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name, description } = req.body;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('school_types')
+      .update({ name, description, updated_at: new Date() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE /api/admin/configurations/types/:id
+router.delete('/configurations/types/:id', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const { error } = await supabaseAdmin
+      .from('school_types')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/admin/configurations/categories
+router.post('/configurations/categories', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { name } = req.body;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('school_categories')
+      .insert({ name })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// PUT /api/admin/configurations/categories/:id
+router.put('/configurations/categories/:id', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name } = req.body;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('school_categories')
+      .update({ name, updated_at: new Date() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE /api/admin/configurations/categories/:id
+router.delete('/configurations/categories/:id', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const { error } = await supabaseAdmin
+      .from('school_categories')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/admin/configurations/countries
+router.get('/configurations/countries', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('countries')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) {
+      // If table doesn't exist yet, return empty array gracefully
+      if (error.code === '42P01' || error.message?.includes('relation "countries" does not exist')) {
+        return res.json([]);
+      }
+      throw error;
+    }
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/admin/configurations/countries
+router.post('/configurations/countries', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { name, code } = req.body;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('countries')
+      .insert({ name, code })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// PUT /api/admin/configurations/countries/:id
+router.put('/configurations/countries/:id', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name, code } = req.body;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('countries')
+      .update({ name, code, updated_at: new Date() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+
 // POST /api/admin/users/:id/reset-password
 // Reset a user's password (System Admin only)
 router.post('/users/:id/reset-password', requireSystemAdmin, async (req: Request, res: Response) => {
@@ -1083,6 +1288,166 @@ router.post('/users/:id/reset-password', requireSystemAdmin, async (req: Request
   } catch (error: any) {
     console.error('Reset Password Error:', error);
     res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// Subscription Plans Configuration
+// GET /api/admin/configurations/plans
+router.get('/configurations/plans', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('subscription_plans')
+      .select('*')
+      .order('price', { ascending: true });
+
+    if (error) {
+      if (error.code === '42P01' || error.message?.includes('relation "subscription_plans" does not exist')) {
+        return res.json([]);
+      }
+      throw error;
+    };
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/admin/configurations/plans
+router.post('/configurations/plans', requireSystemAdmin, async (req: Request, res: Response) => {
+    const { 
+      name, description, price, currency, billing_cycle, is_active, country_ids,
+      min_students, max_students 
+    } = req.body;
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('subscription_plans')
+        .insert({ 
+          name, description, price, currency, billing_cycle, is_active, country_ids,
+          min_students: min_students ? parseInt(String(min_students)) : 0,
+          max_students: max_students ? parseInt(String(max_students)) : null
+        })
+        .select()
+        .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// PUT /api/admin/configurations/plans/:id
+router.put('/configurations/plans/:id', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+    const { 
+      name, description, price, currency, billing_cycle, is_active, country_ids,
+      min_students, max_students
+    } = req.body;
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('subscription_plans')
+        .update({ 
+          name, description, price, currency, billing_cycle, is_active, country_ids, 
+          min_students: min_students ? parseInt(String(min_students)) : 0,
+          max_students: (max_students === null || max_students === '') ? null : parseInt(String(max_students)),
+          updated_at: new Date() 
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE /api/admin/configurations/plans/:id
+router.delete('/configurations/plans/:id', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const { error } = await supabaseAdmin
+      .from('subscription_plans')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/admin/configurations/codes
+router.get('/configurations/codes', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('license_codes')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      // Gracefully handle missing table
+      if (error.code === '42P01' || error.message?.includes('relation "license_codes" does not exist')) {
+        return res.json([]);
+      }
+      console.error('Fetch License Codes Error:', error);
+      throw error;
+    }
+    res.json(data);
+  } catch (error: any) {
+    console.error('GET /configurations/codes 500 Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/admin/configurations/codes
+// Generates a new random license code
+router.post('/configurations/codes', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { plan_name, duration_months, description } = req.body;
+  
+  // Generate random code in format MUCHI-XXXX-XXXX
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const genPart = () => Array.from({length: 4}, () => chars.charAt(Math.floor(Math.random() * chars.length))).join('');
+  const code = `MUCHI-${genPart()}-${genPart()}`;
+
+  try {
+    const { data: { user } } = await supabaseAdmin.auth.getUser(req.headers.authorization?.split(' ')[1] || '');
+    
+    const { data, error } = await supabaseAdmin
+      .from('license_codes')
+      .insert({ 
+        code, 
+        plan_name, 
+        duration_months, 
+        description,
+        created_by: user?.id 
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE /api/admin/configurations/codes/:id
+router.delete('/configurations/codes/:id', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const { error } = await supabaseAdmin
+      .from('license_codes')
+      .delete()
+      .eq('id', id)
+      .eq('is_used', false); // Only allow deleting unused codes
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
   }
 });
 

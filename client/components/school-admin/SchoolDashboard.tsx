@@ -14,8 +14,10 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  FileText
+  FileText,
+  Play
 } from 'lucide-react';
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -53,9 +55,14 @@ import {
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
-export default function SchoolDashboard() {
+interface SchoolDashboardProps {
+  onRelaunchTutorial?: () => void;
+}
+
+export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardProps) {
   const [data, setData] = useState<SchoolDashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -261,48 +268,14 @@ export default function SchoolDashboard() {
             Export Report
           </Button>
 
-          <Dialog open={isAnnouncementOpen} onOpenChange={setIsAnnouncementOpen}>
-            <DialogTrigger asChild>
-              <Button className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 h-11 sm:h-10 text-base sm:text-sm font-bold shadow-md">
-                <Megaphone className="h-4 w-4 mr-2" />
-                New Announcement
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create Announcement</DialogTitle>
-                <DialogDescription>
-                  Post a new announcement visible to teachers and students.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="title">Title</Label>
-                  <Input
-                    id="title"
-                    value={newAnnouncement.title}
-                    onChange={(e) => setNewAnnouncement({ ...newAnnouncement, title: e.target.value })}
-                    placeholder="e.g., Parent-Teacher Meeting"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="content">Content</Label>
-                  <Textarea
-                    id="content"
-                    value={newAnnouncement.content}
-                    onChange={(e) => setNewAnnouncement({ ...newAnnouncement, content: e.target.value })}
-                    placeholder="Details about the announcement..."
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsAnnouncementOpen(false)}>Cancel</Button>
-                <Button onClick={handleCreateAnnouncement} disabled={submitting}>
-                  {submitting ? "Posting..." : "Post Announcement"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button 
+            onClick={onRelaunchTutorial}
+            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 h-11 sm:h-10 text-base sm:text-sm font-bold shadow-md group"
+          >
+            <Play className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
+            Tutorial
+          </Button>
+
         </div>
       </div>
 

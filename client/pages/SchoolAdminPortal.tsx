@@ -32,6 +32,8 @@ import SchoolAdminNavbar from '@/components/school-admin/SchoolAdminNavbar';
 import { syncFetch } from '@/lib/syncService';
 import LicenseAccessDenied from '@/components/common/LicenseAccessDenied';
 import { useToast } from "@/components/ui/use-toast";
+import OnboardingTutorial from '@/components/school-admin/OnboardingTutorial';
+
 
 // Mock data for School Admin Portal
 const adminData = {
@@ -51,7 +53,10 @@ export default function SchoolAdminPortal() {
   const [licenseError, setLicenseError] = useState<string | null>(null);
   const [isLoadingLicense, setIsLoadingLicense] = useState(true);
   const [userRole, setUserRole] = useState<string>("");
+  const [userId, setUserId] = useState<string>("");
+  const [showTutorial, setShowTutorial] = useState(false);
   const navigate = useNavigate();
+
 
   // Listen for hash changes to support direct linking to tabs
   useEffect(() => {
@@ -75,13 +80,22 @@ export default function SchoolAdminPortal() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
 
-        // Fetch user role
-        const { data: profiles } = await supabase
+        // Fetch user profile info
+        const { data: profile } = await supabase
           .from('profiles')
-          .select('role')
+          .select('role, has_completed_onboarding')
           .eq('id', session.user.id)
-          .limit(1);
-        if (profiles && profiles.length > 0) setUserRole(profiles[0].role);
+          .single();
+          
+        if (profile) {
+          setUserRole(profile.role);
+          setUserId(session.user.id);
+          // Only show tutorial for school admins who haven't completed it
+          if (profile.role === 'school_admin' && !profile.has_completed_onboarding) {
+            setShowTutorial(true);
+          }
+        }
+
 
         const headers = { Authorization: `Bearer ${session.access_token}` };
 
@@ -208,6 +222,7 @@ export default function SchoolAdminPortal() {
                 return (
                   <Button
                     key={item.id}
+                    id={`sidebar-${item.id}`}
                     variant={activeTab === item.id ? "default" : "ghost"}
                     className="w-full justify-start"
                     onClick={() => {
@@ -218,6 +233,7 @@ export default function SchoolAdminPortal() {
                     <Icon className="h-5 w-5 mr-3" />
                     {item.label}
                   </Button>
+
                 );
               })}
             </nav>
@@ -247,7 +263,7 @@ export default function SchoolAdminPortal() {
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             {/* Dashboard Tab */}
             <TabsContent value="dashboard" className="space-y-6 m-0">
-              <SchoolDashboard />
+              <SchoolDashboard onRelaunchTutorial={() => setShowTutorial(true)} />
             </TabsContent>
 
             {/* Applications Tab */}
@@ -313,6 +329,14 @@ export default function SchoolAdminPortal() {
           </Tabs>
         </main>
       </div>
+
+      {showTutorial && (
+        <OnboardingTutorial 
+          userId={userId} 
+          onComplete={() => setShowTutorial(false)} 
+          onStepChange={(tab) => setActiveTab(tab)}
+        />
+      )}
 
       {/* Mobile Bottom Navigation */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-40 px-2 py-2 safe-area-bottom shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">

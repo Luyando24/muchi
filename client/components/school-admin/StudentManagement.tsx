@@ -596,7 +596,7 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
 
           <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline">
+              <Button variant="outline" id="import-excel-button">
                 <FileSpreadsheet className="mr-2 h-4 w-4" />
                 Import Excel
               </Button>

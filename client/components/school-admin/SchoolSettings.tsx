@@ -12,6 +12,7 @@ import {
   X,
   School as SchoolIcon // imported School for the type
 } from 'lucide-react';
+import { ZAMBIAN_REGIONS } from '@/lib/regions';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,23 +29,11 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { syncFetch } from '@/lib/syncService';
 import ThemeToggle from '@/components/navigation/ThemeToggle';
-import { School } from '@shared/api';
+import { School, SchoolCategory, Country } from '@shared/api';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AdminManagement from './AdminManagement';
 
-const ZAMBIAN_REGIONS = {
-  "Central": ["Chibombo", "Chisamba", "Chitambo", "Itezhi-Tezhi", "Kabwe", "Kapiri Mposhi", "Luano", "Mkushi", "Mumbwa", "Ngabwe", "Serenje", "Shibuyunji"],
-  "Copperbelt": ["Chililabombwe", "Chingola", "Kalulushi", "Kitwe", "Luanshya", "Lufwanyama", "Masaiti", "Mpongwe", "Mufulira", "Ndola"],
-  "Eastern": ["Chadiza", "Chama", "Chasefu", "Chipata", "Chipangali", "Katete", "Lundazi", "Mambwe", "Nyimba", "Petauke", "Sinda", "Vubwi"],
-  "Luapula": ["Chembe", "Chienge", "Chifunabuli", "Chipili", "Kawambwa", "Lunga", "Mansa", "Milenge", "Mwansabombwe", "Mwense", "Nchelenge", "Samfya"],
-  "Lusaka": ["Chilanga", "Chirundu", "Chongwe", "Kafue", "Luangwa", "Lusaka", "Rufunsa", "Shibuyunji"],
-  "Muchinga": ["Chama", "Chinsali", "Isoka", "Kanchibiya", "Lavushimanda", "Mafinga", "Mpika", "Nakonde", "Shiwang'andu"],
-  "Northern": ["Chilubi", "Kaputa", "Kasama", "Lunte", "Lupososhi", "Luwingu", "Mbala", "Mporokoso", "Mpulungu", "Mungwi", "Nsama", "Senga Hill"],
-  "North-Western": ["Chavuma", "Ikelenge", "Kabompo", "Kalumbila", "Kasempa", "Manyinga", "Mufumbwe", "Mushindamo", "Mwinilunga", "Solwezi", "Zambezi"],
-  "Southern": ["Chikankata", "Choma", "Gwembe", "Kalomo", "Kazungula", "Livingstone", "Mazabuka", "Monze", "Namwala", "Pemba", "Siavonga", "Sinazongwe", "Zimba"],
-  "Western": ["Kalabo", "Kaoma", "Limulunga", "Luampa", "Lukulu", "Mitete", "Mongu", "Mulobezi", "Mwandi", "Nalolo", "Nkeyema", "Senanga", "Sesheke", "Shang'ombo", "Sikongo", "Sioma"]
-};
 
 export default function SchoolSettings() {
   const [school, setSchool] = useState<School | null>(null);
@@ -69,10 +58,44 @@ export default function SchoolSettings() {
     coat_of_arms_url: '',
     headteacher_name: '',
     headteacher_title: 'Headteacher',
-    school_type: 'Secondary' as 'Secondary' | 'Basic'
+    school_type: 'Secondary School' as 'Primary School' | 'Secondary School' | 'Basic School' | 'Combined School',
+    category: '',
+    country: 'Zambia'
   });
 
+  const [categories, setCategories] = useState<SchoolCategory[]>([]);
+  const [countries, setCountries] = useState<Country[]>([]);
+  const [isLoadingMeta, setIsLoadingMeta] = useState(false);
+
   const [newExamType, setNewExamType] = useState('');
+
+  const fetchMetadata = async () => {
+    setIsLoadingMeta(true);
+    try {
+      const [catRes, countRes] = await Promise.all([
+        fetch('/api/schools/metadata/categories'),
+        fetch('/api/schools/metadata/countries')
+      ]);
+
+      if (catRes.ok) {
+        const catData = await catRes.json();
+        setCategories(catData);
+      }
+      
+      if (countRes.ok) {
+        const countData = await countRes.json();
+        setCountries(countData);
+      }
+    } catch (error) {
+      console.error('Error fetching metadata:', error);
+    } finally {
+      setIsLoadingMeta(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMetadata();
+  }, []);
 
   const fetchSettings = async () => {
     setIsLoading(true);
@@ -105,7 +128,9 @@ export default function SchoolSettings() {
         coat_of_arms_url: data.coat_of_arms_url || '',
         headteacher_name: data.headteacher_name || '',
         headteacher_title: data.headteacher_title || 'Headteacher',
-        school_type: data.school_type || 'Secondary'
+        school_type: data.school_type || 'Secondary School',
+        category: data.category || '',
+        country: data.country || 'Zambia'
       });
     } catch (error: any) {
       console.error('Error fetching settings:', error);
@@ -286,7 +311,7 @@ export default function SchoolSettings() {
                       <Label htmlFor="school_type">School Type</Label>
                       <Select
                         value={formData.school_type}
-                        onValueChange={(value: 'Secondary' | 'Basic') =>
+                        onValueChange={(value: 'Primary School' | 'Secondary School' | 'Basic School' | 'Combined School') =>
                           setFormData(prev => ({ ...prev, school_type: value }))
                         }
                       >
@@ -294,10 +319,46 @@ export default function SchoolSettings() {
                           <SelectValue placeholder="Select type" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Secondary">Secondary School (Grades 8-12)</SelectItem>
-                          <SelectItem value="Basic">Basic School (Grades 1-9)</SelectItem>
+                          <SelectItem value="Primary School">Primary School (Grades 1-7)</SelectItem>
+                          <SelectItem value="Secondary School">Secondary School (Grades 8-12)</SelectItem>
+                          <SelectItem value="Basic School">Basic School (Grades 1-9)</SelectItem>
+                          <SelectItem value="Combined School">Combined School (Grades 1-12)</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="category">School Category</Label>
+                      <Select
+                        value={formData.category}
+                        onValueChange={(value) =>
+                          setFormData(prev => ({ ...prev, category: value }))
+                        }
+                      >
+                        <SelectTrigger id="category" className="w-full">
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {isLoadingMeta ? (
+                            <div className="p-2 flex justify-center">
+                              <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                            </div>
+                          ) : categories.length > 0 ? (
+                            categories.map(cat => (
+                              <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                            ))
+                          ) : (
+                            <>
+                              <SelectItem value="Government">Government / Public</SelectItem>
+                              <SelectItem value="Private">Private School</SelectItem>
+                              <SelectItem value="Mission">Mission School</SelectItem>
+                              <SelectItem value="Community">Community School</SelectItem>
+                              <SelectItem value="Other">Other</SelectItem>
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-slate-500 italic">* Collected for Ministry of Education statistical purposes.</p>
                     </div>
 
                     <div className="space-y-2">
@@ -393,6 +454,33 @@ export default function SchoolSettings() {
                           placeholder="+260..."
                         />
                       </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="country">Country</Label>
+                      <Select
+                        value={formData.country}
+                        onValueChange={(value) =>
+                          setFormData(prev => ({ ...prev, country: value }))
+                        }
+                      >
+                        <SelectTrigger id="country" className="w-full">
+                          <SelectValue placeholder="Select country" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {isLoadingMeta ? (
+                            <div className="p-2 flex justify-center">
+                              <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                            </div>
+                          ) : countries.length > 0 ? (
+                            countries.map(country => (
+                              <SelectItem key={country.id} value={country.name}>{country.name}</SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem value="Zambia">Zambia</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="space-y-2">

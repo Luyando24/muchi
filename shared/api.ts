@@ -43,12 +43,12 @@ export interface LoginResponse {
   user: User;
 }
 
-// --- School Types ---
+// --- School Metadata Types ---
 export interface School {
   id: string;
   name: string;
   slug?: string;
-  plan: 'Standard' | 'Premium' | 'Enterprise';
+  plan: string;
   students: number;
   status: 'Active' | 'Suspended' | 'Pending';
   renewalDate: string;
@@ -64,7 +64,57 @@ export interface School {
   logo_url?: string;
   signature_url?: string;
   seal_url?: string;
-  school_type?: 'Secondary' | 'Basic';
+  school_type?: string;
+  category?: string;
+  country?: string;
+}
+
+export interface SchoolType {
+  id: string;
+  name: string;
+  description?: string;
+  created_at: string;
+}
+
+export interface SchoolCategory {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface Country {
+  id: string;
+  name: string;
+  code?: string;
+  created_at: string;
+}
+
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  description?: string;
+  price: number;
+  currency: string;
+  billing_cycle: string;
+  is_active: boolean;
+  country_ids?: string[];
+  min_students?: number;
+  max_students?: number;
+  created_at: string;
+}
+
+export interface LicenseCode {
+  id: string;
+  code: string;
+  plan_name: string;
+  duration_months: number;
+  is_active: boolean;
+  is_used: boolean;
+  redeemed_by_school_id?: string;
+  redeemed_at?: string;
+  description?: string;
+  created_at: string;
+  created_by?: string;
 }
 
 // --- Student Types ---

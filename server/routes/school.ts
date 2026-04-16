@@ -5770,6 +5770,8 @@ router.put(
       school_type,
       headteacher_name,
       headteacher_title,
+      category,
+      country,
     } = req.body;
 
     try {
@@ -5793,6 +5795,8 @@ router.put(
           school_type,
           headteacher_name,
           headteacher_title,
+          category,
+          country,
           updated_at: new Date(),
         })
         .eq("id", schoolId)

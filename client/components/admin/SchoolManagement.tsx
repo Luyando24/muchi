@@ -31,6 +31,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
@@ -76,6 +77,7 @@ interface School {
   plan: string;
   address?: string;
   contact_email?: string;
+  status?: string;
   created_at: string;
   school_licenses?: License[];
 }
@@ -516,6 +518,7 @@ export default function SchoolManagement() {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Slug</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead>Plan</TableHead>
               <TableHead>License</TableHead>
               <TableHead>Created</TableHead>
@@ -545,9 +548,16 @@ export default function SchoolManagement() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className="bg-muted px-2 py-1 rounded text-xs font-mono">
-                      {school.slug}
-                    </span>
+                    <Badge variant={
+                      school.status === 'Active' ? 'default' : 
+                      school.status === 'Pending' ? 'outline' : 
+                      'destructive'
+                    } className={cn(
+                      school.status === 'Active' && "bg-green-500 hover:bg-green-600",
+                      school.status === 'Pending' && "border-yellow-500 text-yellow-600",
+                    )}>
+                      {school.status || 'Active'}
+                    </Badge>
                   </TableCell>
                   <TableCell>{school.plan}</TableCell>
                   <TableCell>

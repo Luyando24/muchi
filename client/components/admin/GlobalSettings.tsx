@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, Save, Loader2, Globe, Mail, Shield, Server, MessageCircle } from 'lucide-react';
+import { AlertCircle, Save, Loader2, Globe, Mail, Shield, Server, MessageCircle, Settings, RefreshCw } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabase';
 
@@ -30,6 +30,9 @@ const defaultSettings: SystemSettings = {
   sessionTimeout: 60,
   whatsappNumber: "260570260374"
 };
+
+import ConfigurationManagement from './ConfigurationManagement';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function GlobalSettings() {
   const [settings, setSettings] = useState<SystemSettings>(defaultSettings);
@@ -138,16 +141,34 @@ export default function GlobalSettings() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Global Settings</h2>
-          <p className="text-slate-600 dark:text-slate-400">Manage system-wide configurations and preferences.</p>
+      <Tabs defaultValue="general" className="w-full">
+        <div className="flex items-center justify-between mb-2">
+          <TabsList>
+            <TabsTrigger value="general" className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              General Settings
+            </TabsTrigger>
+            <TabsTrigger value="metadata" className="flex items-center gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Metadata Management
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="general" className="mt-0">
+            <Button onClick={handleSave} disabled={saving} className="bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-700">
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              Save Changes
+            </Button>
+          </TabsContent>
         </div>
-        <Button onClick={handleSave} disabled={saving} className="bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-700">
-          {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-          Save Changes
-        </Button>
-      </div>
+
+        <TabsContent value="general" className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Global Settings</h2>
+              <p className="text-slate-600 dark:text-slate-400">Manage system-wide configurations and preferences.</p>
+            </div>
+          </div>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
@@ -284,6 +305,12 @@ export default function GlobalSettings() {
           </CardContent>
         </Card>
       </div>
-    </div>
-  );
+    </TabsContent>
+
+    <TabsContent value="metadata">
+      <ConfigurationManagement />
+    </TabsContent>
+  </Tabs>
+</div>
+);
 }
