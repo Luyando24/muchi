@@ -29,7 +29,8 @@ import DataAuditPage from "./pages/DataAuditPage";
 import CheckResults from "./pages/CheckResults";
 import EnterResults from "./pages/results/EnterResults";
 import ResultsAnalysis from "./pages/results/ResultsAnalysis";
-import MasterSheet from "./pages/results/MasterSheet";
+import MasterSheet from "./pages/MasterSheet";
+import { PWAInstallPrompt } from "./components/navigation/PWAInstallPrompt";
 
 const App = () => {
   return (
@@ -37,6 +38,7 @@ const App = () => {
       <Toaster />
       <Sonner />
       <ThemeProvider attribute="class" defaultTheme="light">
+        <PWAInstallPrompt />
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
