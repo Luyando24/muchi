@@ -38,7 +38,8 @@ import {
   Trophy,
   Sparkles,
   ClipboardList,
-  FileSpreadsheet
+  FileSpreadsheet,
+  BarChart2
 } from 'lucide-react';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -170,6 +171,14 @@ interface TimetableEntry {
 // Helper to format time slots
 const formatTime = (time: string) => {
   return time.substring(0, 5);
+};
+
+// Helper to get time-based greeting
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good Morning';
+  if (hour < 17) return 'Good Afternoon';
+  return 'Good Evening';
 };
 
 export default function TeacherPortal() {
@@ -1223,7 +1232,7 @@ export default function TeacherPortal() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">
-                    Good Morning, {(profile?.first_name || profile?.last_name) ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : (profile?.full_name || user?.email || 'Teacher')}!
+                    {getGreeting()}, {(profile?.first_name || profile?.last_name) ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : (profile?.full_name || user?.email || 'Teacher')}!
                   </h2>
                   <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 mt-1">
                     Here's what's happening in your classes today.
@@ -1231,26 +1240,26 @@ export default function TeacherPortal() {
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
                   <Button 
-                    onClick={() => navigate('/teacher-portal/verify')}
-                    className="w-full sm:w-auto bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 h-11 sm:h-10 text-base sm:text-sm font-bold shadow-md text-white border-0"
+                    onClick={() => navigate('/teacher-portal/results/analysis')}
+                    className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 h-11 sm:h-10 text-base sm:text-sm font-bold shadow-md text-white border-0"
                   >
-                    <Trophy className="h-5 w-5 sm:h-4 sm:w-4 mr-2" />
-                    Verify Grades
+                    <BarChart2 className="h-5 w-5 sm:h-4 sm:w-4 mr-2" />
+                    Results Analysis
+                  </Button>
+                  <Button 
+                    onClick={() => navigate('/teacher-portal/results/enter')}
+                    className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 h-11 sm:h-10 text-base sm:text-sm font-bold shadow-md"
+                  >
+                    <PenTool className="h-5 w-5 sm:h-4 sm:w-4 mr-2" />
+                    Enter Results
                   </Button>
                   <Button 
                     onClick={() => setActiveTab("attendance")}
-                    className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 h-11 sm:h-10 text-base sm:text-sm font-bold shadow-md"
-                  >
-                    <ClipboardCheck className="h-5 w-5 sm:h-4 sm:w-4 mr-2" />
-                    Mark Attendance
-                  </Button>
-                  <Button 
-                    onClick={() => setActiveTab("enter-results")}
                     variant="outline"
                     className="w-full sm:w-auto h-11 sm:h-10 text-base sm:text-sm font-bold border-blue-200 dark:border-blue-900 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                   >
-                    <PenTool className="h-5 w-5 sm:h-4 sm:w-4 mr-2 text-blue-600" />
-                    Enter Results
+                    <ClipboardCheck className="h-5 w-5 sm:h-4 sm:w-4 mr-2 text-blue-600" />
+                    Mark Attendance
                   </Button>
                 </div>
               </div>
@@ -2271,7 +2280,6 @@ export default function TeacherPortal() {
         <div className="flex justify-around items-center">
           {[
             sidebarItems.find(i => i.id === 'dashboard'),
-            sidebarItems.find(i => i.id === 'classes'),
             sidebarItems.find(i => i.id === 'results'),
             sidebarItems.find(i => i.id === 'attendance'),
             sidebarItems.find(i => i.id === 'profile')
@@ -2288,8 +2296,8 @@ export default function TeacherPortal() {
                     : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
                 }`}
               >
-                <Icon className={`h-5 w-5 mb-1 ${activeTab === item.id ? "scale-110" : "scale-100"} transition-transform`} />
-                <span className="text-[10px] font-medium truncate max-w-full">{item.label}</span>
+                <Icon className={`h-6 w-6 mb-1 ${activeTab === item.id ? "scale-110" : "scale-100"} transition-transform`} />
+                <span className="text-[12px] font-black tracking-tight truncate max-w-full">{item.label}</span>
               </button>
             );
           })}

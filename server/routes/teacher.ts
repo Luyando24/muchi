@@ -555,7 +555,6 @@ router.get('/assignments', requireTeacher, async (req: Request, res: Response) =
       .from('assignments')
       .select(`
         *,
-        classes(name),
         subjects(name)
       `)
       .eq('teacher_id', teacherId)
