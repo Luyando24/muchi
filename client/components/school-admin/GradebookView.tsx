@@ -555,61 +555,65 @@ export default function GradebookView() {
       )}>
         <div className="flex flex-col gap-3 sm:gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center justify-between sm:block">
-              <div>
-                <h2 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">Gradebook</h2>
-                <p className="hidden sm:block text-sm text-slate-600 dark:text-slate-400">Enter and manage student grades.</p>
-              </div>
-              <div className="sm:hidden flex items-center gap-2">
-                {saving && <span className="text-[10px] text-muted-foreground animate-pulse">Saving...</span>}
-                {!saving && lastSaved && <span className="text-[10px] text-muted-foreground">{lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
-              </div>
+            <div className="hidden sm:block">
+              <h2 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">Gradebook</h2>
+              <p className="text-sm text-slate-600 dark:text-slate-400">Enter and manage student grades.</p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center w-full sm:w-auto">
+              <div className="flex items-center justify-between sm:hidden w-full mb-1">
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Active Session</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {saving && <span className="text-[10px] text-muted-foreground animate-pulse">Saving...</span>}
+                  {!saving && lastSaved && <span className="text-[10px] text-muted-foreground">{lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+                </div>
+              </div>
               <div className="hidden sm:flex items-center justify-end gap-2 px-1">
                 {saving && <span className="text-sm text-muted-foreground animate-pulse">Saving...</span>}
                 {!saving && lastSaved && <span className="text-xs text-muted-foreground">Saved {lastSaved.toLocaleTimeString()}</span>}
               </div>
-              <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex flex-row flex-wrap sm:flex-nowrap gap-2">
                 <Button 
                   variant="outline" 
                   size="sm" 
                   onClick={() => setIsMigrateModalOpen(true)}
                   disabled={!selectedClass || !selectedSubject || !selectedTerm || students.length === 0}
-                  className="w-full sm:w-auto h-10 sm:h-9 font-bold"
+                  className="flex-1 sm:flex-none h-8 sm:h-9 font-bold text-[10px] sm:text-xs px-2"
                 >
-                  <ArrowRightLeft className="h-4 w-4 mr-2" />
-                  Move Grades
+                  <ArrowRightLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  Move
                 </Button>
                 <Button 
                   variant="outline" 
                   size="sm" 
                   onClick={() => setIsClearModalOpen(true)}
                   disabled={!selectedClass || !selectedSubject || !selectedTerm || students.length === 0}
-                  className="w-full sm:w-auto h-10 sm:h-9 font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950 border-red-200"
+                  className="flex-1 sm:flex-none h-8 sm:h-9 font-bold text-[10px] sm:text-xs px-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-950 border-red-200"
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Clear Grades
+                  <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  Clear
                 </Button>
-                <div className="grid grid-cols-2 sm:flex gap-2">
+                <div className="flex flex-1 sm:flex-none gap-2">
                   <Button 
                     variant="outline" 
                     size="sm" 
                     onClick={() => handleSaveAll(false)} 
                     disabled={loading || saving} 
-                    className="w-full sm:w-auto h-10 sm:h-9 font-bold"
+                    className="flex-1 sm:flex-none h-8 sm:h-9 font-bold text-[10px] sm:text-xs px-2"
                   >
-                    {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                    Save Now
+                    {loading ? <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin mr-1 sm:mr-2" /> : <Save className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />}
+                    Save
                   </Button>
                   <Button 
                     size="sm" 
                     onClick={() => setIsSubmitModalOpen(true)} 
                     disabled={loading || !selectedClass || !selectedSubject} 
-                    className="w-full sm:w-auto h-10 sm:h-9 font-bold bg-blue-600 hover:bg-blue-700"
+                    className="flex-1 sm:flex-none h-8 sm:h-9 font-bold text-[10px] sm:text-xs px-2 bg-blue-600 hover:bg-blue-700"
                   >
-                    <Send className="h-4 w-4 mr-2" />
-                    Submit Results
+                    <Send className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                    Submit
                   </Button>
                 </div>
               </div>
@@ -655,12 +659,12 @@ export default function GradebookView() {
             </Badge>
           </div>
         </CardHeader>
-        <CardContent className="p-4 sm:p-6">
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Year</Label>
+        <CardContent className="p-3 sm:p-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-4">
+            <div className="space-y-1">
+              <Label className="hidden sm:block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Year</Label>
               <Select value={selectedYear} onValueChange={setSelectedYear}>
-                <SelectTrigger className="h-9 text-xs sm:text-sm">
+                <SelectTrigger className="h-8 sm:h-9 text-[11px] sm:text-sm">
                   <SelectValue placeholder="Year" />
                 </SelectTrigger>
                 <SelectContent>
@@ -670,10 +674,10 @@ export default function GradebookView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Term</Label>
+            <div className="space-y-1">
+              <Label className="hidden sm:block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Term</Label>
               <Select value={selectedTerm} onValueChange={setSelectedTerm}>
-                <SelectTrigger className="h-9 text-xs sm:text-sm">
+                <SelectTrigger className="h-8 sm:h-9 text-[11px] sm:text-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -683,10 +687,10 @@ export default function GradebookView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5 col-span-2 sm:col-span-1">
-              <Label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Assessment</Label>
+            <div className="space-y-1">
+              <Label className="hidden sm:block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Assessment</Label>
               <Select value={selectedExamType} onValueChange={setSelectedExamType}>
-                <SelectTrigger className="h-9 text-xs sm:text-sm">
+                <SelectTrigger className="h-8 sm:h-9 text-[11px] sm:text-sm">
                   <SelectValue placeholder="Type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -696,10 +700,10 @@ export default function GradebookView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Class</Label>
+            <div className="space-y-1">
+              <Label className="hidden sm:block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Class</Label>
               <Select value={selectedClass} onValueChange={setSelectedClass}>
-                <SelectTrigger className="h-9 text-xs sm:text-sm">
+                <SelectTrigger className="h-8 sm:h-9 text-[11px] sm:text-sm">
                   <SelectValue placeholder="Class" />
                 </SelectTrigger>
                 <SelectContent>
@@ -709,10 +713,10 @@ export default function GradebookView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Subject</Label>
+            <div className="space-y-1 col-span-2 md:col-span-1">
+              <Label className="hidden sm:block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Subject</Label>
               <Select value={selectedSubject} onValueChange={setSelectedSubject}>
-                <SelectTrigger className="h-9 text-xs sm:text-sm">
+                <SelectTrigger className="h-8 sm:h-9 text-[11px] sm:text-sm">
                   <SelectValue placeholder="Subject" />
                 </SelectTrigger>
                 <SelectContent>
