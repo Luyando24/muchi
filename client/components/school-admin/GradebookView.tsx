@@ -939,7 +939,7 @@ export default function GradebookView() {
                 </div>
 
                 {/* Mobile View Cards */}
-                <div className="sm:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                <div className="sm:hidden space-y-4 p-4 bg-slate-50 dark:bg-slate-900/50">
                   {students
                     .filter(student => {
                       const matchesSearch = student.fullName.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -963,7 +963,7 @@ export default function GradebookView() {
                         isDirty: false
                       };
                       return (
-                        <div key={student.id} className="p-4 space-y-3 bg-white dark:bg-slate-900/40">
+                        <div key={student.id} className="p-5 space-y-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                           <div className="flex items-start justify-between">
                             <div>
                               <div className="font-black text-slate-900 dark:text-white text-lg leading-tight">{student.fullName}</div>
@@ -1034,17 +1034,6 @@ export default function GradebookView() {
                             </div>
                           </div>
 
-                          <div className="space-y-1.5">
-                          <Label className="text-xs font-black text-slate-400 uppercase tracking-wider">Teacher Comments</Label>
-                          <Input
-                            placeholder="Type a comment for the report card..."
-                            className="h-12 text-base bg-slate-50/50 border-slate-300 focus:bg-white"
-                            value={entry.comments}
-                            onChange={(e) => handleGradeChange(student.id, 'comments', e.target.value)}
-                            onFocus={() => setIsInputFocused(true)}
-                            onBlur={() => setIsInputFocused(false)}
-                          />
-                        </div>
                         </div>
                       );
                     })}
