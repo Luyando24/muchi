@@ -85,6 +85,7 @@ export default function GradebookView() {
   const [classes, setClasses] = useState<Class[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [gradingScales, setGradingScales] = useState<GradingScale[]>([]);
+  const [schoolType, setSchoolType] = useState<string>('');
 
   const defaultState = location.state as {
     defaultClassId?: string;
@@ -128,6 +129,7 @@ export default function GradebookView() {
         });
         
         if (settings) {
+          setSchoolType(settings.school_type || '');
           if (!defaultState.defaultTerm) setSelectedTerm(settings.current_term || 'Term 1');
           if (!defaultState.defaultYear) setSelectedYear(settings.academic_year || new Date().getFullYear().toString());
           if (settings.exam_types && settings.exam_types.length > 0) {
@@ -136,6 +138,7 @@ export default function GradebookView() {
           }
         } else {
           // Fallback
+          setSchoolType('');
           if (!defaultState.defaultTerm) setSelectedTerm('Term 1');
           if (!defaultState.defaultYear) setSelectedYear(new Date().getFullYear().toString());
         }
@@ -359,7 +362,66 @@ export default function GradebookView() {
   };
 
   const getScale = (percentage: number) => {
-    return gradingScales.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage);
+    // Auto-detect if we should use the Primary G5-7 format
+    const classObj = classes.find(c => c.id === selectedClass);
+    const gradeStr = (classObj?.name || "").toLowerCase();
+    const isPrimarySchool = schoolType.toLowerCase().includes('primary');
+    
+    const isPrimaryG57 = isPrimarySchool && 
+                         (gradeStr.includes("5") || gradeStr.includes("6") || gradeStr.includes("7")) && 
+                         !gradeStr.includes("1") && // Avoid matching 15, 16, 17
+                         (gradeStr.includes("grade") || gradeStr.includes("g"));
+
+    const isPrimaryG14 = isPrimarySchool && 
+                         (gradeStr.includes("1") || gradeStr.includes("2") || gradeStr.includes("3") || gradeStr.includes("4")) && 
+                         !gradeStr.includes("10") && !gradeStr.includes("11") && !gradeStr.includes("12") &&
+                         (gradeStr.includes("grade") || gradeStr.includes("g"));
+
+    if (isPrimaryG57) {
+      const g57Scale = gradingScales.filter(s => ['A+', 'A', 'B+', 'B', 'C+', 'C', 'F'].includes(s.grade.toUpperCase()));
+      if (g57Scale.length > 0) {
+        return g57Scale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage) || null;
+      }
+      // Fallback to default G5-7 scale
+      if (percentage >= 86) return { grade: "A+", description: "Distinction" };
+      if (percentage >= 76) return { grade: "A", description: "Distinction" };
+      if (percentage >= 66) return { grade: "B+", description: "Merit" };
+      if (percentage >= 56) return { grade: "B", description: "Credit" };
+      if (percentage >= 46) return { grade: "C+", description: "Definite Pass" };
+      if (percentage >= 40) return { grade: "C", description: "Pass" };
+      return { grade: "F", description: "Fail" };
+    }
+
+    if (isPrimaryG14) {
+      const g14Scale = gradingScales.filter(s => ['A RED', 'B ORANGE', 'C YELLOW', 'D BLUE'].some(prefix => s.grade.toUpperCase().includes(prefix)));
+      if (g14Scale.length > 0) {
+        return g14Scale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage) || null;
+      }
+      // Fallback to default G1-4 scale
+      if (percentage >= 75) return { grade: "A Red", description: "Excellent" };
+      if (percentage >= 60) return { grade: "B Orange", description: "Very Good" };
+      if (percentage >= 50) return { grade: "C Yellow", description: "Good" };
+      return { grade: "D Blue", description: "Average Below" };
+    }
+
+    // Default Secondary fallback if no scales defined
+    const secondaryScale = gradingScales.filter(s => ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE'].includes(s.grade.toUpperCase()));
+    if (secondaryScale.length > 0) {
+        return secondaryScale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage) || null;
+    } else if (gradingScales.length === 0) {
+      // Standard Secondary Fallback
+      if (percentage >= 75) return { grade: "One", description: "Distinction" };
+      if (percentage >= 70) return { grade: "Two", description: "Distinction" };
+      if (percentage >= 65) return { grade: "Three", description: "Merit" };
+      if (percentage >= 60) return { grade: "Four", description: "Merit" };
+      if (percentage >= 55) return { grade: "Five", description: "Credit" };
+      if (percentage >= 50) return { grade: "Six", description: "Credit" };
+      if (percentage >= 45) return { grade: "Seven", description: "Satisfactory" };
+      if (percentage >= 40) return { grade: "Eight", description: "Satisfactory" };
+      return { grade: "Nine", description: "Unsatisfactory" };
+    }
+
+    return gradingScales.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage) || null;
   };
 
   const calculateGrade = (percentage: number) => {

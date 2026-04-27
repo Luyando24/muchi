@@ -34,6 +34,10 @@ interface ExportModalProps {
   year: string;
   examType: string;
   gradeLevel: string;
+  classId: string;
+  className?: string;
+  subjectId?: string;
+  subjectName?: string;
   schoolName: string;
   disabled?: boolean;
 }
@@ -45,6 +49,10 @@ export default function ExportResultsAnalysisModal({
   year, 
   examType, 
   gradeLevel,
+  classId,
+  className,
+  subjectId,
+  subjectName,
   schoolName,
   disabled 
 }: ExportModalProps) {
@@ -64,12 +72,14 @@ export default function ExportResultsAnalysisModal({
         academic_year: year,
         examType,
         gradeLevel,
+        classId,
+        subjectId: subjectId || "all",
         export: "true"
       });
 
       const res = await syncFetch(`/api/school/reports/results-analysis?${queryParams.toString()}`, {
         headers: { 'Authorization': `Bearer ${session.access_token}` },
-        cacheKey: `export-analysis-${term}-${year}-${examType}-${gradeLevel}`
+        cacheKey: `export-analysis-${term}-${year}-${examType}-${gradeLevel}-${classId}-${subjectId}`
       });
 
       if (!res.analysis || res.analysis.length === 0) {
@@ -109,7 +119,9 @@ export default function ExportResultsAnalysisModal({
       "ABS F", "ABS M", "ABS TOT",
       ...scales.flatMap((s: any) => [`${s.grade} F`, `${s.grade} M`, `${s.grade} TOT`]),
       "PASS F", "PASS M", "PASS TOT",
-      "% PASS F", "% PASS M", "% PASS TOT"
+      "% PASS F", "% PASS M", "% PASS TOT",
+      "FAIL F", "FAIL M", "FAIL TOT",
+      "% FAIL F", "% FAIL M", "% FAIL TOT"
     ];
     
     // Prepare Data Rows
@@ -124,16 +136,30 @@ export default function ExportResultsAnalysisModal({
         a.grades[s.grade]?.tot || 0
       ]),
       a.totalPasses.f, a.totalPasses.m, a.totalPasses.tot,
-      a.percentagePass.f, a.percentagePass.m, a.percentagePass.tot
+      a.percentagePass.f, a.percentagePass.m, a.percentagePass.tot,
+      a.totalFails?.f || 0, a.totalFails?.m || 0, a.totalFails?.tot || 0,
+      a.percentageFail?.f || 0, a.percentageFail?.m || 0, a.percentageFail?.tot || 0
     ]);
 
     // Create Workbook
     const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Results Analysis");
+    
+    // Add Grading Scale Sheet
+    const scaleHeaders = ["Grade", "Min %", "Max %", "Points", "Description"];
+    const scaleRows = scales.map((s: any) => [
+      s.grade, 
+      s.min_percentage, 
+      s.max_percentage, 
+      s.points || "-", 
+      s.description || "-"
+    ]);
+    const scaleSheet = XLSX.utils.aoa_to_sheet([scaleHeaders, ...scaleRows]);
+    XLSX.utils.book_append_sheet(workbook, scaleSheet, "Grading Scale");
 
     // Save File
-    const fileName = `Results_Analysis_${gradeLevel}_${term}_${year}.xlsx`;
+    const fileName = `Results_Analysis_${gradeLevel}_${classId !== 'all' ? className : ''}_${subjectName || 'All'}_${term}_${year}.xlsx`;
     XLSX.writeFile(workbook, fileName);
   };
 
@@ -145,7 +171,7 @@ export default function ExportResultsAnalysisModal({
       "Subject", 
       "REG", "WROTE", "ABS", 
       ...scales.map((s: any) => s.grade),
-      "PASS", "% PASS"
+      "PASS", "% PASS", "FAIL", "% FAIL"
     ];
     
     const tableRows = analysis.map((a: any) => [
@@ -155,7 +181,9 @@ export default function ExportResultsAnalysisModal({
       a.abs.tot,
       ...scales.map((s: any) => a.grades[s.grade]?.tot || 0),
       a.totalPasses.tot,
-      `${a.percentagePass.tot}%`
+      `${a.percentagePass.tot}%`,
+      a.totalFails?.tot || 0,
+      `${a.percentageFail?.tot || 0}%`
     ]);
 
     const addHeader = (doc: any) => {
@@ -167,7 +195,7 @@ export default function ExportResultsAnalysisModal({
       doc.setFont(undefined, 'normal');
       doc.setFontSize(12);
       doc.setTextColor(100);
-      const metaStr = `Grade: ${gradeLevel} | Term: ${term} | Year: ${year} | Assessment: ${examType}`;
+      const metaStr = `Grade: ${gradeLevel} | Class: ${className || 'All'} | Subject: ${subjectName || 'All'} | Term: ${term} | Year: ${year} | Assessment: ${examType}`;
       doc.text(metaStr, 14, 28);
       doc.text(`Generated on ${new Date().toLocaleString()}`, 14, 34);
       
@@ -199,12 +227,39 @@ export default function ExportResultsAnalysisModal({
       },
     });
 
-    doc.save(`Results_Analysis_${gradeLevel}_${term}_${year}.pdf`);
+    doc.save(`Results_Analysis_${gradeLevel}_${classId !== 'all' ? className : ''}_${subjectName || 'All'}_${term}_${year}.pdf`);
+    
+    // Add Grading Scale to PDF on a new page
+    doc.addPage();
+    doc.setFontSize(14);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(40);
+    doc.text("Grading Scale Reference", 14, 20);
+    
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(100);
+    doc.text("The following scale was used to categorize marks and determine pass/fail status.", 14, 26);
+
+    autoTable(doc, {
+      head: [["Grade", "Min %", "Max %", "Points", "Description"]],
+      body: scales.map((s: any) => [
+        s.grade, 
+        `${s.min_percentage}%`, 
+        `${s.max_percentage}%`, 
+        s.points || "-", 
+        s.description || "-"
+      ]),
+      startY: 32,
+      theme: 'grid',
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [51, 65, 85], textColor: 255 }
+    });
   };
 
   const exportToCSV = async (data: any) => {
     const { scales, analysis } = data;
-    const headers = ["Subject", "REG", "WROTE", "ABS", ...scales.map((s: any) => s.grade), "Pass", "% Pass"];
+    const headers = ["Subject", "REG", "WROTE", "ABS", ...scales.map((s: any) => s.grade), "Pass", "% Pass", "Fail", "% Fail"];
     const rows = analysis.map((a: any) => [
       `"${a.subjectName}"`,
       a.reg.tot,
@@ -212,7 +267,9 @@ export default function ExportResultsAnalysisModal({
       a.abs.tot,
       ...scales.map((s: any) => a.grades[s.grade]?.tot || 0),
       a.totalPasses.tot,
-      a.percentagePass.tot
+      a.percentagePass.tot,
+      a.totalFails?.tot || 0,
+      a.percentageFail?.tot || 0
     ]);
     
     const csvContent = "data:text/csv;charset=utf-8," 
@@ -222,7 +279,7 @@ export default function ExportResultsAnalysisModal({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Results_Analysis_${gradeLevel}_${term}_${year}.csv`);
+    link.setAttribute("download", `Results_Analysis_${gradeLevel}_${classId !== 'all' ? className : ''}_${subjectName || 'All'}_${term}_${year}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -279,11 +336,11 @@ export default function ExportResultsAnalysisModal({
             </div>
             <div className="flex items-center gap-3">
               <div className="bg-white dark:bg-slate-800 p-2 rounded-lg shadow-sm">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                <BookOpen className="h-4 w-4 text-emerald-500" />
               </div>
               <div>
-                <p className="text-[10px] uppercase text-slate-400 font-bold tracking-wider">Format</p>
-                <p className="text-sm font-semibold text-emerald-600">Ministry Approved</p>
+                <p className="text-[10px] uppercase text-slate-400 font-bold tracking-wider">Target Subject</p>
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">{subjectName || 'All Subjects'}</p>
               </div>
             </div>
           </div>

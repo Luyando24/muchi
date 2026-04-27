@@ -27,6 +27,9 @@ import SystemAdminPortal from "./pages/SystemAdminPortal";
 import VerifyReport from "./pages/VerifyReport";
 import DataAuditPage from "./pages/DataAuditPage";
 import CheckResults from "./pages/CheckResults";
+import EnterResults from "./pages/results/EnterResults";
+import ResultsAnalysis from "./pages/results/ResultsAnalysis";
+import MasterSheet from "./pages/results/MasterSheet";
 
 const App = () => {
   return (
@@ -52,6 +55,21 @@ const App = () => {
             <Route path="/teacher-portal/verify" element={
               <ProtectedRoute allowedRoles={['teacher', 'school_admin']}>
                 <TeacherVerifyGrades />
+              </ProtectedRoute>
+            } />
+            <Route path="/teacher-portal/results/enter" element={
+              <ProtectedRoute allowedRoles={['teacher', 'school_admin']}>
+                <TeacherPortal />
+              </ProtectedRoute>
+            } />
+            <Route path="/teacher-portal/results/analysis" element={
+              <ProtectedRoute allowedRoles={['teacher', 'school_admin']}>
+                <TeacherPortal />
+              </ProtectedRoute>
+            } />
+            <Route path="/teacher-portal/results/mastersheet" element={
+              <ProtectedRoute allowedRoles={['teacher', 'school_admin']}>
+                <TeacherPortal />
               </ProtectedRoute>
             } />
             <Route path="/teacher-portal/*" element={

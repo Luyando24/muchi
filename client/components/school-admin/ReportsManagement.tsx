@@ -28,7 +28,8 @@ import {
   Star,
   AlertCircle,
   TrendingDown,
-  BookOpen
+  BookOpen,
+  ShieldAlert
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -69,14 +70,14 @@ import { cn } from "@/lib/utils";
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#71717a'];
 
-export default function ReportsManagement() {
+export default function ReportsManagement({ isTeacherPortal = false, defaultTab = "overview" }: { isTeacherPortal?: boolean, defaultTab?: string }) {
   const [liveStats, setLiveStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [schoolSettings, setSchoolSettings] = useState<any>(null);
   const [selectedTerm, setSelectedTerm] = useState<string>("");
   const [selectedYear, setSelectedYear] = useState<string>("");
-  const [activeScreen, setActiveScreen] = useState("overview");
+  const [activeScreen, setActiveScreen] = useState(defaultTab);
   const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
   const [masterSheetData, setMasterSheetData] = useState<{ subjects: any[], students: any[] } | null>(null);
   const [selectedExamType, setSelectedExamType] = useState<string>("");
@@ -85,7 +86,12 @@ export default function ReportsManagement() {
   const [availableClasses, setAvailableClasses] = useState<any[]>([]);
   const [resultsAnalysis, setResultsAnalysis] = useState<any>(null);
   const [selectedGradeLevel, setSelectedGradeLevel] = useState<string>("all");
+  const [selectedAnalysisClassId, setSelectedAnalysisClassId] = useState<string>("all");
   const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>("all");
+  const [selectedMasterGradeLevel, setSelectedMasterGradeLevel] = useState<string>("all");
+  const [selectedMasterSubjectId, setSelectedMasterSubjectId] = useState<string>("all");
+  const [availableSubjects, setAvailableSubjects] = useState<any[]>([]);
   
   // Pagination States
   const [currentPage, setCurrentPage] = useState(1);
@@ -205,6 +211,8 @@ export default function ReportsManagement() {
         academic_year: selectedYear,
         examType: selectedExamType,
         classId: selectedClassId,
+        gradeLevel: selectedMasterGradeLevel,
+        subjectId: selectedMasterSubjectId,
         page: currentPage.toString(),
         limit: pageSize.toString()
       });
@@ -234,9 +242,12 @@ export default function ReportsManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
       
-      const data = await syncFetch('/api/school/classes?limit=200', {
+      const endpoint = isTeacherPortal ? '/api/teacher/classes' : '/api/school/classes?limit=500';
+      const cacheKey = isTeacherPortal ? 'teacher-classes' : 'school-classes';
+
+      const data = await syncFetch(endpoint, {
         headers: { 'Authorization': `Bearer ${session.access_token}` },
-        cacheKey: 'school-classes-brief'
+        cacheKey: cacheKey
       });
       setAvailableClasses(data?.data || data || []);
     } catch (error) {
@@ -244,17 +255,40 @@ export default function ReportsManagement() {
     }
   };
 
+  const fetchSubjects = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      
+      const endpoint = isTeacherPortal ? '/api/teacher/subjects' : '/api/school/subjects?limit=500';
+      const cacheKey = isTeacherPortal ? 'teacher-subjects-brief' : 'school-subjects-brief';
+
+      const data = await syncFetch(endpoint, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        cacheKey: cacheKey
+      });
+      setAvailableSubjects(data || []);
+    } catch (error) {
+      console.error('Error fetching subjects:', error);
+    }
+  };
+
   useEffect(() => {
     if (activeScreen === 'master-sheet') {
       fetchMasterSheet();
       if (availableClasses.length === 0) fetchClasses();
+      if (availableSubjects.length === 0) fetchSubjects();
     }
-  }, [activeScreen, selectedExamType, selectedClassId, selectedTerm, selectedYear, currentPage, pageSize]);
+    if (activeScreen === 'results-analysis') {
+      if (availableClasses.length === 0) fetchClasses();
+      if (availableSubjects.length === 0) fetchSubjects();
+    }
+  }, [activeScreen, selectedExamType, selectedClassId, selectedTerm, selectedYear, currentPage, pageSize, selectedMasterGradeLevel, selectedMasterSubjectId]);
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedExamType, selectedClassId, selectedTerm, selectedYear]);
+  }, [selectedExamType, selectedClassId, selectedTerm, selectedYear, selectedMasterGradeLevel, selectedMasterSubjectId]);
 
   const fetchResultsAnalysis = async () => {
     if (!selectedTerm || !selectedYear) return;
@@ -267,12 +301,14 @@ export default function ReportsManagement() {
         term: selectedTerm,
         academic_year: selectedYear,
         examType: selectedExamType,
-        gradeLevel: selectedGradeLevel
+        gradeLevel: selectedGradeLevel,
+        classId: selectedAnalysisClassId,
+        subjectId: selectedSubjectId
       });
 
       const res = await syncFetch(`/api/school/reports/results-analysis?${queryParams.toString()}`, {
         headers: { 'Authorization': `Bearer ${session.access_token}` },
-        cacheKey: `results-analysis-${selectedTerm}-${selectedYear}-${selectedExamType}-${selectedGradeLevel}`
+        cacheKey: `results-analysis-${selectedTerm}-${selectedYear}-${selectedExamType}-${selectedGradeLevel}-${selectedAnalysisClassId}-${selectedSubjectId}`
       });
 
       setResultsAnalysis(res);
@@ -292,7 +328,7 @@ export default function ReportsManagement() {
     if (activeScreen === 'results-analysis') {
       fetchResultsAnalysis();
     }
-  }, [activeScreen, selectedExamType, selectedGradeLevel, selectedTerm, selectedYear]);
+  }, [activeScreen, selectedExamType, selectedGradeLevel, selectedAnalysisClassId, selectedSubjectId, selectedTerm, selectedYear]);
 
   if (isLoading) {
     return (
@@ -354,14 +390,18 @@ export default function ReportsManagement() {
       </div>
 
       <Tabs value={activeScreen} onValueChange={setActiveScreen} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 md:grid-cols-7 lg:w-[1050px]">
+        <TabsList className={cn("grid w-full", isTeacherPortal ? "grid-cols-3 lg:w-[450px]" : "grid-cols-4 md:grid-cols-7 lg:w-[1050px]")}>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="academic">Academic</TabsTrigger>
+          {!isTeacherPortal && <TabsTrigger value="academic">Academic</TabsTrigger>}
           <TabsTrigger value="master-sheet">Master Sheet</TabsTrigger>
           <TabsTrigger value="results-analysis">Results Analysis</TabsTrigger>
-          <TabsTrigger value="top-students">Top Students</TabsTrigger>
-          <TabsTrigger value="support">Support Needed</TabsTrigger>
-          <TabsTrigger value="finance">Finance</TabsTrigger>
+          {!isTeacherPortal && (
+            <>
+              <TabsTrigger value="top-students">Top Students</TabsTrigger>
+              <TabsTrigger value="support">Support Needed</TabsTrigger>
+              <TabsTrigger value="finance">Finance</TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         {/* Overview Tab */}
@@ -406,11 +446,13 @@ export default function ReportsManagement() {
             <Card className="bg-purple-50/50 dark:bg-purple-900/10 border-purple-100 dark:border-purple-900/20 shadow-none">
               <CardContent className="p-6 flex items-center gap-4">
                 <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-full text-purple-600 dark:text-purple-400">
-                  <UserCheck className="h-6 w-6" />
+                  {isTeacherPortal ? <Users className="h-6 w-6" /> : <UserCheck className="h-6 w-6" />}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Staff</p>
-                  <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{liveStats?.summary?.totalStaff || 0}</h3>
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{isTeacherPortal ? 'Assigned Students' : 'Total Staff'}</p>
+                  <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+                    {isTeacherPortal ? (liveStats?.summary?.totalStudents || 0) : (liveStats?.summary?.totalStaff || 0)}
+                  </h3>
                 </div>
               </CardContent>
             </Card>
@@ -623,6 +665,15 @@ export default function ReportsManagement() {
                 </div>
               </CardContent>
             </Card>
+            <Card className="bg-red-50 dark:bg-red-900/10 border-none shadow-none cursor-pointer hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors" onClick={() => { window.location.hash = '#data-audit'; }}>
+              <CardContent className="p-6">
+                <p className="text-sm font-medium text-red-600 dark:text-red-400">Data Integrity</p>
+                <div className="flex justify-between items-end mt-2">
+                  <h4 className="text-xl font-bold">Grade Anomalies</h4>
+                  <ShieldAlert className="h-6 w-6 text-red-600" />
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 
@@ -632,13 +683,12 @@ export default function ReportsManagement() {
             <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-6">
               <div>
                 <CardTitle className="text-xl">Master Score Sheet</CardTitle>
-                <CardDescription>Comprehensive school-wide academic records for {selectedExamType}</CardDescription>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <div className="w-[180px]">
+                <div className="w-[150px]">
                   <Select value={selectedExamType} onValueChange={setSelectedExamType}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Assessment Type" />
+                      <SelectValue placeholder="Assessment" />
                     </SelectTrigger>
                     <SelectContent>
                       {(schoolSettings?.exam_types && schoolSettings.exam_types.length > 0) ? (
@@ -654,15 +704,55 @@ export default function ReportsManagement() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="w-[180px]">
+
+                <div className="w-[150px]">
+                   <Select value={selectedMasterGradeLevel} onValueChange={(v) => {
+                     setSelectedMasterGradeLevel(v);
+                     setSelectedClassId('all');
+                   }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Grade" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Grades</SelectItem>
+                      {Array.from(new Set(
+                        availableClasses
+                          .map((c: any) => c.level || (c.name.includes('Grade') ? c.name.split(' ').slice(0, 2).join(' ') : c.name))
+                          .filter(Boolean)
+                      ))
+                      .sort((a: any, b: any) => String(a).localeCompare(String(b), undefined, { numeric: true }))
+                      .map(g => (
+                        <SelectItem key={g as string} value={g as string}>{g as string}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="w-[150px]">
                   <Select value={selectedClassId} onValueChange={setSelectedClassId}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select Class" />
+                      <SelectValue placeholder="Class" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Entire School</SelectItem>
-                      {availableClasses.map((cls: any) => (
-                        <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                      {availableClasses
+                        .filter(c => selectedMasterGradeLevel === 'all' || c.level === selectedMasterGradeLevel || c.name.startsWith(`Grade ${selectedMasterGradeLevel}`))
+                        .map((cls: any) => (
+                          <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="w-[150px]">
+                  <Select value={selectedMasterSubjectId} onValueChange={setSelectedMasterSubjectId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Subject" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Subjects</SelectItem>
+                      {availableSubjects.map((s: any) => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -673,6 +763,10 @@ export default function ReportsManagement() {
                   examType={selectedExamType}
                   classId={selectedClassId}
                   className={selectedClassId === 'all' ? 'Entire School' : availableClasses.find((c: any) => c.id === selectedClassId)?.name || 'Selected Class'}
+                  gradeLevel={selectedMasterGradeLevel}
+                  gradeName={selectedMasterGradeLevel === 'all' ? 'All Grades' : selectedMasterGradeLevel}
+                  subjectId={selectedMasterSubjectId}
+                  subjectName={availableSubjects.find(s => s.id === selectedMasterSubjectId)?.name}
                   schoolName={schoolSettings?.school_name}
                   disabled={!masterSheetData?.students.length}
                 />
@@ -782,13 +876,15 @@ export default function ReportsManagement() {
             <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-6">
               <div>
                 <CardTitle className="text-xl">Results Analysis Report</CardTitle>
-                <CardDescription>Subject performance breakdown by gender and custom grade categories</CardDescription>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <div className="w-[180px]">
-                   <Select value={selectedGradeLevel} onValueChange={setSelectedGradeLevel}>
+                <div className="w-[150px]">
+                   <Select value={selectedGradeLevel} onValueChange={(v) => {
+                     setSelectedGradeLevel(v);
+                     setSelectedAnalysisClassId('all');
+                   }}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Grade Level" />
+                      <SelectValue placeholder="Grade" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Grades</SelectItem>
@@ -804,10 +900,27 @@ export default function ReportsManagement() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="w-[180px]">
+
+                <div className="w-[150px]">
+                  <Select value={selectedAnalysisClassId} onValueChange={setSelectedAnalysisClassId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Class" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Classes</SelectItem>
+                      {availableClasses
+                        .filter(c => selectedGradeLevel === 'all' || c.level === selectedGradeLevel || c.name.startsWith(`Grade ${selectedGradeLevel}`))
+                        .map((cls: any) => (
+                          <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="w-[150px]">
                   <Select value={selectedExamType} onValueChange={setSelectedExamType}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Assessment Type" />
+                      <SelectValue placeholder="Assessment" />
                     </SelectTrigger>
                     <SelectContent>
                       {(schoolSettings?.exam_types && schoolSettings.exam_types.length > 0) ? (
@@ -823,13 +936,32 @@ export default function ReportsManagement() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div className="w-[150px]">
+                  <Select value={selectedSubjectId} onValueChange={setSelectedSubjectId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Subject" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Subjects</SelectItem>
+                      {availableSubjects.map((s: any) => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <ExportResultsAnalysisModal 
                   term={selectedTerm}
                   year={selectedYear}
                   examType={selectedExamType}
                   gradeLevel={selectedGradeLevel}
+                  classId={selectedAnalysisClassId}
+                  className={availableClasses.find(c => c.id === selectedAnalysisClassId)?.name}
+                  subjectId={selectedSubjectId}
+                  subjectName={availableSubjects.find(s => s.id === selectedSubjectId)?.name}
                   schoolName={schoolSettings?.school_name}
-                  disabled={!resultsAnalysis?.analysis?.length}
+                  disabled={!selectedTerm || !selectedYear || !selectedExamType}
                 />
               </div>
             </CardHeader>
@@ -859,11 +991,13 @@ export default function ReportsManagement() {
                            </TableHead>
                         ))}
                         <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-indigo-50/50">TOTAL PASSES</TableHead>
-                        <TableHead colSpan={3} className="text-center font-black text-blue-600 border-b border-slate-300 dark:border-slate-700 bg-blue-50/30">% PASS</TableHead>
+                        <TableHead colSpan={3} className="text-center font-black text-blue-600 border-r border-b border-slate-300 dark:border-slate-700 bg-blue-50/30">% PASS</TableHead>
+                        <TableHead colSpan={3} className="text-center font-black text-red-600 border-r border-b border-slate-300 dark:border-slate-700 bg-red-50/50">TOTAL FAILS</TableHead>
+                        <TableHead colSpan={3} className="text-center font-black text-red-800 border-b border-slate-300 dark:border-slate-700 bg-red-100/30">% FAIL</TableHead>
                       </TableRow>
                       <TableRow>
-                        {/* Subheaders for REG to % PASS */}
-                        {[...Array(4 + resultsAnalysis.scales.length)].map((_, i) => (
+                        {/* Subheaders for REG to % FAIL */}
+                        {[...Array(7 + resultsAnalysis.scales.length)].map((_, i) => (
                           <React.Fragment key={i}>
                             <TableHead className="text-center text-[10px] font-bold border-r border-b border-slate-200 dark:border-slate-800">F</TableHead>
                             <TableHead className="text-center text-[10px] font-bold border-r border-b border-slate-200 dark:border-slate-800">M</TableHead>
@@ -912,7 +1046,17 @@ export default function ReportsManagement() {
                           {/* % PASS */}
                           <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-medium">{row.percentagePass.f}%</TableCell>
                           <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-medium">{row.percentagePass.m}%</TableCell>
-                          <TableCell className="text-center border-b border-slate-100 dark:border-slate-800 font-black text-blue-600 bg-blue-50/30">{row.percentagePass.tot}%</TableCell>
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-black text-blue-600 bg-blue-50/30">{row.percentagePass.tot}%</TableCell>
+                          
+                          {/* TOTAL FAILS */}
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 text-red-600">{row.totalFails?.f || 0}</TableCell>
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 text-red-600">{row.totalFails?.m || 0}</TableCell>
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-bold bg-red-50/30 text-red-700">{row.totalFails?.tot || 0}</TableCell>
+                          
+                          {/* % FAIL */}
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-medium">{row.percentageFail?.f || 0}%</TableCell>
+                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-medium">{row.percentageFail?.m || 0}%</TableCell>
+                          <TableCell className="text-center border-b border-slate-100 dark:border-slate-800 font-black text-red-600 bg-red-100/10">{row.percentageFail?.tot || 0}%</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

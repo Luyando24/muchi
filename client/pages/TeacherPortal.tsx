@@ -36,7 +36,9 @@ import {
   AlertCircle,
   ShieldAlert,
   Trophy,
-  Sparkles
+  Sparkles,
+  ClipboardList,
+  FileSpreadsheet
 } from 'lucide-react';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -65,11 +67,17 @@ import {
 import ThemeToggle from '@/components/navigation/ThemeToggle';
 import { useToast } from "@/components/ui/use-toast";
 import GradebookView from '@/components/school-admin/GradebookView';
+import ReportsManagement from '@/components/school-admin/ReportsManagement';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { Combobox } from '@/components/ui/combobox';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { OfflineIndicator } from '@/components/navigation/OfflineIndicator';
 import { syncFetch, offlineQuery } from '@/lib/syncService';
+import { cn } from '@/lib/utils';
+import EnterResults from './results/EnterResults';
+import ResultsAnalysis from './results/ResultsAnalysis';
+import MasterSheet from './results/MasterSheet';
+import ResultsHub from './results/ResultsHub';
 
 // Interfaces
 interface Stats {
@@ -837,8 +845,7 @@ export default function TeacherPortal() {
     { id: "dashboard", label: "Dashboard", icon: Home },
     { id: "classes", label: "My Classes", icon: BookOpen },
     { id: "students", label: "Students", icon: Users },
-    { id: "gradebook", label: "Gradebook", icon: BookOpen },
-    { id: "verify", label: "Verify Grades", icon: Trophy, external: true, path: "/teacher-portal/verify" },
+    { id: "results", label: "Results", icon: ClipboardList },
     { id: "timetable", label: "Timetable", icon: Calendar },
     { id: "attendance", label: "Attendance", icon: ClipboardCheck },
     { id: "profile", label: "Profile", icon: User },
@@ -1171,27 +1178,24 @@ export default function TeacherPortal() {
         <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:static inset-y-0 left-0 z-40 w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 transition-transform duration-300 ease-in-out`}>
           <div className="flex flex-col h-full pt-16 lg:pt-0">
             <nav className="flex-1 px-4 py-6 space-y-2">
-              {sidebarItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Button
-                    key={item.id}
-                    variant={activeTab === item.id ? "default" : "ghost"}
-                    className={`w-full justify-start ${item.id === 'verify' ? 'text-emerald-600 dark:text-emerald-400 font-bold hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20' : ''}`}
-                    onClick={() => {
-                      if (item.external) {
-                        navigate(item.path);
-                      } else {
-                        setActiveTab(item.id);
-                      }
-                      setIsSidebarOpen(false);
-                    }}
-                  >
-                    <Icon className={`h-5 w-5 mr-3 ${item.id === 'verify' ? 'text-emerald-500' : ''}`} />
-                    {item.label}
-                  </Button>
-                );
-              })}
+              {sidebarItems.map((item) => (
+                <SidebarItem
+                  key={item.id}
+                  id={item.id}
+                  label={item.label}
+                  icon={item.icon}
+                  active={activeTab === item.id || (item.id === 'results' && ['enter-results', 'results-analysis', 'master-sheet'].includes(activeTab))}
+                  onClick={() => {
+                    if (item.external) {
+                      navigate(item.path);
+                    } else {
+                      setActiveTab(item.id);
+                    }
+                    setIsSidebarOpen(false);
+                  }}
+                  external={item.external}
+                />
+              ))}
             </nav>
             <div className="p-4 border-t border-slate-200 dark:border-slate-700">
               <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
@@ -1241,7 +1245,7 @@ export default function TeacherPortal() {
                     Mark Attendance
                   </Button>
                   <Button 
-                    onClick={() => setActiveTab("gradebook")}
+                    onClick={() => setActiveTab("enter-results")}
                     variant="outline"
                     className="w-full sm:w-auto h-11 sm:h-10 text-base sm:text-sm font-bold border-blue-200 dark:border-blue-900 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                   >
@@ -1488,73 +1492,24 @@ export default function TeacherPortal() {
               )}
             </TabsContent>
 
-            {/* Timetable Tab */}
-            <TabsContent value="timetable" className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Weekly Timetable</h2>
-                  <p className="text-slate-600 dark:text-slate-400">View your class schedule for the week.</p>
-                </div>
-                <Button variant="outline">
-                  <Download className="h-4 w-4 mr-2" />
-                  Download PDF
-                </Button>
-              </div>
+            {/* Results Hub Tab */}
+            <TabsContent value="results" className="mt-0">
+              <ResultsHub onNavigate={(tab) => setActiveTab(tab)} />
+            </TabsContent>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Class Schedule</CardTitle>
-                  <CardDescription>
-                    {schoolSettings ? `${schoolSettings.academic_year} - ${schoolSettings.current_term}` : 'Loading...'}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[150px]">Time</TableHead>
-                        <TableHead>Monday</TableHead>
-                        <TableHead>Tuesday</TableHead>
-                        <TableHead>Wednesday</TableHead>
-                        <TableHead>Thursday</TableHead>
-                        <TableHead>Friday</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00'].map((time) => {
-                        const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-                        return (
-                          <TableRow key={time}>
-                            <TableCell className="font-medium text-slate-900 dark:text-slate-200">
-                              <div className="flex items-center gap-2">
-                                <Clock className="h-4 w-4 text-slate-500" />
-                                {time}
-                              </div>
-                            </TableCell>
-                            {days.map(day => {
-                              const slot = timetable.find(t =>
-                                t.day_of_week === day &&
-                                formatTime(t.start_time) === time
-                              );
+            {/* Enter Results Tab */}
+            <TabsContent value="enter-results" className="mt-0">
+              <EnterResults />
+            </TabsContent>
 
-                              return (
-                                <TableCell key={day} className={!slot ? "text-slate-400 italic" : "font-medium text-blue-600 dark:text-blue-400"}>
-                                  {slot ? (
-                                    <div>
-                                      <div className="font-bold">{slot.subjects?.name || 'Subject'}</div>
-                                      <div className="text-xs text-slate-500">{slot.classes?.name || 'Class'}</div>
-                                    </div>
-                                  ) : 'Free'}
-                                </TableCell>
-                              );
-                            })}
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
+            {/* Results Analysis Tab */}
+            <TabsContent value="results-analysis" className="mt-0">
+              <ResultsAnalysis />
+            </TabsContent>
+
+            {/* Master Sheet Tab */}
+            <TabsContent value="master-sheet" className="mt-0">
+              <MasterSheet />
             </TabsContent>
 
             {/* Classes Tab */}
@@ -1855,9 +1810,9 @@ export default function TeacherPortal() {
               </Dialog>
             </TabsContent>
 
-            {/* Gradebook Tab */}
-            <TabsContent value="gradebook" className="space-y-6">
-              <GradebookView />
+            {/* Timetable Tab */}
+            <TabsContent value="timetable" className="mt-0">
+              <TimetableTab timetable={timetable} />
             </TabsContent>
 
             {/* Attendance Tab */}
@@ -2317,7 +2272,7 @@ export default function TeacherPortal() {
           {[
             sidebarItems.find(i => i.id === 'dashboard'),
             sidebarItems.find(i => i.id === 'classes'),
-            sidebarItems.find(i => i.id === 'gradebook'),
+            sidebarItems.find(i => i.id === 'results'),
             sidebarItems.find(i => i.id === 'attendance'),
             sidebarItems.find(i => i.id === 'profile')
           ].map((item) => {
@@ -2343,3 +2298,76 @@ export default function TeacherPortal() {
     </div>
   );
 }
+
+// Sub-components
+const SidebarItem = ({ id, label, icon: Icon, active, onClick, external }: any) => (
+  <Button
+    variant={active ? "default" : "ghost"}
+    className={cn(
+      "w-full justify-start gap-3 px-3 py-2 h-10 transition-all duration-200",
+      active 
+        ? "bg-blue-600 text-white hover:bg-blue-700 shadow-md translate-x-1" 
+        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800",
+      id === 'verify' && !active && "text-emerald-600 dark:text-emerald-400 font-bold hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+    )}
+    onClick={onClick}
+  >
+    <Icon className={cn("h-5 w-5", id === 'verify' && !active ? "text-emerald-500" : "")} />
+    <span className="font-medium">{label}</span>
+    {external && <Plus className="h-3 w-3 ml-auto opacity-50" />}
+  </Button>
+);
+
+const TimetableTab = ({ timetable }: { timetable: TimetableEntry[] }) => {
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  
+  // Helper to format time slots
+  const formatTime = (time: string) => {
+    return time.substring(0, 5);
+  };
+  
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Teaching Timetable</h2>
+          <p className="text-slate-600 dark:text-slate-400">Your weekly schedule for assigned classes.</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        {days.map(day => (
+          <Card key={day} className="border-none shadow-sm bg-white dark:bg-slate-800/50 overflow-hidden">
+            <div className="bg-slate-50 dark:bg-slate-800 px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+              <h3 className="font-bold text-sm text-slate-900 dark:text-white uppercase tracking-wider">{day}</h3>
+            </div>
+            <CardContent className="p-4 space-y-4">
+              {timetable.filter(entry => entry.day_of_week === day).length > 0 ? (
+                timetable
+                  .filter(entry => entry.day_of_week === day)
+                  .sort((a, b) => a.start_time.localeCompare(b.start_time))
+                  .map((entry, idx) => (
+                    <div key={idx} className="p-3 rounded-lg bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100/50 dark:border-blue-800/30 space-y-2">
+                      <div className="flex items-center gap-2 text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase">
+                        <Clock className="h-3 w-3" />
+                        {formatTime(entry.start_time)} - {formatTime(entry.end_time)}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-900 dark:text-white">{entry.subjects?.name}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{entry.classes?.name}</p>
+                      </div>
+                    </div>
+                  ))
+              ) : (
+                <div className="py-8 flex flex-col items-center justify-center text-slate-300 dark:text-slate-600">
+                  <Calendar className="h-8 w-8 mb-2 opacity-20" />
+                  <p className="text-[10px] font-medium uppercase tracking-tighter">No classes</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+};

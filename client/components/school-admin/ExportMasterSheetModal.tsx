@@ -35,6 +35,10 @@ interface ExportModalProps {
   examType: string;
   classId: string;
   className: string;
+  gradeLevel?: string;
+  gradeName?: string;
+  subjectId?: string;
+  subjectName?: string;
   schoolName: string;
   disabled?: boolean;
 }
@@ -47,6 +51,10 @@ export default function ExportMasterSheetModal({
   examType, 
   classId, 
   className,
+  gradeLevel,
+  gradeName,
+  subjectId,
+  subjectName,
   schoolName,
   disabled 
 }: ExportModalProps) {
@@ -66,12 +74,14 @@ export default function ExportMasterSheetModal({
         academic_year: year,
         examType,
         classId,
+        gradeLevel: gradeLevel || "all",
+        subjectId: subjectId || "all",
         export: "true"
       });
 
       const res = await syncFetch(`/api/school/reports/master-scoresheet?${queryParams.toString()}`, {
         headers: { 'Authorization': `Bearer ${session.access_token}` },
-        cacheKey: `export-cache-${term}-${year}-${examType}-${classId}`
+        cacheKey: `export-cache-${term}-${year}-${examType}-${classId}-${gradeLevel}-${subjectId}`
       });
 
       if (!res.students || res.students.length === 0) {
@@ -131,9 +141,25 @@ export default function ExportMasterSheetModal({
     ];
     worksheet['!cols'] = wscols;
 
-    // 5. Save File
     const fileName = `Master_Score_Sheet_${term}_${year}_${examType.replace(/\s+/g, '_')}.xlsx`;
     XLSX.writeFile(workbook, fileName);
+
+    // Add Grading Scale Sheet
+    if (data.scales && data.scales.length > 0) {
+      const scaleHeaders = ["Grade", "Min %", "Max %", "Points", "Description"];
+      const scaleRows = data.scales.map((s: any) => [
+        s.grade, 
+        s.min_percentage, 
+        s.max_percentage, 
+        s.points || "-", 
+        s.description || "-"
+      ]);
+      const scaleSheet = XLSX.utils.aoa_to_sheet([scaleHeaders, ...scaleRows]);
+      XLSX.utils.book_append_sheet(workbook, scaleSheet, "Grading Scale");
+      
+      // Save again with the new sheet if possible, or just re-save
+      XLSX.writeFile(workbook, fileName);
+    }
   };
 
   const exportToPDF = async (data: any) => {
@@ -141,11 +167,19 @@ export default function ExportMasterSheetModal({
     const doc = new jsPDF({ orientation: 'landscape' });
     
     const getGradePDFInfo = (pct: number) => {
-      if (pct >= 75) return { label: 'DISTINCTION', color: [16, 185, 129] }; // Emerald
-      if (pct >= 60) return { label: 'MERIT', color: [37, 99, 235] };       // Blue
-      if (pct >= 50) return { label: 'CREDIT', color: [79, 70, 229] };     // Indigo
-      if (pct >= 40) return { label: 'PASS', color: [249, 115, 22] };       // Orange
-      return { label: 'FAIL', color: [239, 68, 68] };                      // Red
+      const scales = data.scales || [];
+      const scale = scales.find((s: any) => pct >= s.min_percentage && pct <= s.max_percentage);
+      
+      if (scale) {
+        const desc = (scale.description || "").toLowerCase();
+        if (desc.includes('distinction')) return { label: scale.grade, color: [16, 185, 129] };
+        if (desc.includes('merit')) return { label: scale.grade, color: [37, 99, 235] };
+        if (desc.includes('credit')) return { label: scale.grade, color: [79, 70, 229] };
+        if (desc.includes('pass')) return { label: scale.grade, color: [249, 115, 22] };
+        if (desc.includes('fail')) return { label: scale.grade, color: [239, 68, 68] };
+        return { label: scale.grade, color: [100, 116, 139] };
+      }
+      return { label: 'N/A', color: [150, 150, 150] };
     };
 
     const tableColumn = ["Rank", "Student Name", "Class", ...subjects.map((s: any) => s.name), "Avg (%)"];
@@ -200,11 +234,9 @@ export default function ExportMasterSheetModal({
       doc.setTextColor(80);
       
       const summaryItems = [
-        { label: "Distinctions:", value: stats.distinction },
-        { label: "Merits:", value: stats.merit },
-        { label: "Credits:", value: stats.credit },
-        { label: "Passes:", value: stats.pass },
-        { label: "Fails:", value: stats.fail }
+        { label: "High Achievers:", value: students.filter((s: any) => s.average >= 75).length },
+        { label: "Passing:", value: students.filter((s: any) => s.average >= 40).length },
+        { label: "Under-performing:", value: students.filter((s: any) => s.average < 40).length },
       ];
 
       summaryItems.forEach((item, index) => {
@@ -319,13 +351,21 @@ export default function ExportMasterSheetModal({
     doc.setTextColor(40);
     doc.text("ACADEMIC GRADING SCALE LEGEND", 14, legendY);
 
-    const grades = [
-      { label: "DISTINCTION", range: "75% - 100%", color: [16, 185, 129] },
-      { label: "MERIT", range: "60% - 74%", color: [37, 99, 235] },
-      { label: "CREDIT", range: "50% - 59%", color: [79, 70, 229] },
-      { label: "PASS", range: "40% - 49%", color: [249, 115, 22] },
-      { label: "FAIL", range: "Below 40%", color: [239, 68, 68] }
-    ];
+    const grades = (data.scales || []).map((s: any) => {
+       const desc = (s.description || "").toLowerCase();
+       let color = [100, 116, 139];
+       if (desc.includes('distinction')) color = [16, 185, 129];
+       else if (desc.includes('merit')) color = [37, 99, 235];
+       else if (desc.includes('credit')) color = [79, 70, 229];
+       else if (desc.includes('pass')) color = [249, 115, 22];
+       else if (desc.includes('fail')) color = [239, 68, 68];
+       
+       return { 
+         label: s.grade, 
+         range: `${s.min_percentage}% - ${s.max_percentage}%`, 
+         color 
+       };
+    });
 
     grades.forEach((g, index) => {
       const gx = 14 + (index * 55);
@@ -396,14 +436,31 @@ export default function ExportMasterSheetModal({
 
         <div className="p-6 space-y-6">
           {/* Metadata Summary */}
-          <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-4">
             <div className="flex items-center gap-3">
               <div className="bg-white dark:bg-slate-800 p-2 rounded-lg shadow-sm">
                 <GraduationCap className="h-4 w-4 text-blue-600" />
               </div>
               <div>
-                <p className="text-[10px] uppercase text-slate-400 font-bold tracking-wider">Class</p>
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">{className || 'All Classes'}</p>
+                <p className="text-[10px] uppercase text-slate-400 font-bold tracking-wider">Target Grade</p>
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">{gradeName || 'All Grades'}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="bg-white dark:bg-slate-800 p-2 rounded-lg shadow-sm">
+                <GraduationCap className="h-4 w-4 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-[10px] uppercase text-slate-400 font-bold tracking-wider">Target Class</p>
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">{className || 'Entire School'}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="bg-white dark:bg-slate-800 p-2 rounded-lg shadow-sm">
+                <BookOpen className="h-4 w-4 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-[10px] uppercase text-slate-400 font-bold tracking-wider">Target Subject</p>
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">{subjectName || 'All Subjects'}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -430,10 +487,9 @@ export default function ExportMasterSheetModal({
               </div>
               <div>
                 <p className="text-[10px] uppercase text-slate-400 font-bold tracking-wider">Status</p>
-                <p className="text-sm font-semibold text-emerald-600">Marks Finalized</p>
+                <p className="text-sm font-semibold text-emerald-600">Finalized</p>
               </div>
             </div>
-          </div>
 
           {/* Format Selection */}
           <div className="grid grid-cols-3 gap-3">

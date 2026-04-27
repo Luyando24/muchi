@@ -12,7 +12,8 @@ import {
   CreditCard,
   PieChart,
   Globe,
-  Utensils
+  Utensils,
+  ShieldAlert
 } from 'lucide-react';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,7 @@ import SchoolSettings from '@/components/school-admin/SchoolSettings';
 import WebsiteManagement from '@/components/school-admin/WebsiteManagement';
 import FeedingProgramManagement from '@/components/school-admin/FeedingProgramManagement';
 import ApplicationsView from '@/components/school-admin/ApplicationsView';
+import { GradeAnomalies } from '@/components/school-admin/GradeAnomalies';
 import SchoolAdminNavbar from '@/components/school-admin/SchoolAdminNavbar';
 import { syncFetch } from '@/lib/syncService';
 import LicenseAccessDenied from '@/components/common/LicenseAccessDenied';
@@ -62,7 +64,7 @@ export default function SchoolAdminPortal() {
   useEffect(() => {
     const handleHashChange = () => {
       if (window.location.hash === '#data-audit') {
-        setActiveTab('academics');
+        setActiveTab('data-audit');
       }
     };
     
@@ -180,6 +182,7 @@ export default function SchoolAdminPortal() {
     { id: "feeding_program", label: "Feeding Program", icon: Utensils, roles: ["school_admin", "bursar", "content_manager"] },
     { id: "website", label: "Website", icon: Globe, roles: ["school_admin", "content_manager"] },
     { id: "reports", label: "Reports", icon: PieChart, roles: ["school_admin", "academic_auditor"] },
+    { id: "data-audit", label: "Data Audit", icon: ShieldAlert, roles: ["school_admin", "exam_officer", "academic_auditor"] },
     { id: "calendar", label: "Calendar", icon: Calendar, roles: ["school_admin", "registrar"] },
     { id: "settings", label: "Settings", icon: Settings, roles: ["school_admin"] }
   ];
@@ -325,6 +328,11 @@ export default function SchoolAdminPortal() {
             {/* Settings Tab */}
             <TabsContent value="settings" className="space-y-6 m-0">
               <SchoolSettings />
+            </TabsContent>
+
+            {/* Data Audit Tab */}
+            <TabsContent value="data-audit" className="space-y-6 m-0">
+              <GradeAnomalies />
             </TabsContent>
           </Tabs>
         </main>

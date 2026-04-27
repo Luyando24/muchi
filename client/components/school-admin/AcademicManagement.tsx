@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit, Save, Search, Settings, BookOpen, Calculator, CheckCircle2, AlertTriangle, Loader2, ClipboardList, Send, ArrowRightLeft, Download, Layers, Building, Calendar, Printer, FileSpreadsheet } from 'lucide-react';
+import { Plus, Trash2, Edit, Save, Search, Settings, BookOpen, Calculator, CheckCircle2, AlertTriangle, Loader2, ClipboardList, Send, ArrowRightLeft, Download, Layers, Building, Calendar, Printer, FileSpreadsheet, Lock, ShieldAlert } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -539,8 +539,9 @@ export default function AcademicManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const url = isEdit ? `/api/school/grading-scales/${scaleForm.id}` : '/api/school/grading-scales';
-      const method = isEdit ? 'PUT' : 'POST';
+      const isUpdate = isEdit && !!scaleForm.id;
+      const url = isUpdate ? `/api/school/grading-scales/${scaleForm.id}` : '/api/school/grading-scales';
+      const method = isUpdate ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
         method,
@@ -1720,89 +1721,152 @@ export default function AcademicManagement() {
         {/* GRADING SCALES TAB */}
         <TabsContent value="grading-scales" className="space-y-4 mt-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Grading Scales</CardTitle>
-                <CardDescription>Define grade ranges.</CardDescription>
+            <CardHeader>
+              <div className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Grading Scales</CardTitle>
+                  <CardDescription>Manage grading schemes for different grade groups.</CardDescription>
+                </div>
+                <Dialog open={isAddScaleOpen} onOpenChange={setIsAddScaleOpen}>
+                  <DialogTrigger asChild>
+                    <Button onClick={() => setScaleForm({ id: '', grade: '', min_percentage: 0, max_percentage: 100, description: '' })}>
+                      <Plus className="h-4 w-4 mr-2" /> Add Grade Scale
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Add Grading Scale</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={(e) => handleScaleSubmit(e, false)} className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Grade (e.g., A+ or 1)</Label>
+                          <Input required value={scaleForm.grade} onChange={e => setScaleForm({ ...scaleForm, grade: e.target.value })} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Min %</Label>
+                          <Input type="number" required value={scaleForm.min_percentage} onChange={e => setScaleForm({ ...scaleForm, min_percentage: parseInt(e.target.value) })} />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Max %</Label>
+                          <Input type="number" required value={scaleForm.max_percentage} onChange={e => setScaleForm({ ...scaleForm, max_percentage: parseInt(e.target.value) })} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Description</Label>
+                          <Input value={scaleForm.description} onChange={e => setScaleForm({ ...scaleForm, description: e.target.value })} />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button type="submit">Save</Button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
               </div>
-              <Dialog open={isAddScaleOpen} onOpenChange={setIsAddScaleOpen}>
-                <DialogTrigger asChild>
-                  <Button onClick={() => setScaleForm({ id: '', grade: '', min_percentage: 0, max_percentage: 100, description: '' })}>
-                    <Plus className="h-4 w-4 mr-2" /> Add Grade Scale
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add Grading Scale</DialogTitle>
-                  </DialogHeader>
-                  <form onSubmit={(e) => handleScaleSubmit(e, false)} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Grade (e.g., A)</Label>
-                        <Input required value={scaleForm.grade} onChange={e => setScaleForm({ ...scaleForm, grade: e.target.value })} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Min %</Label>
-                        <Input type="number" required value={scaleForm.min_percentage} onChange={e => setScaleForm({ ...scaleForm, min_percentage: parseInt(e.target.value) })} />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Max %</Label>
-                        <Input type="number" required value={scaleForm.max_percentage} onChange={e => setScaleForm({ ...scaleForm, max_percentage: parseInt(e.target.value) })} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Description</Label>
-                        <Input value={scaleForm.description} onChange={e => setScaleForm({ ...scaleForm, description: e.target.value })} />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button type="submit">Save</Button>
-                    </DialogFooter>
-                  </form>
-                </DialogContent>
-              </Dialog>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Grade</TableHead>
-                    <TableHead>Range</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {gradingScales.map((scale) => (
-                    <TableRow key={scale.id}>
-                      <TableCell className="font-bold">{scale.grade}</TableCell>
-                      <TableCell>{scale.min_percentage}% - {scale.max_percentage}%</TableCell>
-                      <TableCell>{scale.description}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="sm" onClick={() => {
-                            setScaleForm(scale);
-                            setIsEditScaleOpen(true);
-                          }}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" className="text-red-500" onClick={() => setConfirmState({ type: 'scale', id: scale.id })}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {gradingScales.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-slate-500">
-                        No grading scales defined.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+              <Tabs defaultValue="primary-senior" className="w-full">
+                <TabsList className="grid w-full grid-cols-3 mb-6">
+                  <TabsTrigger value="primary-junior" className="text-xs font-bold">Grade 1 - 4</TabsTrigger>
+                  <TabsTrigger value="primary-senior" className="text-xs font-bold">Grade 5 - 7</TabsTrigger>
+                  <TabsTrigger value="standard" className="text-xs font-bold">Secondary (Form 1 - Grade 12)</TabsTrigger>
+                </TabsList>
+
+                {['primary-junior', 'primary-senior', 'standard'].map((group) => {
+                  const filteredScales = gradingScales.filter(scale => {
+                    const g = scale.grade.toUpperCase();
+                    if (group === 'primary-senior') return ['A+', 'A', 'B+', 'B', 'C+', 'C', 'F'].includes(g);
+                    if (group === 'primary-junior') return ['A RED', 'B ORANGE', 'C YELLOW', 'D BLUE'].some(prefix => g.includes(prefix));
+                    if (group === 'standard') return !isNaN(parseInt(g)) || ['D', 'E', 'U', 'MERIT', 'PASS', 'FAIL', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE'].includes(g);
+                    return false;
+                  });
+
+                  const getGroupDefaults = (group: string) => {
+                    if (group === 'primary-senior') return [
+                      { grade: "A+", min_percentage: 86, max_percentage: 100, description: "Distinction" },
+                      { grade: "A", min_percentage: 76, max_percentage: 85, description: "Distinction" },
+                      { grade: "B+", min_percentage: 66, max_percentage: 75, description: "Merit" },
+                      { grade: "B", min_percentage: 56, max_percentage: 65, description: "Credit" },
+                      { grade: "C+", min_percentage: 46, max_percentage: 55, description: "Definite Pass" },
+                      { grade: "C", min_percentage: 40, max_percentage: 45, description: "Pass" },
+                      { grade: "F", min_percentage: 0, max_percentage: 39, description: "Fail" },
+                    ];
+                    if (group === 'primary-junior') return [
+                      { grade: "A Red", min_percentage: 75, max_percentage: 100, description: "Excellent" },
+                      { grade: "B Orange", min_percentage: 60, max_percentage: 74, description: "Very Good" },
+                      { grade: "C Yellow", min_percentage: 50, max_percentage: 59, description: "Good" },
+                      { grade: "D Blue", min_percentage: 0, max_percentage: 49, description: "Average Below" },
+                    ];
+                    return [
+                      { grade: "One", min_percentage: 75, max_percentage: 100, description: "Distinction" },
+                      { grade: "Two", min_percentage: 70, max_percentage: 74, description: "Distinction" },
+                      { grade: "Three", min_percentage: 65, max_percentage: 69, description: "Merit" },
+                      { grade: "Four", min_percentage: 60, max_percentage: 64, description: "Merit" },
+                      { grade: "Five", min_percentage: 55, max_percentage: 59, description: "Credit" },
+                      { grade: "Six", min_percentage: 50, max_percentage: 54, description: "Credit" },
+                      { grade: "Seven", min_percentage: 45, max_percentage: 49, description: "Satisfactory" },
+                      { grade: "Eight", min_percentage: 40, max_percentage: 44, description: "Satisfactory" },
+                      { grade: "Nine", min_percentage: 0, max_percentage: 39, description: "Unsatisfactory" },
+                    ];
+                  };
+
+                  const displayScales = filteredScales.length > 0 ? filteredScales : getGroupDefaults(group);
+
+                  return (
+                    <TabsContent key={group} value={group} className="space-y-4">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Grade</TableHead>
+                            <TableHead>Range</TableHead>
+                            <TableHead>Description</TableHead>
+                            <TableHead className="text-right">Status</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {displayScales.map((scale: any, sIdx: number) => (
+                            <TableRow key={scale.id || `default-${sIdx}`}>
+                              <TableCell className="font-bold">
+                                <div className="flex items-center gap-2">
+                                  {scale.grade}
+                                  {!scale.id && <Badge variant="outline" className="text-[10px] uppercase font-black bg-blue-50 text-blue-600 border-blue-100">Default</Badge>}
+                                </div>
+                              </TableCell>
+                              <TableCell>{scale.min_percentage}% - {scale.max_percentage}%</TableCell>
+                              <TableCell>{scale.description}</TableCell>
+                              <TableCell className="text-right">
+                                {!scale.id ? (
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase">System Active</span>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-green-600 uppercase">Custom Override</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex justify-end gap-2">
+                                  <Button variant="ghost" size="sm" onClick={() => {
+                                    setScaleForm(scale);
+                                    setIsEditScaleOpen(true);
+                                  }}>
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  {scale.id && (
+                                    <Button variant="ghost" size="sm" className="text-red-500" onClick={() => setConfirmState({ type: 'scale', id: scale.id })}>
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TabsContent>
+                  );
+                })}
+              </Tabs>
             </CardContent>
           </Card>
         </TabsContent>
@@ -2008,6 +2072,16 @@ export default function AcademicManagement() {
                       <ClipboardList className="mr-2 h-4 w-4" />
                     )}
                     Check Readiness Report
+                  </Button>
+
+                  {/* Data Audit Link */}
+                  <Button
+                    variant="outline"
+                    className="w-full border-red-300 text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950"
+                    onClick={() => { window.location.hash = '#data-audit'; }}
+                  >
+                    <ShieldAlert className="mr-2 h-4 w-4" />
+                    Check Results Anomalies
                   </Button>
 
                   {/* Readiness Report Dialog */}

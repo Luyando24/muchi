@@ -730,11 +730,30 @@ router.post('/grades', requireTeacher, async (req: Request, res: Response) => {
 // GET /api/teacher/subjects
 router.get('/subjects', requireTeacher, async (req: Request, res: Response) => {
     const profile = (req as any).profile;
+    const teacherId = profile.id;
     try {
-        const { data: subjects, error } = await supabaseAdmin
+        let query = supabaseAdmin
             .from('subjects')
             .select('*')
             .eq('school_id', profile.school_id);
+
+        // If strictly a teacher, only show subjects they are assigned to
+        if (profile.role === 'teacher' || profile.secondary_role === 'teacher') {
+            const { data: assignments } = await supabaseAdmin
+                .from('class_subjects')
+                .select('subject_id')
+                .eq('teacher_id', teacherId);
+            
+            const subjectIds = Array.from(new Set(assignments?.map(a => a.subject_id) || []));
+            
+            if (subjectIds.length > 0) {
+                query = query.in('id', subjectIds);
+            } else {
+                return res.json([]);
+            }
+        }
+
+        const { data: subjects, error } = await query;
             
         if (error) throw error;
         res.json(subjects);
