@@ -187,14 +187,74 @@ export default function TeacherPortal() {
 
   // UI State
   const [activeTab, setActiveTab] = useState(() => {
+    const path = location.pathname;
+    if (path.includes('/results/enter')) return 'enter-results';
+    if (path.includes('/results/analysis')) return 'results-analysis';
+    if (path.includes('/results/master-sheet')) return 'master-sheet';
+    if (path.includes('/results')) return 'results';
+    if (path.includes('/students')) return 'students';
+    if (path.includes('/classes')) return 'classes';
+    if (path.includes('/attendance')) return 'attendance';
+    if (path.includes('/timetable')) return 'timetable';
+    if (path.includes('/profile')) return 'profile';
+    if (path.includes('/settings')) return 'settings';
+    
     const params = new URLSearchParams(location.search);
     return params.get("tab") || "dashboard";
   });
+
+  // Sync tab with URL changes
+  useEffect(() => {
+    const path = location.pathname;
+    let newTab = activeTab;
+    
+    if (path.includes('/results/enter')) newTab = 'enter-results';
+    else if (path.includes('/results/analysis')) newTab = 'results-analysis';
+    else if (path.includes('/results/master-sheet')) newTab = 'master-sheet';
+    else if (path.includes('/results')) newTab = 'results';
+    else if (path.includes('/students')) newTab = 'students';
+    else if (path.includes('/classes')) newTab = 'classes';
+    else if (path.includes('/attendance')) newTab = 'attendance';
+    else if (path.includes('/timetable')) newTab = 'timetable';
+    else if (path.includes('/profile')) newTab = 'profile';
+    else if (path.includes('/settings')) newTab = 'settings';
+    else if (path === '/teacher-portal' || path === '/teacher-portal/') {
+      const params = new URLSearchParams(location.search);
+      newTab = params.get("tab") || "dashboard";
+    }
+
+    if (newTab !== activeTab) {
+      setActiveTab(newTab);
+    }
+  }, [location.pathname, location.search]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isCreateAssignmentOpen, setIsCreateAssignmentOpen] = useState(false);
   const [isSelfAssignOpen, setIsSelfAssignOpen] = useState(false);
   const [savingAttendance, setSavingAttendance] = useState(false);
+
+  const routeMap: Record<string, string> = {
+    'dashboard': '/teacher-portal',
+    'enter-results': '/teacher-portal/results/enter',
+    'results-analysis': '/teacher-portal/results/analysis',
+    'master-sheet': '/teacher-portal/results/master-sheet',
+    'results': '/teacher-portal/results',
+    'students': '/teacher-portal/students',
+    'classes': '/teacher-portal/classes',
+    'attendance': '/teacher-portal/attendance',
+    'timetable': '/teacher-portal/timetable',
+    'profile': '/teacher-portal/profile',
+    'settings': '/teacher-portal/settings'
+  };
+
+  const handleTabChange = (value: string) => {
+    if (routeMap[value]) {
+      navigate(routeMap[value]);
+    } else {
+      navigate(`/teacher-portal?tab=${value}`);
+    }
+    setActiveTab(value);
+  };
 
   // Data State
   const [user, setUser] = useState<any>(null);
@@ -1143,11 +1203,11 @@ export default function TeacherPortal() {
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel>My Account</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setActiveTab('profile')}>
+                  <DropdownMenuItem onClick={() => handleTabChange('profile')}>
                     <User className="mr-2 h-4 w-4" />
                     <span>Profile</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setActiveTab('settings')}>
+                  <DropdownMenuItem onClick={() => handleTabChange('settings')}>
                     <Settings className="mr-2 h-4 w-4" />
                     <span>Settings</span>
                   </DropdownMenuItem>
@@ -1198,7 +1258,7 @@ export default function TeacherPortal() {
                     if (item.external) {
                       navigate(item.path);
                     } else {
-                      setActiveTab(item.id);
+                      handleTabChange(item.id);
                     }
                     setIsSidebarOpen(false);
                   }}
@@ -1226,7 +1286,10 @@ export default function TeacherPortal() {
 
         {/* Main Content */}
         <main className="flex-1 p-6 overflow-y-auto h-[calc(100vh-64px)]">
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <Tabs 
+            value={activeTab} 
+            onValueChange={handleTabChange}
+          >
             {/* Dashboard Tab */}
             <TabsContent value="dashboard" className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1254,7 +1317,7 @@ export default function TeacherPortal() {
                     Enter Results
                   </Button>
                   <Button 
-                    onClick={() => setActiveTab("attendance")}
+                    onClick={() => handleTabChange("attendance")}
                     variant="outline"
                     className="w-full sm:w-auto h-11 sm:h-10 text-base sm:text-sm font-bold border-blue-200 dark:border-blue-900 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                   >
@@ -1343,7 +1406,7 @@ export default function TeacherPortal() {
                     <Button 
                       variant="ghost" 
                       className="w-full text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/10 font-bold text-sm" 
-                      onClick={() => setActiveTab('classes')}
+                      onClick={() => handleTabChange('classes')}
                     >
                       View All Classes
                       <ChevronRight className="ml-1 h-4 w-4" />
@@ -1503,7 +1566,7 @@ export default function TeacherPortal() {
 
             {/* Results Hub Tab */}
             <TabsContent value="results" className="mt-0">
-              <ResultsHub onNavigate={(tab) => setActiveTab(tab)} />
+              <ResultsHub onNavigate={(tab) => handleTabChange(tab)} />
             </TabsContent>
 
             {/* Enter Results Tab */}
@@ -1572,13 +1635,13 @@ export default function TeacherPortal() {
                         <div className="flex gap-2 pt-2">
                           <Button className="flex-1" size="sm" onClick={() => {
                             setSelectedClassId(cls.id);
-                            setActiveTab('students');
+                            handleTabChange('students');
                           }}>
                             View Students
                           </Button>
                           <Button variant="outline" size="sm" title="Attendance" onClick={() => {
                             setSelectedClassId(cls.id);
-                            setActiveTab('attendance');
+                            handleTabChange('attendance');
                           }}>
                             <ClipboardCheck className="h-4 w-4" />
                           </Button>
@@ -2289,7 +2352,7 @@ export default function TeacherPortal() {
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => handleTabChange(item.id)}
                 className={`flex flex-col items-center justify-center p-2 rounded-lg transition-all duration-200 min-w-[64px] ${
                   activeTab === item.id 
                     ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20" 

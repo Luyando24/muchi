@@ -114,6 +114,22 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
     fetchInitialData();
   }, []);
 
+  // Auto-select first class when available
+  useEffect(() => {
+    if (availableClasses.length > 0) {
+      if (selectedClassId === 'all') setSelectedClassId(availableClasses[0].id);
+      if (selectedAnalysisClassId === 'all') setSelectedAnalysisClassId(availableClasses[0].id);
+    }
+  }, [availableClasses]);
+
+  // Auto-select first subject when available
+  useEffect(() => {
+    if (availableSubjects.length > 0) {
+      if (selectedSubjectId === 'all') setSelectedSubjectId(availableSubjects[0].id);
+      if (selectedMasterSubjectId === 'all') setSelectedMasterSubjectId(availableSubjects[0].id);
+    }
+  }, [availableSubjects]);
+
   useEffect(() => {
     if (selectedTerm || selectedYear || selectedExamType) {
       fetchLiveStats();
@@ -160,8 +176,9 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
         setSelectedExamType("End of Term");
       }
       
-      // Fetch classes to populate filters in multiple tabs
+      // Fetch classes and subjects to populate filters in multiple tabs
       fetchClasses();
+      fetchSubjects();
     } catch (error) {
       console.error('Error fetching initial data:', error);
     }
@@ -249,7 +266,8 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
         headers: { 'Authorization': `Bearer ${session.access_token}` },
         cacheKey: cacheKey
       });
-      setAvailableClasses(data?.data || data || []);
+      const classes = data?.data || data || [];
+      setAvailableClasses(classes);
     } catch (error) {
       console.error('Error fetching classes:', error);
     }
@@ -267,7 +285,8 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
         headers: { 'Authorization': `Bearer ${session.access_token}` },
         cacheKey: cacheKey
       });
-      setAvailableSubjects(data || []);
+      const subjects = data || [];
+      setAvailableSubjects(subjects);
     } catch (error) {
       console.error('Error fetching subjects:', error);
     }
@@ -705,28 +724,30 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                   </Select>
                 </div>
 
-                <div className="w-[150px]">
-                   <Select value={selectedMasterGradeLevel} onValueChange={(v) => {
-                     setSelectedMasterGradeLevel(v);
-                     setSelectedClassId('all');
-                   }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Grade" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Grades</SelectItem>
-                      {Array.from(new Set(
-                        availableClasses
-                          .map((c: any) => c.level || (c.name.includes('Grade') ? c.name.split(' ').slice(0, 2).join(' ') : c.name))
-                          .filter(Boolean)
-                      ))
-                      .sort((a: any, b: any) => String(a).localeCompare(String(b), undefined, { numeric: true }))
-                      .map(g => (
-                        <SelectItem key={g as string} value={g as string}>{g as string}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {!isTeacherPortal && (
+                  <div className="w-[150px]">
+                    <Select value={selectedMasterGradeLevel} onValueChange={(v) => {
+                      setSelectedMasterGradeLevel(v);
+                      setSelectedClassId('all');
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Grade" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Grades</SelectItem>
+                        {Array.from(new Set(
+                          availableClasses
+                            .map((c: any) => c.level || (c.name.includes('Grade') ? c.name.split(' ').slice(0, 2).join(' ') : c.name))
+                            .filter(Boolean)
+                        ))
+                        .sort((a: any, b: any) => String(a).localeCompare(String(b), undefined, { numeric: true }))
+                        .map(g => (
+                          <SelectItem key={g as string} value={g as string}>{g as string}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <div className="w-[150px]">
                   <Select value={selectedClassId} onValueChange={setSelectedClassId}>
@@ -879,45 +900,6 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <div className="w-[150px]">
-                   <Select value={selectedGradeLevel} onValueChange={(v) => {
-                     setSelectedGradeLevel(v);
-                     setSelectedAnalysisClassId('all');
-                   }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Grade" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Grades</SelectItem>
-                      {Array.from(new Set(
-                        availableClasses
-                          .map((c: any) => c.level || (c.name.includes('Grade') ? c.name.split(' ').slice(0, 2).join(' ') : c.name))
-                          .filter(Boolean)
-                      ))
-                      .sort((a: any, b: any) => String(a).localeCompare(String(b), undefined, { numeric: true }))
-                      .map(g => (
-                        <SelectItem key={g as string} value={g as string}>{g as string}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="w-[150px]">
-                  <Select value={selectedAnalysisClassId} onValueChange={setSelectedAnalysisClassId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Class" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Classes</SelectItem>
-                      {availableClasses
-                        .filter(c => selectedGradeLevel === 'all' || c.level === selectedGradeLevel || c.name.startsWith(`Grade ${selectedGradeLevel}`))
-                        .map((cls: any) => (
-                          <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="w-[150px]">
                   <Select value={selectedExamType} onValueChange={setSelectedExamType}>
                     <SelectTrigger>
                       <SelectValue placeholder="Assessment" />
@@ -933,6 +915,47 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                           <SelectItem value="End of Term">End of Term</SelectItem>
                         </>
                       )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {!isTeacherPortal && (
+                  <div className="w-[150px]">
+                    <Select value={selectedGradeLevel} onValueChange={(v) => {
+                      setSelectedGradeLevel(v);
+                      setSelectedAnalysisClassId('all');
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Grade" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Grades</SelectItem>
+                        {Array.from(new Set(
+                          availableClasses
+                            .map((c: any) => c.level || (c.name.includes('Grade') ? c.name.split(' ').slice(0, 2).join(' ') : c.name))
+                            .filter(Boolean)
+                        ))
+                        .sort((a: any, b: any) => String(a).localeCompare(String(b), undefined, { numeric: true }))
+                        .map(g => (
+                          <SelectItem key={g as string} value={g as string}>{g as string}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div className="w-[150px]">
+                  <Select value={selectedAnalysisClassId} onValueChange={setSelectedAnalysisClassId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Class" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Classes</SelectItem>
+                      {availableClasses
+                        .filter(c => selectedGradeLevel === 'all' || c.level === selectedGradeLevel || c.name.startsWith(`Grade ${selectedGradeLevel}`))
+                        .map((cls: any) => (
+                          <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>

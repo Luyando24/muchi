@@ -423,12 +423,12 @@ export default function ExportMasterSheetModal({
           disabled={disabled}
         >
           <Download className="h-4 w-4 mr-2" />
-          Export Report
+          Download Report
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[550px] bg-white dark:bg-slate-950 p-0 overflow-hidden border-none shadow-2xl">
         <DialogHeader className="p-6 pb-0">
-          <DialogTitle className="text-2xl font-bold text-slate-900 dark:text-white">Export Results</DialogTitle>
+          <DialogTitle className="text-2xl font-bold text-slate-900 dark:text-white">Download Master Sheet</DialogTitle>
           <DialogDescription className="text-slate-500">
             Select your preferred file format for the master score sheet.
           </DialogDescription>
