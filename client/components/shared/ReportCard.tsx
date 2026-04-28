@@ -74,13 +74,13 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
             <h1 className="text-3xl font-black tracking-tight text-slate-900">{school?.name || 'MUCHI ACADEMY'}</h1>
             <div className="flex items-center justify-center gap-2 text-sm font-bold text-slate-900">
               <span>{term} - {examType}</span>
-              <span className="text-slate-300">ÔÇó</span>
+              <span className="text-slate-300">&bull;</span>
               <span>Academic Year {academicYear}</span>
             </div>
             <div className="text-sm font-medium text-slate-500 flex flex-col items-center gap-1 mt-1">
               {school?.address && <p>{school.address}</p>}
-              <div className="flex gap-4 text-slate-400 text-xs uppercase tracking-wider">
-                {school?.email && <p>{school.email}</p>}
+              <div className="flex gap-4 text-slate-400 text-xs tracking-wider">
+                {school?.email && <p className="lowercase">{school.email}</p>}
                 {school?.phone && <p>{school.phone}</p>}
               </div>
             </div>
