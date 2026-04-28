@@ -4963,7 +4963,9 @@ router.get(
     const schoolId = profile.school_id;
     const { term, academic_year, examType } = req.query;
 
-    const isTeacher = profile.role === 'teacher' || profile.secondary_role === 'teacher';
+    const isAdmin = ADMIN_ROLES.includes(profile.role) || (profile.secondary_role && ADMIN_ROLES.includes(profile.secondary_role));
+    const isTeacher = (profile.role === 'teacher' || profile.secondary_role === 'teacher') && !isAdmin;
+
     let teacherClassIds: string[] = [];
     if (isTeacher) {
       const { data: tc } = await supabaseAdmin
@@ -5501,7 +5503,9 @@ router.get(
     const schoolId = profile.school_id;
     const { term, academic_year, examType, gradeLevel, classId, subjectId } = req.query;
 
-    const isTeacher = profile.role === 'teacher' || profile.secondary_role === 'teacher';
+    const isAdmin = ADMIN_ROLES.includes(profile.role) || (profile.secondary_role && ADMIN_ROLES.includes(profile.secondary_role));
+    const isTeacher = (profile.role === 'teacher' || profile.secondary_role === 'teacher') && !isAdmin;
+
     let teacherClassIds: string[] = [];
     if (isTeacher) {
       const { data: tc } = await supabaseAdmin
@@ -5750,7 +5754,9 @@ router.get(
     const schoolId = profile.school_id;
     const { term, academic_year, examType, classId, gradeLevel, subjectId } = req.query;
 
-    const isTeacher = profile.role === 'teacher' || profile.secondary_role === 'teacher';
+    const isAdmin = ADMIN_ROLES.includes(profile.role) || (profile.secondary_role && ADMIN_ROLES.includes(profile.secondary_role));
+    const isTeacher = (profile.role === 'teacher' || profile.secondary_role === 'teacher') && !isAdmin;
+
     let teacherClassIds: string[] = [];
     if (isTeacher) {
       const { data: tc } = await supabaseAdmin
@@ -5779,21 +5785,26 @@ router.get(
         .eq("school_id", schoolId)
         .order("min_percentage", { ascending: false });
 
-      // 1. Fetch ALL Active Students for this school
-      const studentsQuery = supabaseAdmin
-        .from("profiles")
+      // 1. Fetch ALL Students enrolled in this school for the selected year
+      const enrollmentsQuery = supabaseAdmin
+        .from("enrollments")
         .select(`
-          id, 
-          full_name, 
-          student_number, 
-          grade,
-          enrollments(class_id, classes(name))
+          student_id,
+          class_id,
+          classes(name),
+          profiles!inner(id, full_name, student_number, grade, enrollment_status)
         `)
-        .eq("school_id", schoolId)
-        .eq("role", "student")
-        .eq("enrollment_status", "Active");
+        .eq("profiles.school_id", schoolId)
+        .eq("academic_year", academic_year)
+        .eq("profiles.role", "student")
+        .eq("profiles.enrollment_status", "Active");
 
-      const studentsData = await fetchAll(studentsQuery);
+      const enrollmentsData = await fetchAll(enrollmentsQuery);
+      
+      const studentsData = enrollmentsData.map((e: any) => ({
+        ...e.profiles,
+        enrollments: [{ class_id: e.class_id, classes: e.classes }]
+      }));
 
       // 2. Filter students by class if requested
       let filteredStudents = studentsData;

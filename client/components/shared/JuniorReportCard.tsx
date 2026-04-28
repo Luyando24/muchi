@@ -94,7 +94,7 @@ export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({ data }) => {
       <div className="grid grid-cols-2 gap-y-4 mb-8 text-sm">
         <div className="flex border-b border-dotted border-black pb-1 mr-4">
           <span className="font-bold mr-2 uppercase w-32">Grade:</span>
-          <span className="flex-1">{student.className || student.grade || student.gradeName}</span>
+          <span className="flex-1">{student.className || student.grade || student.class || student.gradeName}</span>
         </div>
         <div className="flex border-b border-dotted border-black pb-1">
           <span className="font-bold mr-2 uppercase w-20">Term:</span>

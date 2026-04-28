@@ -4,13 +4,17 @@ import { JuniorReportCard } from "./JuniorReportCard";
 
 interface ReportCardContentProps {
   data: any;
+  term: string;
+  examType: string;
+  academicYear: string;
+  className?: string;
 }
 
-export const ReportCardContent: React.FC<ReportCardContentProps> = ({ data }) => {
+export const ReportCardContent: React.FC<ReportCardContentProps> = ({ data, term, examType, academicYear, className = "" }) => {
   const { student, grades, gradingScale, school } = data;
 
   // Auto-detect if we should use the specialized formats
-  const gradeStr = (student.grade || student.className || "").toString().toLowerCase();
+  const gradeStr = (student.grade || student.className || student.class || "").toString().toLowerCase();
   const isPrimarySchool = (school?.school_type || "").toLowerCase().includes("primary");
   
   const isPrimaryG57 = isPrimarySchool && 
@@ -24,12 +28,12 @@ export const ReportCardContent: React.FC<ReportCardContentProps> = ({ data }) =>
                        (gradeStr.includes("grade") || gradeStr.includes("g"));
 
   if (isPrimaryG57) {
-    return <PrimaryReportCard data={data} />;
+    return <PrimaryReportCard data={data} term={term} examType={examType} academicYear={academicYear} className={className} />;
   }
 
   if (isPrimaryG14) {
-    return <JuniorReportCard data={data} />;
+    return <JuniorReportCard data={data} term={term} examType={examType} academicYear={academicYear} className={className} />;
   }
 
-  return <ReportCard data={data} />;
+  return <ReportCard data={data} term={term} examType={examType} academicYear={academicYear} className={className} />;
 };

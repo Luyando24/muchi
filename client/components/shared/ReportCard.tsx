@@ -1,130 +1,477 @@
 
 import React from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { cn } from "@/lib/utils";
+import { QRCodeSVG } from 'qrcode.react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from '@/components/ui/badge';
 
 interface ReportCardProps {
-  data: {
-    student: any;
-    grades: any[];
-    gradingScale: any[];
-    school: any;
-  };
+  data: any;
+  term: string;
+  examType: string;
+  academicYear: string;
+  className?: string;
 }
 
-export const ReportCard: React.FC<ReportCardProps> = ({ data }) => {
-  const { student, grades, school } = data;
+export const ReportCard = ({ data, term, examType, academicYear, className = "" }: ReportCardProps) => {
+  const { student, grades, gradingScale, school } = data;
 
-  // Group grades by subject and handle the standard layout
-  const subjectGrades = grades.reduce((acc: any, curr: any) => {
-    const subjectName = curr.subjects?.name || curr.subjectName || "Unknown";
-    if (!acc[subjectName]) {
-      acc[subjectName] = {
-        name: subjectName,
-        score: '-',
-        grade: '-',
-        comments: '-'
-      };
-    }
+  // Calculate Metrics
+  const totalPercentage = grades.reduce((sum: number, g: any) => sum + (g.percentage || 0), 0);
+  const average = grades.length > 0 ? (totalPercentage / grades.length).toFixed(1) : 0;
 
-    if (curr.exam_type === 'End of Term' || curr.examType === 'End of Term') {
-      acc[subjectName].score = curr.percentage;
-      acc[subjectName].grade = curr.grade || '-';
-      acc[subjectName].comments = curr.comments || '-';
-    }
-
-    return acc;
-  }, {});
-
-  const subjectsList = Object.values(subjectGrades);
+  // Generate a deterministic verification string
+  // Payload structure: VERIFY|studentNumber|studentName|term|examType|academicYear|average|schoolName
+  const rawData = `VERIFY|${student.studentNumber}|${student.name}|${term}|${examType}|${academicYear}|${average}|${school?.name || 'School'}`;
+  const verificationUrl = `${window.location.origin}/verify/${btoa(encodeURIComponent(rawData))}`;
 
   return (
-    <div className="max-w-4xl mx-auto p-8 bg-white shadow-lg border border-slate-200 print:shadow-none print:border-none print:p-0">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8 border-b-2 border-slate-900 pb-6">
-        <div className="flex items-center gap-6">
-          {school?.logo_url && (
-            <img src={school.logo_url} alt="Logo" className="h-24 w-24 object-contain" />
-          )}
-          <div>
-            <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight leading-none mb-2">{school?.name}</h1>
-            <p className="text-sm text-slate-600 font-medium">{school?.address}</p>
-            <p className="text-sm text-slate-600 font-medium">{school?.phone} | {school?.email}</p>
-          </div>
-        </div>
-        <div className="text-right">
-          <div className="inline-block border-2 border-slate-900 px-4 py-2 bg-slate-900 text-white">
-            <h2 className="text-xl font-black tracking-tighter uppercase">Academic Report</h2>
-          </div>
-        </div>
-      </div>
+    <div className={`relative flex flex-col bg-white overflow-hidden print:overflow-hidden print:w-[210mm] print:h-[297mm] mx-auto my-8 print:my-0 shadow-2xl print:shadow-none rounded-3xl print:rounded-none ${className}`}>
+      <style type="text/css" media="print">
+        {`
+          @page { size: A4; margin: 0; }
+          body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+        `}
+      </style>
 
-      {/* Student Details */}
-      <div className="grid grid-cols-3 gap-6 mb-8">
-        <div className="space-y-1">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Student Name</p>
-          <p className="text-sm font-bold text-slate-900 uppercase">{student.full_name || student.name}</p>
+      {/* Decorative Background Flourish (Watermark Style) */}
+      <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/30 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none print:hidden" />
+      <div className="absolute bottom-0 left-0 w-64 h-64 bg-slate-50/30 rounded-full blur-3xl -ml-32 -mb-32 pointer-events-none print:hidden" />
+
+      {/* Global Watermark */}
+      {school?.logo_url && (
+        <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none z-0 overflow-hidden">
+          <img src={school.logo_url} alt="" className="w-[80%] object-contain grayscale" />
         </div>
-        <div className="space-y-1">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Grade / Class</p>
-          <p className="text-sm font-bold text-slate-900 uppercase">{student.className || student.grade}</p>
+      )}
+
+      {/* Document Content */}
+      <div className="relative z-10 flex-1 flex flex-col p-12 print:p-6 print:pt-4 space-y-8 print:space-y-2 h-full justify-between">
+
+        {/* Minimal Header Section */}
+        <div className="flex justify-between items-start pb-8 print:pb-2">
+          {/* Left Side: School Logo */}
+          <div className="w-24">
+            {school?.logo_url ? (
+              <div className="h-24 w-24 bg-white rounded-full shadow-sm border border-slate-100 p-4 flex items-center justify-center text-slate-400">
+                <img src={school.logo_url} alt="School Logo" className="max-h-full max-w-full object-contain" />
+              </div>
+            ) : (
+              <div className="h-24 w-24 bg-white rounded-full shadow-sm border border-slate-100 p-4 flex items-center justify-center">
+                <img src="/images/arakan-logo.png" alt="Logo" className="max-h-full max-w-full object-contain" />
+              </div>
+            )}
+          </div>
+
+          {/* Center: School Name, Term, Year, Address */}
+          <div className="flex-1 flex flex-col items-center text-center px-4 space-y-2">
+            <h1 className="text-3xl font-black tracking-tight text-slate-900">{school?.name || 'MUCHI ACADEMY'}</h1>
+            <div className="flex items-center justify-center gap-2 text-sm font-bold text-slate-900">
+              <span>{term} - {examType}</span>
+              <span className="text-slate-300">ÔÇó</span>
+              <span>Academic Year {academicYear}</span>
+            </div>
+            <div className="text-sm font-medium text-slate-500 flex flex-col items-center gap-1 mt-1">
+              {school?.address && <p>{school.address}</p>}
+              <div className="flex gap-4 text-slate-400 text-xs uppercase tracking-wider">
+                {school?.email && <p>{school.email}</p>}
+                {school?.phone && <p>{school.phone}</p>}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Side: Coat of Arms (or empty spacer to balance flex layout) */}
+          <div className="w-24 flex justify-end">
+            {school?.coat_of_arms_url && (
+              <div className="h-24 w-24 bg-white rounded-full shadow-sm border border-slate-100 p-4 flex items-center justify-center text-slate-400">
+                <img src={school.coat_of_arms_url} alt="Coat of Arms" className="max-h-full max-w-full object-contain" />
+              </div>
+            )}
+          </div>
         </div>
-        <div className="space-y-1">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Term / Year</p>
-          <p className="text-sm font-bold text-slate-900 uppercase">
-            {grades[0]?.term || 'N/A'} - {grades[0]?.academic_year || new Date().getFullYear()}
+
+        {/* Minimal Student Information */}
+        <div className="flex justify-between items-end pb-4 print:pb-2 border-b border-slate-100">
+          <div className="space-y-4 print:space-y-1">
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Student Name</p>
+              <h2 className="text-3xl font-black text-slate-900 tracking-tight">{student.name}</h2>
+            </div>
+          </div>
+          <div className="text-right space-y-4 print:space-y-1">
+            <div className="flex gap-8 justify-end">
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 print:mb-0">Student ID</p>
+                <p className="text-sm font-bold text-slate-700 font-mono">{student.studentNumber}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 print:mb-0">Class</p>
+                <p className="text-sm font-bold text-slate-700">{student.class}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Grades Analysis Section */}
+        <div className="flex-1 print:flex-none min-h-0 space-y-6 print:space-y-2 my-6 print:my-2">
+          {/* ECZ-Style Results Slip Section */}
+          <div className="flex-1 print:flex-none min-h-0 space-y-4 print:space-y-2 relative">
+            <div className="flex justify-between items-center border-b border-slate-900 pb-2 mb-4 print:mb-2 print:pb-2">
+              <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Academic Results</h3>
+              <span className="text-xs font-mono text-slate-400">{Math.floor(1000000 + Math.random() * 9000000)}</span>
+            </div>
+
+            <div className="relative isolate">
+              <div className="overflow-hidden print:overflow-visible">
+                <Table>
+                  <TableHeader className="border-b border-slate-900">
+                    <TableRow className="hover:bg-transparent border-none h-12">
+                      <TableHead className="w-[40%] text-xs font-bold text-slate-900 uppercase tracking-widest pl-0">Subject</TableHead>
+                      <TableHead className="w-[20%] text-xs font-bold text-slate-900 uppercase tracking-widest text-center">Score %</TableHead>
+                      <TableHead className="w-[20%] text-xs font-bold text-slate-900 uppercase tracking-widest text-center">Grade</TableHead>
+                      <TableHead className="w-[20%] text-xs font-bold text-slate-900 uppercase tracking-widest text-right pr-0">Standard</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(() => {
+                      const getStandardFromScale = (percentage: any) => {
+                        const isAbsent = percentage === null || percentage === undefined || percentage === '';
+                        if (isAbsent) return { grade: 'ABSENT', standard: 'NOT RECORDED' };
+
+                        const score = Number(percentage);
+                        
+                        if (gradingScale && gradingScale.length > 0) {
+                          // Sort gradingScale by min_percentage descending to find the highest match first
+                          const sortedScale = [...gradingScale].sort((a: any, b: any) => b.min_percentage - a.min_percentage);
+
+                          for (const scale of sortedScale) {
+                            if (score >= scale.min_percentage) {
+                              return { grade: scale.grade, standard: scale.description.toUpperCase() };
+                            }
+                          }
+                          // If score is lower than the lowest scale (usually Fail)
+                          return { grade: 'F', standard: 'FAIL' };
+                        }
+
+                        // Fallback to ECZ-style if no custom scale is set
+                        if (score >= 75) return { grade: 'ONE', standard: 'DISTINCTION' };
+                        if (score >= 70) return { grade: 'TWO', standard: 'DISTINCTION' };
+                        if (score >= 65) return { grade: 'THREE', standard: 'MERIT' };
+                        if (score >= 60) return { grade: 'FOUR', standard: 'MERIT' };
+                        if (score >= 55) return { grade: 'FIVE', standard: 'CREDIT' };
+                        if (score >= 50) return { grade: 'SIX', standard: 'CREDIT' };
+                        if (score >= 45) return { grade: 'SEVEN', standard: 'PASS' };
+                        if (score >= 40) return { grade: 'EIGHT', standard: 'PASS' };
+                        return { grade: 'NINE', standard: 'FAIL' };
+                      };
+
+                      const subjectsPassed = grades.filter((g: any) => {
+                        const isAbsent = g.percentage === null || g.percentage === undefined || g.percentage === '' || g.grade === 'ABSENT';
+                        if (isAbsent) return false;
+                        
+                        const data = getStandardFromScale(g.percentage);
+                        // Make sure to include UNSATISFACTORY as a fail state
+                        return !['FAIL', 'ABSENT', 'NOT RECORDED', 'UNKNOWN', 'UNSATISFACTORY'].includes(data.standard.toUpperCase());
+                      }).length;
+                      
+                      const subjectsRecorded = grades.filter((g: any) => {
+                        const isAbsent = g.percentage === null || g.percentage === undefined || g.percentage === '' || g.grade === 'ABSENT';
+                        return !isAbsent;
+                      }).length;
+
+                      return (
+                        <>
+                          {grades.length > 0 ? (
+                            grades.map((g: any, i: number) => {
+                              const standardData = getStandardFromScale(g.percentage);
+                              const isAbsent = g.percentage === null || g.percentage === undefined || g.percentage === '' || g.grade === 'ABSENT';
+                              
+                              return (
+                                <TableRow key={g.id || `missing-${i}`} className="border-b border-slate-100 last:border-0 hover:bg-transparent h-10 print:h-8">
+                                  <TableCell className="py-1 pl-0 font-bold text-slate-700">
+                                    <div className="flex gap-6 items-center">
+                                      <span className="uppercase tracking-tight text-sm print:text-[11px]">{g.subjects?.name || 'Unknown Subject'}</span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="py-1 px-4 text-center font-bold text-slate-700 text-sm print:text-[11px]">
+                                    {isAbsent ? '-' : `${g.percentage}%`}
+                                  </TableCell>
+                                  <TableCell className="py-1 px-4 text-center font-black text-slate-900 text-lg print:text-sm">
+                                    {standardData.grade}
+                                  </TableCell>
+                                  <TableCell className="py-1 pr-0 text-right font-bold text-slate-500 text-[10px] print:text-[9px] uppercase tracking-widest">
+                                    {isAbsent ? (
+                                      <span className="text-slate-300 italic font-medium">{standardData.standard}</span>
+                                    ) : (
+                                      standardData.standard
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })
+                          ) : (
+                            <TableRow>
+                              <TableCell colSpan={4} className="text-center py-16">
+                                <div className="flex flex-col items-center gap-2 text-slate-400">
+                                  <p className="text-sm font-medium">No academic records found</p>
+                                  <p className="text-xs opacity-70">Grades for this term have not been published yet.</p>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          {grades.length > 0 && (
+                            <TableRow className="border-t border-slate-900 mt-8 print:mt-4 block">
+                              <TableCell colSpan={4} className="p-4 print:p-2 pl-0">
+                                <div className="flex justify-between items-center text-xs font-bold text-slate-900 uppercase tracking-widest gap-4">
+                                  <div>RECORDED: {subjectsRecorded}</div>
+                                  {school?.school_type === 'Basic' && (
+                                    <div className="bg-slate-900 text-white px-3 py-1 rounded-sm">TOTAL MARKS: {totalPercentage}</div>
+                                  )}
+                                  <div>PASSED: {subjectsPassed}</div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Summary Analytics */}
+        <div className="grid grid-cols-12 gap-6 print:gap-4 print:space-y-0 relative">
+          <div className="col-span-8 print:col-span-8 flex flex-col gap-4">
+            <div className="flex-1 py-4 print:py-2">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 print:mb-1">
+                Class Insights
+              </h4>
+              <p className="text-sm leading-relaxed text-slate-600 font-medium italic border-l-2 border-slate-300 pl-4">
+                 Position {student.position || '-'} out of {student.totalStudents || '-'} students. Class Average: {student.classAverage ? student.classAverage.toFixed(1) : '-'}%.
+              </p>
+            </div>
+          </div>
+
+          <div className="col-span-4 print:col-span-4 space-y-4 print:space-y-2 pt-4 print:pt-2">
+            <div className="flex flex-col items-end text-right">
+              {school?.seal_url && (
+                 <div className="mb-2 print:mb-1 absolute right-0 -top-12 print:-top-16 z-0">
+                    <img src={school.seal_url} alt="Seal" className="h-28 w-28 print:h-28 print:w-28 object-contain opacity-80 mix-blend-multiply" />
+                 </div>
+              )}
+              <div className="flex justify-end items-center mb-2 print:mb-1 gap-4 mt-8 print:mt-6 relative z-10">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-white/90 dark:bg-slate-950/90 px-1 rounded shadow-sm">Attendance</span>
+                <span className="text-sm font-bold text-slate-900 bg-white/90 dark:bg-slate-950/90 px-1 rounded shadow-sm">100%</span>
+              </div>
+              <div className="h-1 w-32 bg-slate-100 rounded-full overflow-hidden relative z-10 shadow-sm">
+                <div className="h-full bg-slate-900 rounded-full" style={{ width: '100%' }}></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Grade Teacher's Remark Box - Full Width */}
+        <div className="w-full py-4 print:py-2 border-t border-slate-100 mt-2">
+          <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 print:mb-1">
+            Grade Teacher's Remark
+          </h4>
+          <p className="text-sm leading-relaxed text-slate-800 font-medium font-serif italic border-l-2 border-slate-900 pl-4">
+            "{(() => {
+              if (!grades || grades.length === 0) return "Academic data unavailable for this period.";
+              
+              // Helper for student reference
+              const firstName = student.name.split(' ')[0];
+              const gender = student.gender?.toLowerCase() || '';
+              const subjPronoun = gender === 'male' ? 'He' : (gender === 'female' ? 'She' : 'They');
+              const objPronoun = gender === 'male' ? 'him' : (gender === 'female' ? 'her' : 'them');
+              const possAdj = gender === 'male' ? 'his' : (gender === 'female' ? 'her' : 'their');
+              const shows = gender === 'male' || gender === 'female' ? 'shows' : 'show';
+              
+              // Analysis Variables
+              const avg = parseFloat(average as string);
+              const validGrades = grades.filter((g: any) => g.percentage !== null && g.percentage !== undefined && g.percentage !== '' && g.grade !== 'ABSENT');
+              
+              const position = student.position || 0;
+              const totalStudents = student.totalStudents || 0;
+              const classAvg = student.classAverage || 0;
+              const percentile = (position > 0 && totalStudents > 0) ? (position / totalStudents) * 100 : 0;
+              
+              const isTopRank = percentile > 0 && percentile <= 25;
+              const isBottomRank = percentile >= 75;
+              const isPassing = avg >= 50;
+              const isExcellent = avg >= 75;
+              
+              // 1. Opening Statement based on combining absolute and relative class-level performance
+              let opening = "";
+              if (position > 0 && totalStudents > 0) {
+                if (isExcellent) {
+                  if (isTopRank) {
+                    opening = `${firstName} has demonstrated an outstanding grasp of the curriculum, ranking ${position} out of ${totalStudents} and setting a high benchmark for the class.`;
+                  } else {
+                    opening = `${firstName} has achieved excellent individual results (${avg}%), maintaining high academic standards within a highly competitive cohort.`;
+                  }
+                } else if (isPassing) {
+                  if (isTopRank) {
+                    opening = `${firstName} secured a commendable position of ${position} out of ${totalStudents}. While this relative standing is strong, pushing for higher absolute scores will unlock ${possAdj} full potential.`;
+                  } else if (!isBottomRank) {
+                    if (avg >= classAvg) {
+                      opening = `${firstName} has shown satisfactory progress, performing slightly above the class average of ${classAvg.toFixed(1)}%. Continuous effort will help elevate ${possAdj} overall grade.`;
+                    } else {
+                      opening = `${firstName} has maintained a passing grade but fell slightly below the class average. A more focused approach during lessons would yield better results.`;
+                    }
+                  } else {
+                    opening = `${firstName} managed to pass overall, but ranking ${position} out of ${totalStudents} suggests they are finding the competitive pace challenging. More active participation is encouraged.`;
+                  }
+                } else {
+                  if (isTopRank) {
+                    opening = `Although ${firstName} ranks ${position} out of ${totalStudents}, the overall score of ${avg}% indicates significant challenges with this term's material. A much stronger academic focus is needed.`;
+                  } else {
+                    opening = `${firstName} has struggled significantly this term, placing below the class average with ${avg}%. Urgent attention to study habits and seeking extra help is highly recommended.`;
+                  }
+                }
+              } else {
+                // Fallback if ranking data is missing
+                if (isExcellent) opening = `${firstName} has demonstrated an excellent grasp of the curriculum this term, standing out as a highly dedicated student.`;
+                else if (avg >= 60) opening = `${firstName} is a very capable student who actively participates and maintains a good standard of work.`;
+                else if (isPassing) opening = `${firstName} has shown steady progress this term, though a more focused approach would yield better results.`;
+                else opening = `${firstName} has found the term's concepts challenging. An urgent review of study habits is necessary.`;
+              }
+
+              // 2. Advice & Strengths Analysis
+              let advice = "";
+              const strongSubjectsCount = validGrades.filter((g: any) => (g.percentage || 0) >= 70).length;
+              const totalSubjects = validGrades.length;
+              
+              if (strongSubjectsCount >= totalSubjects * 0.7 && totalSubjects > 0) {
+                advice = `Consistency across most subjects is a major strength. `;
+              } else if (strongSubjectsCount > 0) {
+                advice = `${subjPronoun} ${shows} promising capability in ${possAdj} stronger subjects, which should be used as motivation to improve weaker areas. `;
+              } else {
+                advice = `We need to work on building foundational understanding across all core subjects. `;
+              }
+
+              if (avg < classAvg && avg >= 50) {
+                advice += `To improve ${possAdj} class standing, ${firstName} should focus on daily revision and completing all assignments promptly.`;
+              } else if (avg < 50) {
+                advice += `Attending remedial sessions and asking more questions during class will be crucial steps toward recovery.`;
+              } else if (isExcellent) {
+                advice += `Maintaining this level of intellectual curiosity will serve ${objPronoun} very well in the future.`;
+              } else {
+                advice += `Staying organized and maintaining current study routines will ensure continued success.`;
+              }
+
+              // Combine parts
+              return [opening, advice].filter(Boolean).join(" ");
+            })()}"
           </p>
         </div>
-      </div>
 
-      {/* Main Results Table */}
-      <div className="mb-8 border-2 border-slate-900 rounded-lg overflow-hidden">
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="bg-slate-900 text-white">
-              <th className="p-3 text-left font-black uppercase tracking-wider">Subject</th>
-              <th className="p-3 text-center font-black uppercase tracking-wider w-24">Score (%)</th>
-              <th className="p-3 text-center font-black uppercase tracking-wider w-24">Grade</th>
-              <th className="p-3 text-left font-black uppercase tracking-wider">Teacher's Comments</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y-2 divide-slate-100">
-            {subjectsList.map((subject: any, idx) => (
-              <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                <td className="p-3 font-bold text-slate-800">{subject.name}</td>
-                <td className="p-3 text-center font-black text-slate-900">{subject.score}</td>
-                <td className="p-3 text-center">
-                  <span className="inline-block px-3 py-1 bg-slate-100 rounded font-black text-slate-900">
-                    {subject.grade}
-                  </span>
-                </td>
-                <td className="p-3 text-slate-600 italic text-xs">{subject.comments}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        {/* Head Teacher's Remark Box - Full Width */}
+        <div className="w-full py-4 print:py-2 border-t border-slate-100 mt-2">
+          <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 print:mb-1">
+            Head Teacher's Remark
+          </h4>
+          <p className="text-sm leading-relaxed text-slate-800 font-medium font-serif italic border-l-2 border-slate-900 pl-4">
+            "{(() => {
+              if (!grades || grades.length === 0) return "Academic data unavailable for this period.";
+              
+              // Helper for student reference
+              const firstName = student.name.split(' ')[0];
+              const gender = student.gender?.toLowerCase() || '';
+              const subjPronoun = gender === 'male' ? 'He' : (gender === 'female' ? 'She' : 'They');
+              const objPronoun = gender === 'male' ? 'him' : (gender === 'female' ? 'her' : 'them');
+              const possAdj = gender === 'male' ? 'his' : (gender === 'female' ? 'her' : 'their');
+              const shows = gender === 'male' || gender === 'female' ? 'shows' : 'show';
+              
+              // Analysis Variables
+              const avg = parseFloat(average as string);
+              // Filter out absent subjects before sorting
+              const validGrades = grades.filter((g: any) => g.percentage !== null && g.percentage !== undefined && g.percentage !== '' && g.grade !== 'ABSENT');
+              
+              const sortedGrades = [...validGrades].sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0));
+              const bestSubjects = sortedGrades.slice(0, 3).map((g: any) => g.subjects?.name);
+              
+              // Expand weak subjects coverage: Take up to 3 subjects with scores < 50%
+              const weakSubjects = sortedGrades.slice(-3).filter((g: any) => (g.percentage || 0) < 50).map((g: any) => g.subjects?.name);
+              
+              // 1. Opening Statement based on Average
+              let opening = "";
+              if (avg >= 75) opening = `${student.name} has produced an outstanding set of results this term, demonstrating exceptional academic maturity and diligence.`;
+              else if (avg >= 65) opening = `${student.name} has achieved a very good standard of performance, showing consistent effort across most subjects.`;
+              else if (avg >= 55) opening = `${student.name} has performed satisfactorily, though there is room for greater consistency in ${possAdj} application.`;
+              else if (avg >= 45) opening = `${student.name} has made a fair attempt this term, but will need to significantly increase ${possAdj} study hours to reach ${possAdj} full potential.`;
+              else opening = `${student.name}'s performance is below the expected standard. An urgent review of study habits and class engagement is recommended.`;
 
-      {/* Footer Section */}
-      <div className="grid grid-cols-2 gap-8 mt-12">
-        <div className="space-y-4">
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Class Teacher's Remarks</p>
-            <p className="text-sm text-slate-700 italic">Excellent performance this term. Keep up the hard work.</p>
-          </div>
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Head Teacher's Remarks</p>
-            <p className="text-sm text-slate-700 italic">Promoted to the next level. Congratulations.</p>
-          </div>
+              // 2. Strengths Analysis
+              let strengths = "";
+              if (bestSubjects.length > 0) {
+                const subjectText = bestSubjects.join(', ').replace(/, ([^,]*)$/, ' and $1');
+                if (avg >= 65) strengths = `Particular aptitude is noted in ${subjectText}, where ${firstName} displays keen insight and mastery.`;
+                else strengths = `${firstName} ${shows} encouraging promise in ${subjectText}, which should serve as a motivation for other areas.`;
+              }
+
+              // 3. Areas for Improvement (only if relevant)
+              let improvements = "";
+              if (weakSubjects.length > 0) {
+                const weakText = weakSubjects.join(', ').replace(/, ([^,]*)$/, ' and $1');
+                improvements = `However, urgent attention is required in ${weakText} to prevent these subjects from pulling down the overall grade.`;
+              } else if (weakSubjects.length === 0 && bestSubjects.length > 0 && bestSubjects.length !== sortedGrades.length) {
+                 improvements = `Performance across all subjects was generally consistent.`;
+              }
+
+              // Combine parts
+              return [opening, strengths, improvements].filter(Boolean).join(" ");
+            })()}"
+          </p>
         </div>
-        
-        <div className="flex flex-col justify-end items-end space-y-6">
-          <div className="text-center w-64 border-t-2 border-slate-900 pt-2">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Head Teacher Signature</p>
-            {school?.signature_url && <img src={school.signature_url} className="h-12 mx-auto mt-2" alt="Signature" />}
+
+        {/* Minimal Footer / Authenticity Section */}
+        <div className="pt-4 print:pt-2 mt-auto">
+          <div className="grid grid-cols-2 gap-12">
+            <div className="space-y-2 print:space-y-1">
+              <div className="h-16 print:h-12 flex items-end">
+                {school?.signature_url ? (
+                  <img src={school.signature_url} alt="Signature" className="max-h-16 print:max-h-12 object-contain" />
+                ) : (
+                  <div className="w-full border-b border-slate-300"></div>
+                )}
+              </div>
+              <div className="flex flex-col">
+                <div className="flex items-end gap-2 mt-1 border-b border-slate-800 w-fit pb-0.5">
+                  <span className="text-sm font-serif font-semibold text-slate-900 border-b border-slate-900 pb-0.5 inline-block min-w-[80px]">
+                    {school?.headteacher_name || ""}
+                  </span>
+                  {school?.headteacher_name && (
+                     <span className="text-sm font-serif text-slate-800">,</span>
+                  )}
+                  <span className="text-sm font-serif italic text-slate-700">
+                    {school?.headteacher_title || ""}
+                  </span>
+                </div>
+                <p className="text-[12px] font-black text-slate-900 uppercase tracking-widest mt-1">
+                  HEADTEACHER
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex flex-col justify-end items-end pb-1 gap-2">
+              <QRCodeSVG value={verificationUrl} size={64} className="opacity-80" />
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Official Document</p>
+            </div>
           </div>
-          <div className="text-center w-64 pt-2">
-            {school?.seal_url && <img src={school.seal_url} className="h-20 mx-auto opacity-80" alt="Official Seal" />}
+
+          <div className="flex justify-between items-end mt-8 print:mt-4 pt-4 border-t border-slate-100 text-[10px] font-bold text-slate-300 uppercase tracking-widest">
+            <p>┬® {new Date().getFullYear()} {school?.name}</p>
+            <p>Generated by MUCHI LMS on {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
           </div>
         </div>
       </div>

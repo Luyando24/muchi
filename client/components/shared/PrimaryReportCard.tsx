@@ -110,7 +110,7 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
           <div className="flex justify-center items-center gap-8 text-sm font-bold">
             <div className="flex gap-2">
               <span className="text-slate-500 uppercase tracking-wider">Grade:</span>
-              <span className="border-b border-dashed border-slate-400 min-w-[60px]">{student.grade}</span>
+              <span className="border-b border-dashed border-slate-400 min-w-[60px]">{student.className || student.grade || student.class || student.gradeName}</span>
             </div>
             <div className="flex gap-2">
               <span className="text-slate-500 uppercase tracking-wider">Term:</span>
