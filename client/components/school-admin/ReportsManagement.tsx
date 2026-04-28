@@ -361,16 +361,16 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
   return (
     <div className="space-y-6 pb-10">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Insights Center</h2>
-          <p className="text-slate-600 dark:text-slate-400">Real-time analytical overview of school performance.</p>
+        <div className="space-y-1">
+          <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Insights Center</h2>
+          <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400 font-medium">Real-time analytical overview of school performance.</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-800 p-2 rounded-xl border shadow-sm">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-slate-400" />
+          <div className="flex items-center gap-1.5 px-2">
+            <Filter className="h-3.5 w-3.5 text-slate-400" />
             <Select value={selectedTerm} onValueChange={setSelectedTerm}>
-              <SelectTrigger className="w-[130px] h-9 border-none focus:ring-0 shadow-none">
+              <SelectTrigger className="w-[100px] md:w-[130px] h-8 border-none focus:ring-0 shadow-none text-xs">
                 <SelectValue placeholder="Term" />
               </SelectTrigger>
               <SelectContent>
@@ -382,10 +382,10 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
             </Select>
           </div>
 
-          <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700" />
+          <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 hidden md:block" />
 
           <Select value={selectedYear} onValueChange={setSelectedYear}>
-            <SelectTrigger className="w-[110px] h-9 border-none focus:ring-0 shadow-none">
+            <SelectTrigger className="w-[80px] md:w-[110px] h-8 border-none focus:ring-0 shadow-none text-xs">
               <SelectValue placeholder="Year" />
             </SelectTrigger>
             <SelectContent>
@@ -399,29 +399,31 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 rounded-full"
+            className="h-8 w-8 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700"
             onClick={fetchLiveStats}
             disabled={isRefreshing}
           >
-            <RefreshCcw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <RefreshCcw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </div>
 
       <Tabs value={activeScreen} onValueChange={setActiveScreen} className="space-y-6">
-        <TabsList className={cn("grid w-full", isTeacherPortal ? "grid-cols-3 lg:w-[450px]" : "grid-cols-4 md:grid-cols-7 lg:w-[1050px]")}>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          {!isTeacherPortal && <TabsTrigger value="academic">Academic</TabsTrigger>}
-          <TabsTrigger value="master-sheet">Master Sheet</TabsTrigger>
-          <TabsTrigger value="results-analysis">Results Analysis</TabsTrigger>
-          {!isTeacherPortal && (
-            <>
-              <TabsTrigger value="top-students">Top Students</TabsTrigger>
-              <TabsTrigger value="support">Support Needed</TabsTrigger>
-              <TabsTrigger value="finance">Finance</TabsTrigger>
-            </>
-          )}
-        </TabsList>
+        <div className="overflow-x-auto pb-1 scrollbar-none">
+          <TabsList className="inline-flex w-full md:grid md:grid-cols-7 min-w-max md:min-w-0 bg-slate-100/50 dark:bg-slate-900/50 p-1 rounded-xl">
+            <TabsTrigger value="overview" className="flex-1">Overview</TabsTrigger>
+            {!isTeacherPortal && <TabsTrigger value="academic" className="flex-1">Academic</TabsTrigger>}
+            <TabsTrigger value="master-sheet" className="flex-1">Master Sheet</TabsTrigger>
+            <TabsTrigger value="results-analysis" className="flex-1">Results Analysis</TabsTrigger>
+            {!isTeacherPortal && (
+              <>
+                <TabsTrigger value="top-students" className="flex-1">Top Students</TabsTrigger>
+                <TabsTrigger value="support" className="flex-1">Support Needed</TabsTrigger>
+                <TabsTrigger value="finance" className="flex-1">Finance</TabsTrigger>
+              </>
+            )}
+          </TabsList>
+        </div>
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
@@ -556,8 +558,8 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                             {gender.name} Students
                           </h4>
                           <div className="text-right">
-                            <div className="text-sm font-bold text-slate-900 dark:text-white">{gender.average}% Average</div>
-                            <div className="text-[10px] text-slate-500 font-medium">
+                            <div className="text-xs md:text-sm font-bold text-slate-900 dark:text-white">{gender.average}% Average</div>
+                            <div className="text-[9px] md:text-[10px] text-slate-500 font-medium">
                               {gender.count} of {totalInGender} Students ({participationRate}% Participation)
                             </div>
                           </div>
@@ -703,94 +705,99 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
               <div>
                 <CardTitle className="text-xl">Master Score Sheet</CardTitle>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="w-[150px]">
-                  <Select value={selectedExamType} onValueChange={setSelectedExamType}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Assessment" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(schoolSettings?.exam_types && schoolSettings.exam_types.length > 0) ? (
-                        schoolSettings.exam_types.map((type: string) => (
-                          <SelectItem key={type} value={type}>{type}</SelectItem>
-                        ))
-                      ) : (
-                        <>
-                          <SelectItem value="Mid Term">Mid Term</SelectItem>
-                          <SelectItem value="End of Term">End of Term</SelectItem>
-                        </>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {!isTeacherPortal && (
-                  <div className="w-[150px]">
-                    <Select value={selectedMasterGradeLevel} onValueChange={(v) => {
-                      setSelectedMasterGradeLevel(v);
-                      setSelectedClassId('all');
-                    }}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Grade" />
+              <div className="flex flex-col md:flex-row md:items-center gap-3 w-full">
+                <div className="flex flex-nowrap items-center gap-2 w-full md:w-auto">
+                  <div className="flex-1 min-w-0 md:w-[150px] md:flex-none">
+                    <Select value={selectedExamType} onValueChange={setSelectedExamType}>
+                      <SelectTrigger className="h-9 text-[10px] md:text-sm px-2">
+                        <SelectValue placeholder="Assessment" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Grades</SelectItem>
-                        {Array.from(new Set(
-                          availableClasses
-                            .map((c: any) => c.level || (c.name.includes('Grade') ? c.name.split(' ').slice(0, 2).join(' ') : c.name))
-                            .filter(Boolean)
-                        ))
-                        .sort((a: any, b: any) => String(a).localeCompare(String(b), undefined, { numeric: true }))
-                        .map(g => (
-                          <SelectItem key={g as string} value={g as string}>{g as string}</SelectItem>
+                        {(schoolSettings?.exam_types && schoolSettings.exam_types.length > 0) ? (
+                          schoolSettings.exam_types.map((type: string) => (
+                            <SelectItem key={type} value={type}>{type}</SelectItem>
+                          ))
+                        ) : (
+                          <>
+                            <SelectItem value="Mid Term">Mid Term</SelectItem>
+                            <SelectItem value="End of Term">End of Term</SelectItem>
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {!isTeacherPortal && (
+                    <div className="flex-1 min-w-0 md:w-[150px] md:flex-none">
+                      <Select value={selectedMasterGradeLevel} onValueChange={(v) => {
+                        setSelectedMasterGradeLevel(v);
+                        setSelectedClassId('all');
+                      }}>
+                        <SelectTrigger className="h-9 text-[10px] md:text-sm px-2">
+                          <SelectValue placeholder="Grade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Grades</SelectItem>
+                          {Array.from(new Set(
+                            availableClasses
+                              .map((c: any) => c.level || (c.name.includes('Grade') ? c.name.split(' ').slice(0, 2).join(' ') : c.name))
+                              .filter(Boolean)
+                          ))
+                          .sort((a: any, b: any) => String(a).localeCompare(String(b), undefined, { numeric: true }))
+                          .map(g => (
+                            <SelectItem key={g as string} value={g as string}>{g as string}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  <div className="flex-1 min-w-0 md:w-[150px] md:flex-none">
+                    <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+                      <SelectTrigger className="h-9 text-[10px] md:text-sm px-2">
+                        <SelectValue placeholder="Class" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Entire School</SelectItem>
+                        {availableClasses
+                          .filter(c => selectedMasterGradeLevel === 'all' || c.level === selectedMasterGradeLevel || c.name.startsWith(`Grade ${selectedMasterGradeLevel}`))
+                          .map((cls: any) => (
+                            <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex-1 min-w-0 md:w-[150px] md:flex-none">
+                    <Select value={selectedMasterSubjectId} onValueChange={setSelectedMasterSubjectId}>
+                      <SelectTrigger className="h-9 text-[10px] md:text-sm px-2">
+                        <SelectValue placeholder="Subject" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Subjects</SelectItem>
+                        {availableSubjects.map((s: any) => (
+                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                )}
-
-                <div className="w-[150px]">
-                  <Select value={selectedClassId} onValueChange={setSelectedClassId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Class" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Entire School</SelectItem>
-                      {availableClasses
-                        .filter(c => selectedMasterGradeLevel === 'all' || c.level === selectedMasterGradeLevel || c.name.startsWith(`Grade ${selectedMasterGradeLevel}`))
-                        .map((cls: any) => (
-                          <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
                 </div>
-
-                <div className="w-[150px]">
-                  <Select value={selectedMasterSubjectId} onValueChange={setSelectedMasterSubjectId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Subject" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Subjects</SelectItem>
-                      {availableSubjects.map((s: any) => (
-                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                
+                <div className="w-full md:w-auto">
+                  <ExportMasterSheetModal 
+                    term={selectedTerm}
+                    year={selectedYear}
+                    examType={selectedExamType}
+                    classId={selectedClassId}
+                    className={selectedClassId === 'all' ? 'Entire School' : availableClasses.find((c: any) => c.id === selectedClassId)?.name || 'Selected Class'}
+                    gradeLevel={selectedMasterGradeLevel}
+                    gradeName={selectedMasterGradeLevel === 'all' ? 'All Grades' : selectedMasterGradeLevel}
+                    subjectId={selectedMasterSubjectId}
+                    subjectName={availableSubjects.find(s => s.id === selectedMasterSubjectId)?.name}
+                    schoolName={schoolSettings?.school_name}
+                    disabled={!masterSheetData?.students.length}
+                  />
                 </div>
-                <ExportMasterSheetModal 
-                  term={selectedTerm}
-                  year={selectedYear}
-                  examType={selectedExamType}
-                  classId={selectedClassId}
-                  className={selectedClassId === 'all' ? 'Entire School' : availableClasses.find((c: any) => c.id === selectedClassId)?.name || 'Selected Class'}
-                  gradeLevel={selectedMasterGradeLevel}
-                  gradeName={selectedMasterGradeLevel === 'all' ? 'All Grades' : selectedMasterGradeLevel}
-                  subjectId={selectedMasterSubjectId}
-                  subjectName={availableSubjects.find(s => s.id === selectedMasterSubjectId)?.name}
-                  schoolName={schoolSettings?.school_name}
-                  disabled={!masterSheetData?.students.length}
-                />
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -805,20 +812,22 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                   <p>No results found for the selected criteria.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <>
+                  {/* Desktop View Table */}
+                  <div className="hidden md:block overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700">
                   <Table className="border-separate border-spacing-0">
                     <TableHeader className="bg-slate-50 dark:bg-slate-900/50">
                       <TableRow>
-                        <TableHead className="w-16 font-bold text-slate-900 dark:text-white border-r border-b border-dotted border-slate-300 dark:border-slate-700">Rank</TableHead>
-                        <TableHead className="min-w-[200px] font-bold text-slate-900 dark:text-white sticky left-0 bg-slate-50 dark:bg-slate-900/50 z-10 shadow-[2px_0_5px_rgba(0,0,0,0.05)] border-r border-b border-dotted border-slate-300 dark:border-slate-700">Student Name</TableHead>
-                        <TableHead className="min-w-[100px] font-bold text-slate-900 dark:text-white border-r border-b border-dotted border-slate-300 dark:border-slate-700">Class</TableHead>
+                        <TableHead className="w-12 md:w-16 font-bold text-slate-900 dark:text-white border-r border-b border-dotted border-slate-300 dark:border-slate-700 text-[10px] md:text-sm">Rank</TableHead>
+                        <TableHead className="min-w-[150px] md:min-w-[200px] font-bold text-slate-900 dark:text-white sticky left-0 bg-slate-50 dark:bg-slate-900/50 z-10 shadow-[2px_0_5px_rgba(0,0,0,0.05)] border-r border-b border-dotted border-slate-300 dark:border-slate-700 text-[10px] md:text-sm">Student Name</TableHead>
+                        <TableHead className="min-w-[80px] md:min-w-[100px] font-bold text-slate-900 dark:text-white border-r border-b border-dotted border-slate-300 dark:border-slate-700 text-[10px] md:text-sm">Class</TableHead>
                         {masterSheetData?.subjects.map(subject => (
-                          <TableHead key={subject.id} className="text-center font-bold text-slate-900 dark:text-white min-w-[100px] border-r border-b border-dotted border-slate-300 dark:border-slate-700">
+                          <TableHead key={subject.id} className="text-center font-bold text-slate-900 dark:text-white min-w-[70px] md:min-w-[100px] border-r border-b border-dotted border-slate-300 dark:border-slate-700 text-[10px] md:text-sm px-1">
                             {subject.name}
                           </TableHead>
                         ))}
-                        <TableHead className="text-center font-bold text-slate-900 dark:text-white border-r border-b border-dotted border-slate-300 dark:border-slate-700">Total</TableHead>
-                        <TableHead className="text-center font-bold text-blue-600 min-w-[100px] border-b border-dotted border-slate-300 dark:border-slate-700">Avg %</TableHead>
+                        <TableHead className="text-center font-bold text-slate-900 dark:text-white border-r border-b border-dotted border-slate-300 dark:border-slate-700 text-[10px] md:text-sm">Total</TableHead>
+                        <TableHead className="text-center font-bold text-blue-600 min-w-[70px] md:min-w-[100px] border-b border-dotted border-slate-300 dark:border-slate-700 text-[10px] md:text-sm">Avg %</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -874,7 +883,58 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                     </TableBody>
                   </Table>
                 </div>
-              )}
+
+                {/* Mobile Card Layout */}
+                <div className="md:hidden space-y-4 px-4 py-6">
+                  {masterSheetData?.students.map(student => (
+                    <div key={student.id} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm relative overflow-hidden">
+                      <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500" />
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant="outline" className="text-[10px] font-black border-blue-200 text-blue-600 bg-blue-50">#{student.rank}</Badge>
+                            <span className="text-xs font-bold text-slate-500">{student.className}</span>
+                          </div>
+                          <h4 className="font-black text-slate-900 dark:text-white text-lg tracking-tight leading-tight">{student.name}</h4>
+                          <p className="text-[10px] text-slate-500 font-medium">{student.studentNumber}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Average</p>
+                          <p className="text-2xl font-black text-blue-600 dark:text-blue-400 leading-tight">{student.average}%</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 mb-4">
+                        {masterSheetData.subjects.map(subject => {
+                          const score = student.grades[subject.id];
+                          const gradeInfo = score !== undefined ? getGradeInfo(score) : null;
+                          return (
+                            <div key={subject.id} className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 flex flex-col justify-between h-[60px]">
+                              <p className="text-[9px] font-bold text-slate-500 uppercase truncate leading-none">{subject.name}</p>
+                              <div className="flex items-center justify-between mt-auto">
+                                <span className={cn("text-sm font-black", gradeInfo?.text || "text-slate-300")}>
+                                  {score !== undefined ? `${score}%` : '-'}
+                                </span>
+                                {gradeInfo && (
+                                  <Badge className={cn("h-4 text-[9px] px-1 font-black leading-none border-none", gradeInfo.bg, gradeInfo.text)}>
+                                    {gradeInfo.label[0]}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Score</span>
+                        <span className="text-lg font-black text-slate-900 dark:text-white">{student.total}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
             </CardContent>
             {masterSheetData?.students.length > 0 && !masterSheetLoading && (
               <div className="border-t border-slate-100 dark:border-slate-800 px-6">
@@ -898,94 +958,98 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
               <div>
                 <CardTitle className="text-xl">Results Analysis Report</CardTitle>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="w-[150px]">
-                  <Select value={selectedExamType} onValueChange={setSelectedExamType}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Assessment" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(schoolSettings?.exam_types && schoolSettings.exam_types.length > 0) ? (
-                        schoolSettings.exam_types.map((type: string) => (
-                          <SelectItem key={type} value={type}>{type}</SelectItem>
-                        ))
-                      ) : (
-                        <>
-                          <SelectItem value="Mid Term">Mid Term</SelectItem>
-                          <SelectItem value="End of Term">End of Term</SelectItem>
-                        </>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {!isTeacherPortal && (
-                  <div className="w-[150px]">
-                    <Select value={selectedGradeLevel} onValueChange={(v) => {
-                      setSelectedGradeLevel(v);
-                      setSelectedAnalysisClassId('all');
-                    }}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Grade" />
+              <div className="flex flex-col md:flex-row md:items-center gap-3 w-full">
+                <div className="flex flex-nowrap items-center gap-2 w-full md:w-auto">
+                  <div className="flex-1 min-w-0 md:w-[150px] md:flex-none">
+                    <Select value={selectedExamType} onValueChange={setSelectedExamType}>
+                      <SelectTrigger className="h-9 text-[10px] md:text-sm px-2">
+                        <SelectValue placeholder="Assessment" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Grades</SelectItem>
-                        {Array.from(new Set(
-                          availableClasses
-                            .map((c: any) => c.level || (c.name.includes('Grade') ? c.name.split(' ').slice(0, 2).join(' ') : c.name))
-                            .filter(Boolean)
-                        ))
-                        .sort((a: any, b: any) => String(a).localeCompare(String(b), undefined, { numeric: true }))
-                        .map(g => (
-                          <SelectItem key={g as string} value={g as string}>{g as string}</SelectItem>
+                        {(schoolSettings?.exam_types && schoolSettings.exam_types.length > 0) ? (
+                          schoolSettings.exam_types.map((type: string) => (
+                            <SelectItem key={type} value={type}>{type}</SelectItem>
+                          ))
+                        ) : (
+                          <>
+                            <SelectItem value="Mid Term">Mid Term</SelectItem>
+                            <SelectItem value="End of Term">End of Term</SelectItem>
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {!isTeacherPortal && (
+                    <div className="flex-1 min-w-0 md:w-[150px] md:flex-none">
+                      <Select value={selectedGradeLevel} onValueChange={(v) => {
+                        setSelectedGradeLevel(v);
+                        setSelectedAnalysisClassId('all');
+                      }}>
+                        <SelectTrigger className="h-9 text-[10px] md:text-sm px-2">
+                          <SelectValue placeholder="Grade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Grades</SelectItem>
+                          {Array.from(new Set(
+                            availableClasses
+                              .map((c: any) => c.level || (c.name.includes('Grade') ? c.name.split(' ').slice(0, 2).join(' ') : c.name))
+                              .filter(Boolean)
+                          ))
+                          .sort((a: any, b: any) => String(a).localeCompare(String(b), undefined, { numeric: true }))
+                          .map(g => (
+                            <SelectItem key={g as string} value={g as string}>{g as string}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  <div className="flex-1 min-w-0 md:w-[150px] md:flex-none">
+                    <Select value={selectedAnalysisClassId} onValueChange={setSelectedAnalysisClassId}>
+                      <SelectTrigger className="h-9 text-[10px] md:text-sm px-2">
+                        <SelectValue placeholder="Class" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Classes</SelectItem>
+                        {availableClasses
+                          .filter(c => selectedGradeLevel === 'all' || c.level === selectedGradeLevel || c.name.startsWith(`Grade ${selectedGradeLevel}`))
+                          .map((cls: any) => (
+                            <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex-1 min-w-0 md:w-[150px] md:flex-none">
+                    <Select value={selectedSubjectId} onValueChange={setSelectedSubjectId}>
+                      <SelectTrigger className="h-9 text-[10px] md:text-sm px-2">
+                        <SelectValue placeholder="Subject" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Subjects</SelectItem>
+                        {availableSubjects.map((s: any) => (
+                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                )}
-
-                <div className="w-[150px]">
-                  <Select value={selectedAnalysisClassId} onValueChange={setSelectedAnalysisClassId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Class" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Classes</SelectItem>
-                      {availableClasses
-                        .filter(c => selectedGradeLevel === 'all' || c.level === selectedGradeLevel || c.name.startsWith(`Grade ${selectedGradeLevel}`))
-                        .map((cls: any) => (
-                          <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
                 </div>
 
-                <div className="w-[150px]">
-                  <Select value={selectedSubjectId} onValueChange={setSelectedSubjectId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Subject" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Subjects</SelectItem>
-                      {availableSubjects.map((s: any) => (
-                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="w-full md:w-auto">
+                  <ExportResultsAnalysisModal 
+                    term={selectedTerm}
+                    year={selectedYear}
+                    examType={selectedExamType}
+                    gradeLevel={selectedGradeLevel}
+                    classId={selectedAnalysisClassId}
+                    className={availableClasses.find(c => c.id === selectedAnalysisClassId)?.name}
+                    subjectId={selectedSubjectId}
+                    subjectName={availableSubjects.find(s => s.id === selectedSubjectId)?.name}
+                    schoolName={schoolSettings?.school_name}
+                    disabled={!selectedTerm || !selectedYear || !selectedExamType}
+                  />
                 </div>
-
-                <ExportResultsAnalysisModal 
-                  term={selectedTerm}
-                  year={selectedYear}
-                  examType={selectedExamType}
-                  gradeLevel={selectedGradeLevel}
-                  classId={selectedAnalysisClassId}
-                  className={availableClasses.find(c => c.id === selectedAnalysisClassId)?.name}
-                  subjectId={selectedSubjectId}
-                  subjectName={availableSubjects.find(s => s.id === selectedSubjectId)?.name}
-                  schoolName={schoolSettings?.school_name}
-                  disabled={!selectedTerm || !selectedYear || !selectedExamType}
-                />
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -1000,23 +1064,25 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                   <p>No analysis data available for the selected criteria.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <>
+                  {/* Desktop View Table */}
+                  <div className="hidden md:block overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700">
                    <Table className="border-separate border-spacing-0">
                     <TableHeader className="bg-slate-50 dark:bg-slate-900/50">
                       <TableRow>
-                        <TableHead rowSpan={2} className="min-w-[200px] font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 sticky left-0 z-20">SUBJECTS</TableHead>
-                        <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-blue-50/50">REG</TableHead>
-                        <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-emerald-50/50">WROTE</TableHead>
-                        <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-orange-50/50">ABS</TableHead>
+                        <TableHead rowSpan={2} className="min-w-[120px] md:min-w-[200px] font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 sticky left-0 z-20 text-[10px] md:text-sm">SUBJECTS</TableHead>
+                        <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-blue-50/50 text-[10px] md:text-sm">REG</TableHead>
+                        <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-emerald-50/50 text-[10px] md:text-sm">WROTE</TableHead>
+                        <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-orange-50/50 text-[10px] md:text-sm">ABS</TableHead>
                         {resultsAnalysis.scales.map((s: any) => (
-                           <TableHead key={s.id} colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700">
+                           <TableHead key={s.id} colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 text-[10px] md:text-sm">
                              {s.grade}
                            </TableHead>
                         ))}
-                        <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-indigo-50/50">TOTAL PASSES</TableHead>
-                        <TableHead colSpan={3} className="text-center font-black text-blue-600 border-r border-b border-slate-300 dark:border-slate-700 bg-blue-50/30">% PASS</TableHead>
-                        <TableHead colSpan={3} className="text-center font-black text-red-600 border-r border-b border-slate-300 dark:border-slate-700 bg-red-50/50">TOTAL FAILS</TableHead>
-                        <TableHead colSpan={3} className="text-center font-black text-red-800 border-b border-slate-300 dark:border-slate-700 bg-red-100/30">% FAIL</TableHead>
+                        <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-indigo-50/50 text-[10px] md:text-sm">TOTAL PASSES</TableHead>
+                        <TableHead colSpan={3} className="text-center font-black text-blue-600 border-r border-b border-slate-300 dark:border-slate-700 bg-blue-50/30 text-[10px] md:text-sm">% PASS</TableHead>
+                        <TableHead colSpan={3} className="text-center font-black text-red-600 border-r border-b border-slate-300 dark:border-slate-700 bg-red-50/50 text-[10px] md:text-sm">TOTAL FAILS</TableHead>
+                        <TableHead colSpan={3} className="text-center font-black text-red-800 border-b border-slate-300 dark:border-slate-700 bg-red-100/30 text-[10px] md:text-sm">% FAIL</TableHead>
                       </TableRow>
                       <TableRow>
                         {/* Subheaders for REG to % FAIL */}
@@ -1085,7 +1151,92 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                     </TableBody>
                   </Table>
                 </div>
-              )}
+
+                {/* Mobile Card Layout */}
+                <div className="md:hidden space-y-4 px-4 py-6">
+                  {resultsAnalysis.analysis.map((row: any) => (
+                    <div key={row.subjectName} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm relative overflow-hidden">
+                      <div className="absolute top-0 left-0 w-1.5 h-full bg-emerald-500" />
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h4 className="font-black text-slate-900 dark:text-white text-lg tracking-tight uppercase leading-tight">{row.subjectName}</h4>
+                          <p className="text-[10px] text-slate-500 font-medium">{row.subjectCode}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pass Rate</p>
+                          <p className="text-2xl font-black text-emerald-600 leading-tight">{row.percentagePass.tot}%</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 mb-4">
+                        <div className="bg-blue-50 dark:bg-blue-900/10 p-2 rounded-xl text-center border border-blue-100 dark:border-blue-900/30">
+                          <p className="text-[9px] font-bold text-blue-600 uppercase">Reg</p>
+                          <p className="text-lg font-black text-blue-700">{row.reg.tot}</p>
+                        </div>
+                        <div className="bg-emerald-50 dark:bg-emerald-900/10 p-2 rounded-xl text-center border border-emerald-100 dark:border-emerald-900/30">
+                          <p className="text-[9px] font-bold text-emerald-600 uppercase">Wrote</p>
+                          <p className="text-lg font-black text-emerald-700">{row.wrote.tot}</p>
+                        </div>
+                        <div className="bg-orange-50 dark:bg-orange-900/10 p-2 rounded-xl text-center border border-orange-100 dark:border-orange-900/30">
+                          <p className="text-[9px] font-bold text-orange-600 uppercase">Abs</p>
+                          <p className="text-lg font-black text-orange-700">{row.abs.tot}</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div>
+                          <div className="flex justify-between items-center text-[10px] mb-1">
+                            <span className="font-bold text-slate-500 uppercase tracking-wider">Gender Distribution</span>
+                            <div className="flex gap-2">
+                              <span className="text-blue-600 font-bold">M: {row.wrote.m}</span>
+                              <span className="text-pink-600 font-bold">F: {row.wrote.f}</span>
+                            </div>
+                          </div>
+                          <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden flex">
+                            <div 
+                              className="bg-blue-500 h-full transition-all" 
+                              style={{ width: `${(row.wrote.m / (row.wrote.tot || 1)) * 100}%` }} 
+                            />
+                            <div 
+                              className="bg-pink-500 h-full transition-all" 
+                              style={{ width: `${(row.wrote.f / (row.wrote.tot || 1)) * 100}%` }} 
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Grade Breakdown</p>
+                          <div className="flex flex-wrap gap-2">
+                            {resultsAnalysis.scales.map((s: any) => (
+                              <div key={s.id} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 rounded-lg flex items-center gap-1.5 border border-slate-100 dark:border-slate-800">
+                                <span className="text-[9px] font-black text-slate-500">{s.grade}:</span>
+                                <span className="text-xs font-black text-blue-600">{row.grades[s.grade]?.tot || 0}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                        <div className="flex items-center gap-4">
+                           <div className="flex flex-col">
+                             <span className="text-[9px] font-bold text-slate-400 uppercase">Passes</span>
+                             <span className="text-sm font-black text-emerald-600">{row.totalPasses.tot}</span>
+                           </div>
+                           <div className="flex flex-col">
+                             <span className="text-[9px] font-bold text-slate-400 uppercase">Fails</span>
+                             <span className="text-sm font-black text-red-600">{row.totalFails?.tot || 0}</span>
+                           </div>
+                        </div>
+                        <Badge variant="outline" className="text-[9px] font-black border-slate-200 text-slate-500">
+                          {row.percentageFail?.tot || 0}% FAIL
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1107,7 +1258,7 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                     {liveStats?.performance?.topStudents?.map((student: any, index: number) => (
                       <div
                         key={student.id}
-                        className={`flex items-center justify-between p-4 rounded-xl border transition-all hover:shadow-md ${index === 0 ? 'bg-yellow-50/50 border-yellow-100 dark:bg-yellow-900/10 dark:border-yellow-900/20' :
+                        className={`flex items-center justify-between p-3 md:p-4 rounded-xl border transition-all hover:shadow-md ${index === 0 ? 'bg-yellow-50/50 border-yellow-100 dark:bg-yellow-900/10 dark:border-yellow-900/20' :
                           index === 1 ? 'bg-slate-50/50 border-slate-100 dark:bg-slate-900/10 dark:border-slate-800' :
                             index === 2 ? 'bg-orange-50/50 border-orange-100 dark:bg-orange-900/10 dark:border-orange-900/20' :
                               'bg-white dark:bg-slate-800'
@@ -1127,8 +1278,8 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-2xl font-black text-blue-600 dark:text-blue-400">{student.average}%</div>
-                          <Badge variant="outline" className="text-[10px] uppercase tracking-wider">Average Score</Badge>
+                          <div className="text-xl md:text-2xl font-black text-blue-600 dark:text-blue-400">{student.average}%</div>
+                          <Badge variant="outline" className="text-[9px] uppercase tracking-wider h-4">Average</Badge>
                         </div>
                       </div>
                     ))}
@@ -1161,8 +1312,8 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                         <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center border-4 border-white/30 mb-4">
                           <Medal className="h-12 w-12 text-yellow-300" />
                         </div>
-                        <h3 className="text-2xl font-bold text-center">{liveStats.performance.topStudents[0].name}</h3>
-                        <p className="text-blue-100">{liveStats.performance.topStudents[0].class}</p>
+                        <h3 className="text-xl md:text-2xl font-bold text-center">{liveStats.performance.topStudents[0].name}</h3>
+                        <p className="text-sm text-blue-100">{liveStats.performance.topStudents[0].class}</p>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="bg-white/10 p-3 rounded-xl backdrop-blur-sm text-center">
@@ -1232,8 +1383,8 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-2xl font-black text-red-600 dark:text-red-400">{student.average}%</div>
-                          <Badge variant="destructive" className="text-[10px] uppercase tracking-wider">Critical</Badge>
+                          <div className="text-xl md:text-2xl font-black text-red-600 dark:text-red-400">{student.average}%</div>
+                          <Badge variant="destructive" className="text-[9px] uppercase tracking-wider h-4">Critical</Badge>
                         </div>
                       </div>
                     ))}
@@ -1260,10 +1411,10 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                   <div className="space-y-2">
                     <p className="text-sm font-medium text-slate-500">Students at Risk</p>
                     <div className="flex items-end gap-2">
-                      <h3 className="text-4xl font-bold text-red-600">
+                      <h3 className="text-3xl md:text-4xl font-bold text-red-600">
                         {liveStats?.performance?.lowStudents?.filter((s: any) => s.average < 50).length || 0}
                       </h3>
-                      <p className="text-slate-500 mb-1 font-medium">Total requiring help</p>
+                      <p className="text-xs md:text-sm text-slate-500 mb-1 font-medium">Total requiring help</p>
                     </div>
                   </div>
 

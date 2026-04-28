@@ -11,8 +11,8 @@ export default function MasterSheet() {
           <FileSpreadsheet className="h-6 w-6" />
         </div>
         <div>
-          <h1 className="text-2xl font-black text-slate-900 dark:text-white">Master Sheet</h1>
-          <p className="text-slate-500 text-sm font-medium">Comprehensive grid view of all student scores across subjects.</p>
+          <h1 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight">Master Sheet</h1>
+          <p className="text-slate-500 text-xs md:text-sm font-medium">Comprehensive grid view of student scores.</p>
         </div>
       </div>
 

@@ -290,7 +290,7 @@ export default function ExportResultsAnalysisModal({
       <DialogTrigger asChild>
         <Button 
           variant="outline" 
-          className="bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white border-none shadow-md"
+          className="w-full md:w-auto bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white border-none shadow-md"
           disabled={disabled}
         >
           <Download className="h-4 w-4 mr-2" />

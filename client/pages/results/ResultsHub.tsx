@@ -47,8 +47,8 @@ export default function ResultsHub({ onNavigate }: { onNavigate: (tab: string) =
           <ClipboardList className="h-3 w-3" />
           Academic Management
         </div>
-        <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">Results Center</h1>
-        <p className="text-slate-500 dark:text-slate-400 max-w-lg mx-auto font-medium">
+        <h1 className="text-2xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tighter">Results Center</h1>
+        <p className="text-slate-500 dark:text-slate-400 max-w-lg mx-auto text-xs md:text-sm font-medium">
           Manage assessments, track student progress, and generate comprehensive school reports.
         </p>
       </div>

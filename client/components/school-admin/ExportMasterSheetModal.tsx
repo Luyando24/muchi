@@ -419,7 +419,7 @@ export default function ExportMasterSheetModal({
       <DialogTrigger asChild>
         <Button 
           variant="outline" 
-          className="bg-blue-600 text-white hover:bg-blue-700 hover:text-white border-none shadow-md"
+          className="w-full md:w-auto bg-blue-600 text-white hover:bg-blue-700 hover:text-white border-none shadow-md"
           disabled={disabled}
         >
           <Download className="h-4 w-4 mr-2" />
