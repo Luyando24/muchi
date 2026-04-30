@@ -5109,6 +5109,7 @@ router.get(
         .from("student_grades")
         .select(`
           percentage,
+          grade,
           student_id,
           term,
           academic_year,
@@ -5228,6 +5229,9 @@ router.get(
         let percentage = Number(g.percentage) || 0;
         if (percentage > 100) percentage = 100;
         if (percentage < 0) percentage = 0;
+
+        // Skip absent students from all aggregated performance metrics
+        if (g.grade === "ABSENT") return;
         
         const gradeLabel = getGradeLabel(percentage);
 
@@ -5608,7 +5612,7 @@ router.get(
       // 4. Fetch Grades (Fetch all for school and filter in-memory to avoid URI length issues)
       let gradesQuery = supabaseAdmin
         .from("student_grades")
-        .select("student_id, subject_id, percentage")
+        .select("student_id, subject_id, percentage, grade")
         .eq("school_id", schoolId)
         .in("status", ["Submitted", "Published"]);
 
@@ -5695,6 +5699,9 @@ router.get(
 
         const gender = student.gender;
         const percentage = Number(g.percentage) || 0;
+        
+        // Skip students who were absent for this specific subject
+        if (g.grade === "ABSENT") return;
         
         analysis[g.subject_id].wrote.tot++;
         if (gender === 'male') analysis[g.subject_id].wrote.m++;
@@ -5840,6 +5847,7 @@ router.get(
         .from("student_grades")
         .select(`
           percentage,
+          grade,
           student_id,
           subject_id,
           subjects(name, code)
@@ -5882,6 +5890,9 @@ router.get(
 
         // Aggregate student scores
         const stats = studentPerformanceMap.get(g.student_id) || { total: 0, count: 0, grades: {} };
+        // Skip absent students from performance aggregation
+        if (g.grade === "ABSENT") return;
+
         const percentage = Number(g.percentage) || 0;
         stats.total += percentage;
         stats.count += 1;

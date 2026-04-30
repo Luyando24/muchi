@@ -136,7 +136,7 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
 
     // 5. Aggregate national pass rate (%) and Gender-wise Grade Distribution
     // NOTE: Using a simpler query and manual joining below to ensure stability against schema cache issues
-    let passRateQuery = supabaseAdmin.from('student_grades').select('school_id, percentage, student_id, subject_id');
+    let passRateQuery = supabaseAdmin.from('student_grades').select('school_id, percentage, student_id, subject_id, grade');
 
     let scalesQuery = supabaseAdmin.from('grading_scales').select('grade, min_percentage, max_percentage, description, school_id');
     
@@ -181,9 +181,10 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
       });
     }
 
-    const totalGrades = gradeData?.length || 0;
+    const validGrades = gradeData?.filter(g => g.grade !== 'ABSENT') || [];
+    const totalGrades = validGrades.length;
     const avgPassRate = totalGrades > 0 
-      ? gradeData?.reduce((acc, curr) => acc + curr.percentage, 0) / totalGrades 
+      ? validGrades.reduce((acc, curr) => acc + curr.percentage, 0) / totalGrades 
     : 0;
 
     // 6. Gender-wise Grade Distribution Aggregation & Subject Analytics
@@ -208,7 +209,7 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
     };
 
     gradeData?.forEach(g => {
-      if (g.percentage == null) return;
+      if (g.percentage == null || g.grade === 'ABSENT') return;
       const gender = (g.profiles?.gender || 'Other').toLowerCase();
       const targetGender = gender === 'male' || gender === 'female' ? gender : 'other';
       const label = getGradeLabel(g.percentage, g.school_id);
@@ -225,7 +226,7 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
     // 7. Detailed Metrics per School (Ratio, Pass Rate, Attendance)
     const schoolGrades = new Map<string, { total: number, count: number }>();
     gradeData?.forEach(g => {
-      if (!g.school_id || g.percentage == null) return;
+      if (!g.school_id || g.percentage == null || g.grade === 'ABSENT') return;
       const current = schoolGrades.get(g.school_id) || { total: 0, count: 0 };
       schoolGrades.set(g.school_id, { total: current.total + g.percentage, count: current.count + 1 });
     });
@@ -289,6 +290,7 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
     // 7. Category Ranking
     const categoryGrades = new Map<string, { total: number, count: number }>();
     gradeData?.forEach(g => {
+      if (g.grade === 'ABSENT') return;
       const school = schoolMap.get(g.school_id);
       if (!school || !school.category) return;
       const current = categoryGrades.get(school.category) || { total: 0, count: 0 };
