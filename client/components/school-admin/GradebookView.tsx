@@ -191,8 +191,8 @@ export default function GradebookView() {
           term: selectedTerm,
           examType: selectedExamType,
           academicYear: selectedYear,
-          percentage: g.percentage === '' ? 0 : g.percentage,
-          comments: g.comments
+          percentage: g.percentage === '' ? null : g.percentage,
+          comments: g.comments || (g.percentage === '' ? 'Absent' : '')
         }))
       };
 
@@ -333,7 +333,7 @@ export default function GradebookView() {
         gradesData.forEach((g: any) => {
           gradesMap[g.student_id] = {
             studentId: g.student_id,
-            percentage: g.percentage,
+            percentage: g.percentage === null ? '' : g.percentage,
             grade: g.grade,
             comments: g.comments || '',
             status: g.status || 'Draft',

@@ -2192,11 +2192,14 @@ router.post(
         .eq("school_id", schoolId);
 
       const processedGrades = grades.map((g) => {
-        const scale = scales?.find(
+        const isAbsent = g.percentage === null || g.percentage === undefined || g.percentage === '';
+        
+        const scale = !isAbsent ? scales?.find(
           (s) =>
             g.percentage >= s.min_percentage &&
             g.percentage <= s.max_percentage,
-        );
+        ) : null;
+
         return {
           school_id: schoolId,
           student_id: g.studentId,
@@ -2204,9 +2207,9 @@ router.post(
           term: g.term,
           exam_type: g.examType || "End of Term",
           academic_year: g.academicYear,
-          grade: scale ? scale.grade : "N/A",
-          percentage: g.percentage,
-          comments: g.comments,
+          grade: isAbsent ? "ABSENT" : (scale ? scale.grade : "N/A"),
+          percentage: isAbsent ? null : g.percentage,
+          comments: g.comments || (isAbsent ? "Absent" : ""),
           status: "Draft",
         };
       });
