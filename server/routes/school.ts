@@ -5587,7 +5587,7 @@ router.get(
         enrollmentsQuery = enrollmentsQuery.in("class_id", teacherClassIds);
       }
 
-      const { data: enrollmentData } = await enrollmentsQuery;
+      const enrollmentData = await fetchAll(enrollmentsQuery);
       const classStudentIds = enrollmentData?.map(e => e.student_id) || [];
       
       if ((classId && String(classId).toLowerCase() !== "all") || isTeacher) {
@@ -5649,11 +5649,12 @@ router.get(
 
       // 6. Map Enrollments to track which subjects are offered to which students
       // Filtering by school_id via profile join to avoid large studentIds list
-      const { data: allEnrollments } = await supabaseAdmin
+      let allEnrollmentsQuery = supabaseAdmin
         .from("enrollments")
         .select("student_id, class_id, profiles!inner(school_id)")
         .eq("profiles.school_id", schoolId)
         .eq("academic_year", academic_year || new Date().getFullYear().toString());
+      const allEnrollments = await fetchAll(allEnrollmentsQuery);
 
       const enrollments = allEnrollments?.filter((e: any) => studentIdsSet.has(e.student_id)) || [];
 
@@ -5670,7 +5671,7 @@ router.get(
         classSubjectsQuery = classSubjectsQuery.in("class_id", relevantClassIds);
       }
       
-      const { data: classSubjects } = await classSubjectsQuery;
+      const classSubjects = await fetchAll(classSubjectsQuery);
 
       const classToSubjects = new Map();
       classSubjects?.forEach(cs => {

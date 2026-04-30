@@ -30,31 +30,50 @@ export function PWAInstallPrompt() {
     const isIos = /iphone|ipad|ipod/.test(userAgent);
     const isAndroid = /android/.test(userAgent);
 
+    const checkDismissal = () => {
+      const dismissedAt = localStorage.getItem('pwa_prompt_dismissed');
+      if (!dismissedAt) return true;
+      
+      const fiveMinutes = 5 * 60 * 1000;
+      return Date.now() - parseInt(dismissedAt) > fiveMinutes;
+    };
+
     if (isIos) {
       setPlatform('ios');
       // On iOS, we show the prompt after a small delay if not standalone
       const timer = setTimeout(() => {
-        const hasDismissed = localStorage.getItem('pwa_prompt_dismissed');
-        if (!hasDismissed) setShowPrompt(true);
+        if (checkDismissal()) setShowPrompt(true);
       }, 3000);
-      return () => clearTimeout(timer);
+      
+      const interval = setInterval(() => {
+        if (!showPrompt && checkDismissal()) setShowPrompt(true);
+      }, 30000); // Check every 30 seconds
+
+      return () => {
+        clearTimeout(timer);
+        clearInterval(interval);
+      };
     } else if (isAndroid) {
       setPlatform('android');
       
       const handleBeforeInstallPrompt = (e: any) => {
-        // Prevent Chrome 67 and earlier from automatically showing the prompt
         e.preventDefault();
-        // Stash the event so it can be triggered later.
         setDeferredPrompt(e);
-        
-        const hasDismissed = localStorage.getItem('pwa_prompt_dismissed');
-        if (!hasDismissed) setShowPrompt(true);
+        if (checkDismissal()) setShowPrompt(true);
       };
 
       window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      
+      const interval = setInterval(() => {
+        if (!showPrompt && deferredPrompt && checkDismissal()) setShowPrompt(true);
+      }, 30000); // Check every 30 seconds
+
+      return () => {
+        window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+        clearInterval(interval);
+      };
     }
-  }, []);
+  }, [showPrompt, deferredPrompt]);
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
@@ -73,7 +92,7 @@ export function PWAInstallPrompt() {
 
   const dismissPrompt = () => {
     setShowPrompt(false);
-    // Remember dismissal for 7 days
+    // Remember dismissal timestamp to allow reappearance after 5 minutes
     localStorage.setItem('pwa_prompt_dismissed', Date.now().toString());
   };
 
