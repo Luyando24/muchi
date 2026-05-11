@@ -94,6 +94,64 @@ async function getClassRankings(classId: string, term: string, examType: string,
   };
 }
 
+// Helper to select the correct grading scale based on grade level and school type
+function getGradingScaleForGrade(percentage: number, grade: string, schoolType: string, allScales: any[]) {
+  const gradeStr = (grade || "").toLowerCase();
+  const type = (schoolType || "").toLowerCase();
+
+  // Specific School Types
+  const isLowerPrimarySchool = type === "lower primary";
+  const isUpperPrimarySchool = type === "upper primary";
+  const isCombinedPrimarySchool = type === "combined primary" || type === "primary school";
+
+  // Grade-based detection for Combined schools
+  // Prioritize "Grade" or "G" prefixes and explicitly exclude "Form"
+  const isG57Grade = (gradeStr.includes("5") || gradeStr.includes("6") || gradeStr.includes("7")) &&
+                     !gradeStr.includes("1") && // Avoid matching 15, 16, 17
+                     !gradeStr.includes("form") &&
+                     (gradeStr.includes("grade") || gradeStr.includes("g"));
+
+  const isG14Grade = (gradeStr.includes("1") || gradeStr.includes("2") || gradeStr.includes("3") || gradeStr.includes("4")) &&
+                     !gradeStr.includes("10") && !gradeStr.includes("11") && !gradeStr.includes("12") &&
+                     !gradeStr.includes("form") &&
+                     (gradeStr.includes("grade") || gradeStr.includes("g"));
+
+  if (isUpperPrimarySchool || (isCombinedPrimarySchool && isG57Grade)) {
+    const g57Scale = allScales.filter(s => ['A+', 'A', 'B+', 'B', 'C+', 'C', 'F'].includes(s.grade.trim().toUpperCase()));
+    const matchedScale = g57Scale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage);
+    if (matchedScale) return matchedScale;
+    
+    // Fallback to default G5-7 scale
+    if (percentage >= 86) return { grade: "A+", description: "Distinction" };
+    if (percentage >= 76) return { grade: "A", description: "Distinction" };
+    if (percentage >= 66) return { grade: "B+", description: "Merit" };
+    if (percentage >= 56) return { grade: "B", description: "Credit" };
+    if (percentage >= 46) return { grade: "C+", description: "Definite Pass" };
+    if (percentage >= 40) return { grade: "C", description: "Pass" };
+    return { grade: "F", description: "Fail" };
+  }
+
+  if (isLowerPrimarySchool || (isCombinedPrimarySchool && isG14Grade)) {
+    const g14Scale = allScales.filter(s => ['A RED', 'B ORANGE', 'C YELLOW', 'D BLUE'].some(prefix => s.grade.trim().toUpperCase().includes(prefix)));
+    const matchedScale = g14Scale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage);
+    if (matchedScale) return matchedScale;
+
+    // Fallback to default G1-4 scale
+    if (percentage >= 75) return { grade: "A Red", description: "Excellent" };
+    if (percentage >= 60) return { grade: "B Orange", description: "Very Good" };
+    if (percentage >= 50) return { grade: "C Yellow", description: "Good" };
+    return { grade: "D Blue", description: "Average Below" };
+  }
+
+  // Default Secondary fallback (includes Form classes)
+  const secondaryScale = allScales.filter(s => ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', '1', '2', '3', '4', '5', '6', '7', '8', '9'].includes(s.grade.trim().toUpperCase()));
+  const matchedSecondary = secondaryScale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage);
+  if (matchedSecondary) return matchedSecondary;
+
+  // Final fallback to the first scale that matches the percentage
+  return allScales.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage) || null;
+}
+
 const router = Router();
 
 // --- PUBLIC ENDPOINTS ---
@@ -2062,8 +2120,12 @@ router.post(
 // Helper to calculate grade from percentage
 async function calculateGrade(
   schoolId: string,
-  percentage: number,
+  percentage: number | null,
 ): Promise<{ grade: string; point: number | null }> {
+  if (percentage === null || percentage === undefined) {
+    return { grade: "ABSENT", point: 0 };
+  }
+
   const { data: scales, error } = await supabaseAdmin
     .from("grading_scales")
     .select("*")
@@ -2073,11 +2135,10 @@ async function calculateGrade(
     .maybeSingle();
 
   if (error || !scales) {
-    // Fallback if no scale found
     return { grade: "N/A", point: 0 };
   }
 
-  return { grade: scales.grade, point: 0 }; // gpa_point removed from schema
+  return { grade: scales.grade, point: 0 };
 }
 
 // POST /api/school/students/:id/grades
@@ -2115,9 +2176,9 @@ router.post(
           exam_type: examType,
           academic_year: academicYear,
           grade,
-          percentage,
+          percentage: percentage === null || percentage === undefined ? 0 : percentage,
           comments,
-          status: "Draft", // Default status
+          status: "Draft",
         },
         {
           onConflict: "student_id, subject_id, term, academic_year, exam_type",
@@ -2208,7 +2269,7 @@ router.post(
           exam_type: g.examType || "End of Term",
           academic_year: g.academicYear,
           grade: isAbsent ? "ABSENT" : (scale ? scale.grade : "N/A"),
-          percentage: isAbsent ? null : g.percentage,
+          percentage: isAbsent ? 0 : g.percentage,
           comments: g.comments || (isAbsent ? "Absent" : ""),
           status: "Draft",
         };
@@ -4965,6 +5026,14 @@ router.get(
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
     const { term, academic_year, examType } = req.query;
+    
+    // Fetch school type for grade-aware logic
+    const { data: school } = await supabaseAdmin
+      .from("schools")
+      .select("school_type")
+      .eq("id", schoolId)
+      .single();
+    const schoolType = school?.school_type || "Secondary";
 
     const isAdmin = ADMIN_ROLES.includes(profile.role) || (profile.secondary_role && ADMIN_ROLES.includes(profile.secondary_role));
     const isTeacher = (profile.role === 'teacher' || profile.secondary_role === 'teacher') && !isAdmin;
@@ -4993,10 +5062,10 @@ router.get(
           enrollment_status, 
           full_name, 
           grade,
-          department,
-          enrollments(class_id, classes(name))
+          department
         `)
-        .eq("school_id", schoolId);
+        .eq("school_id", schoolId)
+        .order("id"); // Deterministic order for fetchAll
 
       if (isTeacher) {
         const { data: enrollments } = await supabaseAdmin
@@ -5007,20 +5076,31 @@ router.get(
         if (studentIds.length > 0) {
           schoolProfilesQuery = schoolProfilesQuery.in("id", studentIds);
         } else {
-          // If no students, still filter by role so staff count is 0 or filtered
           schoolProfilesQuery = schoolProfilesQuery.eq("id", "none"); 
         }
       }
 
       const schoolProfilesData = await fetchAll(schoolProfilesQuery);
 
+      // 1.5 Fetch Enrollments separately for precise year mapping
+      let enrollmentsQuery = supabaseAdmin
+        .from("enrollments")
+        .select("student_id, class_id, classes!inner(name, school_id)")
+        .eq("classes.school_id", schoolId);
+      
+      if (academic_year && academic_year !== "All") {
+        enrollmentsQuery = enrollmentsQuery.eq("academic_year", academic_year);
+      }
+      
+      const enrollmentsData = await fetchAll(enrollmentsQuery.order("id"));
       const studentClassMap = new Map();
+      enrollmentsData?.forEach((e: any) => {
+        studentClassMap.set(e.student_id, e.classes?.name || "Unassigned");
+      });
+
       const studentProfileMap = new Map();
       schoolProfilesData?.forEach((p: any) => {
         if (p.role === "student") {
-          const enrollment = p.enrollments && Array.isArray(p.enrollments) && p.enrollments.length > 0 ? p.enrollments[0] : null;
-          const className = (enrollment as any)?.classes?.name || p.grade || "Unassigned";
-          studentClassMap.set(p.id, className);
           studentProfileMap.set(p.id, p);
         }
       });
@@ -5037,7 +5117,8 @@ router.get(
       const schoolClassesQuery = supabaseAdmin
         .from("classes")
         .select("id, name, school_id")
-        .eq("school_id", schoolId);
+        .eq("school_id", schoolId)
+        .order("id");
       
       const schoolClasses = await fetchAll(schoolClassesQuery);
 
@@ -5136,7 +5217,7 @@ router.get(
       if (term && term !== "All") gradesQuery = gradesQuery.eq("term", term);
       if (academic_year && academic_year !== "All") gradesQuery = academic_year === "All" ? gradesQuery : gradesQuery.eq("academic_year", academic_year);
       
-      const grades = await fetchAll(gradesQuery);
+      const grades = await fetchAll(gradesQuery.order("id"));
 
       // Map profiles to student_grades
       const mappedGrades = grades?.map((g: any) => ({
@@ -5155,7 +5236,7 @@ router.get(
         `)
         .eq("status", "graded");
       
-      const realTimeSubmissions = await fetchAll(realTimeSubmissionsQuery);
+      const realTimeSubmissions = await fetchAll(realTimeSubmissionsQuery.order("id"));
 
       // Fetch subjects for real-time mapping
       const schoolSubjectsQuery = supabaseAdmin
@@ -5163,7 +5244,7 @@ router.get(
         .select("id, name, department")
         .eq("school_id", schoolId);
       
-      const schoolSubjects = await fetchAll(schoolSubjectsQuery);
+      const schoolSubjects = await fetchAll(schoolSubjectsQuery.order("id"));
 
       const submissionGrades = realTimeSubmissions
         ?.filter(s => {
@@ -5221,9 +5302,9 @@ router.get(
       };
       const gradeDistribution: any = { school: {}, byClass: {}, bySubject: {} };
 
-      const getGradeLabel = (pct: number) => {
+      const getGradeLabel = (pct: number, studentGrade: string = "") => {
         if (!scales || scales.length === 0) return "N/A";
-        const scale = scales.find((s: any) => pct >= s.min_percentage && pct <= s.max_percentage);
+        const scale = getGradingScaleForGrade(pct, studentGrade, schoolType, scales);
         return scale ? scale.description || scale.grade : "N/A";
       };
 
@@ -5236,7 +5317,8 @@ router.get(
         // Skip absent students from all aggregated performance metrics
         if (g.grade === "ABSENT") return;
         
-        const gradeLabel = getGradeLabel(percentage);
+        const studentGrade = g.profiles?.grade || "";
+        const gradeLabel = getGradeLabel(percentage, studentGrade);
 
         gradeDistribution.school[gradeLabel] = (gradeDistribution.school[gradeLabel] || 0) + 1;
 
@@ -5501,6 +5583,105 @@ router.get(
   },
 );
 
+// GET /api/school/reports/academic-support
+router.get(
+  "/reports/academic-support",
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { term, academic_year, examType, page = 1, limit = 50 } = req.query;
+
+    try {
+      // 1. Fetch Students
+      const studentsQuery = supabaseAdmin
+        .from("profiles")
+        .select(`id, full_name`)
+        .eq("school_id", schoolId)
+        .eq("role", "student")
+        .order("id");
+      
+      const allStudents = await fetchAll(studentsQuery);
+      
+      // 1.5 Fetch Enrollments for year mapping
+      let enrollmentsQuery = supabaseAdmin
+        .from("enrollments")
+        .select("student_id, class_id, classes(name)")
+        .eq("academic_year", academic_year || new Date().getFullYear().toString());
+      
+      const enrollmentsData = await fetchAll(enrollmentsQuery.order("id"));
+      const studentClassMap = new Map();
+      enrollmentsData?.forEach((e: any) => {
+        studentClassMap.set(e.student_id, e.classes?.name || "Unassigned");
+      });
+
+      const studentProfileMap = new Map();
+      allStudents?.forEach((p: any) => studentProfileMap.set(p.id, p));
+
+      // 2. Fetch Grades
+      let gradesQuery = supabaseAdmin
+        .from("student_grades")
+        .select(`percentage, student_id, term, academic_year, exam_type, status`)
+        .eq("school_id", schoolId)
+        .in("status", ["Submitted", "Published"]);
+
+      if (term && term !== "All") gradesQuery = gradesQuery.eq("term", term);
+      if (academic_year && academic_year !== "All") gradesQuery = gradesQuery.eq("academic_year", academic_year);
+      if (examType && examType !== "All") gradesQuery = gradesQuery.eq("exam_type", examType);
+
+      const grades = await fetchAll(gradesQuery);
+
+      // 3. Calculate Averages
+      const studentPerformance: any = {};
+      grades?.forEach((g: any) => {
+        if (!studentProfileMap.has(g.student_id)) return;
+        
+        let percentage = Number(g.percentage) || 0;
+        if (percentage > 100) percentage = 100;
+        if (percentage < 0) percentage = 0;
+
+        if (!studentPerformance[g.student_id]) {
+          const profile = studentProfileMap.get(g.student_id);
+          const className = studentClassMap.get(g.student_id) || "Unassigned";
+
+          studentPerformance[g.student_id] = {
+            id: g.student_id,
+            name: profile.full_name,
+            class: className,
+            total: 0,
+            count: 0
+          };
+        }
+        studentPerformance[g.student_id].total += percentage;
+        studentPerformance[g.student_id].count += 1;
+      });
+
+      // 4. Filter and Group
+      const supportList = Object.values(studentPerformance)
+        .map((s: any) => ({ ...s, average: Math.round(s.total / s.count) }))
+        .filter((s: any) => s.average < 50)
+        .sort((a: any, b: any) => a.average - b.average);
+
+      const totalRecords = supportList.length;
+      const startIndex = (Number(page) - 1) * Number(limit);
+      const paginatedData = supportList.slice(startIndex, startIndex + Number(limit));
+
+      res.json({
+        data: paginatedData,
+        metadata: {
+          total: totalRecords,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(totalRecords / Number(limit))
+        }
+      });
+    } catch (error: any) {
+      console.error("Academic Support Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  },
+);
+
 // GET /api/school/reports/results-analysis
 router.get(
   "/reports/results-analysis",
@@ -5509,6 +5690,14 @@ router.get(
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
     const { term, academic_year, examType, gradeLevel, classId, subjectId } = req.query;
+    
+    // Fetch school type for grade-aware logic
+    const { data: school } = await supabaseAdmin
+      .from("schools")
+      .select("school_type")
+      .eq("id", schoolId)
+      .single();
+    const schoolType = school?.school_type || "Secondary";
 
     const isAdmin = ADMIN_ROLES.includes(profile.role) || (profile.secondary_role && ADMIN_ROLES.includes(profile.secondary_role));
     const isTeacher = (profile.role === 'teacher' || profile.secondary_role === 'teacher') && !isAdmin;
@@ -5607,6 +5796,7 @@ router.get(
       studentsData.forEach((s: any) => {
         studentMap.set(s.id, {
           gender: (s.gender || "Other").toLowerCase(),
+          grade: s.grade || "",
         });
       });
 
@@ -5623,7 +5813,7 @@ router.get(
       if (academic_year && academic_year !== "All") gradesQuery = gradesQuery.eq("academic_year", academic_year);
       if (examType && examType !== "All") gradesQuery = gradesQuery.eq("exam_type", examType);
 
-      const allGrades = await fetchAll(gradesQuery);
+      const allGrades = await fetchAll(gradesQuery.order("id"));
       const studentIdsSet = new Set(studentIds);
       const gradesData = allGrades.filter((g: any) => studentIdsSet.has(g.student_id));
 
@@ -5671,7 +5861,7 @@ router.get(
         classSubjectsQuery = classSubjectsQuery.in("class_id", relevantClassIds);
       }
       
-      const classSubjects = await fetchAll(classSubjectsQuery);
+      const classSubjects = await fetchAll(classSubjectsQuery.order("class_id"));
 
       const classToSubjects = new Map();
       classSubjects?.forEach(cs => {
@@ -5711,7 +5901,8 @@ router.get(
         if (gender === 'male') analysis[g.subject_id].wrote.m++;
         else if (gender === 'female') analysis[g.subject_id].wrote.f++;
 
-        const scale = scales.find((s: any) => percentage >= s.min_percentage && percentage <= s.max_percentage);
+        const studentGrade = student.grade || "";
+        const scale = getGradingScaleForGrade(percentage, studentGrade, schoolType, scales);
         if (scale) {
           analysis[g.subject_id].grades[scale.grade].tot++;
           if (gender === 'male') analysis[g.subject_id].grades[scale.grade].m++;
@@ -5748,7 +5939,30 @@ router.get(
           return a;
         });
 
-      res.json({ scales, analysis: resultAnalysis });
+      // Refine scales for the response to keep headers clean if a specific grade is targeted
+      let refinedScales = scales;
+      if (gradeLevel && gradeLevel !== "all") {
+        const gradeStr = String(gradeLevel).toLowerCase().includes("grade") ? String(gradeLevel) : `Grade ${gradeLevel}`;
+        const sampleScale = getGradingScaleForGrade(90, gradeStr, schoolType, scales);
+        if (sampleScale) {
+          const isJunior = ["A RED", "B ORANGE", "C YELLOW", "D BLUE"].some((prefix) =>
+            sampleScale.grade.toUpperCase().includes(prefix)
+          );
+          const isPrimary = ["A+", "A", "B+", "B", "C+", "C", "F"].includes(sampleScale.grade.toUpperCase());
+
+          if (isJunior) {
+            refinedScales = scales.filter((s: any) =>
+              ["A RED", "B ORANGE", "C YELLOW", "D BLUE"].some((prefix) => s.grade.toUpperCase().includes(prefix))
+            );
+          } else if (isPrimary) {
+            refinedScales = scales.filter((s: any) =>
+              ["A+", "A", "B+", "B", "C+", "C", "F"].includes(s.grade.toUpperCase())
+            );
+          }
+        }
+      }
+
+      res.json({ scales: refinedScales, analysis: resultAnalysis });
     } catch (error: any) {
       console.error("Results Analysis Error:", error);
       res.status(500).json({ message: error.message });

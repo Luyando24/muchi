@@ -59,27 +59,12 @@ const App = () => {
                 <TeacherVerifyGrades />
               </ProtectedRoute>
             } />
-            <Route path="/teacher-portal/results/enter" element={
-              <ProtectedRoute allowedRoles={['teacher', 'school_admin']}>
-                <TeacherPortal />
-              </ProtectedRoute>
-            } />
-            <Route path="/teacher-portal/results/analysis" element={
-              <ProtectedRoute allowedRoles={['teacher', 'school_admin']}>
-                <TeacherPortal />
-              </ProtectedRoute>
-            } />
-            <Route path="/teacher-portal/results/master-sheet" element={
-              <ProtectedRoute allowedRoles={['teacher', 'school_admin']}>
-                <TeacherPortal />
-              </ProtectedRoute>
-            } />
             <Route path="/teacher-portal/*" element={
               <ProtectedRoute allowedRoles={['teacher', 'school_admin', 'bursar', 'registrar', 'exam_officer', 'academic_auditor', 'accounts', 'content_manager', 'system_admin']}>
                 <TeacherPortal />
               </ProtectedRoute>
             } />
-            <Route path="/school-admin" element={
+            <Route path="/school-admin/*" element={
               <ProtectedRoute allowedRoles={['school_admin', 'bursar', 'registrar', 'exam_officer', 'academic_auditor', 'accounts', 'content_manager', 'system_admin']}>
                 <SchoolAdminPortal />
               </ProtectedRoute>

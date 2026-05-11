@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ExportMasterSheetModal from './ExportMasterSheetModal';
 import ExportResultsAnalysisModal from './ExportResultsAnalysisModal';
+import ExportSupportListModal from './ExportSupportListModal';
 import {
   FileText,
   Download,
@@ -92,6 +93,10 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
   const [selectedMasterGradeLevel, setSelectedMasterGradeLevel] = useState<string>("all");
   const [selectedMasterSubjectId, setSelectedMasterSubjectId] = useState<string>("all");
   const [availableSubjects, setAvailableSubjects] = useState<any[]>([]);
+  const [academicSupportData, setAcademicSupportData] = useState<any[]>([]);
+  const [supportMetadata, setSupportMetadata] = useState<any>(null);
+  const [isSupportLoading, setIsSupportLoading] = useState(false);
+  const [supportPage, setSupportPage] = useState(1);
   
   // Pagination States
   const [currentPage, setCurrentPage] = useState(1);
@@ -133,6 +138,7 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
   useEffect(() => {
     if (selectedTerm || selectedYear || selectedExamType) {
       fetchLiveStats();
+      fetchAcademicSupport(1);
     }
   }, [selectedTerm, selectedYear, selectedExamType]);
 
@@ -251,6 +257,36 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
       });
     } finally {
       setMasterSheetLoading(false);
+    }
+  };
+
+  const fetchAcademicSupport = async (page: number) => {
+    if (!selectedTerm || !selectedYear) return;
+    try {
+      setIsSupportLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const queryParams = new URLSearchParams({
+        term: selectedTerm,
+        academic_year: selectedYear,
+        examType: selectedExamType,
+        page: page.toString(),
+        limit: "20"
+      });
+
+      const res = await syncFetch(`/api/school/reports/academic-support?${queryParams.toString()}`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        cacheKey: `academic-support-${selectedTerm}-${selectedYear}-${selectedExamType}-${page}`
+      });
+
+      setAcademicSupportData(res.data);
+      setSupportMetadata(res.metadata);
+      setSupportPage(page);
+    } catch (error: any) {
+      console.error('Error fetching support list:', error);
+    } finally {
+      setIsSupportLoading(false);
     }
   };
 
@@ -1362,34 +1398,64 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
                     <CardTitle className="text-lg">Academic Support List</CardTitle>
-                    <CardDescription>Students performing below 50% who may require intervention</CardDescription>
+                    <CardDescription>Full list of students performing below 50% across all classes</CardDescription>
                   </div>
-                  <AlertCircle className="h-6 w-6 text-red-500" />
+                  <div className="flex items-center gap-2">
+                    <ExportSupportListModal 
+                      term={selectedTerm}
+                      year={selectedYear}
+                      examType={selectedExamType}
+                      schoolName={schoolSettings?.name || "School"}
+                    />
+                    <AlertCircle className="h-6 w-6 text-red-500" />
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {liveStats?.performance?.lowStudents?.filter((s: any) => s.average < 50).map((student: any, index: number) => (
-                      <div
-                        key={student.id}
-                        className="flex items-center justify-between p-4 rounded-xl border border-red-50 bg-red-50/30 dark:bg-red-900/5 dark:border-red-900/10 hover:shadow-sm transition-all"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center justify-center w-10 h-10 rounded-full bg-red-100 text-red-700 font-bold">
-                            !
-                          </div>
-                          <div>
-                            <h4 className="font-bold text-slate-900 dark:text-white">{student.name}</h4>
-                            <p className="text-sm text-slate-500">{student.class}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-xl md:text-2xl font-black text-red-600 dark:text-red-400">{student.average}%</div>
-                          <Badge variant="destructive" className="text-[9px] uppercase tracking-wider h-4">Critical</Badge>
-                        </div>
+                    {isSupportLoading ? (
+                      <div className="flex flex-col items-center justify-center py-20">
+                        <Loader2 className="h-10 w-10 animate-spin text-red-500 mb-4" />
+                        <p className="text-slate-500">Retrieving full list of students...</p>
                       </div>
-                    ))}
-                    {(!liveStats?.performance?.lowStudents || liveStats.performance.lowStudents.filter((s: any) => s.average < 50).length === 0) && (
-                      <div className="text-center py-10">
+                    ) : academicSupportData.length > 0 ? (
+                      <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {academicSupportData.map((student: any) => (
+                            <div
+                              key={student.id}
+                              className="flex items-center justify-between p-4 rounded-xl border border-red-50 bg-red-50/30 dark:bg-red-900/5 dark:border-red-900/10 hover:shadow-sm transition-all"
+                            >
+                              <div className="flex items-center gap-4">
+                                <div className="flex items-center justify-center w-10 h-10 rounded-full bg-red-100 text-red-700 font-bold">
+                                  !
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-slate-900 dark:text-white line-clamp-1">{student.name}</h4>
+                                  <p className="text-xs text-slate-500">{student.class}</p>
+                                </div>
+                              </div>
+                              <div className="text-right ml-2">
+                                <div className="text-xl font-black text-red-600 dark:text-red-400">{student.average}%</div>
+                                <Badge variant="destructive" className="text-[8px] uppercase tracking-wider h-3.5 px-1.5">
+                                  {student.average < 40 ? 'Critical' : 'At Risk'}
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        
+                        {supportMetadata && supportMetadata.totalPages > 1 && (
+                          <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
+                            <PaginationControls
+                              currentPage={supportPage}
+                              totalPages={supportMetadata.totalPages}
+                              onPageChange={fetchAcademicSupport}
+                            />
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-center py-20">
                         <div className="bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 p-4 rounded-xl inline-block mb-4">
                           <TrendingUp className="h-8 w-8" />
                         </div>

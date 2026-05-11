@@ -58,7 +58,7 @@ export default function SchoolSettings() {
     coat_of_arms_url: '',
     headteacher_name: '',
     headteacher_title: 'Headteacher',
-    school_type: 'Secondary School' as 'Primary School' | 'Secondary School' | 'Basic School' | 'Combined School',
+    school_type: 'Secondary School' as string,
     category: '',
     country: 'Zambia'
   });
@@ -319,7 +319,10 @@ export default function SchoolSettings() {
                           <SelectValue placeholder="Select type" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Primary School">Primary School (Grades 1-7)</SelectItem>
+                          <SelectItem value="Lower Primary">Lower Primary (Grades 1-4)</SelectItem>
+                          <SelectItem value="Upper Primary">Upper Primary (Grades 5-7)</SelectItem>
+                          <SelectItem value="Combined Primary">Combined Primary (Grades 1-7)</SelectItem>
+                          <SelectItem value="Primary School">Primary School (Legacy 1-7)</SelectItem>
                           <SelectItem value="Secondary School">Secondary School (Grades 8-12)</SelectItem>
                           <SelectItem value="Basic School">Basic School (Grades 1-9)</SelectItem>
                           <SelectItem value="Combined School">Combined School (Grades 1-12)</SelectItem>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import StudentDetailsView from '@/components/school-admin/StudentDetailsView';
 import {
@@ -186,7 +186,8 @@ export default function TeacherPortal() {
   const location = useLocation();
 
   // UI State
-  const [activeTab, setActiveTab] = useState(() => {
+  // UI State - derived from URL
+  const activeTab = (() => {
     const path = location.pathname;
     if (path.includes('/results/enter')) return 'enter-results';
     if (path.includes('/results/analysis')) return 'results-analysis';
@@ -199,61 +200,36 @@ export default function TeacherPortal() {
     if (path.includes('/profile')) return 'profile';
     if (path.includes('/settings')) return 'settings';
     
-    const params = new URLSearchParams(location.search);
-    return params.get("tab") || "dashboard";
-  });
+    return "dashboard";
+  })();
 
-  // Sync tab with URL changes
-  useEffect(() => {
-    const path = location.pathname;
-    let newTab = activeTab;
-    
-    if (path.includes('/results/enter')) newTab = 'enter-results';
-    else if (path.includes('/results/analysis')) newTab = 'results-analysis';
-    else if (path.includes('/results/master-sheet')) newTab = 'master-sheet';
-    else if (path.includes('/results')) newTab = 'results';
-    else if (path.includes('/students')) newTab = 'students';
-    else if (path.includes('/classes')) newTab = 'classes';
-    else if (path.includes('/attendance')) newTab = 'attendance';
-    else if (path.includes('/timetable')) newTab = 'timetable';
-    else if (path.includes('/profile')) newTab = 'profile';
-    else if (path.includes('/settings')) newTab = 'settings';
-    else if (path === '/teacher-portal' || path === '/teacher-portal/') {
-      const params = new URLSearchParams(location.search);
-      newTab = params.get("tab") || "dashboard";
-    }
-
-    if (newTab !== activeTab) {
-      setActiveTab(newTab);
-    }
-  }, [location.pathname, location.search]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isCreateAssignmentOpen, setIsCreateAssignmentOpen] = useState(false);
   const [isSelfAssignOpen, setIsSelfAssignOpen] = useState(false);
   const [savingAttendance, setSavingAttendance] = useState(false);
 
-  const routeMap: Record<string, string> = {
-    'dashboard': '/teacher-portal',
-    'enter-results': '/teacher-portal/results/enter',
-    'results-analysis': '/teacher-portal/results/analysis',
-    'master-sheet': '/teacher-portal/results/master-sheet',
-    'results': '/teacher-portal/results',
-    'students': '/teacher-portal/students',
-    'classes': '/teacher-portal/classes',
-    'attendance': '/teacher-portal/attendance',
-    'timetable': '/teacher-portal/timetable',
-    'profile': '/teacher-portal/profile',
-    'settings': '/teacher-portal/settings'
-  };
-
   const handleTabChange = (value: string) => {
+    const routeMap: Record<string, string> = {
+      'dashboard': '/teacher-portal',
+      'enter-results': '/teacher-portal/results/enter',
+      'results-analysis': '/teacher-portal/results/analysis',
+      'master-sheet': '/teacher-portal/results/master-sheet',
+      'results': '/teacher-portal/results',
+      'students': '/teacher-portal/students',
+      'classes': '/teacher-portal/classes',
+      'attendance': '/teacher-portal/attendance',
+      'timetable': '/teacher-portal/timetable',
+      'profile': '/teacher-portal/profile',
+      'settings': '/teacher-portal/settings'
+    };
+
     if (routeMap[value]) {
       navigate(routeMap[value]);
     } else {
-      navigate(`/teacher-portal?tab=${value}`);
+      navigate(`/teacher-portal/${value}`);
     }
-    setActiveTab(value);
+    setIsSidebarOpen(false);
   };
 
   // Data State
@@ -515,12 +491,17 @@ export default function TeacherPortal() {
           setSelectedClassId(finalClasses[0].id);
         }
 
-        // If no classes assigned, open self-assign modal
+        // If no classes assigned, open self-assign modal unless snoozed
         if (finalClasses.length === 0) {
-          setIsSelfAssignOpen(true);
-          // Also fetch all classes for the school
-          const allClassesData = await fetchWithAuth('/api/teacher/all-school-classes');
-          setAllClasses(Array.isArray(allClassesData) ? allClassesData : (allClassesData?.data || []));
+          const dismissedAt = localStorage.getItem('teacher_self_assign_dismissed');
+          const isSnoozed = dismissedAt && (Date.now() - parseInt(dismissedAt) < 5 * 60 * 1000);
+          
+          if (!isSnoozed) {
+            setIsSelfAssignOpen(true);
+            // Also fetch all classes for the school
+            const allClassesData = await fetchWithAuth('/api/teacher/all-school-classes');
+            setAllClasses(Array.isArray(allClassesData) ? allClassesData : (allClassesData?.data || []));
+          }
         }
       } catch (e) {
         console.error('Failed to fetch classes', e);
@@ -910,15 +891,35 @@ export default function TeacherPortal() {
     }))
   ].sort((a, b) => b.timestamp - a.timestamp);
 
-  const sidebarItems = [
-    { id: "dashboard", label: "Dashboard", icon: Home },
-    { id: "classes", label: "My Classes", icon: BookOpen },
-    { id: "students", label: "Students", icon: Users },
-    { id: "results", label: "Results", icon: ClipboardList },
-    { id: "timetable", label: "Timetable", icon: Calendar },
-    { id: "attendance", label: "Attendance", icon: ClipboardCheck },
-    { id: "profile", label: "Profile", icon: User },
-    { id: "settings", label: "Settings", icon: Settings }
+  const sidebarGroups = [
+    {
+      label: "Overview",
+      items: [
+        { id: "dashboard", label: "Dashboard", icon: Home },
+        { id: "timetable", label: "Timetable", icon: Calendar },
+      ]
+    },
+    {
+      label: "Teaching",
+      items: [
+        { id: "classes", label: "My Classes", icon: BookOpen },
+        { id: "students", label: "Students", icon: Users },
+        { id: "attendance", label: "Attendance", icon: ClipboardCheck },
+      ]
+    },
+    {
+      label: "Evaluation",
+      items: [
+        { id: "results", label: "Results", icon: ClipboardList },
+      ]
+    },
+    {
+      label: "Account",
+      items: [
+        { id: "profile", label: "Profile", icon: User },
+        { id: "settings", label: "Settings", icon: Settings }
+      ]
+    }
   ];
 
 
@@ -1004,7 +1005,7 @@ export default function TeacherPortal() {
                               className="px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 flex justify-between items-center border-b border-slate-50 dark:border-slate-700 last:border-0"
                               onClick={() => {
                                 setSelectedStudentId(student.id);
-                                setActiveTab('students');
+                                handleTabChange('students');
                                 setIsMobileSearchOpen(false);
                                 setSearchQuery('');
                               }}
@@ -1066,7 +1067,7 @@ export default function TeacherPortal() {
                                   className="px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer flex justify-between items-center group transition-colors"
                                   onClick={() => {
                                     setSelectedStudentId(student.id);
-                                    setActiveTab('students');
+                                    handleTabChange('students');
                                     setIsSearchOpen(false);
                                     setSearchQuery('');
                                   }}
@@ -1132,7 +1133,7 @@ export default function TeacherPortal() {
                         <React.Fragment key={item.id}>
                           <DropdownMenuItem 
                             className="cursor-pointer p-4 focus:bg-slate-50 dark:focus:bg-slate-800/50"
-                            onClick={() => setActiveTab('dashboard')}
+                            onClick={() => handleTabChange('dashboard')}
                           >
                             <div className="flex gap-3 items-start">
                               <div className={`p-2 rounded-full mt-0.5 ${
@@ -1169,7 +1170,7 @@ export default function TeacherPortal() {
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem 
-                    onClick={() => setActiveTab('dashboard')}
+                    onClick={() => handleTabChange('dashboard')}
                     className="justify-center text-blue-600 font-bold text-xs cursor-pointer py-3 hover:bg-blue-50 dark:hover:bg-blue-900/10"
                   >
                     View School Announcements
@@ -1244,26 +1245,35 @@ export default function TeacherPortal() {
 
       <div className="flex">
         {/* Sidebar */}
-        <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:static inset-y-0 left-0 z-40 w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 transition-transform duration-300 ease-in-out`}>
+        <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:sticky lg:top-16 lg:h-[calc(100vh-64px)] inset-y-0 left-0 z-40 w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 transition-transform duration-300 ease-in-out`}>
           <div className="flex flex-col h-full pt-16 lg:pt-0">
-            <nav className="flex-1 px-4 py-6 space-y-2">
-              {sidebarItems.map((item) => (
-                <SidebarItem
-                  key={item.id}
-                  id={item.id}
-                  label={item.label}
-                  icon={item.icon}
-                  active={activeTab === item.id || (item.id === 'results' && ['enter-results', 'results-analysis', 'master-sheet'].includes(activeTab))}
-                  onClick={() => {
-                    if (item.external) {
-                      navigate(item.path);
-                    } else {
-                      handleTabChange(item.id);
-                    }
-                    setIsSidebarOpen(false);
-                  }}
-                  external={item.external}
-                />
+            <nav className="flex-1 px-4 py-6 space-y-8 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700">
+              {sidebarGroups.map((group) => (
+                <div key={group.label} className="space-y-2">
+                  <h3 className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                    {group.label}
+                  </h3>
+                  <div className="space-y-1">
+                    {group.items.map((item) => (
+                      <SidebarItem
+                        key={item.id}
+                        id={item.id}
+                        label={item.label}
+                        icon={item.icon}
+                        active={activeTab === item.id || (item.id === 'results' && ['enter-results', 'results-analysis', 'master-sheet'].includes(activeTab))}
+                        onClick={() => {
+                          if (item.external) {
+                            navigate(item.path);
+                          } else {
+                            handleTabChange(item.id);
+                          }
+                          setIsSidebarOpen(false);
+                        }}
+                        external={item.external}
+                      />
+                    ))}
+                  </div>
+                </div>
               ))}
             </nav>
             <div className="p-4 border-t border-slate-200 dark:border-slate-700">
@@ -1286,12 +1296,11 @@ export default function TeacherPortal() {
 
         {/* Main Content */}
         <main className="flex-1 p-6 overflow-y-auto h-[calc(100vh-64px)]">
-          <Tabs 
-            value={activeTab} 
-            onValueChange={handleTabChange}
-          >
+          <Routes>
+            <Route index element={<Navigate to="dashboard" replace />} />
             {/* Dashboard Tab */}
-            <TabsContent value="dashboard" className="space-y-6">
+            <Route path="dashboard" element={
+              <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">
@@ -1478,10 +1487,12 @@ export default function TeacherPortal() {
                   </CardContent>
                 </Card>
               </div>
-            </TabsContent>
+              </div>
+            } />
 
             {/* Students Tab */}
-            <TabsContent value="students" className="space-y-6">
+            <Route path="students" element={
+              <div className="space-y-6">
               {selectedStudentId ? (
                 <StudentDetailsView 
                   studentId={selectedStudentId} 
@@ -1562,30 +1573,35 @@ export default function TeacherPortal() {
                   </Card>
                 </>
               )}
-            </TabsContent>
+              </div>
+            } />
 
-            {/* Results Hub Tab */}
-            <TabsContent value="results" className="mt-0">
-              <ResultsHub onNavigate={(tab) => handleTabChange(tab)} />
-            </TabsContent>
+            <Route path="results" element={
+              <div className="mt-0">
+                <ResultsHub onNavigate={(tab) => handleTabChange(tab)} />
+              </div>
+            } />
 
-            {/* Enter Results Tab */}
-            <TabsContent value="enter-results" className="mt-0">
-              <EnterResults />
-            </TabsContent>
+            <Route path="results/enter" element={
+              <div className="mt-0">
+                <EnterResults />
+              </div>
+            } />
 
-            {/* Results Analysis Tab */}
-            <TabsContent value="results-analysis" className="mt-0">
-              <ResultsAnalysis />
-            </TabsContent>
+            <Route path="results/analysis" element={
+              <div className="mt-0">
+                <ResultsAnalysis />
+              </div>
+            } />
 
-            {/* Master Sheet Tab */}
-            <TabsContent value="master-sheet" className="mt-0">
-              <MasterSheet />
-            </TabsContent>
+            <Route path="results/master-sheet" element={
+              <div className="mt-0">
+                <MasterSheet />
+              </div>
+            } />
 
-            {/* Classes Tab */}
-            <TabsContent value="classes" className="space-y-6">
+            <Route path="classes" element={
+              <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-bold text-slate-900 dark:text-white">My Classes</h2>
@@ -1651,10 +1667,12 @@ export default function TeacherPortal() {
                   </Card>
                 ))}
               </div>
-            </TabsContent>
+              </div>
+            } />
 
             {/* Grading / Assignments Tab */}
-            <TabsContent value="grading" className="space-y-6">
+            <Route path="grading" element={
+              <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Assignments</h2>
@@ -1880,15 +1898,17 @@ export default function TeacherPortal() {
                   </div>
                 </DialogContent>
               </Dialog>
-            </TabsContent>
+              </div>
+            } />
 
-            {/* Timetable Tab */}
-            <TabsContent value="timetable" className="mt-0">
-              <TimetableTab timetable={timetable} />
-            </TabsContent>
+            <Route path="timetable" element={
+              <div className="mt-0">
+                <TimetableTab timetable={timetable} />
+              </div>
+            } />
 
-            {/* Attendance Tab */}
-            <TabsContent value="attendance" className="space-y-6">
+            <Route path="attendance" element={
+              <div className="space-y-6">
               <div className="sticky top-[-24px] z-20 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-sm pb-4 pt-2 -mt-2">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
@@ -2070,10 +2090,11 @@ export default function TeacherPortal() {
                   </div>
                 )}
               </div>
-            </TabsContent>
+              </div>
+            } />
 
-            {/* Profile Tab */}
-            <TabsContent value="profile" className="space-y-6">
+            <Route path="profile" element={
+              <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-bold text-slate-900 dark:text-white">My Profile</h2>
@@ -2182,10 +2203,11 @@ export default function TeacherPortal() {
                   </Card>
                 </div>
               </div>
-            </TabsContent>
+              </div>
+            } />
 
-            {/* Settings Tab */}
-            <TabsContent value="settings" className="space-y-6">
+            <Route path="settings" element={
+              <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Account Settings</h2>
@@ -2255,9 +2277,9 @@ export default function TeacherPortal() {
                   </Button>
                 </CardContent>
               </Card>
-            </TabsContent>
-
-          </Tabs>
+              </div>
+            } />
+          </Routes>
         </main>
       </div>
       <ConfirmDialog
@@ -2275,8 +2297,9 @@ export default function TeacherPortal() {
       <Dialog 
         open={isSelfAssignOpen} 
         onOpenChange={(open) => {
-          // Prevent closing if no classes are assigned
-          if (!classes || classes.length === 0) return;
+          if (!open) {
+            localStorage.setItem('teacher_self_assign_dismissed', Date.now().toString());
+          }
           setIsSelfAssignOpen(open);
         }}
       >
@@ -2319,9 +2342,19 @@ export default function TeacherPortal() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={() => {
+                localStorage.setItem('teacher_self_assign_dismissed', Date.now().toString());
+                setIsSelfAssignOpen(false);
+              }}
+            >
+              Remind me later
+            </Button>
             <Button 
-              className="w-full bg-blue-600 hover:bg-blue-700" 
+              className="w-full sm:flex-1 bg-blue-600 hover:bg-blue-700 font-bold" 
               onClick={handleSelfAssign}
               disabled={isSubmittingSelfAssign || !selfAssignForm.classId || (selfAssignForm.subjectIds || []).length === 0}
             >
@@ -2342,10 +2375,10 @@ export default function TeacherPortal() {
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-40 px-2 py-2 safe-area-bottom shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
         <div className="flex justify-around items-center">
           {[
-            sidebarItems.find(i => i.id === 'dashboard'),
-            sidebarItems.find(i => i.id === 'results'),
-            sidebarItems.find(i => i.id === 'attendance'),
-            sidebarItems.find(i => i.id === 'profile')
+            sidebarGroups.flatMap(g => g.items).find(i => i.id === 'dashboard'),
+            sidebarGroups.flatMap(g => g.items).find(i => i.id === 'results'),
+            sidebarGroups.flatMap(g => g.items).find(i => i.id === 'attendance'),
+            sidebarGroups.flatMap(g => g.items).find(i => i.id === 'profile')
           ].map((item) => {
             if (!item) return null;
             const Icon = item.icon;

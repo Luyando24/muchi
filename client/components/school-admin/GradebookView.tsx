@@ -333,7 +333,7 @@ export default function GradebookView() {
         gradesData.forEach((g: any) => {
           gradesMap[g.student_id] = {
             studentId: g.student_id,
-            percentage: g.percentage === null ? '' : g.percentage,
+            percentage: g.grade === 'ABSENT' ? '' : (g.percentage === null ? '' : g.percentage),
             grade: g.grade,
             comments: g.comments || '',
             status: g.status || 'Draft',
@@ -362,26 +362,33 @@ export default function GradebookView() {
   };
 
   const getScale = (percentage: number) => {
-    // Auto-detect if we should use the Primary G5-7 format
+    // Auto-detect if we should use the specialized formats
     const classObj = classes.find(c => c.id === selectedClass);
     const gradeStr = (classObj?.name || "").toLowerCase();
-    const isPrimarySchool = schoolType.toLowerCase().includes('primary');
+    const type = (schoolType || "").toLowerCase();
     
-    const isPrimaryG57 = isPrimarySchool && 
-                         (gradeStr.includes("5") || gradeStr.includes("6") || gradeStr.includes("7")) && 
-                         !gradeStr.includes("1") && // Avoid matching 15, 16, 17
-                         (gradeStr.includes("grade") || gradeStr.includes("g"));
+    // Specific School Types
+    const isLowerPrimarySchool = type === "lower primary";
+    const isUpperPrimarySchool = type === "upper primary";
+    const isCombinedPrimarySchool = type === "combined primary" || type === "primary school";
+    
+    // Grade-based detection for Combined schools
+    // Prioritize "Grade" or "G" prefixes and explicitly exclude "Form" (Secondary)
+    const isG57Grade = (gradeStr.includes("5") || gradeStr.includes("6") || gradeStr.includes("7")) && 
+                       !gradeStr.includes("1") && // Avoid matching 15, 16, 17
+                       !gradeStr.includes("form") &&
+                       (gradeStr.includes("grade") || gradeStr.includes("g"));
 
-    const isPrimaryG14 = isPrimarySchool && 
-                         (gradeStr.includes("1") || gradeStr.includes("2") || gradeStr.includes("3") || gradeStr.includes("4")) && 
-                         !gradeStr.includes("10") && !gradeStr.includes("11") && !gradeStr.includes("12") &&
-                         (gradeStr.includes("grade") || gradeStr.includes("g"));
+    const isG14Grade = (gradeStr.includes("1") || gradeStr.includes("2") || gradeStr.includes("3") || gradeStr.includes("4")) && 
+                       !gradeStr.includes("10") && !gradeStr.includes("11") && !gradeStr.includes("12") &&
+                       !gradeStr.includes("form") &&
+                       (gradeStr.includes("grade") || gradeStr.includes("g"));
 
-    if (isPrimaryG57) {
-      const g57Scale = gradingScales.filter(s => ['A+', 'A', 'B+', 'B', 'C+', 'C', 'F'].includes(s.grade.toUpperCase()));
-      if (g57Scale.length > 0) {
-        return g57Scale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage) || null;
-      }
+    if (isUpperPrimarySchool || (isCombinedPrimarySchool && isG57Grade)) {
+      const g57Scale = gradingScales.filter(s => ['A+', 'A', 'B+', 'B', 'C+', 'C', 'F'].includes(s.grade.trim().toUpperCase()));
+      const matchedScale = g57Scale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage);
+      if (matchedScale) return matchedScale;
+      
       // Fallback to default G5-7 scale
       if (percentage >= 86) return { grade: "A+", description: "Distinction" };
       if (percentage >= 76) return { grade: "A", description: "Distinction" };
@@ -392,11 +399,11 @@ export default function GradebookView() {
       return { grade: "F", description: "Fail" };
     }
 
-    if (isPrimaryG14) {
-      const g14Scale = gradingScales.filter(s => ['A RED', 'B ORANGE', 'C YELLOW', 'D BLUE'].some(prefix => s.grade.toUpperCase().includes(prefix)));
-      if (g14Scale.length > 0) {
-        return g14Scale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage) || null;
-      }
+    if (isLowerPrimarySchool || (isCombinedPrimarySchool && isG14Grade)) {
+      const g14Scale = gradingScales.filter(s => ['A RED', 'B ORANGE', 'C YELLOW', 'D BLUE'].some(prefix => s.grade.trim().toUpperCase().includes(prefix)));
+      const matchedScale = g14Scale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage);
+      if (matchedScale) return matchedScale;
+      
       // Fallback to default G1-4 scale
       if (percentage >= 75) return { grade: "A Red", description: "Excellent" };
       if (percentage >= 60) return { grade: "B Orange", description: "Very Good" };
@@ -405,10 +412,11 @@ export default function GradebookView() {
     }
 
     // Default Secondary fallback if no scales defined
-    const secondaryScale = gradingScales.filter(s => ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE'].includes(s.grade.toUpperCase()));
-    if (secondaryScale.length > 0) {
-        return secondaryScale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage) || null;
-    } else if (gradingScales.length === 0) {
+    const secondaryScale = gradingScales.filter(s => ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', '1', '2', '3', '4', '5', '6', '7', '8', '9'].includes(s.grade.trim().toUpperCase()));
+    const matchedSecondary = secondaryScale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage);
+    if (matchedSecondary) return matchedSecondary;
+    
+    if (gradingScales.length === 0 || !matchedSecondary) {
       // Standard Secondary Fallback
       if (percentage >= 75) return { grade: "One", description: "Distinction" };
       if (percentage >= 70) return { grade: "Two", description: "Distinction" };

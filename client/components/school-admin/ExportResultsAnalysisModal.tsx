@@ -165,13 +165,86 @@ export default function ExportResultsAnalysisModal({
 
   const exportToPDF = async (data: any) => {
     const { scales, analysis } = data;
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' }); // A3 for wide report
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.width;
+    const margin = 14;
     
+    // --- 1. HEADER SECTION ---
+    const addHeader = (doc: any) => {
+      // School Name Banner
+      doc.setFillColor(79, 70, 229); // Indigo 600
+      doc.rect(0, 0, pageWidth, 40, 'F');
+      
+      doc.setTextColor(255, 255, 255);
+      doc.setFont(undefined, 'bold');
+      doc.setFontSize(22);
+      doc.text(schoolName.toUpperCase(), margin, 18);
+      
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text("OFFICIAL RESULTS ANALYSIS REPORT", margin, 25);
+      
+      // Meta Info Box
+      doc.setFillColor(255, 255, 255, 0.2);
+      doc.roundedRect(margin, 28, pageWidth - (margin * 2), 8, 1, 1, 'F');
+      doc.setFontSize(8);
+      const metaStr = `GRADE: ${gradeLevel} | CLASS: ${className || 'ALL'} | TERM: ${term} | YEAR: ${year} | ASSESSMENT: ${examType}`;
+      doc.text(metaStr, margin + 4, 33.5);
+    };
+
+    addHeader(doc);
+
+    // --- 2. EXECUTIVE SUMMARY ---
+    const totalReg = analysis.reduce((sum: number, a: any) => sum + a.reg.tot, 0);
+    const totalWrote = analysis.reduce((sum: number, a: any) => sum + a.wrote.tot, 0);
+    const avgPassRate = analysis.length > 0 ? Math.round(analysis.reduce((sum: number, a: any) => sum + a.percentagePass.tot, 0) / analysis.length) : 0;
+    const totalAbs = totalReg - totalWrote;
+
+    let currentY = 50;
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text("Performance Overview", margin, currentY);
+    
+    currentY += 6;
+    const cardWidth = (pageWidth - (margin * 2) - 10) / 2;
+    const cardHeight = 20;
+
+    const drawCard = (x: number, y: number, label: string, value: string, color: [number, number, number]) => {
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(x, y, cardWidth, cardHeight, 2, 2, 'F');
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(x, y, cardWidth, cardHeight, 2, 2, 'S');
+      
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text(label.toUpperCase(), x + 4, y + 7);
+      
+      doc.setFontSize(14);
+      doc.setTextColor(color[0], color[1], color[2]);
+      doc.text(value, x + 4, y + 16);
+    };
+
+    drawCard(margin, currentY, "Total Registered", totalReg.toString(), [30, 41, 59]);
+    drawCard(margin + cardWidth + 10, currentY, "Total Wrote", totalWrote.toString(), [79, 70, 229]);
+    
+    currentY += cardHeight + 5;
+    drawCard(margin, currentY, "Avg Pass Rate", `${avgPassRate}%`, [16, 185, 129]);
+    drawCard(margin + cardWidth + 10, currentY, "Total Absent", totalAbs.toString(), [239, 68, 68]);
+
+    currentY += cardHeight + 10;
+
+    // --- 3. RESULTS TABLE ---
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text("Subject Breakdown", margin, currentY);
+
     const tableColumn = [
       "Subject", 
-      "REG", "WROTE", "ABS", 
+      "REG", "WRT", "ABS", 
       ...scales.map((s: any) => s.grade),
-      "PASS", "% PASS", "FAIL", "% FAIL"
+      "PASS", "%"
     ];
     
     const tableRows = analysis.map((a: any) => [
@@ -181,80 +254,64 @@ export default function ExportResultsAnalysisModal({
       a.abs.tot,
       ...scales.map((s: any) => a.grades[s.grade]?.tot || 0),
       a.totalPasses.tot,
-      `${a.percentagePass.tot}%`,
-      a.totalFails?.tot || 0,
-      `${a.percentageFail?.tot || 0}%`
+      `${a.percentagePass.tot}%`
     ]);
-
-    const addHeader = (doc: any) => {
-      doc.setFont(undefined, 'bold');
-      doc.setFontSize(24);
-      doc.setTextColor(40);
-      doc.text(schoolName || "RESULTS ANALYSIS REPORT", 14, 20);
-      
-      doc.setFont(undefined, 'normal');
-      doc.setFontSize(12);
-      doc.setTextColor(100);
-      const metaStr = `Grade: ${gradeLevel} | Class: ${className || 'All'} | Subject: ${subjectName || 'All'} | Term: ${term} | Year: ${year} | Assessment: ${examType}`;
-      doc.text(metaStr, 14, 28);
-      doc.text(`Generated on ${new Date().toLocaleString()}`, 14, 34);
-      
-      doc.setLineWidth(0.5);
-      doc.line(14, 40, doc.internal.pageSize.width - 14, 40);
-    };
 
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      startY: 45,
+      startY: currentY + 5,
       theme: 'grid',
       styles: { 
-        fontSize: 10, 
-        cellPadding: 3,
-        halign: 'center'
+        fontSize: 7, 
+        cellPadding: 1.5,
+        halign: 'center',
+        textColor: [51, 65, 85]
       },
-      headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold' },
+      headStyles: { 
+        fillColor: [51, 65, 85], 
+        textColor: 255, 
+        fontStyle: 'bold',
+        fontSize: 7
+      },
       columnStyles: {
-        0: { cellWidth: 60, halign: 'left', fontStyle: 'bold' },
+        0: { cellWidth: 'auto', halign: 'left', fontStyle: 'bold' },
+        [tableColumn.length - 1]: { fontStyle: 'bold', textColor: [16, 185, 129] }
       },
+      alternateRowStyles: { fillColor: [249, 250, 251] },
       didDrawPage: (data) => {
-        if (data.pageNumber === 1) addHeader(doc);
         const pageHeight = doc.internal.pageSize.height;
-        doc.setFontSize(10);
-        doc.setTextColor(150);
-        doc.text("MUCHI LMS - Official Results Analysis Report", 14, pageHeight - 10);
-        doc.text(`Page ${data.pageNumber}`, doc.internal.pageSize.width - 25, pageHeight - 10);
+        doc.setFontSize(8);
+        doc.setTextColor(148, 163, 184);
+        doc.text(`MUCHI LMS - Results Analysis • Page ${data.pageNumber}`, margin, pageHeight - 10);
+        doc.text(`Generated: ${new Date().toLocaleDateString()}`, pageWidth - margin - 30, pageHeight - 10);
       },
     });
 
-    doc.save(`Results_Analysis_${gradeLevel}_${classId !== 'all' ? className : ''}_${subjectName || 'All'}_${term}_${year}.pdf`);
+    // --- 4. GRADING SCALE ---
+    const finalY = (doc as any).lastAutoTable.finalY || currentY;
+    if (finalY > 240) doc.addPage();
     
-    // Add Grading Scale to PDF on a new page
-    doc.addPage();
-    doc.setFontSize(14);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(40);
-    doc.text("Grading Scale Reference", 14, 20);
-    
+    const scaleY = finalY > 240 ? 20 : finalY + 15;
     doc.setFontSize(10);
-    doc.setFont(undefined, 'normal');
-    doc.setTextColor(100);
-    doc.text("The following scale was used to categorize marks and determine pass/fail status.", 14, 26);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text("Grading Scale Reference", margin, scaleY);
 
     autoTable(doc, {
-      head: [["Grade", "Min %", "Max %", "Points", "Description"]],
+      head: [["Grade", "Range", "Description"]],
       body: scales.map((s: any) => [
         s.grade, 
-        `${s.min_percentage}%`, 
-        `${s.max_percentage}%`, 
-        s.points || "-", 
+        `${s.min_percentage}% - ${s.max_percentage}%`, 
         s.description || "-"
       ]),
-      startY: 32,
-      theme: 'grid',
-      styles: { fontSize: 9, cellPadding: 3 },
-      headStyles: { fillColor: [51, 65, 85], textColor: 255 }
+      startY: scaleY + 5,
+      theme: 'plain',
+      styles: { fontSize: 7, cellPadding: 1 },
+      headStyles: { fontStyle: 'bold', textColor: [100, 116, 139] }
     });
+
+    doc.save(`Results_Analysis_${gradeLevel}_${className || 'All'}_${term}_${year}.pdf`);
   };
 
   const exportToCSV = async (data: any) => {
