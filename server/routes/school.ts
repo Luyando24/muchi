@@ -5276,8 +5276,16 @@ router.get(
         })
         .map(s => {
           const a = s.assignments as any;
-          let percentage = s.max_score > 0 ? (s.score / s.max_score) * 100 : 0;
-          if (percentage > 100) percentage = 100;
+          const student = studentProfileMap.get(s.student_id);
+          const studentGrade = (student?.grade || "").toLowerCase();
+          const isG57 = (studentGrade.includes("5") || studentGrade.includes("6") || studentGrade.includes("7")) && 
+                       !studentGrade.includes("1") && 
+                       !studentGrade.includes("form") &&
+                       (studentGrade.includes("grade") || studentGrade.includes("g"));
+          
+          const scale = isG57 ? 150 : 100;
+          let percentage = s.max_score > 0 ? (s.score / s.max_score) * scale : 0;
+          if (percentage > scale) percentage = scale;
           if (percentage < 0) percentage = 0;
           
           const student = studentProfileMap.get(s.student_id);
@@ -5328,10 +5336,17 @@ router.get(
         return scale ? scale.description || scale.grade : "N/A";
       };
 
-      filteredGrades.forEach((g: any) => {
-        // Enforce maximum percentage of 100
+        // Enforce maximum percentage based on grade level
         let percentage = Number(g.percentage) || 0;
-        if (percentage > 100) percentage = 100;
+        
+        const studentGrade = (g.profiles?.grade || "").toLowerCase();
+        const isG57 = (studentGrade.includes("5") || studentGrade.includes("6") || studentGrade.includes("7")) && 
+                     !studentGrade.includes("1") && 
+                     !studentGrade.includes("form") &&
+                     (studentGrade.includes("grade") || studentGrade.includes("g"));
+        
+        const maxAllowed = isG57 ? 150 : 100;
+        if (percentage > maxAllowed) percentage = maxAllowed;
         if (percentage < 0) percentage = 0;
 
         // Skip absent students from all aggregated performance metrics
@@ -5656,20 +5671,27 @@ router.get(
       grades?.forEach((g: any) => {
         if (!studentProfileMap.has(g.student_id)) return;
         
+        const className = studentClassMap.get(g.student_id) || "Unassigned";
+        const isG57 = (className.toLowerCase().includes("5") || className.toLowerCase().includes("6") || className.toLowerCase().includes("7")) && 
+                     !className.toLowerCase().includes("1") && 
+                     !className.toLowerCase().includes("form") &&
+                     (className.toLowerCase().includes("grade") || className.toLowerCase().includes("g"));
+        
+        const maxAllowed = isG57 ? 150 : 100;
         let percentage = Number(g.percentage) || 0;
-        if (percentage > 100) percentage = 100;
+        if (percentage > maxAllowed) percentage = maxAllowed;
         if (percentage < 0) percentage = 0;
 
         if (!studentPerformance[g.student_id]) {
           const profile = studentProfileMap.get(g.student_id);
-          const className = studentClassMap.get(g.student_id) || "Unassigned";
 
           studentPerformance[g.student_id] = {
             id: g.student_id,
             name: profile.full_name,
             class: className,
             total: 0,
-            count: 0
+            count: 0,
+            isG57
           };
         }
         studentPerformance[g.student_id].total += percentage;
@@ -5678,8 +5700,13 @@ router.get(
 
       // 4. Filter and Group
       const supportList = Object.values(studentPerformance)
-        .map((s: any) => ({ ...s, average: Math.round(s.total / s.count) }))
-        .filter((s: any) => s.average < 50)
+        .map((s: any) => {
+          const avg = s.count > 0 ? s.total / s.count : 0;
+          const maxMark = s.isG57 ? 150 : 100;
+          const pct = (avg / maxMark) * 100;
+          return { ...s, average: Math.round(avg), percentage: pct };
+        })
+        .filter((s: any) => s.percentage < 50)
         .sort((a: any, b: any) => a.average - b.average);
 
       const totalRecords = supportList.length;

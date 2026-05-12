@@ -107,11 +107,18 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
   
   const { toast } = useToast();
   
-  const getGradeInfo = (pct: number) => {
-    if (pct >= 75) return { label: 'Distinction', color: 'bg-emerald-500 hover:bg-emerald-600', text: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30' };
-    if (pct >= 60) return { label: 'Merit', color: 'bg-blue-500 hover:bg-blue-600', text: 'text-blue-700 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30' };
-    if (pct >= 50) return { label: 'Credit', color: 'bg-indigo-500 hover:bg-indigo-600', text: 'text-indigo-700 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-950/30' };
-    if (pct >= 40) return { label: 'Pass', color: 'bg-orange-500 hover:bg-orange-600', text: 'text-orange-700 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-950/30' };
+  const getGradeInfo = (pct: number, className: string = "") => {
+    const isG57 = (className.toLowerCase().includes("5") || className.toLowerCase().includes("6") || className.toLowerCase().includes("7")) && 
+                  !className.toLowerCase().includes("1") && 
+                  !className.toLowerCase().includes("form") &&
+                  (className.toLowerCase().includes("grade") || className.toLowerCase().includes("g"));
+    const maxMark = isG57 ? 150 : 100;
+    const normalizedPct = (pct / maxMark) * 100;
+
+    if (normalizedPct >= 75) return { label: 'Distinction', color: 'bg-emerald-500 hover:bg-emerald-600', text: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30' };
+    if (normalizedPct >= 60) return { label: 'Merit', color: 'bg-blue-500 hover:bg-blue-600', text: 'text-blue-700 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30' };
+    if (normalizedPct >= 50) return { label: 'Credit', color: 'bg-indigo-500 hover:bg-indigo-600', text: 'text-indigo-700 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-950/30' };
+    if (normalizedPct >= 40) return { label: 'Pass', color: 'bg-orange-500 hover:bg-orange-600', text: 'text-orange-700 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-950/30' };
     return { label: 'Fail', color: 'bg-red-500 hover:bg-red-600', text: 'text-red-700 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-950/30' };
   };
 
@@ -566,7 +573,10 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={liveStats?.performance?.bySubject} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" domain={[0, 100]} />
+                    <XAxis type="number" domain={[0, liveStats?.performance?.byClass?.some((c: any) => {
+                      const n = c.name.toLowerCase();
+                      return (n.includes("5") || n.includes("6") || n.includes("7")) && !n.includes("1") && !n.includes("form") && (n.includes("grade") || n.includes("g"));
+                    }) ? 150 : 100]} />
                     <YAxis dataKey="name" type="category" width={120} />
                     <Tooltip />
                     <Bar dataKey="average" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
@@ -881,7 +891,7 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                           </TableCell>
                           {masterSheetData?.subjects.map(subject => {
                             const score = student.grades[subject.id];
-                            const gradeInfo = score !== undefined ? getGradeInfo(score) : null;
+                            const gradeInfo = score !== undefined ? getGradeInfo(score, student.className) : null;
                             return (
                               <TableCell key={subject.id} className="text-center border-r border-b border-dotted border-slate-200 dark:border-slate-800/80 p-2">
                                 {score !== undefined ? (
