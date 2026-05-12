@@ -95,6 +95,7 @@ async function getClassRankings(classId: string, term: string, examType: string,
 }
 
 // Helper to select the correct grading scale based on grade level and school type
+// Helper to select the correct grading scale based on grade level and school type
 function getGradingScaleForGrade(percentage: number, grade: string, schoolType: string, allScales: any[]) {
   const gradeStr = (grade || "").toLowerCase();
   const type = (schoolType || "").toLowerCase();
@@ -117,7 +118,14 @@ function getGradingScaleForGrade(percentage: number, grade: string, schoolType: 
                      (gradeStr.includes("grade") || gradeStr.includes("g"));
 
   if (isUpperPrimarySchool || (isCombinedPrimarySchool && isG57Grade)) {
-    const g57Scale = allScales.filter(s => ['A+', 'A', 'B+', 'B', 'C+', 'C', 'F'].includes(s.grade.trim().toUpperCase()));
+    // Try to filter by section first
+    let g57Scale = allScales.filter(s => s.section === 'primary-senior');
+    
+    // Fallback to name-based filtering if no scales have the section set
+    if (g57Scale.length === 0) {
+      g57Scale = allScales.filter(s => ['A+', 'A', 'B+', 'B', 'C+', 'C', 'F'].includes(s.grade.trim().toUpperCase()));
+    }
+
     const matchedScale = g57Scale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage);
     if (matchedScale) return matchedScale;
     
@@ -132,7 +140,14 @@ function getGradingScaleForGrade(percentage: number, grade: string, schoolType: 
   }
 
   if (isLowerPrimarySchool || (isCombinedPrimarySchool && isG14Grade)) {
-    const g14Scale = allScales.filter(s => ['A RED', 'B ORANGE', 'C YELLOW', 'D BLUE'].some(prefix => s.grade.trim().toUpperCase().includes(prefix)));
+    // Try to filter by section first
+    let g14Scale = allScales.filter(s => s.section === 'primary-junior');
+    
+    // Fallback to name-based filtering if no scales have the section set
+    if (g14Scale.length === 0) {
+      g14Scale = allScales.filter(s => ['A RED', 'B ORANGE', 'C YELLOW', 'D BLUE'].some(prefix => s.grade.trim().toUpperCase().includes(prefix)));
+    }
+
     const matchedScale = g14Scale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage);
     if (matchedScale) return matchedScale;
 
@@ -144,7 +159,12 @@ function getGradingScaleForGrade(percentage: number, grade: string, schoolType: 
   }
 
   // Default Secondary fallback (includes Form classes)
-  const secondaryScale = allScales.filter(s => ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', '1', '2', '3', '4', '5', '6', '7', '8', '9'].includes(s.grade.trim().toUpperCase()));
+  let secondaryScale = allScales.filter(s => s.section === 'secondary');
+  
+  if (secondaryScale.length === 0) {
+    secondaryScale = allScales.filter(s => ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'D'].includes(s.grade.trim().toUpperCase()));
+  }
+
   const matchedSecondary = secondaryScale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage);
   if (matchedSecondary) return matchedSecondary;
 
@@ -6675,7 +6695,7 @@ router.post(
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
-    const { grade, min_percentage, max_percentage, description } = req.body;
+    const { grade, min_percentage, max_percentage, description, section } = req.body;
 
     try {
       const { data, error } = await supabaseAdmin
@@ -6686,6 +6706,7 @@ router.post(
           min_percentage,
           max_percentage,
           description,
+          section: section || 'secondary',
         })
         .select()
         .single();
@@ -6707,7 +6728,7 @@ router.put(
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
     const { id } = req.params;
-    const { grade, min_percentage, max_percentage, description } = req.body;
+    const { grade, min_percentage, max_percentage, description, section } = req.body;
 
     try {
       const { data, error } = await supabaseAdmin
@@ -6717,6 +6738,7 @@ router.put(
           min_percentage,
           max_percentage,
           description,
+          section,
           updated_at: new Date(),
         })
         .eq("id", id)
@@ -8221,6 +8243,16 @@ router.get(
           className,
           teacherName
         };
+      }).filter((a: any) => {
+        // Dynamic threshold check
+        const className = (a.className || "").toLowerCase();
+        const isG57Grade = (className.includes("5") || className.includes("6") || className.includes("7")) && 
+                           !className.includes("1") && 
+                           !className.includes("form") &&
+                           (className.includes("grade") || className.includes("g"));
+        
+        const threshold = isG57Grade ? 150 : 100;
+        return a.percentage > threshold;
       });
 
       res.json(formatted);

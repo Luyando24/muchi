@@ -73,6 +73,7 @@ interface GradingScale {
   min_percentage: number;
   max_percentage: number;
   description: string;
+  section?: string;
 }
 
 interface GradingWeight {
@@ -112,6 +113,7 @@ export default function AcademicManagement() {
   const [gradingScales, setGradingScales] = useState<GradingScale[]>([]);
   const [gradingWeights, setGradingWeights] = useState<GradingWeight[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [activeGradingTab, setActiveGradingTab] = useState('primary-senior');
   const [schoolSettings, setSchoolSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isImportOpen, setIsImportOpen] = useState<string | null>(null); // null | 'classes' | 'subjects' | 'departments'
@@ -139,7 +141,7 @@ export default function AcademicManagement() {
   const [subjectForm, setSubjectForm] = useState({ id: '', name: '', department: '', headTeacherId: '', code: '' });
   const [classForm, setClassForm] = useState({ id: '', name: '', level: '', room: '', capacity: 40, classTeacherId: '' });
   const [deptForm, setDeptForm] = useState({ id: '', name: '', head_of_department_id: '' });
-  const [scaleForm, setScaleForm] = useState({ id: '', grade: '', min_percentage: 0, max_percentage: 100, description: '' });
+  const [scaleForm, setScaleForm] = useState({ id: '', grade: '', min_percentage: 0, max_percentage: 100, description: '', section: 'secondary' });
   const [weightForm, setWeightForm] = useState({ id: '', assessment_type: '', weight_percentage: 0 });
 
   // Grade Calculation State
@@ -557,7 +559,7 @@ export default function AcademicManagement() {
       toast({ title: "Success", description: `Grading scale ${isEdit ? 'updated' : 'created'} successfully` });
       setIsAddScaleOpen(false);
       setIsEditScaleOpen(false);
-      setScaleForm({ id: '', grade: '', min_percentage: 0, max_percentage: 100, description: '' });
+      setScaleForm({ id: '', grade: '', min_percentage: 0, max_percentage: 100, description: '', section: 'secondary' });
       fetchData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -1729,7 +1731,7 @@ export default function AcademicManagement() {
                 </div>
                 <Dialog open={isAddScaleOpen} onOpenChange={setIsAddScaleOpen}>
                   <DialogTrigger asChild>
-                    <Button onClick={() => setScaleForm({ id: '', grade: '', min_percentage: 0, max_percentage: 100, description: '' })}>
+                    <Button onClick={() => setScaleForm({ id: '', grade: '', min_percentage: 0, max_percentage: 100, description: '', section: activeGradingTab })}>
                       <Plus className="h-4 w-4 mr-2" /> Add Grade Scale
                     </Button>
                   </DialogTrigger>
@@ -1747,15 +1749,31 @@ export default function AcademicManagement() {
                           <Label>Min %</Label>
                           <Input type="number" required value={scaleForm.min_percentage} onChange={e => setScaleForm({ ...scaleForm, min_percentage: parseInt(e.target.value) })} />
                         </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>Max %</Label>
                           <Input type="number" required value={scaleForm.max_percentage} onChange={e => setScaleForm({ ...scaleForm, max_percentage: parseInt(e.target.value) })} />
                         </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>Description</Label>
                           <Input value={scaleForm.description} onChange={e => setScaleForm({ ...scaleForm, description: e.target.value })} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Section</Label>
+                          <Select 
+                            value={scaleForm.section || 'secondary'} 
+                            onValueChange={v => setScaleForm({ ...scaleForm, section: v })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select section" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="primary-junior">Grade 1 - 4 (Primary Junior)</SelectItem>
+                              <SelectItem value="primary-senior">Grade 5 - 7 (Primary Senior)</SelectItem>
+                              <SelectItem value="standard">Secondary (Form 1 - Grade 12)</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                       </div>
                       <DialogFooter>
@@ -1767,7 +1785,7 @@ export default function AcademicManagement() {
               </div>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="primary-senior" className="w-full">
+              <Tabs value={activeGradingTab} onValueChange={setActiveGradingTab} className="w-full">
                 <TabsList className="grid w-full grid-cols-3 mb-6">
                   <TabsTrigger value="primary-junior" className="text-xs font-bold">Grade 1 - 4</TabsTrigger>
                   <TabsTrigger value="primary-senior" className="text-xs font-bold">Grade 5 - 7</TabsTrigger>
@@ -1776,6 +1794,10 @@ export default function AcademicManagement() {
 
                 {['primary-junior', 'primary-senior', 'standard'].map((group) => {
                   const filteredScales = gradingScales.filter(scale => {
+                    // Use explicit section if available
+                    if (scale.section) return scale.section === group;
+                    
+                    // Fallback to name-based logic for legacy data
                     const g = scale.grade.toUpperCase();
                     if (group === 'primary-senior') return ['A+', 'A', 'B+', 'B', 'C+', 'C', 'F'].includes(g);
                     if (group === 'primary-junior') return ['A RED', 'B ORANGE', 'C YELLOW', 'D BLUE'].some(prefix => g.includes(prefix));
@@ -1847,7 +1869,10 @@ export default function AcademicManagement() {
                               <TableCell className="text-right">
                                 <div className="flex justify-end gap-2">
                                   <Button variant="ghost" size="sm" onClick={() => {
-                                    setScaleForm(scale);
+                                    setScaleForm({
+                                      ...scale,
+                                      section: scale.section || group
+                                    });
                                     setIsEditScaleOpen(true);
                                   }}>
                                     <Edit className="h-4 w-4" />

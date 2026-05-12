@@ -85,7 +85,7 @@ export function GradeAnomalies() {
             <div>
               <CardTitle className="text-lg">Anomalous Grades Report</CardTitle>
               <CardDescription>
-                Scores exceeding the maximum 100% threshold
+                Scores exceeding the valid section threshold
               </CardDescription>
             </div>
           </div>
@@ -108,7 +108,7 @@ export function GradeAnomalies() {
               <AlertTriangle className="h-8 w-8 text-green-600" />
             </div>
             <h3 className="text-lg font-bold text-slate-900 mb-1">No Anomalies Detected</h3>
-            <p>All recorded grades are within the valid 0-100% range.</p>
+            <p>All recorded grades are within the valid range.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -214,7 +214,7 @@ export function GradeAnomalies() {
         <div className="flex justify-between items-end">
           <div>
             <h2 className="text-3xl font-bold tracking-tight text-slate-900">Data Audit</h2>
-            <p className="text-slate-500 mt-1">Review and manage anomalous grades (over 100%) across the school.</p>
+            <p className="text-slate-500 mt-1">Review and manage anomalous grades across the school.</p>
           </div>
           <Button onClick={handlePrint} className="gap-2" disabled={loading}>
             <FileText className="h-4 w-4" />
@@ -249,7 +249,7 @@ export function GradeAnomalies() {
               <h2 className="text-2xl font-bold tracking-tight text-slate-900">Data Audit</h2>
               <p className="text-slate-500 mt-1">
                 {activeTab === 'anomalies' 
-                  ? 'Anomalous grades (over 100%) across the school.'
+                  ? 'Anomalous grades across the school.'
                   : 'Classes with no grade anomalies detected.'}
               </p>
             </div>

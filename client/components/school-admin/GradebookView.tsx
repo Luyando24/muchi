@@ -102,6 +102,15 @@ export default function GradebookView() {
   const [selectedExamType, setSelectedExamType] = useState<string>(defaultState.defaultExamType || 'End of Term');
   const [selectedYear, setSelectedYear] = useState<string>(defaultState.defaultYear || '');
   const [availableExamTypes, setAvailableExamTypes] = useState<string[]>(['Mid Term', 'End of Term']);
+  
+  // Calculate max allowed marks based on grade level
+  const currentClassObj = classes.find(c => c.id === selectedClass);
+  const currentGradeStr = (currentClassObj?.name || "").toLowerCase();
+  const isG57GradeForMax = (currentGradeStr.includes("5") || currentGradeStr.includes("6") || currentGradeStr.includes("7")) && 
+                           !currentGradeStr.includes("1") && 
+                           !currentGradeStr.includes("form") &&
+                           (currentGradeStr.includes("grade") || currentGradeStr.includes("g"));
+  const maxAllowed = isG57GradeForMax ? 150 : 100;
 
   // Data State
   const [students, setStudents] = useState<Student[]>([]);
@@ -447,11 +456,26 @@ export default function GradebookView() {
           entry.grade = '-';
           entry.comments = '';
         } else {
-          // Strict validation: Don't allow values greater than 100
+          // Dynamic validation based on grade group (maxAllowed defined in scope)
           let pct = parseFloat(value);
+          
           if (isNaN(pct)) pct = 0;
-          if (pct > 100) pct = 100;
           if (pct < 0) pct = 0;
+
+          // Rejection logic for > 150 (absolute max)
+          if (pct > 150) {
+            toast({ 
+              title: "Double Check Mark", 
+              description: "Marks above 150 are not accepted. Please verify the input.", 
+              variant: "destructive" 
+            });
+            return prev;
+          }
+
+          // Cap logic for maxAllowed (threshold for current class)
+          if (pct > maxAllowed) {
+            pct = maxAllowed;
+          }
           
           entry.percentage = pct;
           const scale = getScale(pct);
@@ -878,7 +902,7 @@ export default function GradebookView() {
                                 <Input
                                   type="number"
                                   min="0"
-                                  max="100"
+                                  max={maxAllowed}
                                   className="h-9 w-20 text-center font-bold focus:ring-2 focus:ring-blue-500/20 border-slate-200 dark:border-slate-700"
                                   value={entry.percentage}
                                   onChange={(e) => handleGradeChange(student.id, 'percentage', e.target.value)}
@@ -1008,7 +1032,7 @@ export default function GradebookView() {
                               <Input
                                 type="number"
                                 min="0"
-                                max="100"
+                                max={maxAllowed}
                                 className="h-14 text-center font-black text-2xl border-slate-300 focus:ring-4 focus:ring-blue-500/20"
                                 value={entry.percentage}
                                 onChange={(e) => handleGradeChange(student.id, 'percentage', e.target.value)}
