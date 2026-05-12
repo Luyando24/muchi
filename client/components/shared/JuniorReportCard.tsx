@@ -48,24 +48,41 @@ export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({ data }) => {
 
   const subjectsList = Object.values(subjectGrades);
 
-  // Helper to get color label from percentage
-  const getColorLabel = (percentage: any) => {
+  // Helper to get color label and matching scale
+  const getScaleInfo = (percentage: any) => {
     const p = parseFloat(percentage);
-    if (isNaN(p)) return '-';
-    if (p >= 75) return 'RED';
-    if (p >= 60) return 'ORANGE';
-    if (p >= 50) return 'YELLOW';
-    return 'BLUE';
+    if (isNaN(p)) return { label: '-', description: '' };
+    
+    // Priority 1: Use provided grading scales from DB
+    if (data.gradingScale && data.gradingScale.length > 0) {
+      const match = data.gradingScale.find(s => p >= s.min_percentage && p <= s.max_percentage);
+      if (match) {
+        // Map common labels to color standard if they match or use the grade name
+        const grade = match.grade.toUpperCase();
+        let label = grade;
+        if (grade.includes('RED')) label = 'RED';
+        else if (grade.includes('ORANGE')) label = 'ORANGE';
+        else if (grade.includes('YELLOW')) label = 'YELLOW';
+        else if (grade.includes('BLUE')) label = 'BLUE';
+        
+        return { label, description: match.description || '' };
+      }
+    }
+
+    // Priority 2: Fallback to standard Zambia G1-4 categories
+    if (p >= 75) return { label: 'RED', description: 'Excellent' };
+    if (p >= 60) return { label: 'ORANGE', description: 'Very Good' };
+    if (p >= 50) return { label: 'YELLOW', description: 'Good' };
+    return { label: 'BLUE', description: 'Average Below' };
   };
 
   const getPerformanceColor = (label: string) => {
-    switch (label.toUpperCase()) {
-      case 'RED': return 'bg-red-500 text-white';
-      case 'ORANGE': return 'bg-orange-500 text-white';
-      case 'YELLOW': return 'bg-yellow-400 text-black';
-      case 'BLUE': return 'bg-blue-500 text-white';
-      default: return '';
-    }
+    const l = label.toUpperCase();
+    if (l.includes('RED')) return 'bg-red-500 text-white';
+    if (l.includes('ORANGE')) return 'bg-orange-500 text-white';
+    if (l.includes('YELLOW')) return 'bg-yellow-400 text-black';
+    if (l.includes('BLUE')) return 'bg-blue-500 text-white';
+    return 'bg-slate-100 text-slate-600';
   };
 
   return (
@@ -128,19 +145,22 @@ export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({ data }) => {
           </thead>
           <tbody>
             {subjectsList.map((subject: any, idx) => {
-              const colorLabel = getColorLabel(subject.percentage);
+              const scaleInfo = getScaleInfo(subject.percentage);
               return (
                 <tr key={idx} className="border-b border-black last:border-0 hover:bg-slate-50 transition-colors">
                   <td className="border-r border-black p-2 text-center text-xs font-bold">{idx + 1}</td>
                   <td className="border-r border-black p-2 text-xs font-bold uppercase">{subject.name}</td>
-                  <td className="border-r border-black p-2 text-center text-sm">{subject.test1}</td>
-                  <td className="border-r border-black p-2 text-center text-sm">{subject.test2}</td>
-                  <td className="border-r border-black p-2 text-center text-sm">{subject.test3}</td>
-                  <td className="border-r border-black p-2 text-center text-sm">{subject.avMarks}</td>
-                  <td className="border-r border-black p-2 text-center text-sm font-bold">{subject.marksScored}</td>
-                  <td className="border-r border-black p-2 text-center text-sm">{subject.outOf}</td>
-                  <td className={cn("p-2 text-center text-[10px] font-black tracking-tight", getPerformanceColor(colorLabel))}>
-                    {colorLabel}
+                  <td className="border-r border-black p-2 text-center text-sm">{subject.test1 || '-'}</td>
+                  <td className="border-r border-black p-2 text-center text-sm">{subject.test2 || '-'}</td>
+                  <td className="border-r border-black p-2 text-center text-sm">{subject.test3 || '-'}</td>
+                  <td className="border-r border-black p-2 text-center text-sm">{subject.avMarks || '-'}</td>
+                  <td className="border-r border-black p-2 text-center text-sm font-bold">{subject.marksScored || subject.percentage}</td>
+                  <td className="border-r border-black p-2 text-center text-sm">{subject.outOf || '100'}</td>
+                  <td className={cn(
+                    "p-2 text-center text-[10px] font-black tracking-tight",
+                    getPerformanceColor(scaleInfo.label)
+                  )}>
+                    {scaleInfo.label}
                   </td>
                 </tr>
               );

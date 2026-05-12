@@ -5288,7 +5288,7 @@ router.get(
           if (percentage > scale) percentage = scale;
           if (percentage < 0) percentage = 0;
           
-          const student = studentProfileMap.get(s.student_id);
+          const studentProfile = studentProfileMap.get(s.student_id);
           const subject = schoolSubjects?.find(sub => sub.id === a.subject_id);
           
           return {
@@ -5297,7 +5297,7 @@ router.get(
             term: a.term || term,
             academic_year: a.academic_year || academic_year,
             exam_type: a.type || "Assignment",
-            profiles: student,
+            profiles: studentProfile,
             subjects: subject || { id: a.subject_id, name: "Assignment", department: "General" }
           };
         }) || [];
@@ -5335,7 +5335,7 @@ router.get(
         const scale = getGradingScaleForGrade(pct, studentGrade, schoolType, scales);
         return scale ? scale.description || scale.grade : "N/A";
       };
-
+      filteredGrades.forEach((g: any) => {
         // Enforce maximum percentage based on grade level
         let percentage = Number(g.percentage) || 0;
         
@@ -5352,8 +5352,8 @@ router.get(
         // Skip absent students from all aggregated performance metrics
         if (g.grade === "ABSENT") return;
         
-        const studentGrade = g.profiles?.grade || "";
-        const gradeLabel = getGradeLabel(percentage, studentGrade);
+        const studentGradeLabel = g.profiles?.grade || "";
+        const gradeLabel = getGradeLabel(percentage, studentGradeLabel);
 
         gradeDistribution.school[gradeLabel] = (gradeDistribution.school[gradeLabel] || 0) + 1;
 
@@ -6186,7 +6186,7 @@ router.get(
 
       // Sort results by average globally to determine correct rank
       fullScoreSheet.sort((a, b) => b.average - a.average);
-      fullScoreSheet.forEach((s, idx) => {
+      fullScoreSheet.forEach((s: any, idx) => {
         s.rank = idx + 1;
       });
 

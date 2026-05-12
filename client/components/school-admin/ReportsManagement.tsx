@@ -108,10 +108,10 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
   const { toast } = useToast();
   
   const getGradeInfo = (pct: number, className: string = "") => {
-    const isG57 = (className.toLowerCase().includes("5") || className.toLowerCase().includes("6") || className.toLowerCase().includes("7")) && 
-                  !className.toLowerCase().includes("1") && 
-                  !className.toLowerCase().includes("form") &&
-                  (className.toLowerCase().includes("grade") || className.toLowerCase().includes("g"));
+    const n = className.toLowerCase();
+    const isSecondary = n.includes("form") || /\b(8|9|10|11|12)\b/.test(n);
+    const isG57 = !isSecondary && /\b(5|6|7)\b/.test(n) && !/\b(1|2|3|4)\b/.test(n);
+    
     const maxMark = isG57 ? 150 : 100;
     const normalizedPct = (pct / maxMark) * 100;
 
@@ -575,7 +575,8 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                     <XAxis type="number" domain={[0, liveStats?.performance?.byClass?.some((c: any) => {
                       const n = c.name.toLowerCase();
-                      return (n.includes("5") || n.includes("6") || n.includes("7")) && !n.includes("1") && !n.includes("form") && (n.includes("grade") || n.includes("g"));
+                      const isSec = n.includes("form") || /\b(8|9|10|11|12)\b/.test(n);
+                      return !isSec && /\b(5|6|7)\b/.test(n) && !/\b(1|2|3|4)\b/.test(n);
                     }) ? 150 : 100]} />
                     <YAxis dataKey="name" type="category" width={120} />
                     <Tooltip />

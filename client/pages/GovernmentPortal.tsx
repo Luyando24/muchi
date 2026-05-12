@@ -67,6 +67,8 @@ import {
 
 import GovernmentNavbar from '@/components/government/GovernmentNavbar';
 import { cn } from '@/lib/utils';
+import { exportToExcel, exportToPDF, generateNationalReport } from '@/utils/government-exports';
+
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#71717a'];
 
 // --- SUB-COMPONENTS --- //
@@ -187,11 +189,65 @@ function OverviewDashboard() {
             variant="ghost"
             size="icon"
             className="h-9 w-9 rounded-full text-blue-600"
+            onClick={() => generateNationalReport(stats)}
           >
             <Download className="h-4 w-4" />
           </Button>
         </div>
       </div>
+
+      {(stats as any).yoyPassRate && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <Card className="bg-gradient-to-br from-slate-900 to-slate-800 text-white border-none shadow-xl">
+            <CardContent className="p-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">YoY Performance</p>
+                  <h4 className="text-3xl font-black mt-1">{(stats as any).yoyPassRate.current}%</h4>
+                  <div className="flex items-center gap-1 mt-2">
+                    {(stats as any).yoyPassRate.change >= 0 ? (
+                      <ArrowUpRight className="h-4 w-4 text-emerald-400" />
+                    ) : (
+                      <ArrowDownRight className="h-4 w-4 text-red-400" />
+                    )}
+                    <span className={cn(
+                      "text-xs font-bold",
+                      (stats as any).yoyPassRate.change >= 0 ? "text-emerald-400" : "text-red-400"
+                    )}>
+                      {Math.abs((stats as any).yoyPassRate.change)}% {(stats as any).yoyPassRate.change >= 0 ? 'Increase' : 'Decrease'}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-3 bg-white/10 rounded-xl backdrop-blur-sm">
+                  <TrendingUp className="h-6 w-6 text-blue-400" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="md:col-span-2 border-dashed border-2 border-slate-200 dark:border-slate-800 bg-transparent">
+            <CardContent className="p-6 flex items-center justify-between h-full">
+              <div>
+                <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-tight">Underperforming Clusters</h4>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Districts requiring targeted academic intervention</p>
+              </div>
+              <div className="flex flex-wrap gap-2 justify-end">
+                {(stats as any).underperformingClusters?.map((c: any) => (
+                  <Badge key={c.name} variant="outline" className="border-red-200 bg-red-50 text-red-600 dark:bg-red-900/10 dark:border-red-900/30 dark:text-red-400 font-bold px-3 py-1 rounded-lg">
+                    {c.name}: {c.avg.toFixed(1)}%
+                  </Badge>
+                ))}
+                {(!(stats as any).underperformingClusters || (stats as any).underperformingClusters.length === 0) && (
+                  <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-600 font-bold px-4 py-1.5 rounded-lg">
+                    No Critical Clusters Detected
+                  </Badge>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/20 shadow-none">
@@ -1039,92 +1095,390 @@ function FeedingDashboard() {
   );
 }
 
-
-// --- MAIN PORTAL COMPONENT --- //
-export default function GovernmentPortal() {
-  const [activeTab, setActiveTab] = useState("overview");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [userProfile, setUserProfile] = useState<{full_name: string; role: string; secondary_role?: string} | null>(null);
-  const navigate = useNavigate();
+function EnrollmentDashboard() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({ province: 'All', district: 'All' });
+  const [regions, setRegions] = useState<{ province: string, districts: string[] }[]>([]);
 
   useEffect(() => {
-    async function getUser() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data } = await supabase.from('profiles').select('full_name, role, secondary_role').eq('id', user.id).single();
-        if (data) setUserProfile(data);
-      }
+    async function fetchRegions() {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/government/regions', { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
+      if (res.ok) setRegions(await res.json());
     }
-    getUser();
+    fetchRegions();
   }, []);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      let url = `/api/government/enrollment-analytics?province=${filters.province !== 'All' ? filters.province : ''}&district=${filters.district !== 'All' ? filters.district : ''}`;
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
+      if (res.ok) setData(await res.json());
+      setLoading(false);
+    }
+    load();
+  }, [filters]);
+
+  if (loading) return <div className="flex justify-center p-12"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (!data) return <div className="flex justify-center p-12 text-slate-500 italic">No enrollment data available.</div>;
+
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-2xl font-bold">Enrollment & Demographics</h2>
+          <p className="text-slate-500">NER, GER, and Inclusive Education monitoring</p>
+        </div>
+        <div className="flex gap-4">
+            <Select value={filters.province} onValueChange={(val) => setFilters({ ...filters, province: val, district: 'All' })}>
+                <SelectTrigger className="w-[140px]"><SelectValue placeholder="Province" /></SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="All">All Provinces</SelectItem>
+                    {regions.map(r => <SelectItem key={r.province} value={r.province}>{r.province}</SelectItem>)}
+                </SelectContent>
+            </Select>
+            <Button variant="outline" onClick={() => exportToExcel(Object.entries(data.gradeBreakdown).map(([grade, count]) => ({ grade, count })), 'enrollment_report')}>
+                <Download className="h-4 w-4 mr-2" /> Export
+            </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Primary GER</CardTitle></CardHeader>
+              <CardContent><h3 className="text-2xl font-bold text-blue-600">{data.ger.primary}%</h3></CardContent>
+          </Card>
+          <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Secondary GER</CardTitle></CardHeader>
+              <CardContent><h3 className="text-2xl font-bold text-purple-600">{data.ger.secondary}%</h3></CardContent>
+          </Card>
+          <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Inclusive (Disability)</CardTitle></CardHeader>
+              <CardContent><h3 className="text-2xl font-bold text-emerald-600">{((data.totalEnrolled - (data.disabilityBreakdown.none || 0)) / data.totalEnrolled * 100).toFixed(1)}%</h3></CardContent>
+          </Card>
+          <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Total Enrollment</CardTitle></CardHeader>
+              <CardContent><h3 className="text-2xl font-bold">{data.totalEnrolled.toLocaleString()}</h3></CardContent>
+          </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+              <CardHeader><CardTitle className="text-lg">Age Distribution Pyramid</CardTitle></CardHeader>
+              <CardContent className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={Object.entries(data.ageBands).map(([name, value]) => ({ name, value }))} layout="vertical">
+                          <XAxis type="number" />
+                          <YAxis dataKey="name" type="category" />
+                          <Tooltip />
+                          <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                  </ResponsiveContainer>
+              </CardContent>
+          </Card>
+          <Card>
+              <CardHeader><CardTitle className="text-lg">Disability Integration</CardTitle></CardHeader>
+              <CardContent className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                          <Pie data={Object.entries(data.disabilityBreakdown).filter(([k]) => k !== 'none').map(([name, value]) => ({ name, value }))} cx="50%" cy="50%" outerRadius={80} fill="#8884d8" label>
+                              {Object.entries(data.disabilityBreakdown).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                          </Pie>
+                          <Tooltip />
+                          <Legend />
+                      </PieChart>
+                  </ResponsiveContainer>
+              </CardContent>
+          </Card>
+      </div>
+    </div>
+  );
+}
+
+function TeacherDashboard() {
+    const [data, setData] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+    const [filters, setFilters] = useState({ province: 'All', district: 'All' });
+  
+    useEffect(() => {
+      async function load() {
+        setLoading(true);
+        const { data: { session } } = await supabase.auth.getSession();
+        let url = `/api/government/teacher-analytics?province=${filters.province !== 'All' ? filters.province : ''}&district=${filters.district !== 'All' ? filters.district : ''}`;
+        const res = await fetch(url, { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
+        if (res.ok) setData(await res.json());
+        setLoading(false);
+      }
+      load();
+    }, [filters]);
+  
+    if (loading) return <div className="flex justify-center p-12"><Loader2 className="animate-spin text-blue-600" /></div>;
+    if (!data) return <div className="flex justify-center p-12 text-slate-500 italic">No teacher workforce data available.</div>;
+
+  
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h2 className="text-2xl font-bold">Teacher Workforce Matrix</h2>
+            <p className="text-slate-500">Deployment, Qualifications, and Staffing Gaps</p>
+          </div>
+        </div>
+  
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Card className="lg:col-span-2">
+                <CardHeader><CardTitle className="text-lg">Staffing Gap Analysis (PTR &gt; 35:1)</CardTitle></CardHeader>
+                <CardContent>
+                    <div className="space-y-4">
+                        {data.staffingGaps?.map((gap: any) => (
+                            <div key={gap.schoolName} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 rounded-xl">
+                                <div>
+                                    <h4 className="font-bold">{gap.schoolName}</h4>
+                                    <p className="text-xs text-slate-500">{gap.district}</p>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <div className="text-right">
+                                        <p className="text-lg font-bold">{gap.ptr}:1</p>
+                                        <p className="text-[10px] uppercase font-black text-slate-400">PTR Ratio</p>
+                                    </div>
+                                    <Badge className={cn(
+                                        gap.gap === 'Critical' ? "bg-red-100 text-red-600" : "bg-orange-100 text-orange-600"
+                                    )}>
+                                        {gap.gap}
+                                    </Badge>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader><CardTitle className="text-lg">Qualification Distribution</CardTitle></CardHeader>
+                <CardContent className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                            <Pie data={Object.entries(data.qualificationBreakdown).map(([name, value]) => ({ name, value }))} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={80}>
+                                {Object.entries(data.qualificationBreakdown).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                            </Pie>
+                            <Tooltip />
+                        </PieChart>
+                    </ResponsiveContainer>
+                </CardContent>
+            </Card>
+        </div>
+      </div>
+    );
+}
+
+function InfrastructureDashboard() {
+    const [data, setData] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        async function load() {
+            setLoading(true);
+            const { data: { session } } = await supabase.auth.getSession();
+            const res = await fetch('/api/government/infrastructure-analytics', { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
+            if (res.ok) setData(await res.json());
+            setLoading(false);
+        }
+        load();
+    }, []);
+
+    if (loading) return <div className="flex justify-center p-12"><Loader2 className="animate-spin text-blue-600" /></div>;
+    if (!data) return <div className="flex justify-center p-12 text-slate-500 italic">No infrastructure data available.</div>;
+
+
+    return (
+        <div className="space-y-6">
+            <h2 className="text-2xl font-bold">National Infrastructure Scorecard</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="bg-blue-50/30 border-blue-100">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Water Access</CardTitle></CardHeader>
+                    <CardContent><h3 className="text-3xl font-black text-blue-600">{data.summary.waterAccessPct}%</h3></CardContent>
+                </Card>
+                <Card className="bg-amber-50/30 border-amber-100">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Power Access</CardTitle></CardHeader>
+                    <CardContent><h3 className="text-3xl font-black text-amber-600">{data.summary.electricityAccessPct}%</h3></CardContent>
+                </Card>
+                <Card className="bg-emerald-50/30 border-emerald-100">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Internet Access</CardTitle></CardHeader>
+                    <CardContent><h3 className="text-3xl font-black text-emerald-600">{data.summary.internetAccessPct}%</h3></CardContent>
+                </Card>
+            </div>
+
+            <Card>
+                <CardHeader><CardTitle>Institutional Scoring</CardTitle></CardHeader>
+                <CardContent>
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="text-xs uppercase text-slate-400 border-b">
+                                <th className="pb-4">School</th>
+                                <th className="pb-4">Classrooms</th>
+                                <th className="pb-4">Toilets</th>
+                                <th className="pb-4">Connectivity</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {data.assessments?.map((a: any) => (
+                                <tr key={a.id} className="border-b last:border-0">
+                                    <td className="py-4 font-bold">{a.school?.name}</td>
+                                    <td className="py-4">{a.classroom_count}</td>
+                                    <td className="py-4">{a.toilets_count}</td>
+                                    <td className="py-4">
+                                        {a.internet_connectivity ? <Badge className="bg-emerald-100 text-emerald-600">Online</Badge> : <Badge variant="secondary">Offline</Badge>}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </CardContent>
+            </Card>
+        </div>
+    );
+}
+
+export default function GovernmentPortal() {
+  const navigate = useNavigate();
+  const [user, setUser] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    async function checkUser() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        navigate('/login');
+        return;
+      }
+
+      const { data: profile } = await supabase.from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile || (profile.role !== 'system_admin' && profile.role !== 'government' && profile.secondary_role !== 'government')) {
+        navigate('/');
+        return;
+      }
+
+      setUser(profile);
+    }
+    checkUser();
+  }, [navigate]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/login');
   };
 
-  const sidebarItems = [
-    { id: "overview", label: "National Overview", icon: LayoutDashboard },
-    { id: "performance", label: "Academic Performance", icon: TrendingUp },
-    { id: "feeding", label: "National Feeding", icon: Package },
-    { id: "settings", label: "Portal Settings", icon: Settings }
+  const sidebarGroups = [
+    {
+      label: "Core Monitoring",
+      items: [
+        { id: 'overview', label: 'Dashboard', icon: LayoutDashboard },
+        { id: 'performance', label: 'Learning Outcomes', icon: GraduationCap },
+      ]
+    },
+    {
+      label: "Human Capital",
+      items: [
+        { id: 'enrollment', label: 'Enrollment Intelligence', icon: Users },
+        { id: 'teachers', label: 'Teacher Workforce', icon: Users2 },
+      ]
+    },
+    {
+      label: "Infrastructure",
+      items: [
+        { id: 'infrastructure', label: 'Infrastructure', icon: Building2 },
+      ]
+    },
+    {
+      label: "Operations",
+      items: [
+        { id: 'feeding', label: 'Feeding Program', icon: Package },
+      ]
+    },
+    {
+      label: "System",
+      items: [
+        { id: 'settings', label: 'Settings', icon: Settings },
+      ]
+    }
   ];
 
-  if (!userProfile) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-        <span className="ml-2 text-lg font-medium">Loading Government Portal...</span>
-      </div>
-    );
-  }
+  if (!user) return (
+    <div className="h-screen w-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+      <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col font-inter">
       <GovernmentNavbar
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onLogout={handleLogout}
-        userProfile={userProfile}
+        userProfile={user}
       />
 
-      <div className="flex">
+      <div className="flex flex-1">
         {/* Sidebar */}
-        <aside className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:static inset-y-0 left-0 z-40 w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 transition-transform duration-300 ease-in-out`}>
+        <aside className={cn(
+          "bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 transition-transform duration-300 ease-in-out z-40 fixed lg:sticky lg:top-20 lg:h-[calc(100vh-80px)] inset-y-0 left-0 w-64",
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        )}>
           <div className="flex flex-col h-full pt-16 lg:pt-0">
-            <nav className="flex-1 px-4 py-6 space-y-2">
-              <div className="mb-4 px-2">
-                <p className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Core Monitoring</p>
-              </div>
-              {sidebarItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Button
-                    key={item.id}
-                    variant={activeTab === item.id ? "default" : "ghost"}
-                    className="w-full justify-start"
-                    onClick={() => {
-                      setActiveTab(item.id);
-                      setIsSidebarOpen(false);
-                    }}
-                  >
-                    <Icon className="h-5 w-5 mr-3" />
-                    {item.label}
-                  </Button>
-                );
-              })}
+            <nav className="flex-1 px-4 py-6 space-y-8 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700">
+              {sidebarGroups.map((group) => (
+                <div key={group.label} className="space-y-2">
+                  <h3 className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                    {group.label}
+                  </h3>
+                  <div className="space-y-1">
+                    {group.items.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <Button
+                          key={item.id}
+                          variant={activeTab === item.id ? "default" : "ghost"}
+                          className={cn(
+                            "w-full justify-start h-9 px-4 transition-all duration-200",
+                            activeTab === item.id 
+                              ? "bg-blue-600 text-white shadow-md hover:bg-blue-700" 
+                              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50"
+                          )}
+                          onClick={() => {
+                            setActiveTab(item.id);
+                            setIsSidebarOpen(false);
+                          }}
+                        >
+                          <Icon className={cn(
+                            "h-4 w-4 mr-3 transition-transform",
+                            activeTab === item.id ? "scale-110" : "scale-100"
+                          )} />
+                          <span className="text-sm font-medium">{item.label}</span>
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </nav>
-
             <div className="p-4 border-t border-slate-200 dark:border-slate-700">
               <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-                <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">National Support</p>
+                <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">National Status</p>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="h-2 w-2 rounded-full bg-green-500"></span>
                   <p className="text-xs text-blue-600 dark:text-blue-300">All Systems Operational</p>
                 </div>
-                <Button size="sm" variant="outline" className="w-full text-xs">Support Center</Button>
+                <Button size="sm" variant="outline" className="w-full text-xs">View Logs</Button>
               </div>
             </div>
           </div>
@@ -1139,71 +1493,37 @@ export default function GovernmentPortal() {
         )}
 
         {/* Main Content */}
-        <main className="flex-1 p-4 sm:p-6 overflow-y-auto h-[calc(100vh-64px)] pb-24 lg:pb-6">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full space-y-8">
-            <TabsContent value="overview" className="m-0 focus-visible:outline-none">
+        <main className="flex-1 p-4 sm:p-10 max-w-[1600px] mx-auto overflow-y-auto">
+           <Tabs value={activeTab} className="w-full">
+             <TabsContent value="overview">
                <OverviewDashboard />
-            </TabsContent>
-            
-            <TabsContent value="performance" className="m-0 focus-visible:outline-none">
+             </TabsContent>
+             <TabsContent value="performance">
                <PerformanceDashboard />
-            </TabsContent>
-            
-            <TabsContent value="feeding" className="m-0 focus-visible:outline-none">
+             </TabsContent>
+             <TabsContent value="enrollment">
+               <EnrollmentDashboard />
+             </TabsContent>
+             <TabsContent value="teachers">
+               <TeacherDashboard />
+             </TabsContent>
+             <TabsContent value="infrastructure">
+               <InfrastructureDashboard />
+             </TabsContent>
+             <TabsContent value="feeding">
                <FeedingDashboard />
-            </TabsContent>
-
-            <TabsContent value="settings" className="m-0 focus-visible:outline-none">
-                <div className="max-w-3xl">
-                  <div className="mb-8">
-                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Portal Settings</h2>
-                    <p className="text-slate-600 mt-1">Manage your ministry official profile and portal preferences.</p>
-                  </div>
-                 <Card className="border-none shadow-xl bg-white dark:bg-slate-800 rounded-3xl overflow-hidden">
-                    <CardHeader className="border-b dark:border-slate-700 p-8 bg-slate-50/50 dark:bg-slate-900/50">
-                       <CardTitle className="text-xl font-bold">Account Preferences</CardTitle>
-                       <CardDescription>Configure how you interact with the national monitoring systems.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-8 space-y-6">
-                       <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700">
-                          <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed italic">
-                            National monitoring thresholds, automated report distribution, and regional access permissions will be configurable here in the next release.
-                          </p>
-                       </div>
-                       <div className="flex justify-end gap-3 pt-4">
-                          <Button variant="outline" className="rounded-xl px-6">Discard Changes</Button>
-                          <Button className="rounded-xl px-8 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200 dark:shadow-none">Save Settings</Button>
-                       </div>
-                    </CardContent>
-                 </Card>
-              </div>
-            </TabsContent>
-          </Tabs>
+             </TabsContent>
+             <TabsContent value="settings">
+                <div className="py-12 flex flex-col items-center justify-center text-center">
+                    <Settings className="h-16 w-16 text-slate-200 mb-4" />
+                    <h3 className="text-xl font-bold">Portal Configuration</h3>
+                    <p className="text-slate-500 max-w-sm mt-2">Ministry-level preferences and regional data thresholds will be manageable here.</p>
+                </div>
+             </TabsContent>
+           </Tabs>
         </main>
-      </div>
-
-      {/* Mobile Bottom Navigation */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-40 px-2 py-2 safe-area-bottom shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
-        <div className="flex justify-around items-center">
-          {sidebarItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`flex flex-col items-center justify-center p-2 rounded-lg transition-all duration-200 min-w-[64px] ${
-                  activeTab === item.id 
-                    ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20" 
-                    : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
-                }`}
-              >
-                <Icon className={`h-5 w-5 mb-1 ${activeTab === item.id ? "scale-110" : "scale-100"} transition-transform`} />
-                <span className="text-[10px] font-medium truncate max-w-full">{item.label}</span>
-              </button>
-            );
-          })}
-        </div>
       </div>
     </div>
   );
 }
+

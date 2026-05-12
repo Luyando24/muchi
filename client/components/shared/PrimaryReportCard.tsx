@@ -55,14 +55,34 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
   const totalPercentage = rawGrades.reduce((sum: number, g: any) => sum + (g.percentage || 0), 0);
   const average = rawGrades.length > 0 ? (totalPercentage / rawGrades.length).toFixed(1) : 0;
 
-  const studentGrade = (student.className || student.grade || "").toLowerCase();
-  const isG57 = (studentGrade.includes("5") || studentGrade.includes("6") || studentGrade.includes("7")) && 
-                !studentGrade.includes("1") && 
-                !studentGrade.includes("form") &&
-                (studentGrade.includes("grade") || studentGrade.includes("g"));
+  const studentGrade = (student.className || student.grade || student.class || "").toLowerCase();
+  
+  // Robust Grade Detection
+  const isSecondary = studentGrade.includes("form") || /\b(8|9|10|11|12)\b/.test(studentGrade);
+  const isG57 = !isSecondary && 
+                /\b(5|6|7)\b/.test(studentGrade) && 
+                !/\b(1|2|3|4)\b/.test(studentGrade);
+                
   const maxMark = isG57 ? 150 : 100;
 
+  const getScaleMatch = (percentage: number) => {
+    if (gradingScale && gradingScale.length > 0) {
+      return gradingScale.find((s: any) => percentage >= s.min_percentage && percentage <= s.max_percentage);
+    }
+    return null;
+  };
+
   const getGradeColor = (percentage: number) => {
+    const scale = getScaleMatch(percentage);
+    if (scale) {
+      const g = scale.grade.toUpperCase();
+      if (g.includes('RED') || g === 'A+' || g === 'A') return { name: "Red", class: "text-red-600 font-bold" };
+      if (g.includes('ORANGE') || g === 'B+' || g === 'B') return { name: "Orange", class: "text-orange-500 font-bold" };
+      if (g.includes('YELLOW') || g === 'C+' || g === 'C') return { name: "Yellow", class: "text-yellow-600 font-bold" };
+      return { name: "Blue", class: "text-blue-600 font-bold" };
+    }
+    
+    // Fallback
     const pct = (percentage / maxMark) * 100;
     if (pct >= 75) return { name: "Red", class: "text-red-600 font-bold" };
     if (pct >= 60) return { name: "Orange", class: "text-orange-500 font-bold" };
@@ -71,6 +91,10 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
   };
 
   const getGradeLetter = (percentage: number) => {
+    const scale = getScaleMatch(percentage);
+    if (scale) return scale.grade;
+    
+    // Fallback
     const pct = (percentage / maxMark) * 100;
     if (pct >= 86) return "A+";
     if (pct >= 76) return "A";
@@ -82,6 +106,10 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
   };
 
   const getGradeDescription = (percentage: number) => {
+    const scale = getScaleMatch(percentage);
+    if (scale) return scale.description || scale.remark || "Satisfactory";
+    
+    // Fallback
     const pct = (percentage / maxMark) * 100;
     if (pct >= 76) return "Distinction";
     if (pct >= 66) return "Merit";

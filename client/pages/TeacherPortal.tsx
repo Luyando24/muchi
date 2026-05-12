@@ -895,29 +895,29 @@ export default function TeacherPortal() {
     {
       label: "Overview",
       items: [
-        { id: "dashboard", label: "Dashboard", icon: Home },
-        { id: "timetable", label: "Timetable", icon: Calendar },
+        { id: "dashboard", label: "Dashboard", icon: Home, external: false, path: "" },
+        { id: "timetable", label: "Timetable", icon: Calendar, external: false, path: "" },
       ]
     },
     {
       label: "Teaching",
       items: [
-        { id: "classes", label: "My Classes", icon: BookOpen },
-        { id: "students", label: "Students", icon: Users },
-        { id: "attendance", label: "Attendance", icon: ClipboardCheck },
+        { id: "classes", label: "My Classes", icon: BookOpen, external: false, path: "" },
+        { id: "students", label: "Students", icon: Users, external: false, path: "" },
+        { id: "attendance", label: "Attendance", icon: ClipboardCheck, external: false, path: "" },
       ]
     },
     {
       label: "Evaluation",
       items: [
-        { id: "results", label: "Results", icon: ClipboardList },
+        { id: "results", label: "Results", icon: ClipboardList, external: false, path: "" },
       ]
     },
     {
       label: "Account",
       items: [
-        { id: "profile", label: "Profile", icon: User },
-        { id: "settings", label: "Settings", icon: Settings }
+        { id: "profile", label: "Profile", icon: User, external: false, path: "" },
+        { id: "settings", label: "Settings", icon: Settings, external: false, path: "" }
       ]
     }
   ];

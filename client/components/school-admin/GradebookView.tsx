@@ -106,10 +106,14 @@ export default function GradebookView() {
   // Calculate max allowed marks based on grade level
   const currentClassObj = classes.find(c => c.id === selectedClass);
   const currentGradeStr = (currentClassObj?.name || "").toLowerCase();
-  const isG57GradeForMax = (currentGradeStr.includes("5") || currentGradeStr.includes("6") || currentGradeStr.includes("7")) && 
-                           !currentGradeStr.includes("1") && 
-                           !currentGradeStr.includes("form") &&
-                           (currentGradeStr.includes("grade") || currentGradeStr.includes("g"));
+  
+  // Robust Grade Detection
+  const isSecondaryGrade = currentGradeStr.includes("form") || 
+                           /\b(8|9|10|11|12)\b/.test(currentGradeStr);
+  const isG57GradeForMax = !isSecondaryGrade && 
+                           /\b(5|6|7)\b/.test(currentGradeStr) && 
+                           !/\b(1|2|3|4)\b/.test(currentGradeStr);
+  
   const maxAllowed = isG57GradeForMax ? 150 : 100;
 
   // Data State
@@ -381,17 +385,16 @@ export default function GradebookView() {
     const isUpperPrimarySchool = type === "upper primary";
     const isCombinedPrimarySchool = type === "combined primary" || type === "primary school";
     
-    // Grade-based detection for Combined schools
-    // Prioritize "Grade" or "G" prefixes and explicitly exclude "Form" (Secondary)
-    const isG57Grade = (gradeStr.includes("5") || gradeStr.includes("6") || gradeStr.includes("7")) && 
-                       !gradeStr.includes("1") && // Avoid matching 15, 16, 17
-                       !gradeStr.includes("form") &&
-                       (gradeStr.includes("grade") || gradeStr.includes("g"));
+    // Grade-based detection
+    const isSecondary = currentGradeStr.includes("form") || /\b(8|9|10|11|12)\b/.test(currentGradeStr);
+    
+    const isG57Grade = !isSecondary && 
+                       /\b(5|6|7)\b/.test(currentGradeStr) && 
+                       !/\b(1|2|3|4)\b/.test(currentGradeStr);
 
-    const isG14Grade = (gradeStr.includes("1") || gradeStr.includes("2") || gradeStr.includes("3") || gradeStr.includes("4")) && 
-                       !gradeStr.includes("10") && !gradeStr.includes("11") && !gradeStr.includes("12") &&
-                       !gradeStr.includes("form") &&
-                       (gradeStr.includes("grade") || gradeStr.includes("g"));
+    const isG14Grade = !isSecondary && 
+                       /\b(1|2|3|4)\b/.test(currentGradeStr) && 
+                       !/\b(5|6|7|8|9|10|11|12)\b/.test(currentGradeStr);
 
     if (isUpperPrimarySchool || (isCombinedPrimarySchool && isG57Grade)) {
       const g57Scale = gradingScales.filter(s => ['A+', 'A', 'B+', 'B', 'C+', 'C', 'F'].includes(s.grade.trim().toUpperCase()));
