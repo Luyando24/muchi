@@ -1460,7 +1460,9 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                             <PaginationControls
                               currentPage={supportPage}
                               totalPages={supportMetadata.totalPages}
+                              pageSize={20}
                               onPageChange={fetchAcademicSupport}
+                              onPageSizeChange={() => {}}
                             />
                           </div>
                         )}

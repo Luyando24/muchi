@@ -5,6 +5,7 @@ import * as z from "zod";
 import { supabase } from "@/lib/supabase";
 import { useNavigate, Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { getSubdomain, getRoleSubdomainUrl, SUBDOMAIN_ROLE_MAP } from "@/lib/subdomain";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -31,8 +32,19 @@ const formSchema = z.object({
 type UserRole = "student" | "teacher" | "school_admin" | "system_admin";
 
 export default function Login() {
+  const subdomain = getSubdomain();
+
+  // Derive the default tab from the current subdomain
+  const defaultTab: UserRole = (() => {
+    if (subdomain === "admin") return "school_admin";
+    if (subdomain === "teacher") return "teacher";
+    if (subdomain === "system") return "school_admin"; // system uses same form style
+    if (subdomain === "gov") return "school_admin";
+    return "student";
+  })();
+
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<UserRole>("student");
+  const [activeTab, setActiveTab] = useState<UserRole>(defaultTab);
   const [showRoleSelection, setShowRoleSelection] = useState(false);
   const [userData, setUserData] = useState<{ session: any; profile: any } | null>(null);
   
@@ -70,24 +82,39 @@ export default function Login() {
   });
 
   const handleRoleNavigation = (role: string, userId: string) => {
-    if (["school_admin", "bursar", "registrar", "exam_officer", "academic_auditor", "accounts", "content_manager"].includes(role)) {
-      navigate("/school-admin");
+    const subdomainUrl = getRoleSubdomainUrl(role, userId);
+
+    // If we're already on the correct subdomain, use React Router navigate
+    const currentSub = getSubdomain();
+    const targetSubMap: Record<string, string> = {
+      school_admin: "admin", bursar: "admin", registrar: "admin",
+      exam_officer: "admin", academic_auditor: "admin", accounts: "admin",
+      content_manager: "admin",
+      teacher: "teacher",
+      student: "student",
+      government: "gov",
+      system_admin: "system",
+    };
+    const targetSub = targetSubMap[role];
+
+    if (currentSub && currentSub === targetSub) {
+      // Already on the right subdomain — stay here
+      navigate("/");
+    } else if (subdomainUrl && subdomainUrl.startsWith("http")) {
+      // Redirect to the subdomain (full page navigation to switch origin)
+      window.location.href = subdomainUrl;
     } else {
-      switch (role) {
-        case "system_admin":
-          navigate("/system-admin");
-          break;
-        case "government":
-          navigate("/gov");
-          break;
-        case "teacher":
-          navigate("/teacher-portal");
-          break;
-        case "student":
-          navigate(`/student-portal/${userId}`);
-          break;
-        default:
-          navigate("/");
+      // Fallback: path-based routes (local dev without custom hosts)
+      if (["school_admin", "bursar", "registrar", "exam_officer", "academic_auditor", "accounts", "content_manager"].includes(role)) {
+        navigate("/school-admin");
+      } else {
+        switch (role) {
+          case "system_admin": navigate("/system-admin"); break;
+          case "government":   navigate("/gov"); break;
+          case "teacher":      navigate("/teacher-portal"); break;
+          case "student":      navigate(`/student-portal/${userId}`); break;
+          default:             navigate("/");
+        }
       }
     }
   };

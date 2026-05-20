@@ -1185,7 +1185,7 @@ function EnrollmentDashboard() {
               <CardContent className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                          <Pie data={Object.entries(data.disabilityBreakdown).filter(([k]) => k !== 'none').map(([name, value]) => ({ name, value }))} cx="50%" cy="50%" outerRadius={80} fill="#8884d8" label>
+                          <Pie data={Object.entries(data.disabilityBreakdown).filter(([k]) => k !== 'none').map(([name, value]) => ({ name, value }))} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8" label>
                               {Object.entries(data.disabilityBreakdown).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                           </Pie>
                           <Tooltip />

@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { LicenseCode, SchoolType } from '@shared/api';
+import { LicenseCode, SchoolType, SchoolCategory, Country, SubscriptionPlan } from '@shared/api';
 
 
 export default function ConfigurationManagement() {
@@ -379,7 +379,7 @@ export default function ConfigurationManagement() {
 
   const handleGenerateCode = async () => {
     if (!newCodePlan) {
-      toast({ variant: "warning", title: "Wait", description: "Please select a plan for this code" });
+      toast({ variant: "destructive", title: "Wait", description: "Please select a plan for this code" });
       return;
     }
     setIsAdding(true);
@@ -640,7 +640,7 @@ export default function ConfigurationManagement() {
                   <Input 
                     placeholder="KE" 
                     value={newCode} 
-                    onChange={(e) => setNewCode(e.target.toUpperCase())}
+                    onChange={(e) => setNewCode(e.target.value.toUpperCase())}
                     maxLength={2}
                   />
                 </div>

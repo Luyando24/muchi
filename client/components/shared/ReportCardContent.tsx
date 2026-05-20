@@ -45,7 +45,7 @@ export const ReportCardContent: React.FC<ReportCardContentProps> = ({ data, term
   }
 
   if (isLowerPrimarySchool || (isCombinedPrimarySchool && isG14Grade)) {
-    return <JuniorReportCard data={data} term={term} examType={examType} academicYear={academicYear} className={className} />;
+    return <JuniorReportCard data={data} />;
   }
 
   return <ReportCard data={data} term={term} examType={examType} academicYear={academicYear} className={className} />;

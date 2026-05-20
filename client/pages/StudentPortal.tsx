@@ -62,9 +62,26 @@ import { syncFetch, offlineQuery } from '@/lib/syncService';
 export default function StudentPortal() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const studentId = id;
   const { toast } = useToast();
-  
+
+  // On the student subdomain there is no :id in the URL, so we fall back
+  // to the authenticated user's own ID from the active Supabase session.
+  const [studentId, setStudentId] = useState<string | undefined>(id);
+
+  useEffect(() => {
+    if (id) {
+      setStudentId(id);
+      return;
+    }
+    // No URL param — resolve from session (subdomain case)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.id) {
+        setStudentId(session.user.id);
+      } else {
+        window.location.href = '/login';
+      }
+    });
+  }, [id]);
   const [loading, setLoading] = useState(true);
   const [student, setStudent] = useState<any>(null);
   const [gradesData, setGradesData] = useState<any>(null);

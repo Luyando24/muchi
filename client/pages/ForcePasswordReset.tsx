@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
 import { syncFetch } from '@/lib/syncService';
 import { useToast } from "@/hooks/use-toast";
+import { getRoleSubdomainUrl } from "@/lib/subdomain";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -105,14 +106,16 @@ export default function ForcePasswordReset() {
       // Delay navigation slightly to ensure the database update has fully committed and propagated
       // before the Login or Portal components re-fetch the profile data
       setTimeout(() => {
-        // Redirect based on role instead of just going to root "/"
         const role = updatedProfile?.role || session.user.user_metadata?.role;
-        if (role === 'teacher') {
+        const subdomainUrl = role ? getRoleSubdomainUrl(role, session.user.id) : null;
+
+        if (subdomainUrl && subdomainUrl.startsWith('http')) {
+          window.location.href = subdomainUrl;
+        } else if (role === 'teacher') {
           navigate("/teacher-portal");
         } else if (role === 'student') {
           navigate("/student-portal");
         } else {
-          // Fallback for admins or others
           navigate("/school-admin");
         }
       }, 500);
