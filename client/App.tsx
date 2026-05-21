@@ -60,7 +60,7 @@ const CommonRoutes = () => (
 const AdminSubdomainApp = () => (
   <Providers>
     <Routes>
-      <CommonRoutes />
+      {CommonRoutes()}
       <Route
         path="/data-audit"
         element={
@@ -86,7 +86,7 @@ const AdminSubdomainApp = () => (
 const TeacherSubdomainApp = () => (
   <Providers>
     <Routes>
-      <CommonRoutes />
+      {CommonRoutes()}
       <Route
         path="/verify"
         element={
@@ -112,7 +112,7 @@ const TeacherSubdomainApp = () => (
 const StudentSubdomainApp = () => (
   <Providers>
     <Routes>
-      <CommonRoutes />
+      {CommonRoutes()}
       <Route
         path="/:id/*"
         element={
@@ -138,7 +138,7 @@ const StudentSubdomainApp = () => (
 const GovSubdomainApp = () => (
   <Providers>
     <Routes>
-      <CommonRoutes />
+      {CommonRoutes()}
       <Route
         path="/*"
         element={
@@ -156,7 +156,7 @@ const GovSubdomainApp = () => (
 const SystemSubdomainApp = () => (
   <Providers>
     <Routes>
-      <CommonRoutes />
+      {CommonRoutes()}
       <Route
         path="/login"
         element={<SystemAdminLogin />}
