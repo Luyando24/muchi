@@ -698,7 +698,7 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
                      <div className="flex justify-between items-center p-4 bg-muted rounded-lg">
                         <span className="font-medium">Current Status</span>
                         <Badge variant="outline" className={
-                          profile.fees_status === 'Paid' ? 'bg-green-50 text-green-700 border-green-200 text-lg py-1 px-3' : 
+                          profile.fees_status === 'Paid' || profile.fees_status === 'Paid/Free Education' ? 'bg-green-50 text-green-700 border-green-200 text-lg py-1 px-3' : 
                           profile.fees_status === 'Pending' ? 'bg-yellow-50 text-yellow-700 border-yellow-200 text-lg py-1 px-3' : 
                           profile.fees_status === 'Partial' ? 'bg-blue-50 text-blue-700 border-blue-200 text-lg py-1 px-3' :
                           'bg-red-50 text-red-700 border-red-200 text-lg py-1 px-3'

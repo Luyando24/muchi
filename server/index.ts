@@ -13,7 +13,7 @@ import { teacherRouter } from './routes/teacher.js';
 import { websiteRouter } from './routes/website.js';
 import { feedingProgramRouter } from './routes/feeding-program.js';
 import { governmentPortalRouter } from './routes/government-portal.js';
-
+import { financeRouter } from './routes/finance.js';
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -37,6 +37,7 @@ app.use('/api/teacher', teacherRouter);
 app.use('/api/school', websiteRouter);
 app.use('/api/school/feeding-program', feedingProgramRouter);
 app.use('/api/government', governmentPortalRouter);
+app.use('/api/finance', financeRouter);
 // The requirement says "Add a new module to school admin portal", 
 // usually /api/school is for school admin portal. 
 // Let's use /api/school/website as a prefix or just add to /api/school.

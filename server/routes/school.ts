@@ -877,6 +877,14 @@ router.get(
 
       if (error) throw error;
 
+      const { count: tuitionCount } = await supabaseAdmin
+        .from('fee_structures')
+        .select('*', { count: 'exact', head: true })
+        .eq('school_id', schoolId)
+        .eq('fee_type', 'tuition');
+      
+      const noTuitionFeesSet = tuitionCount === 0;
+
       const formattedStudents = students.map((student: any) => ({
         id: student.id,
         firstName: student.full_name?.split(" ")[0] || "",
@@ -887,7 +895,9 @@ router.get(
         grade: student.grade || "Unassigned",
         gender: student.gender || "Not specified",
         status: student.enrollment_status || "Active",
-        fees: student.fees_status || "Pending",
+        fees: noTuitionFeesSet && (!student.fees_status || student.fees_status === "Pending") 
+              ? "Paid/Free Education" 
+              : (student.fees_status || "Pending"),
         guardian: student.guardian_name || "None",
       }));
 
@@ -1086,13 +1096,23 @@ router.get(
         if (g.subjects?.name) allSubjectNames.add(g.subjects.name);
       });
 
+      const { count: tuitionCount } = await supabaseAdmin
+        .from('fee_structures')
+        .select('*', { count: 'exact', head: true })
+        .eq('school_id', schoolId)
+        .eq('fee_type', 'tuition');
+      
+      const noTuitionFeesSet = tuitionCount === 0;
+
       const response = {
         profile: {
           ...student,
           className: enrollment?.classes?.name || student.grade || "Unassigned",
           academicYear:
             enrollment?.academic_year || new Date().getFullYear().toString(),
-          fees_status: student.fees_status || "Pending",
+          fees_status: noTuitionFeesSet && (!student.fees_status || student.fees_status === "Pending")
+              ? "Paid/Free Education"
+              : (student.fees_status || "Pending"),
         },
         academics: {
           enrollment,

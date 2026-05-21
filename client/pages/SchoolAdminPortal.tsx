@@ -13,7 +13,8 @@ import {
   PieChart,
   Globe,
   Utensils,
-  ShieldAlert
+  ShieldAlert,
+  Receipt
 } from 'lucide-react';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ import TeacherManagement from '@/components/school-admin/TeacherManagement';
 import AcademicManagement from '@/components/school-admin/AcademicManagement';
 import GradebookView from '@/components/school-admin/GradebookView';
 import FinanceManagement from '@/components/school-admin/FinanceManagement';
+import SchoolFeesManagement from '@/components/school-admin/SchoolFeesManagement';
 import ReportsManagement from '@/components/school-admin/ReportsManagement';
 import CalendarManagement from '@/components/school-admin/CalendarManagement';
 import SchoolSettings from '@/components/school-admin/SchoolSettings';
@@ -36,6 +38,7 @@ import LicenseAccessDenied from '@/components/common/LicenseAccessDenied';
 import { useToast } from "@/components/ui/use-toast";
 import OnboardingTutorial from '@/components/school-admin/OnboardingTutorial';
 import { cn } from '@/lib/utils';
+import { isOnSubdomain } from '@/lib/subdomain';
 
 
 // Mock data for School Admin Portal
@@ -53,9 +56,11 @@ export default function SchoolAdminPortal() {
   const location = useLocation();
   
   // Derive active tab from pathname (e.g., /school-admin/students -> students)
-  const activeTab = location.pathname === '/school-admin' || location.pathname === '/school-admin/' 
+  const activeTab = location.pathname === '/school-admin' || location.pathname === '/school-admin/' || location.pathname === '/' || location.pathname === ''
     ? "dashboard" 
     : location.pathname.split('/').pop() || "dashboard";
+
+  const portalBase = isOnSubdomain() ? '' : '/school-admin';
 
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(null);
@@ -71,7 +76,7 @@ export default function SchoolAdminPortal() {
   useEffect(() => {
     const handleHashChange = () => {
       if (window.location.hash === '#data-audit') {
-        navigate('/school-admin/data-audit');
+        navigate(`${portalBase}/data-audit`);
       }
     };
     
@@ -206,7 +211,8 @@ export default function SchoolAdminPortal() {
     {
       label: "Operations",
       items: [
-        { id: "finance", label: "Finance", icon: CreditCard, roles: ["school_admin", "bursar", "accounts", "academic_auditor"] },
+        { id: "finance", label: "Finance (Ledger)", icon: CreditCard, roles: ["school_admin", "bursar", "accounts", "academic_auditor"] },
+        { id: "fees", label: "School Fees", icon: Receipt, roles: ["school_admin", "bursar", "accounts"] },
         { id: "feeding_program", label: "Feeding Program", icon: Utensils, roles: ["school_admin", "bursar", "content_manager"] },
         { id: "website", label: "Website", icon: Globe, roles: ["school_admin", "content_manager"] },
       ]
@@ -242,7 +248,7 @@ export default function SchoolAdminPortal() {
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
         activeTab={activeTab}
-        setActiveTab={(tab) => navigate(`/school-admin/${tab}`)}
+        setActiveTab={(tab) => navigate(`${portalBase}/${tab}`)}
         onSelectStudent={setSelectedStudentId}
         onSelectTeacher={setSelectedTeacherId}
         onLogout={handleLogout}
@@ -273,7 +279,7 @@ export default function SchoolAdminPortal() {
                               : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50"
                           )}
                           onClick={() => {
-                            navigate(`/school-admin/${item.id}`);
+                            navigate(`${portalBase}/${item.id}`);
                             setIsSidebarOpen(false);
                           }}
                         >
@@ -363,6 +369,12 @@ export default function SchoolAdminPortal() {
               </div>
             } />
 
+            <Route path="fees" element={
+              <div className="space-y-6">
+                <SchoolFeesManagement />
+              </div>
+            } />
+
             <Route path="reports" element={
               <div className="space-y-6">
                 <ReportsManagement />
@@ -404,9 +416,9 @@ export default function SchoolAdminPortal() {
 
       {showTutorial && (
         <OnboardingTutorial 
-          userId={userId} 
-          onComplete={() => setShowTutorial(false)} 
-          onStepChange={(tab) => navigate(`/school-admin/${tab}`)}
+          onComplete={() => setShowTutorial(false)}
+          onSkip={() => setShowTutorial(false)}
+          onStepChange={(tab) => navigate(`${portalBase}/${tab}`)}
         />
       )}
 
@@ -425,7 +437,7 @@ export default function SchoolAdminPortal() {
             return (
               <button
                 key={item.id}
-                onClick={() => navigate(`/school-admin/${item.id}`)}
+                onClick={() => navigate(`${portalBase}/${item.id}`)}
                 className={`flex flex-col items-center justify-center p-2 rounded-lg transition-all duration-200 min-w-[64px] ${
                   activeTab === item.id 
                     ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20" 

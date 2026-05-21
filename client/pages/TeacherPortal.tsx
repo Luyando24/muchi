@@ -75,6 +75,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { OfflineIndicator } from '@/components/navigation/OfflineIndicator';
 import { syncFetch, offlineQuery } from '@/lib/syncService';
 import { cn } from '@/lib/utils';
+import { isOnSubdomain } from '@/lib/subdomain';
 import EnterResults from './results/EnterResults';
 import ResultsAnalysis from './results/ResultsAnalysis';
 import MasterSheet from './results/MasterSheet';
@@ -209,25 +210,27 @@ export default function TeacherPortal() {
   const [isSelfAssignOpen, setIsSelfAssignOpen] = useState(false);
   const [savingAttendance, setSavingAttendance] = useState(false);
 
+  const portalBase = isOnSubdomain() ? '' : '/teacher-portal';
+
   const handleTabChange = (value: string) => {
     const routeMap: Record<string, string> = {
-      'dashboard': '/teacher-portal',
-      'enter-results': '/teacher-portal/results/enter',
-      'results-analysis': '/teacher-portal/results/analysis',
-      'master-sheet': '/teacher-portal/results/master-sheet',
-      'results': '/teacher-portal/results',
-      'students': '/teacher-portal/students',
-      'classes': '/teacher-portal/classes',
-      'attendance': '/teacher-portal/attendance',
-      'timetable': '/teacher-portal/timetable',
-      'profile': '/teacher-portal/profile',
-      'settings': '/teacher-portal/settings'
+      'dashboard': portalBase || '/',
+      'enter-results': `${portalBase}/results/enter`,
+      'results-analysis': `${portalBase}/results/analysis`,
+      'master-sheet': `${portalBase}/results/master-sheet`,
+      'results': `${portalBase}/results`,
+      'students': `${portalBase}/students`,
+      'classes': `${portalBase}/classes`,
+      'attendance': `${portalBase}/attendance`,
+      'timetable': `${portalBase}/timetable`,
+      'profile': `${portalBase}/profile`,
+      'settings': `${portalBase}/settings`
     };
 
     if (routeMap[value]) {
       navigate(routeMap[value]);
     } else {
-      navigate(`/teacher-portal/${value}`);
+      navigate(`${portalBase}/${value}`);
     }
     setIsSidebarOpen(false);
   };
@@ -1312,14 +1315,14 @@ export default function TeacherPortal() {
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
                   <Button 
-                    onClick={() => navigate('/teacher-portal/results/analysis')}
+                    onClick={() => navigate(`${portalBase}/results/analysis`)}
                     className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 h-11 sm:h-10 text-base sm:text-sm font-bold shadow-md text-white border-0"
                   >
                     <BarChart2 className="h-5 w-5 sm:h-4 sm:w-4 mr-2" />
                     Results Analysis
                   </Button>
                   <Button 
-                    onClick={() => navigate('/teacher-portal/results/enter')}
+                    onClick={() => navigate(`${portalBase}/results/enter`)}
                     className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 h-11 sm:h-10 text-base sm:text-sm font-bold shadow-md"
                   >
                     <PenTool className="h-5 w-5 sm:h-4 sm:w-4 mr-2" />

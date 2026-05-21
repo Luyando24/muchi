@@ -56,6 +56,9 @@ export const ROLE_SUBDOMAIN_MAP: Record<string, KnownSubdomain> = {
  */
 export function getSubdomain(): KnownSubdomain | null {
   const hostname = window.location.hostname;
+  
+  const isLocalhost = hostname === 'localhost' || hostname.endsWith('.localhost') || hostname === '127.0.0.1';
+  if (isLocalhost) return null; // Disable subdomains entirely on localhost
 
   // IP address — no subdomain
   if (/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(hostname)) return null;
@@ -91,6 +94,22 @@ export function getSubdomain(): KnownSubdomain | null {
  *      getSubdomainUrl('admin', '/data-audit') → "https://admin.muchiapp.com/data-audit"
  */
 export function getSubdomainUrl(subdomain: KnownSubdomain, path: string = ''): string {
+  // If we are on localhost, map subdomains to RootApp paths
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname.endsWith('.localhost') || window.location.hostname === '127.0.0.1';
+  
+  if (isLocalhost) {
+    const LOCAL_PREFIX_MAP: Record<KnownSubdomain, string> = {
+      admin: '/school-admin',
+      teacher: '/teacher-portal',
+      student: '/student-portal',
+      gov: '/gov',
+      system: '/system-admin'
+    };
+    const prefix = LOCAL_PREFIX_MAP[subdomain] || '';
+    const cleanPath = path.startsWith('/') ? path : (path ? `/${path}` : '');
+    return `${window.location.origin}${prefix}${cleanPath}`;
+  }
+
   const appUrl = import.meta.env.VITE_APP_URL || window.location.origin;
 
   try {
@@ -100,13 +119,6 @@ export function getSubdomainUrl(subdomain: KnownSubdomain, path: string = ''): s
     let hostname = url.hostname;
     if (hostname.startsWith('www.')) {
       hostname = hostname.substring(4);
-    }
-
-    // Handle localhost — use port from the current page
-    if (hostname === 'localhost') {
-      url.hostname = `${subdomain}.localhost`;
-      url.pathname = path;
-      return url.toString();
     }
 
     url.hostname = `${subdomain}.${hostname}`;
@@ -129,8 +141,14 @@ export function getRoleSubdomainUrl(role: string, userId?: string): string {
 
   // Student URL includes the user ID
   if (sub === 'student' && userId) {
-    // On the student subdomain there's no :id in the path — session resolves it
-    return getSubdomainUrl('student');
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname.endsWith('.localhost') || window.location.hostname === '127.0.0.1';
+    if (isLocalhost) {
+      // On localhost (RootApp), we NEED the ID in the path: /student-portal/:id
+      return getSubdomainUrl('student', `/${userId}`);
+    } else {
+      // On the student subdomain there's no :id in the path — session resolves it
+      return getSubdomainUrl('student');
+    }
   }
 
   return getSubdomainUrl(sub);

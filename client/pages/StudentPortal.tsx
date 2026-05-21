@@ -19,7 +19,8 @@ import {
   Calendar,
   Download,
   Lock,
-  AlertCircle
+  AlertCircle,
+  Receipt
 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -58,6 +59,7 @@ import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { OfflineIndicator } from '@/components/navigation/OfflineIndicator';
 import { syncFetch, offlineQuery } from '@/lib/syncService';
+import StudentFees from '@/components/student/StudentFees';
 
 export default function StudentPortal() {
   const { id } = useParams();
@@ -299,6 +301,7 @@ export default function StudentPortal() {
     { id: "subjects", label: "Subjects", icon: BookOpen },
     { id: "grades", label: "Results", icon: Award },
     { id: "attendance", label: "Attendance", icon: ClipboardCheck },
+    { id: "fees", label: "School Fees", icon: Receipt },
     // { id: "assignments", label: "Assignments", icon: FileText },
     { id: "profile", label: "Profile", icon: User },
     { id: "settings", label: "Settings", icon: Settings }
@@ -1026,6 +1029,10 @@ export default function StudentPortal() {
                    <p>No pending assignments.</p>
                  </CardContent>
                </Card>
+            </TabsContent>
+
+            <TabsContent value="fees" className="space-y-6 m-0">
+               <StudentFees />
             </TabsContent>
 
             <TabsContent value="profile" className="space-y-6 m-0">

@@ -19,6 +19,8 @@ interface SystemSettings {
   defaultLanguage: string;
   sessionTimeout: number; // in minutes
   whatsappNumber: string;
+  defaultCurrency: string;
+  supportedCurrencies: string;
 }
 
 const defaultSettings: SystemSettings = {
@@ -28,7 +30,9 @@ const defaultSettings: SystemSettings = {
   supportEmail: "support@muchi.com",
   defaultLanguage: "en",
   sessionTimeout: 60,
-  whatsappNumber: "260570260374"
+  whatsappNumber: "260570260374",
+  defaultCurrency: "ZMW",
+  supportedCurrencies: '["ZMW", "USD", "ZAR"]'
 };
 
 import ConfigurationManagement from './ConfigurationManagement';
@@ -69,7 +73,9 @@ export default function GlobalSettings() {
         supportEmail: data.support_email || defaultSettings.supportEmail,
         defaultLanguage: data.default_language || defaultSettings.defaultLanguage,
         sessionTimeout: parseInt(data.session_timeout) || defaultSettings.sessionTimeout,
-        whatsappNumber: data.whatsapp_number || defaultSettings.whatsappNumber
+        whatsappNumber: data.whatsapp_number || defaultSettings.whatsappNumber,
+        defaultCurrency: data.default_currency || defaultSettings.defaultCurrency,
+        supportedCurrencies: data.supported_currencies || defaultSettings.supportedCurrencies
       };
 
       setSettings(mappedSettings);
@@ -98,7 +104,9 @@ export default function GlobalSettings() {
         support_email: settings.supportEmail,
         default_language: settings.defaultLanguage,
         session_timeout: String(settings.sessionTimeout),
-        whatsapp_number: settings.whatsappNumber
+        whatsapp_number: settings.whatsappNumber,
+        default_currency: settings.defaultCurrency,
+        supported_currencies: settings.supportedCurrencies
       };
 
       const response = await fetch('/api/admin/settings', {
@@ -203,6 +211,27 @@ export default function GlobalSettings() {
                 <option value="es">Spanish</option>
                 <option value="zh">Chinese</option>
               </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="defaultCurrency">Default Currency</Label>
+              <Input 
+                id="defaultCurrency" 
+                value={settings.defaultCurrency} 
+                onChange={(e) => setSettings({...settings, defaultCurrency: e.target.value.toUpperCase()})}
+                placeholder="e.g. ZMW"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="supportedCurrencies">Supported Currencies (JSON array)</Label>
+              <Input 
+                id="supportedCurrencies" 
+                value={settings.supportedCurrencies} 
+                onChange={(e) => setSettings({...settings, supportedCurrencies: e.target.value})}
+                placeholder='e.g. ["ZMW", "USD"]'
+              />
+              <p className="text-xs text-slate-500">List of currencies allowed for fees.</p>
             </div>
 
             <div className="space-y-2">
