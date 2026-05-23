@@ -30,7 +30,6 @@ import CheckResults from "./pages/CheckResults";
 import EnterResults from "./pages/results/EnterResults";
 import ResultsAnalysis from "./pages/results/ResultsAnalysis";
 import MasterSheet from "./pages/results/MasterSheet";
-import { PWAInstallPrompt } from "./components/navigation/PWAInstallPrompt";
 import { getSubdomain } from "./lib/subdomain";
 
 /** Shared providers wrapper */
@@ -39,7 +38,6 @@ const Providers = ({ children }: { children: React.ReactNode }) => (
     <Toaster />
     <Sonner />
     <ThemeProvider attribute="class" defaultTheme="light">
-      <PWAInstallPrompt />
       <BrowserRouter>{children}</BrowserRouter>
     </ThemeProvider>
   </TooltipProvider>
