@@ -77,6 +77,7 @@ const locationSchema = z.object({
   province: z.string().min(1, "Please select a province"),
   district: z.string().min(1, "Please select a district"),
   address: z.string().min(5, "Physical address must be at least 5 characters"),
+  location_type: z.string().min(1, "Please select a location type"),
 });
 
 import { SchoolCategory, Country, SubscriptionPlan, SchoolType } from '@shared/api';
@@ -186,6 +187,7 @@ export default function SchoolRegister() {
       province: '',
       district: '',
       address: '',
+      location_type: 'Urban',
     },
   });
 
@@ -855,6 +857,31 @@ export default function SchoolRegister() {
                                 <Input placeholder="Plot number, Street name, Area" className="pl-10 h-12" {...field} />
                               </div>
                             </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={locationForm.control}
+                        name="location_type"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="font-semibold">School Location Type</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger className="h-12">
+                                  <SelectValue placeholder="Select location type" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="Urban">Urban (Town / City)</SelectItem>
+                                <SelectItem value="Rural">Rural (Village / Remote Area)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormDescription className="text-xs">
+                              Used by the government to track teacher deployment across rural and urban schools.
+                            </FormDescription>
                             <FormMessage />
                           </FormItem>
                         )}

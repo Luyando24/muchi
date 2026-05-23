@@ -39,6 +39,7 @@ import { useToast } from "@/components/ui/use-toast";
 import OnboardingTutorial from '@/components/school-admin/OnboardingTutorial';
 import { cn } from '@/lib/utils';
 import { isOnSubdomain } from '@/lib/subdomain';
+import SubscriptionReminder from '@/components/common/SubscriptionReminder';
 
 
 // Mock data for School Admin Portal
@@ -70,6 +71,9 @@ export default function SchoolAdminPortal() {
   const [userRole, setUserRole] = useState<string>("");
   const [userId, setUserId] = useState<string>("");
   const [showTutorial, setShowTutorial] = useState(false);
+  const [showSubscriptionReminder, setShowSubscriptionReminder] = useState(false);
+  const [schoolNameForReminder, setSchoolNameForReminder] = useState("");
+  const [schoolIdForReminder, setSchoolIdForReminder] = useState("");
 
 
   // Listen for hash changes to support direct linking to tabs
@@ -97,7 +101,7 @@ export default function SchoolAdminPortal() {
         // Fetch user profile info
         const { data: profile } = await supabase
           .from('profiles')
-          .select('role, has_completed_onboarding')
+          .select('role, secondary_role, has_completed_onboarding, school_id')
           .eq('id', session.user.id)
           .single();
           
@@ -107,6 +111,45 @@ export default function SchoolAdminPortal() {
           // Only show tutorial for school admins who haven't completed it
           if (profile.role === 'school_admin' && !profile.has_completed_onboarding) {
             setShowTutorial(true);
+          }
+
+          // Check for subscription reminder if user is a school admin
+          const isAdmin = profile.role === 'school_admin' || profile.secondary_role === 'school_admin';
+          if (isAdmin && profile.school_id) {
+            const schoolId = profile.school_id;
+            setSchoolIdForReminder(schoolId);
+            
+            // 1. Fetch school details (registration date, name)
+            const { data: school } = await supabase
+              .from('schools')
+              .select('created_at, name')
+              .eq('id', schoolId)
+              .single();
+              
+            if (school) {
+              setSchoolNameForReminder(school.name);
+              const regDate = new Date(school.created_at);
+              const daysSinceReg = (Date.now() - regDate.getTime()) / (1000 * 60 * 60 * 24);
+              
+              if (daysSinceReg > 30) {
+                // 2. Check if school has a valid active license in the DB
+                const { data: licenses } = await supabase
+                  .from('school_licenses')
+                  .select('id')
+                  .eq('school_id', schoolId)
+                  .eq('status', 'active')
+                  .gt('end_date', new Date().toISOString());
+                  
+                const hasLicense = licenses && licenses.length > 0;
+                
+                if (!hasLicense) {
+                  const dismissedUntil = localStorage.getItem(`school_license_reminder_dismissed_until_${schoolId}`);
+                  if (!dismissedUntil || Date.now() > parseInt(dismissedUntil)) {
+                    setShowSubscriptionReminder(true);
+                  }
+                }
+              }
+            }
           }
         }
 
@@ -181,6 +224,18 @@ export default function SchoolAdminPortal() {
       console.error('Error logging out:', error);
       navigate('/login');
     }
+  };
+
+  const handleSnoozeReminder = () => {
+    if (schoolIdForReminder) {
+      const snoozeUntil = Date.now() + 3 * 24 * 60 * 60 * 1000; // 3 days
+      localStorage.setItem(`school_license_reminder_dismissed_until_${schoolIdForReminder}`, snoozeUntil.toString());
+    }
+    setShowSubscriptionReminder(false);
+  };
+
+  const handleCloseReminder = () => {
+    setShowSubscriptionReminder(false);
   };
 
   const sidebarGroups = [
@@ -417,10 +472,17 @@ export default function SchoolAdminPortal() {
       {showTutorial && (
         <OnboardingTutorial 
           onComplete={() => setShowTutorial(false)}
-          onSkip={() => setShowTutorial(false)}
           onStepChange={(tab) => navigate(`${portalBase}/${tab}`)}
+          userId={userId}
         />
       )}
+
+      <SubscriptionReminder
+        isOpen={showSubscriptionReminder}
+        onClose={handleCloseReminder}
+        onSnooze={handleSnoozeReminder}
+        schoolName={schoolNameForReminder}
+      />
 
       {/* Mobile Bottom Navigation */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-40 px-2 py-2 safe-area-bottom shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">

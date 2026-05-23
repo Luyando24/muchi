@@ -21,26 +21,18 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function applyMigration() {
-  const migrationPath = path.join(__dirname, '../supabase/migrations/0035_add_term_to_timetables.sql');
+  const migrationPath = path.join(__dirname, '../supabase/migrations/0086_add_teacher_location_type.sql');
   const sql = fs.readFileSync(migrationPath, 'utf8');
 
   console.log('Applying migration via RPC...');
   
-  // Try common RPC names for executing SQL
-  const { error } = await supabase.rpc('exec_sql', { sql_query: sql });
+  const { data, error } = await supabase.rpc('execute_sql', { sql_query: sql });
   
   if (error) {
-      console.error('RPC exec_sql failed:', error);
-      // Try another name?
-      const { error: error2 } = await supabase.rpc('execute_sql', { sql });
-      if (error2) {
-          console.error('RPC execute_sql failed:', error2);
-          console.log('Could not apply migration automatically. Please run the SQL file manually in Supabase SQL Editor.');
-      } else {
-          console.log('Migration applied successfully via execute_sql!');
-      }
+      console.error('RPC execute_sql failed:', error);
+      console.log('Could not apply migration automatically. Please run the SQL file manually in Supabase SQL Editor.');
   } else {
-      console.log('Migration applied successfully via exec_sql!');
+      console.log('Migration applied successfully via execute_sql!', data);
   }
 }
 

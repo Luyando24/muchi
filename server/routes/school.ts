@@ -271,7 +271,7 @@ router.post("/teacher/reset-password", async (req: Request, res: Response) => {
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
       .select("id, role, email")
-      .eq("email", email)
+      .ilike("email", email)
       .eq("staff_number", staffNumber)
       .maybeSingle();
 
@@ -1633,7 +1633,7 @@ router.post(
           const { data: existingProfile } = await supabaseAdmin
             .from("profiles")
             .select("id, staff_number")
-            .eq("email", emailToUse)
+            .ilike("email", emailToUse)
             .maybeSingle();
           
           if (existingProfile) {
@@ -1642,10 +1642,15 @@ router.post(
           }
         }
 
+        // 4. Generate Staff Number if missing (for new or existing but migrated users)
+        if (!staffNumber) {
+          staffNumber = await generateUniqueStaffNumber();
+        }
+
         // 3. Handle Auth User (Create if doesn't exist)
         let isNewAuthUser = false;
         if (!existingId) {
-          const finalEmail = emailToUse || `${await generateUniqueStaffNumber()}@teacher.muchi.app`;
+          const finalEmail = emailToUse || `${staffNumber}@teacher.muchi.app`;
           
           const { data: user, error: userError } =
             await supabaseAdmin.auth.admin.createUser({
@@ -1668,11 +1673,6 @@ router.post(
           }
           existingId = user.user.id;
           isNewAuthUser = true;
-        }
-
-        // 4. Generate Staff Number if missing (for new or existing but migrated users)
-        if (!staffNumber) {
-          staffNumber = await generateUniqueStaffNumber();
         }
 
         // 5. Upsert Profile with latest details
@@ -3586,6 +3586,17 @@ router.put(
       work_history,
       username,
       email,
+      marital_status,
+      housing_status,
+      living_with_spouse,
+      disability_status,
+      accommodation_provided,
+      highest_qualification,
+      institution_name,
+      completion_year,
+      field_of_study,
+      current_role,
+      location_type,
     } = req.body;
 
     try {
@@ -3614,6 +3625,23 @@ router.put(
             ? date_of_birth
             : null;
       }
+
+      // Handle new government analytics fields
+      if (marital_status !== undefined) updateData.marital_status = marital_status;
+      if (housing_status !== undefined) updateData.housing_status = housing_status;
+      if (living_with_spouse !== undefined) {
+        updateData.living_with_spouse = typeof living_with_spouse === 'boolean' ? living_with_spouse : null;
+      }
+      if (disability_status !== undefined) updateData.disability_status = disability_status;
+      if (accommodation_provided !== undefined) updateData.accommodation_provided = accommodation_provided;
+      if (highest_qualification !== undefined) updateData.highest_qualification = highest_qualification;
+      if (institution_name !== undefined) updateData.institution_name = institution_name;
+      if (completion_year !== undefined) {
+        updateData.completion_year = completion_year ? parseInt(completion_year, 10) : null;
+      }
+      if (field_of_study !== undefined) updateData.field_of_study = field_of_study;
+      if (current_role !== undefined) updateData.current_role = current_role;
+      if (location_type !== undefined) updateData.location_type = location_type;
 
       const { error } = await supabaseAdmin
         .from("profiles")
@@ -6566,6 +6594,7 @@ router.put(
       headteacher_title,
       category,
       country,
+      location_type,
     } = req.body;
 
     try {
@@ -6591,6 +6620,7 @@ router.put(
           headteacher_title,
           category,
           country,
+          location_type,
           updated_at: new Date(),
         })
         .eq("id", schoolId)

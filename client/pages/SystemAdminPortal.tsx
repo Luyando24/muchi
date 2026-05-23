@@ -50,7 +50,8 @@ import SystemDashboard from '@/components/admin/SystemDashboard';
 import SystemAdminNavbar from '@/components/admin/SystemAdminNavbar';
 import GovernmentPortal from '@/pages/GovernmentPortal';
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, Wrench } from 'lucide-react';
+import { Loader2, Wrench, DollarSign } from 'lucide-react';
+import BusinessFinances from '@/components/admin/BusinessFinances';
 
 // Mock data for System Admin Portal
 const databaseBackups: any[] = [];
@@ -116,6 +117,7 @@ export default function SystemAdminPortal() {
 
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "schools", label: "Schools Management", icon: Building },
+    { id: "finances", label: "Business Finances", icon: DollarSign },
     { id: "users", label: "User Directory", icon: Users },
     { id: "infrastructure", label: "Infrastructure", icon: Server },
     { id: "security", label: "Security & Access", icon: Shield },
@@ -196,6 +198,11 @@ export default function SystemAdminPortal() {
             {/* Schools Tab */}
             <TabsContent value="schools" className="space-y-6">
               <SchoolManagement />
+            </TabsContent>
+
+            {/* Finances Tab */}
+            <TabsContent value="finances" className="space-y-6">
+              <BusinessFinances />
             </TabsContent>
 
             {/* Users Tab */}

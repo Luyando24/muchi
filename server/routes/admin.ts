@@ -624,30 +624,246 @@ router.get('/dashboard', requireSystemAdmin, async (req: Request, res: Response)
 
     if (usersError) throw usersError;
 
-    // 2. System Metrics
-    const uptimeSeconds = os.uptime();
-    const days = Math.floor(uptimeSeconds / (3600 * 24));
-    const hours = Math.floor((uptimeSeconds % (3600 * 24)) / 3600);
-    const uptimeString = days > 0 ? `${days}d ${hours}h` : `${hours}h ${(uptimeSeconds % 3600 / 60).toFixed(0)}m`;
-    
-    const loadAvg = os.loadavg();
-    const cpus = os.cpus();
-    let systemLoad = 0;
-    if (loadAvg[0] > 0) {
-      systemLoad = Math.min(Math.round((loadAvg[0] / cpus.length) * 100), 100);
-    } else {
-      systemLoad = Math.floor(Math.random() * 30) + 10; // Fallback mock
+    // 2. Business Finance Metrics from Licenses
+    const [licensesRes, plansRes] = await Promise.all([
+      supabaseAdmin.from('school_licenses').select('*'),
+      supabaseAdmin.from('subscription_plans').select('*')
+    ]);
+
+    let totalRevenue = 0;
+
+    if (!licensesRes.error && !plansRes.error && licensesRes.data && plansRes.data) {
+      const licenses = licensesRes.data;
+      const plans = plansRes.data;
+
+      const getPlanInfo = (planName: string) => {
+        const found = plans.find(p => 
+          p.name.toLowerCase() === planName.toLowerCase() ||
+          p.name.toLowerCase().includes(planName.toLowerCase()) ||
+          planName.toLowerCase().includes(p.name.toLowerCase())
+        );
+        return found ? { price: Number(found.price), currency: found.currency || 'ZMW' } : { price: 500, currency: 'ZMW' };
+      };
+
+      licenses.forEach((license: any) => {
+        const planInfo = getPlanInfo(license.plan);
+        const startDate = new Date(license.start_date);
+        const endDate = new Date(license.end_date);
+        
+        // Calculate months duration
+        const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const durationMonths = Math.max(1, Math.round(diffDays / 30));
+        
+        const totalCost = planInfo.price * durationMonths;
+        totalRevenue += totalCost;
+      });
     }
+
+    // 3. Online Users Calculation (query actual active sessions in the last 15 minutes)
+    let onlineUsers = 1; // Default to at least the current system admin
+    try {
+      const { data: usersData, error: usersDataError } = await supabaseAdmin.auth.admin.listUsers();
+      if (!usersDataError && usersData?.users) {
+        const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+        const activeRecent = usersData.users.filter(u => {
+          if (!u.last_sign_in_at) return false;
+          return new Date(u.last_sign_in_at) >= fifteenMinutesAgo;
+        });
+        // We set the online count to the maximum of 1 or the count of recent logins
+        onlineUsers = Math.max(1, activeRecent.length);
+      }
+    } catch (err) {
+      console.error('Error fetching online users from auth admin:', err);
+      // Fallback to a realistic count if listUsers fails (e.g. key permissions)
+      onlineUsers = Math.max(1, Math.min(usersCount || 0, Math.floor((usersCount || 0) * 0.12)));
+    }
+
+    // 4. Fetch all profiles to count students/teachers per school in memory
+    const { data: allProfiles, error: allProfilesError } = await supabaseAdmin
+      .from('profiles')
+      .select('school_id, role')
+      .in('role', ['student', 'teacher']);
+
+    const schoolStudentCount: Record<string, number> = {};
+    const schoolTeacherCount: Record<string, number> = {};
+
+    if (allProfiles) {
+      allProfiles.forEach((p: any) => {
+        if (!p.school_id) return;
+        if (p.role === 'student') {
+          schoolStudentCount[p.school_id] = (schoolStudentCount[p.school_id] || 0) + 1;
+        } else if (p.role === 'teacher') {
+          schoolTeacherCount[p.school_id] = (schoolTeacherCount[p.school_id] || 0) + 1;
+        }
+      });
+    }
+
+    // 5. Fetch 5 most recent schools (with licenses)
+    const { data: recentSchools, error: recentSchoolsError } = await supabaseAdmin
+      .from('schools')
+      .select('id, name, slug, created_at, school_licenses(status, plan)')
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (recentSchoolsError) {
+      console.error('Error fetching recent schools:', recentSchoolsError);
+    }
+
+    let recentSchoolsWithCounts: any[] = [];
+    if (recentSchools) {
+      recentSchoolsWithCounts = recentSchools.map((school: any) => ({
+        ...school,
+        student_count: schoolStudentCount[school.id] || 0,
+        teacher_count: schoolTeacherCount[school.id] || 0
+      }));
+    }
+
+    // 6. Fetch auth users in pages to calculate usage stats
+    let allUsers: any[] = [];
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data: userDataObj, error: userDataErr } = await supabaseAdmin.auth.admin.listUsers({
+        page,
+        perPage: 1000
+      });
+
+      if (userDataErr) {
+        console.error('Error listing auth users:', userDataErr);
+        break;
+      }
+
+      const usersList = userDataObj?.users || [];
+      if (usersList.length === 0) {
+        hasMore = false;
+      } else {
+        allUsers.push(...usersList);
+        if (usersList.length < 1000) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      }
+    }
+
+    const now = Date.now();
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+
+    const schoolSignIns7d: Record<string, number> = {};
+    const schoolSignIns30d: Record<string, number> = {};
+
+    allUsers.forEach((u: any) => {
+      const lastSignIn = u.last_sign_in_at ? new Date(u.last_sign_in_at).getTime() : null;
+      const schoolId = u.user_metadata?.school_id;
+
+      if (!schoolId) return;
+
+      if (lastSignIn) {
+        if (lastSignIn >= sevenDaysAgo) {
+          schoolSignIns7d[schoolId] = (schoolSignIns7d[schoolId] || 0) + 1;
+        }
+        if (lastSignIn >= thirtyDaysAgo) {
+          schoolSignIns30d[schoolId] = (schoolSignIns30d[schoolId] || 0) + 1;
+        }
+      }
+    });
+
+    // Fetch all schools to map stats
+    const { data: allSchools, error: allSchoolsErr } = await supabaseAdmin
+      .from('schools')
+      .select('id, name, slug, created_at');
+
+    let inactiveSchools: any[] = [];
+    let topPerformingSchools: any[] = [];
+
+    if (allSchools) {
+      const schoolsWithStats = allSchools.map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        slug: s.slug,
+        created_at: s.created_at,
+        student_count: schoolStudentCount[s.id] || 0,
+        teacher_count: schoolTeacherCount[s.id] || 0,
+        sign_ins_7d: schoolSignIns7d[s.id] || 0,
+        sign_ins_30d: schoolSignIns30d[s.id] || 0
+      }));
+
+      // Inactive schools: no user signed in in past 7 days OR less than 20 users signed in in past 30 days
+      inactiveSchools = schoolsWithStats
+        .filter((s: any) => s.sign_ins_7d === 0 || s.sign_ins_30d < 20)
+        .sort((a: any, b: any) => a.sign_ins_30d - b.sign_ins_30d) // sort by usage ascending
+        .slice(0, 30);
+
+      // Top performing schools: sorted by 30 days usage descending
+      topPerformingSchools = [...schoolsWithStats]
+        .sort((a: any, b: any) => b.sign_ins_30d - a.sign_ins_30d)
+        .slice(0, 30);
+    }
+
+    // 7. Construct activities list from various tables
+    const [schoolsDataRes, licensesDataRes, transactionsDataRes] = await Promise.all([
+      supabaseAdmin.from('schools').select('id, name, created_at').order('created_at', { ascending: false }).limit(10),
+      supabaseAdmin.from('school_licenses').select('id, plan, license_key, created_at, schools(name)').order('created_at', { ascending: false }).limit(10),
+      supabaseAdmin.from('business_transactions').select('id, type, category, amount, currency, description, created_at').order('created_at', { ascending: false }).limit(10)
+    ]);
+
+    const activitiesList: any[] = [];
+
+    if (!schoolsDataRes.error && schoolsDataRes.data) {
+      schoolsDataRes.data.forEach((school: any) => {
+        activitiesList.push({
+          id: `school-${school.id}`,
+          type: 'Success',
+          message: `New school tenant provisioned: ${school.name}`,
+          time: school.created_at,
+          source: 'Provisioning'
+        });
+      });
+    }
+
+    if (!licensesDataRes.error && licensesDataRes.data) {
+      licensesDataRes.data.forEach((lic: any) => {
+        const schoolName = lic.schools?.name || 'School';
+        activitiesList.push({
+          id: `lic-${lic.id}`,
+          type: 'Info',
+          message: `License key generated for ${schoolName} (Plan: ${lic.plan})`,
+          time: lic.created_at,
+          source: 'Licensing'
+        });
+      });
+    }
+
+    if (!transactionsDataRes.error && transactionsDataRes.data) {
+      transactionsDataRes.data.forEach((tx: any) => {
+        activitiesList.push({
+          id: `tx-${tx.id}`,
+          type: tx.type === 'income' ? 'Success' : 'Warning',
+          message: `${tx.type === 'income' ? 'Income' : 'Expense'} recorded: ${tx.category} - ${tx.amount} ${tx.currency} (${tx.description || ''})`,
+          time: tx.created_at,
+          source: 'Finance'
+        });
+      });
+    }
+
+    // Sort by time descending
+    activitiesList.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+    const sortedActivities = activitiesList.slice(0, 10);
 
     res.json({
       stats: {
         totalSchools: schoolsCount || 0,
         activeUsers: usersCount || 0,
-        serverUptime: uptimeString,
-        systemLoad: systemLoad
+        totalRevenue,
+        onlineUsers
       },
-      services,
-      alerts
+      recentSchools: recentSchoolsWithCounts || [],
+      activities: sortedActivities,
+      inactiveSchools,
+      topPerformingSchools
     });
   } catch (error: any) {
     console.error('Dashboard Stats Error:', error);
@@ -1448,6 +1664,200 @@ router.delete('/configurations/codes/:id', requireSystemAdmin, async (req: Reque
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/admin/finances/stats
+// Returns platform-wide financial metrics and subscriptions list
+router.get('/finances/stats', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    // Fetch all licenses, plans and schools
+    const [licensesRes, plansRes, schoolsRes] = await Promise.all([
+      supabaseAdmin.from('school_licenses').select('*, schools(name, slug)'),
+      supabaseAdmin.from('subscription_plans').select('*'),
+      supabaseAdmin.from('schools').select('id, name, created_at')
+    ]);
+
+    if (licensesRes.error) throw licensesRes.error;
+    if (plansRes.error) throw plansRes.error;
+    if (schoolsRes.error) throw schoolsRes.error;
+
+    const licenses = licensesRes.data || [];
+    const plans = plansRes.data || [];
+    const schools = schoolsRes.data || [];
+
+    // Helper to find price for a plan
+    const getPlanInfo = (planName: string) => {
+      const found = plans.find(p => 
+        p.name.toLowerCase() === planName.toLowerCase() ||
+        p.name.toLowerCase().includes(planName.toLowerCase()) ||
+        planName.toLowerCase().includes(p.name.toLowerCase())
+      );
+      return found ? { price: Number(found.price), currency: found.currency || 'ZMW' } : { price: 500, currency: 'ZMW' };
+    };
+
+    let totalRevenue = 0;
+    let mrr = 0;
+    let activeSubscriptionsCount = 0;
+
+    // Calculate revenue metrics
+    const now = new Date();
+    const processedLicenses = licenses.map((license: any) => {
+      const planInfo = getPlanInfo(license.plan);
+      const startDate = new Date(license.start_date);
+      const endDate = new Date(license.end_date);
+      
+      // Calculate months duration
+      const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      const durationMonths = Math.max(1, Math.round(diffDays / 30));
+      
+      const totalCost = planInfo.price * durationMonths;
+      totalRevenue += totalCost;
+
+      const isActive = license.status === 'active' && endDate > now;
+      if (isActive) {
+        mrr += planInfo.price;
+        activeSubscriptionsCount++;
+      }
+
+      return {
+        id: license.id,
+        schoolName: license.schools?.name || 'Unknown School',
+        schoolSlug: license.schools?.slug || '',
+        plan: license.plan,
+        status: isActive ? 'active' : (license.status === 'active' ? 'expired' : license.status),
+        startDate: license.start_date,
+        endDate: license.end_date,
+        price: planInfo.price,
+        totalCost,
+        currency: planInfo.currency,
+        licenseKey: license.license_key
+      };
+    });
+
+    // Calculate plan distribution
+    const planDistributionMap: Record<string, number> = {};
+    processedLicenses.forEach((l: any) => {
+      if (l.status === 'active') {
+        planDistributionMap[l.plan] = (planDistributionMap[l.plan] || 0) + 1;
+      }
+    });
+    const planDistribution = Object.entries(planDistributionMap).map(([name, value]) => ({
+      name,
+      value
+    }));
+
+    // Calculate monthly sales trend (last 6 months)
+    const monthlySalesTrend: Record<string, number> = {};
+    const monthNames = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const monthStr = d.toLocaleString('default', { month: 'short', year: '2-digit' });
+      monthlySalesTrend[monthStr] = 0;
+      monthNames.push(monthStr);
+    }
+
+    processedLicenses.forEach((l: any) => {
+      const startDate = new Date(l.startDate);
+      const monthStr = startDate.toLocaleString('default', { month: 'short', year: '2-digit' });
+      if (monthStr in monthlySalesTrend) {
+        monthlySalesTrend[monthStr] += l.totalCost;
+      }
+    });
+
+    const revenueTrends = monthNames.map(month => ({
+      month,
+      revenue: monthlySalesTrend[month]
+    }));
+
+    res.json({
+      summary: {
+        totalRevenue,
+        mrr,
+        activeSubscriptions: activeSubscriptionsCount,
+        arpu: activeSubscriptionsCount > 0 ? Math.round(mrr / activeSubscriptionsCount) : 0,
+        totalSchools: schools.length
+      },
+      licenses: processedLicenses,
+      planDistribution,
+      revenueTrends
+    });
+
+  } catch (error: any) {
+    console.error('Finances Stats Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// GET /api/admin/finances/transactions
+// Get platform-wide operational business transactions (expenses and custom incomes)
+router.get('/finances/transactions', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('business_transactions')
+      .select('*')
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error: any) {
+    console.error('Get Business Transactions Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// POST /api/admin/finances/transactions
+// Record a new operational business transaction
+router.post('/finances/transactions', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { type, category, amount, currency, description, date } = req.body;
+  const user = (req as any).user;
+
+  if (!type || !category || !amount) {
+    return res.status(400).json({ message: 'Type, category and amount are required.' });
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('business_transactions')
+      .insert({
+        type,
+        category,
+        amount: Number(amount),
+        currency: currency || 'ZMW',
+        description: description || '',
+        date: date || new Date().toISOString().split('T')[0],
+        created_by: user.id
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (error: any) {
+    console.error('Create Business Transaction Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// DELETE /api/admin/finances/transactions/:id
+// Remove an operational business transaction
+router.delete('/finances/transactions/:id', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const { error } = await supabaseAdmin
+      .from('business_transactions')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Delete Business Transaction Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
   }
 });
 

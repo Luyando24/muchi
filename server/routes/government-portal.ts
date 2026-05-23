@@ -52,23 +52,23 @@ router.get('/regions', requireGovernmentAccess, async (req: Request, res: Respon
     if (error) throw error;
 
     const provinces = new Set<string>();
-    const districtsByProvince: Record<string, Set<string>> = {};
+    const districtsByProvince = new Map<string, Set<string>>();
 
     data?.forEach(school => {
       if (school.province) {
         provinces.add(school.province);
-        if (!districtsByProvince[school.province]) {
-          districtsByProvince[school.province] = new Set<string>();
+        if (!districtsByProvince.has(school.province)) {
+          districtsByProvince.set(school.province, new Set<string>());
         }
         if (school.district) {
-          districtsByProvince[school.province].add(school.district);
+          districtsByProvince.get(school.province)!.add(school.district);
         }
       }
     });
 
     const regions = Array.from(provinces).map(province => ({
       province,
-      districts: Array.from(districtsByProvince[province] || [])
+      districts: Array.from(districtsByProvince.get(province) || [])
     }));
 
     res.json(regions);
@@ -89,6 +89,38 @@ router.get('/population-data', requireGovernmentAccess, async (req: Request, res
     res.status(500).json({ message: error.message });
   }
 });
+
+// Helper to get system settings with defaults for government thresholds
+const getSettings = async () => {
+  const defaults = {
+    gov_ptr_critical_threshold: '45',
+    gov_ptr_warning_threshold: '35',
+    gov_pass_rate_threshold: '40',
+    gov_attendance_threshold: '75',
+    gov_maize_allocation_per_student: '5',
+    system_name: 'MUCHI Central',
+    support_email: 'support@muchi.com',
+    whatsapp_number: '260570260374'
+  };
+
+  try {
+    const { data, error } = await supabaseAdmin.from('system_settings').select('key, value');
+    if (error) {
+      console.warn("Failed to fetch system settings, using defaults:", error.message);
+      return defaults;
+    }
+    const settingsMap = { ...defaults };
+    data?.forEach((item: any) => {
+      if (item.key && Object.prototype.hasOwnProperty.call(defaults, item.key)) {
+        settingsMap[item.key as keyof typeof defaults] = item.value;
+      }
+    });
+    return settingsMap;
+  } catch (err) {
+    console.warn("Failed to fetch system settings, using defaults:", err);
+    return defaults;
+  }
+};
 
 // GET /api/government/overview
 router.get('/overview', requireGovernmentAccess, async (req: Request, res: Response) => {
@@ -355,8 +387,14 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
     const currentAvg = currentYearGrades.length > 0 ? currentYearGrades.reduce((a, b) => a + b.percentage, 0) / currentYearGrades.length : 0;
     const prevAvg = prevYearGrades.length > 0 ? prevYearGrades.reduce((a, b) => a + b.percentage, 0) / prevYearGrades.length : 0;
 
-    // 9. Underperforming Clusters (Districts with < 40% avg)
-    const districtPerformance: Record<string, { total: number, count: number }> = {};
+    // Load threshold settings dynamically
+    const settings = await getSettings();
+    const passRateThreshold = parseFloat(settings.gov_pass_rate_threshold);
+    const attendanceThreshold = parseFloat(settings.gov_attendance_threshold);
+    const ptrCriticalThreshold = parseFloat(settings.gov_ptr_critical_threshold);
+    const ptrWarningThreshold = parseFloat(settings.gov_ptr_warning_threshold);
+
+    const districtPerformance: Record<string, { total: number, count: number }> = Object.create(null);
     schoolPerformanceMetrics.forEach(s => {
       if (!districtPerformance[s.district]) districtPerformance[s.district] = { total: 0, count: 0 };
       districtPerformance[s.district].total += s.passRate;
@@ -365,7 +403,7 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
 
     const underperformingClusters = Object.entries(districtPerformance)
       .map(([name, data]) => ({ name, avg: data.total / data.count }))
-      .filter(d => d.avg < 40)
+      .filter(d => d.avg < passRateThreshold)
       .sort((a, b) => a.avg - b.avg);
 
     res.json({
@@ -388,7 +426,17 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
       topSubjects,
       categoryPerformance,
       schoolPerformanceMetrics: schoolPerformanceMetrics.sort((a, b) => b.passRate - a.passRate),
-      topSchools
+      topSchools,
+      thresholds: {
+        passRate: passRateThreshold,
+        attendance: attendanceThreshold,
+        ptrCritical: ptrCriticalThreshold,
+        ptrWarning: ptrWarningThreshold,
+        systemName: settings.system_name,
+        supportEmail: settings.support_email,
+        whatsappNumber: settings.whatsapp_number,
+        maizeAllocation: parseFloat(settings.gov_maize_allocation_per_student)
+      }
     });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -482,18 +530,19 @@ router.get('/teacher-analytics', requireGovernmentAccess, async (req: Request, r
       schoolIds = schools?.map(s => s.id) || [];
     }
 
-    let teacherQuery = supabaseAdmin.from('teachers').select('*, profiles!teachers_staff_user_id_fkey(full_name, gender), schools(name, district, province)');
+    let teacherQuery = supabaseAdmin.from('teachers').select('*, profiles!teachers_staff_user_id_fkey(full_name, gender, location_type), schools(name, district, province, location_type)');
     if (schoolIds.length > 0) {
       teacherQuery = teacherQuery.in('school_id', schoolIds);
     } else if (provinceFilter || districtFilter) {
       // If filters provided but no schools found, return empty
-      return res.json({ qualificationBreakdown: {}, specializationBreakdown: {}, staffingGaps: [], totalTeachers: 0 });
+      return res.json({ qualificationBreakdown: {}, specializationBreakdown: {}, locationBreakdown: { Rural: 0, Urban: 0 }, staffingGaps: [], totalTeachers: 0 });
     }
 
     const { data: teachers } = await teacherQuery;
 
     const qualificationBreakdown: Record<string, number> = {};
     const specializationBreakdown: Record<string, number> = {};
+    const locationBreakdown = { Rural: 0, Urban: 0 };
     
     teachers?.forEach(t => {
       const qual = t.qualification || 'Other';
@@ -501,6 +550,11 @@ router.get('/teacher-analytics', requireGovernmentAccess, async (req: Request, r
       
       const spec = t.specialization || 'General';
       specializationBreakdown[spec] = (specializationBreakdown[spec] || 0) + 1;
+
+      // Location type is determined by the school, not the individual teacher
+      const loc = t.schools?.location_type || 'Urban';
+      if (loc === 'Rural') locationBreakdown.Rural++;
+      else locationBreakdown.Urban++;
     });
 
     // Fetch school ratios
@@ -527,6 +581,10 @@ router.get('/teacher-analytics', requireGovernmentAccess, async (req: Request, r
       studentCountsBySchool.set(s.school_id, (studentCountsBySchool.get(s.school_id) || 0) + 1);
     });
 
+    const settings = await getSettings();
+    const ptrCritical = parseFloat(settings.gov_ptr_critical_threshold);
+    const ptrWarning = parseFloat(settings.gov_ptr_warning_threshold);
+
     const staffingGaps = schools?.map(s => {
       const tc = teacherCountsBySchool.get(s.id) || 0;
       const sc = studentCountsBySchool.get(s.id) || 0;
@@ -535,15 +593,20 @@ router.get('/teacher-analytics', requireGovernmentAccess, async (req: Request, r
         schoolName: s.name,
         district: s.district,
         ptr: Number(ptr.toFixed(1)),
-        gap: ptr > 40 ? 'Critical' : ptr > 30 ? 'Warning' : 'Stable'
+        gap: ptr >= ptrCritical ? 'Critical' : ptr >= ptrWarning ? 'Warning' : 'Stable'
       };
-    }).filter(s => s.ptr > 35).sort((a, b) => b.ptr - a.ptr);
+    }).filter(s => s.ptr >= ptrWarning).sort((a, b) => b.ptr - a.ptr);
 
     res.json({
       qualificationBreakdown,
       specializationBreakdown,
+      locationBreakdown,
       staffingGaps,
-      totalTeachers: teachers?.length || 0
+      totalTeachers: teachers?.length || 0,
+      thresholds: {
+        ptrCritical,
+        ptrWarning
+      }
     });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -674,7 +737,7 @@ router.get('/stats', requireGovernmentAccess, async (req: Request, res: Response
         if (!acc[curr.item_name]) acc[curr.item_name] = 0;
         acc[curr.item_name] += Number(curr.quantity);
         return acc;
-      }, {}),
+      }, Object.create(null)),
       pendingProcurements: pendingProcurements || 0
     };
 
@@ -776,6 +839,333 @@ router.get('/feeding-program/procurements/pending', requireGovernmentAccess, asy
       .order('created_at', { ascending: false });
     if (error) throw error;
     res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/government/staffing-overview
+router.get('/staffing-overview', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const { province, district } = req.query;
+  try {
+    let schoolQuery = supabaseAdmin.from('schools').select('id, name, district, province');
+    if (province && province !== 'All') schoolQuery = schoolQuery.eq('province', province);
+    if (district && district !== 'All') schoolQuery = schoolQuery.eq('district', district);
+    
+    const { data: schools } = await schoolQuery;
+    const schoolIds = schools?.map(s => s.id) || [];
+
+    if (schoolIds.length === 0) {
+      return res.json({ headcount: 0, genderBreakdown: { Male: 0, Female: 0, Other: 0 }, locationBreakdown: { Rural: 0, Urban: 0 }, mortality: [], vacancies: [], alerts: [] });
+    }
+
+    // Teachers — join school to get location_type from school, not profile
+    const { data: teachers } = await supabaseAdmin.from('profiles')
+      .select('gender, school_id')
+      .eq('role', 'teacher')
+      .in('school_id', schoolIds);
+
+    // Build school location map
+    const { data: schoolsWithLocation } = await supabaseAdmin.from('schools')
+      .select('id, location_type')
+      .in('id', schoolIds);
+    const schoolLocationMap = new Map<string, string>();
+    schoolsWithLocation?.forEach((s: any) => schoolLocationMap.set(s.id, s.location_type || 'Urban'));
+
+    const genderBreakdown = { Male: 0, Female: 0, Other: 0 };
+    const locationBreakdown = { Rural: 0, Urban: 0 };
+    const teacherCountsBySchool = new Map<string, number>();
+    teachers?.forEach(t => {
+      const g = t.gender || 'Other';
+      if (g === 'Male') genderBreakdown.Male++;
+      else if (g === 'Female') genderBreakdown.Female++;
+      else genderBreakdown.Other++;
+
+      // Location type comes from the school, not the teacher profile
+      const loc = (t.school_id ? schoolLocationMap.get(t.school_id) : null) || 'Urban';
+      if (loc === 'Rural') locationBreakdown.Rural++;
+      else locationBreakdown.Urban++;
+      
+      if (t.school_id) {
+        teacherCountsBySchool.set(t.school_id, (teacherCountsBySchool.get(t.school_id) || 0) + 1);
+      }
+    });
+
+    // Students for PTR
+    const { data: students } = await supabaseAdmin.from('profiles')
+      .select('school_id')
+      .eq('role', 'student')
+      .in('school_id', schoolIds);
+      
+    const studentCountsBySchool = new Map<string, number>();
+    students?.forEach(s => {
+      if (s.school_id) {
+        studentCountsBySchool.set(s.school_id, (studentCountsBySchool.get(s.school_id) || 0) + 1);
+      }
+    });
+
+    const settings = await getSettings();
+    const ptrCritical = parseFloat(settings.gov_ptr_critical_threshold);
+    const ptrWarning = parseFloat(settings.gov_ptr_warning_threshold);
+
+    const alerts = schools?.map(s => {
+      const tc = teacherCountsBySchool.get(s.id) || 0;
+      const sc = studentCountsBySchool.get(s.id) || 0;
+      const ptr = tc > 0 ? sc / tc : sc;
+      if (ptr >= ptrCritical) return { schoolName: s.name, district: s.district, ptr: Number(ptr.toFixed(1)), level: 'Critical' };
+      if (ptr >= ptrWarning) return { schoolName: s.name, district: s.district, ptr: Number(ptr.toFixed(1)), level: 'Warning' };
+      return null;
+    }).filter(Boolean);
+
+    // Mortality
+    const { data: mortalityData } = await supabaseAdmin.from('teacher_mortality').select('*, profiles(full_name, gender, school_id)');
+    const mortality = mortalityData?.filter((m: any) => m.profiles?.school_id && schoolIds.includes(m.profiles.school_id)) || [];
+
+    // Vacancies
+    const { data: vacancies } = await supabaseAdmin.from('school_vacancies').select('*, schools(name, district, province)').in('school_id', schoolIds);
+
+    res.json({
+      headcount: teachers?.length || 0,
+      genderBreakdown,
+      locationBreakdown,
+      mortality,
+      vacancies: vacancies || [],
+      alerts: alerts || []
+    });
+  } catch (error: any) { res.status(500).json({ message: error.message }); }
+});
+
+// GET /api/government/academic-performance
+router.get('/academic-performance', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const { province, district } = req.query;
+  try {
+    let schoolQuery = supabaseAdmin.from('schools').select('id, name, district, province');
+    if (province && province !== 'All') schoolQuery = schoolQuery.eq('province', province);
+    if (district && district !== 'All') schoolQuery = schoolQuery.eq('district', district);
+    
+    const { data: schools } = await schoolQuery;
+    const schoolIds = schools?.map(s => s.id) || [];
+
+    if (schoolIds.length === 0) return res.json({ performanceList: [] });
+
+    // This is a simplified aggregated view.
+    // Fetch grades, attendance, infrastructure scores
+    const { data: grades } = await supabaseAdmin.from('student_grades').select('school_id, percentage').in('school_id', schoolIds);
+    const { data: infra } = await supabaseAdmin.from('school_infrastructure_scores').select('*').in('school_id', schoolIds);
+    
+    const schoolGrades = new Map<string, { total: number, count: number }>();
+    grades?.forEach(g => {
+      if (!g.percentage) return;
+      const current = schoolGrades.get(g.school_id) || { total: 0, count: 0 };
+      current.total += g.percentage;
+      current.count++;
+      schoolGrades.set(g.school_id, current);
+    });
+
+    const performanceList = schools?.map(s => {
+      const g = schoolGrades.get(s.id);
+      const passRate = g && g.count > 0 ? Number((g.total / g.count).toFixed(1)) : 0;
+      const i = infra?.find(inf => inf.school_id === s.id);
+      return {
+        schoolId: s.id,
+        schoolName: s.name,
+        district: s.district,
+        province: s.province,
+        passRate,
+        infrastructureScore: i ? Number(i.overall_infrastructure_score) : 0,
+        // Mocked missing drivers (would be aggregated from other tables in real logic)
+        teacherQualAvg: 'Diploma',
+        absenteeismRate: Math.floor(Math.random() * 15) + 2, // Mock placeholder
+        vulnerablePct: Math.floor(Math.random() * 30) + 5 // Mock placeholder
+      };
+    }).sort((a, b) => b.passRate - a.passRate);
+
+    res.json({ performanceList });
+  } catch (error: any) { res.status(500).json({ message: error.message }); }
+});
+
+// GET /api/government/transfers-housing
+router.get('/transfers-housing', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const { province, district } = req.query;
+  try {
+    // Housing Status Breakdown
+    let profileQuery = supabaseAdmin.from('profiles').select('housing_status, living_with_spouse, marital_status, school_id').eq('role', 'teacher');
+    
+    if (province && province !== 'All' || district && district !== 'All') {
+      let schoolQuery = supabaseAdmin.from('schools').select('id');
+      if (province && province !== 'All') schoolQuery = schoolQuery.eq('province', province);
+      if (district && district !== 'All') schoolQuery = schoolQuery.eq('district', district);
+      const { data: schools } = await schoolQuery;
+      const schoolIds = schools?.map(s => s.id) || [];
+      if (schoolIds.length > 0) profileQuery = profileQuery.in('school_id', schoolIds);
+      else return res.json({ housingStats: {}, reunions: [], transfers: [] });
+    }
+
+    const { data: housingData } = await profileQuery;
+    const housingStats = {
+      Government: 0, Private: 0, OwnHome: 0, Unknown: 0, SeparatedFromSpouse: 0
+    };
+    
+    housingData?.forEach(h => {
+      const status = h.housing_status || 'Unknown';
+      if (status === 'Government House') housingStats.Government++;
+      else if (status === 'Private Rental') housingStats.Private++;
+      else if (status === 'Own Home') housingStats.OwnHome++;
+      else housingStats.Unknown++;
+      
+      if (h.marital_status === 'Married' && h.living_with_spouse === false) {
+        housingStats.SeparatedFromSpouse++;
+      }
+    });
+
+    const { data: transfers } = await supabaseAdmin.from('teacher_transfers').select('*, profiles(full_name), origin:schools!origin_school_id(name, location_type), dest:schools!destination_school_id(name, location_type)');
+    const { data: reunions } = await supabaseAdmin.from('couple_reunion_applications').select('*, profiles(full_name, school_id)');
+
+    const transferFlowStats = { RuralToUrban: 0, UrbanToRural: 0, RuralToRural: 0, UrbanToUrban: 0 };
+    transfers?.forEach((t: any) => {
+      const originLoc = t.origin?.location_type || 'Urban';
+      const destLoc = t.dest?.location_type || 'Urban';
+      if (originLoc === 'Rural' && destLoc === 'Urban') transferFlowStats.RuralToUrban++;
+      else if (originLoc === 'Urban' && destLoc === 'Rural') transferFlowStats.UrbanToRural++;
+      else if (originLoc === 'Rural' && destLoc === 'Rural') transferFlowStats.RuralToRural++;
+      else if (originLoc === 'Urban' && destLoc === 'Urban') transferFlowStats.UrbanToUrban++;
+    });
+
+    res.json({ housingStats, transfers: transfers || [], reunions: reunions || [], transferFlowStats });
+  } catch (error: any) { res.status(500).json({ message: error.message }); }
+});
+
+// GET /api/government/qualifications
+router.get('/qualifications', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const { province, district } = req.query;
+  try {
+    let profileQuery = supabaseAdmin.from('profiles').select('id, full_name, highest_qualification, current_role, institution_name, completion_year, school_id').eq('role', 'teacher');
+    
+    if (province && province !== 'All' || district && district !== 'All') {
+      let schoolQuery = supabaseAdmin.from('schools').select('id');
+      if (province && province !== 'All') schoolQuery = schoolQuery.eq('province', province);
+      if (district && district !== 'All') schoolQuery = schoolQuery.eq('district', district);
+      const { data: schools } = await schoolQuery;
+      const schoolIds = schools?.map(s => s.id) || [];
+      if (schoolIds.length > 0) profileQuery = profileQuery.in('school_id', schoolIds);
+      else return res.json({ qualifications: [], distribution: {} });
+    }
+
+    const { data: qualifications } = await profileQuery;
+    const distribution: Record<string, number> = {};
+    
+    qualifications?.forEach(q => {
+      const qual = q.highest_qualification || 'Unknown';
+      distribution[qual] = (distribution[qual] || 0) + 1;
+    });
+
+    res.json({ qualifications: qualifications || [], distribution });
+  } catch (error: any) { res.status(500).json({ message: error.message }); }
+});
+
+// GET /api/government/teacher-disabilities
+router.get('/teacher-disabilities', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const { province, district } = req.query;
+  try {
+    let profileQuery = supabaseAdmin.from('profiles').select('id, full_name, disability_status, accommodation_provided, school_id').eq('role', 'teacher');
+    
+    if (province && province !== 'All' || district && district !== 'All') {
+      let schoolQuery = supabaseAdmin.from('schools').select('id');
+      if (province && province !== 'All') schoolQuery = schoolQuery.eq('province', province);
+      if (district && district !== 'All') schoolQuery = schoolQuery.eq('district', district);
+      const { data: schools } = await schoolQuery;
+      const schoolIds = schools?.map(s => s.id) || [];
+      if (schoolIds.length > 0) profileQuery = profileQuery.in('school_id', schoolIds);
+      else return res.json({ disabilities: [], summary: {} });
+    }
+
+    const { data: profiles } = await profileQuery;
+    const disabilities = profiles?.filter(p => p.disability_status && p.disability_status !== 'None') || [];
+    
+    const summary: Record<string, number> = {};
+    disabilities.forEach(d => {
+      const status = d.disability_status;
+      summary[status] = (summary[status] || 0) + 1;
+    });
+
+    res.json({ disabilities, summary });
+  } catch (error: any) { res.status(500).json({ message: error.message }); }
+});
+
+// GET /api/government/student-vulnerabilities
+router.get('/student-vulnerabilities', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const { province, district } = req.query;
+  try {
+    let profileQuery = supabaseAdmin.from('profiles').select('id, full_name, disability_type, poverty_flag, orphan_status, bursary_recipient, school_id').eq('role', 'student');
+    
+    if (province && province !== 'All' || district && district !== 'All') {
+      let schoolQuery = supabaseAdmin.from('schools').select('id');
+      if (province && province !== 'All') schoolQuery = schoolQuery.eq('province', province);
+      if (district && district !== 'All') schoolQuery = schoolQuery.eq('district', district);
+      const { data: schools } = await schoolQuery;
+      const schoolIds = schools?.map(s => s.id) || [];
+      if (schoolIds.length > 0) profileQuery = profileQuery.in('school_id', schoolIds);
+      else return res.json({ stats: { totalVulnerable: 0, disabilities: 0, orphans: 0, poverty: 0, bursaries: 0 } });
+    }
+
+    const { data: students } = await profileQuery;
+    
+    const stats = {
+      totalVulnerable: 0,
+      disabilities: 0,
+      orphans: 0,
+      poverty: 0,
+      bursaries: 0
+    };
+
+    students?.forEach(s => {
+      let isVulnerable = false;
+      if (s.disability_type && s.disability_type !== 'None') { stats.disabilities++; isVulnerable = true; }
+      if (s.orphan_status && s.orphan_status !== 'None') { stats.orphans++; isVulnerable = true; }
+      if (s.poverty_flag === 'Yes') { stats.poverty++; isVulnerable = true; }
+      if (s.bursary_recipient) { stats.bursaries++; isVulnerable = true; }
+      
+      if (isVulnerable) stats.totalVulnerable++;
+    });
+
+    res.json({ stats });
+  } catch (error: any) { res.status(500).json({ message: error.message }); }
+});
+
+// GET /api/government/settings
+router.get('/settings', requireGovernmentAccess, async (req: Request, res: Response) => {
+  try {
+    const settings = await getSettings();
+    res.json(settings);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// PUT /api/government/settings
+router.put('/settings', requireGovernmentAccess, async (req: Request, res: Response) => {
+  try {
+    const settings = req.body;
+    
+    // Process updates into key-value format for system_settings table
+    const updates = Object.entries(settings).map(([key, value]) => ({
+      key,
+      value: String(value),
+      updated_at: new Date().toISOString(),
+      updated_by: (req as any).userId
+    }));
+
+    if (updates.length === 0) {
+      return res.json({ message: 'No settings to update' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('system_settings')
+      .upsert(updates)
+      .select();
+
+    if (error) throw error;
+    res.json({ message: 'Settings updated successfully', data });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }

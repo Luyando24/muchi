@@ -2162,6 +2162,167 @@ export default function TeacherPortal() {
                           </div>
                         </div>
 
+                        <div className="border-t border-slate-200 dark:border-slate-700 my-6 pt-6 animate-in fade-in duration-300">
+                          <h4 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider mb-4">Demographics & Disability</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>Marital Status</Label>
+                              <Select 
+                                value={profile?.marital_status || ''} 
+                                onValueChange={(val) => setProfile({ ...profile, marital_status: val })}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select marital status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Single">Single</SelectItem>
+                                  <SelectItem value="Married">Married</SelectItem>
+                                  <SelectItem value="Divorced">Divorced</SelectItem>
+                                  <SelectItem value="Widowed">Widowed</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            {profile?.marital_status === 'Married' && (
+                              <div className="flex items-center justify-between border border-slate-200 dark:border-slate-700 rounded-lg p-3 h-10 mt-8">
+                                <Label className="cursor-pointer">Living with Spouse</Label>
+                                <Switch 
+                                  checked={profile?.living_with_spouse || false}
+                                  onCheckedChange={(checked) => setProfile({ ...profile, living_with_spouse: checked })}
+                                />
+                              </div>
+                            )}
+                            <div className="space-y-2">
+                              <Label>Disability Status</Label>
+                              <Select 
+                                value={profile?.disability_status || ''} 
+                                onValueChange={(val) => setProfile({ ...profile, disability_status: val })}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select disability status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="None">None</SelectItem>
+                                  <SelectItem value="Visual">Visual</SelectItem>
+                                  <SelectItem value="Hearing">Hearing</SelectItem>
+                                  <SelectItem value="Physical">Physical</SelectItem>
+                                  <SelectItem value="Cognitive">Cognitive</SelectItem>
+                                  <SelectItem value="Other">Other</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                               <Label>School Location Type</Label>
+                               <div className="h-10 px-3 py-2 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-sm text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                   (profile?.schools?.location_type || 'Urban') === 'Rural'
+                                     ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+                                     : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                 }`}>
+                                   {profile?.schools?.location_type || 'Urban'}
+                                 </span>
+                                 <span className="text-xs text-slate-400">Set by your school admin</span>
+                               </div>
+                             </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-slate-200 dark:border-slate-700 my-6 pt-6 animate-in fade-in duration-300">
+                          <h4 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider mb-4">Housing & Accommodation</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>Housing Status</Label>
+                              <Select 
+                                value={profile?.housing_status || ''} 
+                                onValueChange={(val) => setProfile({ ...profile, housing_status: val })}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select housing status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Government House">Government House</SelectItem>
+                                  <SelectItem value="Private Rental">Private Rental</SelectItem>
+                                  <SelectItem value="Own Home">Own Home</SelectItem>
+                                  <SelectItem value="Unknown">Unknown</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Accommodation Provided by School</Label>
+                              <Select 
+                                value={profile?.accommodation_provided || ''} 
+                                onValueChange={(val) => setProfile({ ...profile, accommodation_provided: val })}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select option" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Yes">Yes</SelectItem>
+                                  <SelectItem value="No">No</SelectItem>
+                                  <SelectItem value="Partially">Partially</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-slate-200 dark:border-slate-700 my-6 pt-6 animate-in fade-in duration-300">
+                          <h4 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider mb-4">Professional & Qualifications</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>Highest Qualification</Label>
+                              <Select 
+                                value={profile?.highest_qualification || ''} 
+                                onValueChange={(val) => setProfile({ ...profile, highest_qualification: val })}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select qualification" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Certificate">Certificate</SelectItem>
+                                  <SelectItem value="Diploma">Diploma</SelectItem>
+                                  <SelectItem value="Bachelor's Degree">Bachelor's Degree</SelectItem>
+                                  <SelectItem value="Master's Degree">Master's Degree</SelectItem>
+                                  <SelectItem value="PhD">PhD</SelectItem>
+                                  <SelectItem value="Other">Other</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Field of Study</Label>
+                              <Input 
+                                placeholder="e.g. Mathematics, Education"
+                                value={profile?.field_of_study || ''}
+                                onChange={(e) => setProfile({ ...profile, field_of_study: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Institution Name</Label>
+                              <Input 
+                                placeholder="e.g. University of Zambia"
+                                value={profile?.institution_name || ''}
+                                onChange={(e) => setProfile({ ...profile, institution_name: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Completion Year</Label>
+                              <Input 
+                                type="number"
+                                placeholder="e.g. 2018"
+                                value={profile?.completion_year || ''}
+                                onChange={(e) => setProfile({ ...profile, completion_year: e.target.value ? parseInt(e.target.value) : '' })}
+                              />
+                            </div>
+                            <div className="space-y-2 sm:col-span-2">
+                              <Label>Current Role</Label>
+                              <Input 
+                                placeholder="e.g. Senior Teacher, Head of Science Department"
+                                value={profile?.current_role || ''}
+                                onChange={(e) => setProfile({ ...profile, current_role: e.target.value })}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
                         <div className="flex justify-end pt-4">
                           <Button onClick={async () => {
                             try {
@@ -2170,7 +2331,18 @@ export default function TeacherPortal() {
                                 method: 'PUT',
                                 body: JSON.stringify({
                                   phone_number: profile.phone_number,
-                                  address: profile.address
+                                  address: profile.address,
+                                  marital_status: profile.marital_status,
+                                  housing_status: profile.housing_status,
+                                  living_with_spouse: profile.marital_status === 'Married' ? profile.living_with_spouse : null,
+                                  disability_status: profile.disability_status,
+                                  accommodation_provided: profile.accommodation_provided,
+                                  highest_qualification: profile.highest_qualification,
+                                  institution_name: profile.institution_name,
+                                  completion_year: profile.completion_year,
+                                  field_of_study: profile.field_of_study,
+                                  current_role: profile.current_role,
+                                  location_type: profile.location_type
                                 })
                               });
                               toast({

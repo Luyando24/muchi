@@ -212,7 +212,7 @@ export default function Login() {
           const { data: profiles } = await supabase
             .from('profiles')
             .select('id')
-            .eq('email', identifier)
+            .ilike('email', identifier)
             .limit(1);
           
           if (!profiles || profiles.length === 0) {

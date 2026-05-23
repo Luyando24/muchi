@@ -47,6 +47,8 @@ import {
   Pie
 } from 'recharts';
 
+import { Award, ArrowRightLeft, Heart, Activity } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
@@ -69,7 +71,16 @@ import GovernmentNavbar from '@/components/government/GovernmentNavbar';
 import { cn } from '@/lib/utils';
 import { exportToExcel, exportToPDF, generateNationalReport } from '@/utils/government-exports';
 
+import StaffingOverview from '@/components/government/StaffingOverview';
+import QualificationsPromotion from '@/components/government/QualificationsPromotion';
+import TransfersAndHousing from '@/components/government/TransfersAndHousing';
+import AcademicPerformance from '@/components/government/AcademicPerformance';
+import TeacherDisabilities from '@/components/government/TeacherDisabilities';
+import StudentVulnerability from '@/components/government/StudentVulnerability';
+import GovernmentSettings from '@/components/government/GovernmentSettings';
+
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#71717a'];
+const getColor = (index: number): string => COLORS[index % COLORS.length];
 
 // --- SUB-COMPONENTS --- //
 
@@ -84,7 +95,13 @@ function OverviewDashboard() {
     schoolTypeBreakdown: {} as Record<string, number>,
     schoolCategoryBreakdown: {} as Record<string, number>,
     genderBreakdown: { Male: 0, Female: 0, Other: 0 } as Record<string, number>,
-    schoolPerformanceMetrics: [] as any[]
+    schoolPerformanceMetrics: [] as any[],
+    thresholds: {
+      passRate: 40,
+      attendance: 75,
+      ptrCritical: 45,
+      ptrWarning: 35
+    } as any
   });
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ province: 'All', district: 'All' });
@@ -336,7 +353,7 @@ function OverviewDashboard() {
                 dataKey="value"
               >
                 {Object.entries(stats.schoolCategoryBreakdown).map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  <Cell key={`cell-${index}`} fill={getColor(index)} />
                 ))}
               </Pie>
               <Tooltip />
@@ -444,30 +461,30 @@ function OverviewDashboard() {
             <CardDescription className="text-[10px] font-black uppercase tracking-widest text-slate-400">System anomalies requiring observation</CardDescription>
           </CardHeader>
           <CardContent className="p-6 space-y-4">
-             {stats.avgAttendance < 75 ? (
-               <div className="flex items-start gap-4 p-4 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30 transition-all hover:bg-orange-100/50 dark:hover:bg-orange-900/30">
-                  <div className="h-10 w-10 rounded-lg bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center text-orange-600 shrink-0">
-                    <AlertTriangle className="h-5 w-5" />
-                  </div>
-                  <div>
-                     <h4 className="font-black text-orange-900 dark:text-orange-300 uppercase tracking-tight text-sm">Low Attendance Warning</h4>
-                     <p className="text-xs text-orange-700 dark:text-orange-400/80 mt-1 font-medium leading-relaxed">
-                       {filters.province !== 'All' ? filters.province : 'National'} average attendance is critical ({stats.avgAttendance}%). Immediate intervention required.
-                     </p>
-                  </div>
-               </div>
+             {stats.avgAttendance < (stats.thresholds?.attendance ?? 75) ? (
+                <div className="flex items-start gap-4 p-4 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30 transition-all hover:bg-orange-100/50 dark:hover:bg-orange-900/30">
+                   <div className="h-10 w-10 rounded-lg bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center text-orange-600 shrink-0">
+                     <AlertTriangle className="h-5 w-5" />
+                   </div>
+                   <div>
+                      <h4 className="font-black text-orange-900 dark:text-orange-300 uppercase tracking-tight text-sm">Low Attendance Warning</h4>
+                      <p className="text-xs text-orange-700 dark:text-orange-400/80 mt-1 font-medium leading-relaxed">
+                        {filters.province !== 'All' ? filters.province : 'National'} average attendance is critical ({stats.avgAttendance}%). Immediate intervention required (threshold: {stats.thresholds?.attendance ?? 75}%).
+                      </p>
+                   </div>
+                </div>
              ) : (
-               <div className="flex items-start gap-4 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 transition-all hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30">
-                  <div className="h-10 w-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center text-emerald-600 shrink-0">
-                    <TrendingUp className="h-5 w-5" />
-                  </div>
-                  <div>
-                     <h4 className="font-black text-emerald-900 dark:text-emerald-300 uppercase tracking-tight text-sm">Stable Attendance</h4>
-                     <p className="text-xs text-emerald-700 dark:text-emerald-400/80 mt-1 font-medium leading-relaxed">
-                       {filters.province !== 'All' ? filters.province : 'National'} attendance metrics are stable at {stats.avgAttendance}%.
-                     </p>
-                  </div>
-               </div>
+                <div className="flex items-start gap-4 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 transition-all hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30">
+                   <div className="h-10 w-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center text-emerald-600 shrink-0">
+                     <TrendingUp className="h-5 w-5" />
+                   </div>
+                   <div>
+                      <h4 className="font-black text-emerald-900 dark:text-emerald-300 uppercase tracking-tight text-sm">Stable Attendance</h4>
+                      <p className="text-xs text-emerald-700 dark:text-emerald-400/80 mt-1 font-medium leading-relaxed">
+                        {filters.province !== 'All' ? filters.province : 'National'} attendance metrics are stable at {stats.avgAttendance}%.
+                      </p>
+                   </div>
+                </div>
              )}
              
              {stats.totalStudents > 0 && (
@@ -625,10 +642,11 @@ function PerformanceDashboard() {
           <CardContent>
             <div className="h-[350px] w-full mt-4">
               {(() => {
-                const genders = ['male', 'female'];
+                 const genders = ['male', 'female'];
                 const allLabelsSet = new Set<string>();
                 genders.forEach(g => {
-                  Object.keys(stats.genderGradeDistribution?.[g] || {}).forEach(l => allLabelsSet.add(l));
+                  const dist = g === 'male' ? stats.genderGradeDistribution?.male : stats.genderGradeDistribution?.female;
+                  Object.keys(dist || {}).forEach(l => allLabelsSet.add(l));
                 });
                 
                 const allLabels = Array.from(allLabelsSet);
@@ -644,8 +662,8 @@ function PerformanceDashboard() {
                 });
 
                 const chartData = genders.map(gender => {
-                  const data = stats.genderGradeDistribution?.[gender] || {};
-                  const total = Object.values(data).reduce((a: any, b: any) => a + b, 0) as number;
+                  const data = gender === 'male' ? stats.genderGradeDistribution?.male : stats.genderGradeDistribution?.female;
+                  const total = Object.values(data || {}).reduce((a: any, b: any) => a + b, 0) as number;
                   return {
                     name: gender.charAt(0).toUpperCase() + gender.slice(1),
                     total,
@@ -698,7 +716,7 @@ function PerformanceDashboard() {
                           key={label} 
                           dataKey={label} 
                           stackId="a" 
-                          fill={COLORS[idx % COLORS.length]} 
+                          fill={getColor(idx)} 
                           radius={idx === allLabels.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} 
                         />
                       ))}
@@ -1186,7 +1204,7 @@ function EnrollmentDashboard() {
                   <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                           <Pie data={Object.entries(data.disabilityBreakdown).filter(([k]) => k !== 'none').map(([name, value]) => ({ name, value }))} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8" label>
-                              {Object.entries(data.disabilityBreakdown).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                              {Object.entries(data.disabilityBreakdown).map((_, i) => <Cell key={i} fill={getColor(i)} />)}
                           </Pie>
                           <Tooltip />
                           <Legend />
@@ -1231,7 +1249,7 @@ function TeacherDashboard() {
   
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Card className="lg:col-span-2">
-                <CardHeader><CardTitle className="text-lg">Staffing Gap Analysis (PTR &gt; 35:1)</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-lg">Staffing Gap Analysis (PTR &gt; {data.thresholds?.ptrWarning ?? 35}:1)</CardTitle></CardHeader>
                 <CardContent>
                     <div className="space-y-4">
                         {data.staffingGaps?.map((gap: any) => (
@@ -1262,7 +1280,7 @@ function TeacherDashboard() {
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                             <Pie data={Object.entries(data.qualificationBreakdown).map(([name, value]) => ({ name, value }))} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={80}>
-                                {Object.entries(data.qualificationBreakdown).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                                {Object.entries(data.qualificationBreakdown).map((_, i) => <Cell key={i} fill={getColor(i)} />)}
                             </Pie>
                             <Tooltip />
                         </PieChart>
@@ -1382,6 +1400,7 @@ export default function GovernmentPortal() {
       items: [
         { id: 'overview', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'performance', label: 'Learning Outcomes', icon: GraduationCap },
+        { id: 'academic-performance', label: 'Academic Analysis', icon: Activity },
       ]
     },
     {
@@ -1389,6 +1408,16 @@ export default function GovernmentPortal() {
       items: [
         { id: 'enrollment', label: 'Enrollment Intelligence', icon: Users },
         { id: 'teachers', label: 'Teacher Workforce', icon: Users2 },
+        { id: 'staffing-overview', label: 'Staffing Overview', icon: Users },
+        { id: 'qualifications-promotion', label: 'Qualifications & Promotion', icon: Award },
+        { id: 'transfers-housing', label: 'Transfers & Housing', icon: ArrowRightLeft },
+        { id: 'teacher-disabilities', label: 'Teacher Disabilities', icon: Heart },
+      ]
+    },
+    {
+      label: "Student Welfare",
+      items: [
+        { id: 'student-vulnerability', label: 'Vulnerability Tracking', icon: ShieldAlert },
       ]
     },
     {
@@ -1513,17 +1542,30 @@ export default function GovernmentPortal() {
              <TabsContent value="feeding">
                <FeedingDashboard />
              </TabsContent>
-             <TabsContent value="settings">
-                <div className="py-12 flex flex-col items-center justify-center text-center">
-                    <Settings className="h-16 w-16 text-slate-200 mb-4" />
-                    <h3 className="text-xl font-bold">Portal Configuration</h3>
-                    <p className="text-slate-500 max-w-sm mt-2">Ministry-level preferences and regional data thresholds will be manageable here.</p>
-                </div>
+             <TabsContent value="staffing-overview">
+               <StaffingOverview />
              </TabsContent>
-           </Tabs>
-        </main>
+             <TabsContent value="academic-performance">
+               <AcademicPerformance />
+             </TabsContent>
+             <TabsContent value="transfers-housing">
+               <TransfersAndHousing />
+             </TabsContent>
+             <TabsContent value="qualifications-promotion">
+               <QualificationsPromotion />
+             </TabsContent>
+             <TabsContent value="teacher-disabilities">
+               <TeacherDisabilities />
+             </TabsContent>
+             <TabsContent value="student-vulnerability">
+               <StudentVulnerability />
+             </TabsContent>
+             <TabsContent value="settings">
+                <GovernmentSettings />
+              </TabsContent>
+            </Tabs>
+         </main>
       </div>
     </div>
   );
 }
-

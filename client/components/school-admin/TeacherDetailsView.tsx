@@ -14,7 +14,10 @@ import {
   Briefcase,
   Plus,
   Trash2,
-  Clock
+  Clock,
+  Heart,
+  Home,
+  Shield
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -42,6 +45,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 
 interface TeacherDetailsViewProps {
   teacherId: string;
@@ -75,6 +79,17 @@ interface TeacherDetails {
     status: string;
     avatar_url: string;
     totalClassesCount?: number;
+    marital_status?: string;
+    housing_status?: string;
+    living_with_spouse?: boolean;
+    disability_status?: string;
+    accommodation_provided?: string;
+    highest_qualification?: string;
+    institution_name?: string;
+    completion_year?: number;
+    field_of_study?: string;
+    current_role?: string;
+    location_type?: string;
   };
   classes: Array<{
     id: string;
@@ -166,7 +181,18 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
           subjects: data.teachingAssignments ? data.teachingAssignments.map((ta: any) => ta.id) : [],
           qualifications: (data.profile.qualifications || []).join(', '),
           work_history: data.profile.work_history || [],
-          status: data.profile.status
+          status: data.profile.status,
+          marital_status: data.profile.marital_status || '',
+          housing_status: data.profile.housing_status || '',
+          living_with_spouse: data.profile.living_with_spouse || false,
+          disability_status: data.profile.disability_status || '',
+          accommodation_provided: data.profile.accommodation_provided || '',
+          highest_qualification: data.profile.highest_qualification || '',
+          institution_name: data.profile.institution_name || '',
+          completion_year: data.profile.completion_year || '',
+          field_of_study: data.profile.field_of_study || '',
+          current_role: data.profile.current_role || '',
+          location_type: data.profile.location_type || '',
         });
 
       } catch (error: any) {
@@ -238,7 +264,13 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
   };
 
   const handleSelectChange = (name: string, value: string) => {
-    setProfileForm((prev: any) => ({ ...prev, [name]: value }));
+    setProfileForm((prev: any) => {
+      const updated = { ...prev, [name]: value };
+      if (name === 'marital_status' && value !== 'Married') {
+        updated.living_with_spouse = false;
+      }
+      return updated;
+    });
   };
 
   if (isLoading) {
@@ -337,6 +369,38 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
                 <div className="flex items-center space-x-3 text-sm">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
                   <span>DOB: {profile.date_of_birth ? new Date(profile.date_of_birth).toLocaleDateString() : 'Not set'}</span>
+                </div>
+              </div>
+
+              <div className="border-t pt-4 space-y-4 animate-in fade-in duration-300">
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Demographics & Housing</h4>
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-3 text-sm">
+                    <Heart className="h-4 w-4 text-muted-foreground" />
+                    <span>Marital Status: <strong className="font-semibold text-slate-800">{profile.marital_status || 'Not set'}</strong></span>
+                  </div>
+                  {profile.marital_status === 'Married' && (
+                    <div className="flex items-center space-x-3 text-sm pl-7">
+                      <span className="text-muted-foreground">•</span>
+                      <span>Living with Spouse: <strong className="font-semibold text-slate-800">{profile.living_with_spouse ? 'Yes' : 'No'}</strong></span>
+                    </div>
+                  )}
+                  <div className="flex items-center space-x-3 text-sm">
+                    <Shield className="h-4 w-4 text-muted-foreground" />
+                    <span>Disability: <strong className="font-semibold text-slate-800">{profile.disability_status || 'None'}</strong></span>
+                  </div>
+                  <div className="flex items-center space-x-3 text-sm">
+                    <Home className="h-4 w-4 text-muted-foreground" />
+                    <span>Housing: <strong className="font-semibold text-slate-800">{profile.housing_status || 'Not set'}</strong></span>
+                  </div>
+                  <div className="flex items-center space-x-3 text-sm">
+                    <Home className="h-4 w-4 text-muted-foreground" />
+                    <span>School Accomm.: <strong className="font-semibold text-slate-800">{profile.accommodation_provided || 'Not set'}</strong></span>
+                  </div>
+                  <div className="flex items-center space-x-3 text-sm">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <span>Location Type: <strong className="font-semibold text-slate-800">{profile.location_type || 'Not set'}</strong></span>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -551,6 +615,39 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
+                    <GraduationCap className="h-5 w-5 text-indigo-500" />
+                    Academic & Government Analytics Details
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-3 border rounded-lg bg-slate-50">
+                      <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Highest Qualification</div>
+                      <div className="font-medium mt-1 text-slate-800">{profile.highest_qualification || 'Not set'}</div>
+                    </div>
+                    <div className="p-3 border rounded-lg bg-slate-50">
+                      <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Field of Study</div>
+                      <div className="font-medium mt-1 text-slate-800">{profile.field_of_study || 'Not set'}</div>
+                    </div>
+                    <div className="p-3 border rounded-lg bg-slate-50">
+                      <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Institution</div>
+                      <div className="font-medium mt-1 text-slate-800">{profile.institution_name || 'Not set'}</div>
+                    </div>
+                    <div className="p-3 border rounded-lg bg-slate-50">
+                      <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Completion Year</div>
+                      <div className="font-medium mt-1 text-slate-800">{profile.completion_year || 'Not set'}</div>
+                    </div>
+                    <div className="p-3 border rounded-lg bg-slate-50 md:col-span-2">
+                      <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Current Role</div>
+                      <div className="font-medium mt-1 text-slate-800">{profile.current_role || 'Not set'}</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
                     <Briefcase className="h-5 w-5 text-indigo-500" />
                     Work History
                   </CardTitle>
@@ -642,6 +739,184 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
               <div className="space-y-2">
                 <Label htmlFor="address">Address</Label>
                 <Textarea id="address" name="address" value={profileForm.address} onChange={handleInputChange} className="min-h-[100px]" />
+              </div>
+
+              <div className="border-t border-slate-200 my-6 pt-6">
+                <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-4">Demographics & Disability</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="marital_status">Marital Status</Label>
+                    <Select 
+                      name="marital_status" 
+                      value={profileForm.marital_status || ''} 
+                      onValueChange={(val) => handleSelectChange('marital_status', val)}
+                    >
+                      <SelectTrigger id="marital_status">
+                        <SelectValue placeholder="Select marital status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Single">Single</SelectItem>
+                        <SelectItem value="Married">Married</SelectItem>
+                        <SelectItem value="Divorced">Divorced</SelectItem>
+                        <SelectItem value="Widowed">Widowed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {profileForm.marital_status === 'Married' && (
+                    <div className="flex items-center justify-between border border-slate-200 rounded-lg p-3 h-10 mt-8">
+                      <Label htmlFor="living_with_spouse" className="cursor-pointer">Living with Spouse</Label>
+                      <Switch 
+                        id="living_with_spouse"
+                        checked={profileForm.living_with_spouse || false}
+                        onCheckedChange={(checked) => setProfileForm((prev: any) => ({ ...prev, living_with_spouse: checked }))}
+                      />
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Label htmlFor="disability_status">Disability Status</Label>
+                    <Select 
+                      name="disability_status" 
+                      value={profileForm.disability_status || ''} 
+                      onValueChange={(val) => handleSelectChange('disability_status', val)}
+                    >
+                      <SelectTrigger id="disability_status">
+                        <SelectValue placeholder="Select disability status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="None">None</SelectItem>
+                        <SelectItem value="Visual">Visual</SelectItem>
+                        <SelectItem value="Hearing">Hearing</SelectItem>
+                        <SelectItem value="Physical">Physical</SelectItem>
+                        <SelectItem value="Cognitive">Cognitive</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="location_type">Location Type</Label>
+                    <Select 
+                      name="location_type" 
+                      value={profileForm.location_type || ''} 
+                      onValueChange={(val) => handleSelectChange('location_type', val)}
+                    >
+                      <SelectTrigger id="location_type">
+                        <SelectValue placeholder="Select location type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Rural">Rural</SelectItem>
+                        <SelectItem value="Urban">Urban</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-200 my-6 pt-6">
+                <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-4">Housing & Accommodation</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="housing_status">Housing Status</Label>
+                    <Select 
+                      name="housing_status" 
+                      value={profileForm.housing_status || ''} 
+                      onValueChange={(val) => handleSelectChange('housing_status', val)}
+                    >
+                      <SelectTrigger id="housing_status">
+                        <SelectValue placeholder="Select housing status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Government House">Government House</SelectItem>
+                        <SelectItem value="Private Rental">Private Rental</SelectItem>
+                        <SelectItem value="Own Home">Own Home</SelectItem>
+                        <SelectItem value="Unknown">Unknown</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="accommodation_provided">Accommodation Provided by School</Label>
+                    <Select 
+                      name="accommodation_provided" 
+                      value={profileForm.accommodation_provided || ''} 
+                      onValueChange={(val) => handleSelectChange('accommodation_provided', val)}
+                    >
+                      <SelectTrigger id="accommodation_provided">
+                        <SelectValue placeholder="Select option" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Yes">Yes</SelectItem>
+                        <SelectItem value="No">No</SelectItem>
+                        <SelectItem value="Partially">Partially</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-200 my-6 pt-6">
+                <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-4">Government Analytics & Education</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="highest_qualification">Highest Qualification</Label>
+                    <Select 
+                      name="highest_qualification" 
+                      value={profileForm.highest_qualification || ''} 
+                      onValueChange={(val) => handleSelectChange('highest_qualification', val)}
+                    >
+                      <SelectTrigger id="highest_qualification">
+                        <SelectValue placeholder="Select qualification" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Certificate">Certificate</SelectItem>
+                        <SelectItem value="Diploma">Diploma</SelectItem>
+                        <SelectItem value="Bachelor's Degree">Bachelor's Degree</SelectItem>
+                        <SelectItem value="Master's Degree">Master's Degree</SelectItem>
+                        <SelectItem value="PhD">PhD</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="field_of_study">Field of Study</Label>
+                    <Input 
+                      id="field_of_study"
+                      name="field_of_study" 
+                      placeholder="e.g. Mathematics, Education"
+                      value={profileForm.field_of_study || ''}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="institution_name">Institution Name</Label>
+                    <Input 
+                      id="institution_name"
+                      name="institution_name" 
+                      placeholder="e.g. University of Zambia"
+                      value={profileForm.institution_name || ''}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="completion_year">Completion Year</Label>
+                    <Input 
+                      id="completion_year"
+                      name="completion_year" 
+                      type="number"
+                      placeholder="e.g. 2018"
+                      value={profileForm.completion_year || ''}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="current_role">Current Role</Label>
+                    <Input 
+                      id="current_role"
+                      name="current_role" 
+                      placeholder="e.g. Senior Teacher, Head of Science Department"
+                      value={profileForm.current_role || ''}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-6">

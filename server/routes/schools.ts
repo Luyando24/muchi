@@ -136,6 +136,7 @@ router.post('/register', async (req: Request, res: Response) => {
     adminName, 
     adminEmail, 
     adminPassword,
+    location_type, // 'Urban' | 'Rural'
     licenseCode // Optional pre-paid activation code
   } = req.body;
 
@@ -191,6 +192,7 @@ router.post('/register', async (req: Request, res: Response) => {
         plan: planToUse,
         category: req.body.category,
         country: req.body.country || 'Zambia',
+        location_type: location_type || 'Urban',
         status: 'Pending' // Requires System Admin Approval
       })
       .select()

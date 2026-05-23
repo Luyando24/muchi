@@ -282,7 +282,7 @@ export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardP
       {/* Stats Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         {/* Students */}
-        <Card className="hover:shadow-md transition-shadow border-l-4 border-l-blue-500">
+        <Card className="hover:shadow-md transition-shadow">
           <CardContent className="p-5 sm:p-6">
             <div className="flex flex-col gap-2">
               <div className="flex justify-between items-center">
@@ -302,7 +302,7 @@ export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardP
         </Card>
 
         {/* Teachers */}
-        <Card className="hover:shadow-md transition-shadow border-l-4 border-l-green-500">
+        <Card className="hover:shadow-md transition-shadow">
           <CardContent className="p-5 sm:p-6">
             <div className="flex flex-col gap-2">
               <div className="flex justify-between items-center">
@@ -322,7 +322,7 @@ export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardP
         </Card>
 
         {/* Active Classes */}
-        <Card className="hover:shadow-md transition-shadow border-l-4 border-l-orange-500">
+        <Card className="hover:shadow-md transition-shadow">
           <CardContent className="p-5 sm:p-6">
             <div className="flex flex-col gap-2">
               <div className="flex justify-between items-center">
@@ -342,7 +342,7 @@ export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardP
         </Card>
 
         {/* Attendance */}
-        <Card className="hover:shadow-md transition-shadow border-l-4 border-l-purple-500">
+        <Card className="hover:shadow-md transition-shadow">
           <CardContent className="p-5 sm:p-6">
             <div className="flex flex-col gap-2">
               <div className="flex justify-between items-center">

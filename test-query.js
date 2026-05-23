@@ -5,12 +5,17 @@ dotenv.config();
 const supabaseAdmin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 async function test() {
-    console.log("Fetching schools count...");
-    const schools = await supabaseAdmin.from('schools').select('*', { count: 'exact', head: true });
-    console.log("Schools:", schools);
+    console.log("Fetching schools with licenses...");
+    const { data, error } = await supabaseAdmin
+      .from('schools')
+      .select('id, name, slug, created_at, school_licenses(*)')
+      .order('created_at', { ascending: false })
+      .limit(5);
 
-    console.log("Fetching profiles count...");
-    const profiles = await supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student');
-    console.log("Profiles:", profiles);
+    if (error) {
+        console.error("Query Error:", error);
+    } else {
+        console.log("Query Data:", JSON.stringify(data, null, 2));
+    }
 }
 test();

@@ -24,7 +24,7 @@ const requireTeacher = async (req: Request, res: Response, next: any) => {
 
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('*, schools(name, id)')
+      .select('*, schools(name, id, location_type)')
       .eq('id', user.id)
       .single();
 
@@ -765,7 +765,21 @@ router.get('/subjects', requireTeacher, async (req: Request, res: Response) => {
 // Update teacher profile details
 router.put('/profile', requireTeacher, async (req: Request, res: Response) => {
   const profile = (req as any).profile;
-  const { phone_number, address } = req.body;
+  const {
+    phone_number,
+    address,
+    marital_status,
+    housing_status,
+    living_with_spouse,
+    disability_status,
+    accommodation_provided,
+    highest_qualification,
+    institution_name,
+    completion_year,
+    field_of_study,
+    current_role,
+    location_type
+  } = req.body;
 
   try {
     const { data, error } = await supabaseAdmin
@@ -773,6 +787,17 @@ router.put('/profile', requireTeacher, async (req: Request, res: Response) => {
       .update({
         phone_number,
         address,
+        marital_status,
+        housing_status,
+        living_with_spouse: typeof living_with_spouse === 'boolean' ? living_with_spouse : null,
+        disability_status,
+        accommodation_provided,
+        highest_qualification,
+        institution_name,
+        completion_year: completion_year ? parseInt(completion_year, 10) : null,
+        field_of_study,
+        current_role,
+        location_type,
         updated_at: new Date().toISOString()
       })
       .eq('id', profile.id)

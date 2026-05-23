@@ -60,7 +60,8 @@ export default function SchoolSettings() {
     headteacher_title: 'Headteacher',
     school_type: 'Secondary School' as string,
     category: '',
-    country: 'Zambia'
+    country: 'Zambia',
+    location_type: 'Urban'
   });
 
   const [categories, setCategories] = useState<SchoolCategory[]>([]);
@@ -130,7 +131,8 @@ export default function SchoolSettings() {
         headteacher_title: data.headteacher_title || 'Headteacher',
         school_type: data.school_type || 'Secondary School',
         category: data.category || '',
-        country: data.country || 'Zambia'
+        country: data.country || 'Zambia',
+        location_type: data.location_type || 'Urban'
       });
     } catch (error: any) {
       console.error('Error fetching settings:', error);
@@ -362,6 +364,25 @@ export default function SchoolSettings() {
                         </SelectContent>
                       </Select>
                       <p className="text-[10px] text-slate-500 italic">* Collected for Ministry of Education statistical purposes.</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="location_type">School Location Type</Label>
+                      <Select
+                        value={formData.location_type}
+                        onValueChange={(value) =>
+                          setFormData(prev => ({ ...prev, location_type: value }))
+                        }
+                      >
+                        <SelectTrigger id="location_type" className="w-full">
+                          <SelectValue placeholder="Select location type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Urban">Urban (Town / City)</SelectItem>
+                          <SelectItem value="Rural">Rural (Village / Remote Area)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-slate-500 italic">* Used by the government to track teacher deployment and rural shortages.</p>
                     </div>
 
                     <div className="space-y-2">
