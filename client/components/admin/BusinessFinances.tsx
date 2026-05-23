@@ -448,9 +448,15 @@ export default function BusinessFinances() {
       </div>
 
       <Tabs defaultValue="subscriptions" className="w-full">
-        <TabsList className="mb-4">
-          <TabsTrigger value="subscriptions">Subscription Revenue</TabsTrigger>
-          <TabsTrigger value="ledger">Operational Ledger (Incomes & Expenses)</TabsTrigger>
+        <TabsList className="flex overflow-x-auto w-full max-w-full h-auto gap-1 bg-slate-100 p-1 dark:bg-slate-800 rounded-lg border scrollbar-none mb-4">
+          <TabsTrigger value="subscriptions" className="font-bold text-sm py-2.5 px-4 shrink-0">
+            <span className="hidden sm:inline">Subscription Revenue</span>
+            <span className="sm:hidden">Subscriptions</span>
+          </TabsTrigger>
+          <TabsTrigger value="ledger" className="font-bold text-sm py-2.5 px-4 shrink-0">
+            <span className="hidden sm:inline">Operational Ledger (Incomes & Expenses)</span>
+            <span className="sm:hidden">Operational Ledger</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="subscriptions" className="space-y-6">

@@ -354,22 +354,22 @@ export default function UserManagement() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">User Management</h2>
           <p className="text-muted-foreground">Manage system administrators and school administrators</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <Button 
             variant="outline" 
-            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 flex-1 sm:flex-none"
             onClick={() => setIsPurgeConfirmOpen(true)}
           >
             <ShieldAlert className="mr-2 h-4 w-4" /> Purge Users
           </Button>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button onClick={openCreateDialog}>
+              <Button onClick={openCreateDialog} className="flex-1 sm:flex-none">
                 <Plus className="mr-2 h-4 w-4" /> Add User
               </Button>
             </DialogTrigger>
@@ -528,7 +528,7 @@ export default function UserManagement() {
         </div>
       </div>
 
-      <div className="rounded-md border">
+      <div className="rounded-md border overflow-x-auto w-full">
         <Table>
           <TableHeader>
             <TableRow>

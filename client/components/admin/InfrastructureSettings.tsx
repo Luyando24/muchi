@@ -103,13 +103,13 @@ export default function InfrastructureSettings() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Infrastructure Status</h2>
           <p className="text-slate-600 dark:text-slate-400">Monitor server performance and resource utilization.</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchData} disabled={loading}>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button variant="outline" onClick={fetchData} disabled={loading} className="w-full sm:w-auto">
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh Status
           </Button>
@@ -176,64 +176,66 @@ export default function InfrastructureSettings() {
           <CardDescription>Health status of all system nodes</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Node Name</TableHead>
-                <TableHead>Region</TableHead>
-                <TableHead>CPU</TableHead>
-                <TableHead>Memory</TableHead>
-                <TableHead>Disk</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {nodes.map((node, index) => (
-                <TableRow key={index}>
-                  <TableCell className="font-medium">
-                    <div className="flex items-center gap-2">
-                      <Server className="h-4 w-4 text-slate-400" />
-                      {node.name}
-                    </div>
-                  </TableCell>
-                  <TableCell>{node.region}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="w-8 text-right text-xs">{node.cpu}%</span>
-                      <Progress value={node.cpu} className="h-2 w-24" />
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="w-8 text-right text-xs">{node.memory}%</span>
-                      <Progress value={node.memory} className="h-2 w-24" />
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="w-8 text-right text-xs">{node.disk}%</span>
-                      <Progress value={node.disk} className="h-2 w-24" />
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={
-                      node.status === 'Operational' ? 'bg-green-50 text-green-700 border-green-200' :
-                      node.status === 'Degraded' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                      'bg-red-50 text-red-700 border-red-200'
-                    }>
-                      {node.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="sm">
-                      <Terminal className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
+          <div className="overflow-x-auto w-full">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Node Name</TableHead>
+                  <TableHead>Region</TableHead>
+                  <TableHead>CPU</TableHead>
+                  <TableHead>Memory</TableHead>
+                  <TableHead>Disk</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {nodes.map((node, index) => (
+                  <TableRow key={index}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <Server className="h-4 w-4 text-slate-400" />
+                        {node.name}
+                      </div>
+                    </TableCell>
+                    <TableCell>{node.region}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="w-8 text-right text-xs">{node.cpu}%</span>
+                        <Progress value={node.cpu} className="h-2 w-24" />
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="w-8 text-right text-xs">{node.memory}%</span>
+                        <Progress value={node.memory} className="h-2 w-24" />
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="w-8 text-right text-xs">{node.disk}%</span>
+                        <Progress value={node.disk} className="h-2 w-24" />
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={
+                        node.status === 'Operational' ? 'bg-green-50 text-green-700 border-green-200' :
+                        node.status === 'Degraded' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                        'bg-red-50 text-red-700 border-red-200'
+                      }>
+                        {node.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm">
+                        <Terminal className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

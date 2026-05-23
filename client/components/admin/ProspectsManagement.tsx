@@ -364,14 +364,14 @@ export default function ProspectsManagement() {
       </div>
 
       {/* Analytics Card */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm border shadow-sm">
           <CardContent className="pt-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider">Total Leads</p>
               <h3 className="text-2xl font-black mt-1">{prospects.length}</h3>
             </div>
-            <TrendingUp className="h-8 w-8 text-blue-500 opacity-60" />
+            <TrendingUp className="h-8 w-8 text-blue-500 opacity-60 animate-pulse" />
           </CardContent>
         </Card>
         <Card className="bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm border shadow-sm">
@@ -411,20 +411,20 @@ export default function ProspectsManagement() {
         </Card>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-        <div className="relative w-full md:w-80">
+      <div className="flex flex-col sm:flex-row gap-4 justify-between sm:items-center">
+        <div className="relative w-full sm:w-80">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <Input 
             placeholder="Search leads..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
+            className="pl-10 w-full"
           />
         </div>
         
-        <div className="flex gap-2 w-full md:w-auto">
+        <div className="w-full sm:w-auto">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full sm:w-[200px]">
               <Filter className="h-3.5 w-3.5 mr-2 text-slate-400" />
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
@@ -441,17 +441,17 @@ export default function ProspectsManagement() {
         </div>
       </div>
 
-      <div className="rounded-xl border bg-white dark:bg-slate-950 overflow-hidden">
+      <div className="rounded-xl border bg-white dark:bg-slate-950 overflow-x-auto w-full max-w-full">
         <Table>
           <TableHeader className="bg-slate-50 dark:bg-slate-900/50">
             <TableRow>
               <TableHead className="font-semibold">School Name</TableHead>
               <TableHead className="font-semibold">Contact Person</TableHead>
-              <TableHead className="font-semibold">Email</TableHead>
-              <TableHead className="font-semibold">Phone</TableHead>
-              <TableHead className="font-semibold">Location</TableHead>
+              <TableHead className="font-semibold hidden md:table-cell">Email</TableHead>
+              <TableHead className="font-semibold hidden sm:table-cell">Phone</TableHead>
+              <TableHead className="font-semibold hidden lg:table-cell">Location</TableHead>
               <TableHead className="font-semibold">Pipeline Stage</TableHead>
-              <TableHead className="font-semibold">Notes</TableHead>
+              <TableHead className="font-semibold hidden md:table-cell">Notes</TableHead>
               <TableHead className="w-12 text-right font-semibold pr-6">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -486,7 +486,7 @@ export default function ProspectsManagement() {
                       <span className="text-muted-foreground text-xs italic">N/A</span>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     {prospect.email ? (
                       <a href={`mailto:${prospect.email}`} className="flex items-center gap-1.5 text-blue-500 hover:underline">
                         <Mail className="h-3.5 w-3.5 shrink-0" />
@@ -496,7 +496,7 @@ export default function ProspectsManagement() {
                       <span className="text-muted-foreground text-xs italic">N/A</span>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden sm:table-cell">
                     {prospect.phone ? (
                       <span className="flex items-center gap-1.5 text-slate-650 font-medium">
                         <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
@@ -506,7 +506,7 @@ export default function ProspectsManagement() {
                       <span className="text-muted-foreground text-xs italic">N/A</span>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden lg:table-cell">
                     {prospect.address ? (
                       <span className="flex items-center gap-1.5 text-slate-650">
                         <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
@@ -517,7 +517,7 @@ export default function ProspectsManagement() {
                     )}
                   </TableCell>
                   <TableCell>{getStatusBadge(prospect.status)}</TableCell>
-                  <TableCell className="max-w-xs truncate text-xs text-slate-500" title={prospect.notes}>
+                  <TableCell className="max-w-xs truncate text-xs text-slate-500 hidden md:table-cell" title={prospect.notes}>
                     {prospect.notes || <span className="italic text-slate-350">No notes logged</span>}
                   </TableCell>
                   <TableCell className="text-right pr-6">

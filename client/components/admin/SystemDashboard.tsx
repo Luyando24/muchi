@@ -153,7 +153,7 @@ export default function SystemDashboard({ onNavigate }: SystemDashboardProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
             System Overview
@@ -162,12 +162,12 @@ export default function SystemDashboard({ onNavigate }: SystemDashboardProps) {
             Real-time monitoring of platform health and performance
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchDashboardData}>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Button variant="outline" onClick={fetchDashboardData} className="flex-1 sm:flex-none">
             <Activity className="h-4 w-4 mr-2" />
             Refresh
           </Button>
-          <Button className="bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-700" onClick={handleProvisionSchool}>
+          <Button className="bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-700 flex-1 sm:flex-none" onClick={handleProvisionSchool}>
             <Plus className="h-4 w-4 mr-2" />
             Provision School
           </Button>

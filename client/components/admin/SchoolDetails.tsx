@@ -795,13 +795,19 @@ export default function SchoolDetails({ schoolId, schoolName, onBack }: SchoolDe
       <Tabs defaultValue="directory" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg h-auto">
           <TabsTrigger value="directory" className="rounded-md font-bold text-sm py-2.5">
-            <Users className="h-4 w-4 mr-2" /> Staff Directory
+            <Users className="h-4 w-4 mr-1.5 shrink-0" />
+            <span className="hidden sm:inline">Staff Directory</span>
+            <span className="sm:hidden">Staff</span>
           </TabsTrigger>
           <TabsTrigger value="project" className="rounded-md font-bold text-sm py-2.5">
-            <Briefcase className="h-4 w-4 mr-2" /> Onboarding & Tasks
+            <Briefcase className="h-4 w-4 mr-1.5 shrink-0" />
+            <span className="hidden sm:inline">Onboarding & Tasks</span>
+            <span className="sm:hidden">Onboarding</span>
           </TabsTrigger>
           <TabsTrigger value="engagement" className="rounded-md font-bold text-sm py-2.5">
-            <MessageSquare className="h-4 w-4 mr-2" /> CRM & Engagement
+            <MessageSquare className="h-4 w-4 mr-1.5 shrink-0" />
+            <span className="hidden sm:inline">CRM & Engagement</span>
+            <span className="sm:hidden">CRM</span>
           </TabsTrigger>
         </TabsList>
 
@@ -836,7 +842,7 @@ export default function SchoolDetails({ schoolId, schoolName, onBack }: SchoolDe
               </div>
             </CardHeader>
             <CardContent>
-              <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-x-auto w-full max-w-full">
                 <Table>
                   <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
                     <TableRow>
@@ -847,10 +853,10 @@ export default function SchoolDetails({ schoolId, schoolName, onBack }: SchoolDe
                         />
                       </TableHead>
                       <TableHead className="font-semibold">Full Name</TableHead>
-                      <TableHead className="font-semibold">Email / Login</TableHead>
+                      <TableHead className="font-semibold hidden sm:table-cell">Email / Login</TableHead>
                       <TableHead className="font-semibold">Staff Number</TableHead>
                       <TableHead className="font-semibold">Status</TableHead>
-                      <TableHead className="font-semibold text-right pr-6">Joined Date</TableHead>
+                      <TableHead className="font-semibold text-right pr-6 hidden md:table-cell">Joined Date</TableHead>
                       <TableHead className="w-20 text-right pr-6 font-semibold">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -884,7 +890,7 @@ export default function SchoolDetails({ schoolId, schoolName, onBack }: SchoolDe
                             />
                           </TableCell>
                           <TableCell className="font-bold text-slate-900 dark:text-white">{teacher.full_name}</TableCell>
-                          <TableCell className="text-slate-650 dark:text-slate-400 font-medium">{teacher.email || 'N/A'}</TableCell>
+                          <TableCell className="text-slate-650 dark:text-slate-400 font-medium hidden sm:table-cell">{teacher.email || 'N/A'}</TableCell>
                           <TableCell>
                             <code className="bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 px-2 py-1 rounded text-xs font-bold font-mono border border-blue-100 dark:border-blue-900/50">
                               {teacher.staff_number || 'PENDING'}
@@ -899,7 +905,7 @@ export default function SchoolDetails({ schoolId, schoolName, onBack }: SchoolDe
                               {teacher.employment_status}
                             </span>
                           </TableCell>
-                          <TableCell className="text-sm text-slate-500 dark:text-slate-400 text-right pr-6 font-medium">
+                          <TableCell className="text-sm text-slate-500 dark:text-slate-400 text-right pr-6 font-medium hidden md:table-cell">
                             {new Date(teacher.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
                           </TableCell>
                           <TableCell className="text-right pr-6">

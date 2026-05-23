@@ -533,14 +533,14 @@ export default function SchoolManagement() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Schools Management</h2>
           <p className="text-muted-foreground">Manage registered schools and their configurations</p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={openCreateDialog}>
+            <Button onClick={openCreateDialog} className="w-full sm:w-auto">
               <Plus className="mr-2 h-4 w-4" /> Add School
             </Button>
           </DialogTrigger>
@@ -643,30 +643,30 @@ export default function SchoolManagement() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full animate-in fade-in duration-300">
-          <TabsList className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 w-full h-auto gap-1 bg-slate-100 p-1 dark:bg-slate-800 rounded-lg border">
-            <TabsTrigger value="all" className="font-bold text-sm py-2.5 px-4 w-full h-full">All</TabsTrigger>
-            <TabsTrigger value="new" className="font-bold text-sm py-2.5 px-4 w-full h-full">Newest</TabsTrigger>
-            <TabsTrigger value="oldest" className="font-bold text-sm py-2.5 px-4 w-full h-full">Oldest</TabsTrigger>
-            <TabsTrigger value="paid" className="font-bold text-sm py-2.5 px-4 w-full h-full">Paid Subscriptions</TabsTrigger>
-            <TabsTrigger value="overdue" className="font-bold text-sm py-2.5 px-4 w-full h-full">Overdue & Grace</TabsTrigger>
-            <TabsTrigger value="unpaid" className="font-bold text-sm py-2.5 px-4 w-full h-full">Unpaid</TabsTrigger>
-            <TabsTrigger value="active" className="font-bold text-sm py-2.5 px-4 w-full h-full">Onboarded</TabsTrigger>
-            <TabsTrigger value="in-progress" className="font-bold text-sm py-2.5 px-4 w-full h-full">In Progress</TabsTrigger>
-            <TabsTrigger value="pending" className="font-bold text-sm py-2.5 px-4 w-full h-full">Pending Setup</TabsTrigger>
+          <TabsList className="flex overflow-x-auto w-full max-w-full h-auto gap-1 bg-slate-100 p-1 dark:bg-slate-800 rounded-lg border scrollbar-none">
+            <TabsTrigger value="all" className="font-bold text-sm py-2.5 px-4 shrink-0">All</TabsTrigger>
+            <TabsTrigger value="new" className="font-bold text-sm py-2.5 px-4 shrink-0">Newest</TabsTrigger>
+            <TabsTrigger value="oldest" className="font-bold text-sm py-2.5 px-4 shrink-0">Oldest</TabsTrigger>
+            <TabsTrigger value="paid" className="font-bold text-sm py-2.5 px-4 shrink-0">Paid Subscriptions</TabsTrigger>
+            <TabsTrigger value="overdue" className="font-bold text-sm py-2.5 px-4 shrink-0">Overdue & Grace</TabsTrigger>
+            <TabsTrigger value="unpaid" className="font-bold text-sm py-2.5 px-4 shrink-0">Unpaid</TabsTrigger>
+            <TabsTrigger value="active" className="font-bold text-sm py-2.5 px-4 shrink-0">Onboarded</TabsTrigger>
+            <TabsTrigger value="in-progress" className="font-bold text-sm py-2.5 px-4 shrink-0">In Progress</TabsTrigger>
+            <TabsTrigger value="pending" className="font-bold text-sm py-2.5 px-4 shrink-0">Pending Setup</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
-      <div className="rounded-md border">
+      <div className="rounded-md border overflow-x-auto w-full max-w-full">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead colSpan={1}>Name</TableHead>
               <TableHead>Onboarding</TableHead>
-              <TableHead>Last Contact</TableHead>
-              <TableHead>Plan</TableHead>
+              <TableHead className="hidden md:table-cell">Last Contact</TableHead>
+              <TableHead className="hidden sm:table-cell">Plan</TableHead>
               <TableHead>License</TableHead>
-              <TableHead>Created</TableHead>
+              <TableHead className="hidden md:table-cell">Created</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -710,7 +710,7 @@ export default function SchoolManagement() {
                       );
                     })()}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     {(() => {
                       if (!school.school_contact_logs || school.school_contact_logs.length === 0) {
                         return <span className="text-muted-foreground text-xs font-semibold">Never Contacted</span>;
@@ -728,7 +728,7 @@ export default function SchoolManagement() {
                       );
                     })()}
                   </TableCell>
-                  <TableCell>{school.plan}</TableCell>
+                  <TableCell className="hidden sm:table-cell">{school.plan}</TableCell>
                   <TableCell>
                     {(() => {
                       const license = getActiveLicense(school);
@@ -747,7 +747,7 @@ export default function SchoolManagement() {
                       }
                     })()}
                   </TableCell>
-                  <TableCell>{new Date(school.created_at).toLocaleDateString()}</TableCell>
+                  <TableCell className="hidden md:table-cell">{new Date(school.created_at).toLocaleDateString()}</TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

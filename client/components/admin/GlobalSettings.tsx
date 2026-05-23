@@ -150,20 +150,20 @@ export default function GlobalSettings() {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="general" className="w-full">
-        <div className="flex items-center justify-between mb-2">
-          <TabsList>
-            <TabsTrigger value="general" className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row gap-4 justify-between sm:items-center mb-4">
+          <TabsList className="flex overflow-x-auto w-full sm:w-auto h-auto gap-1 bg-slate-100 p-1 dark:bg-slate-800 rounded-lg border scrollbar-none">
+            <TabsTrigger value="general" className="font-bold text-sm py-2.5 px-4 shrink-0 flex items-center gap-2">
               <Settings className="h-4 w-4" />
               General Settings
             </TabsTrigger>
-            <TabsTrigger value="metadata" className="flex items-center gap-2">
+            <TabsTrigger value="metadata" className="font-bold text-sm py-2.5 px-4 shrink-0 flex items-center gap-2">
               <RefreshCw className="h-4 w-4" />
               Metadata Management
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="general" className="mt-0">
-            <Button onClick={handleSave} disabled={saving} className="bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-700">
+          <TabsContent value="general" className="mt-0 w-full sm:w-auto">
+            <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-700">
               {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
               Save Changes
             </Button>

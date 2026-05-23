@@ -434,36 +434,36 @@ export default function ConfigurationManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Metadata Configuration</h2>
           <p className="text-slate-600 dark:text-slate-400">Manage global lists for categories and countries used across the system.</p>
         </div>
-        <Button variant="outline" onClick={fetchData} disabled={isLoading}>
+        <Button variant="outline" onClick={fetchData} disabled={isLoading} className="self-start sm:self-auto">
           <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
           Reload
         </Button>
       </div>
 
       <Tabs defaultValue="categories" className="w-full">
-        <TabsList className="grid w-full grid-cols-5 max-w-3xl">
-          <TabsTrigger value="categories" className="flex items-center gap-2">
+        <TabsList className="flex overflow-x-auto w-full max-w-full h-auto gap-1 bg-slate-100 p-1 dark:bg-slate-800 rounded-lg border scrollbar-none">
+          <TabsTrigger value="categories" className="font-bold text-sm py-2.5 px-4 shrink-0 flex items-center gap-2">
             <Building className="h-4 w-4" />
             Categories
           </TabsTrigger>
-          <TabsTrigger value="types" className="flex items-center gap-2">
+          <TabsTrigger value="types" className="font-bold text-sm py-2.5 px-4 shrink-0 flex items-center gap-2">
             <Package className="h-4 w-4" />
             Types
           </TabsTrigger>
-          <TabsTrigger value="countries" className="flex items-center gap-2">
+          <TabsTrigger value="countries" className="font-bold text-sm py-2.5 px-4 shrink-0 flex items-center gap-2">
             <Globe className="h-4 w-4" />
             Countries
           </TabsTrigger>
-          <TabsTrigger value="plans" className="flex items-center gap-2">
+          <TabsTrigger value="plans" className="font-bold text-sm py-2.5 px-4 shrink-0 flex items-center gap-2">
             <CreditCard className="h-4 w-4" />
             Plans
           </TabsTrigger>
-          <TabsTrigger value="codes" className="flex items-center gap-2">
+          <TabsTrigger value="codes" className="font-bold text-sm py-2.5 px-4 shrink-0 flex items-center gap-2">
             <Ticket className="h-4 w-4" />
             License Codes
           </TabsTrigger>
@@ -477,7 +477,7 @@ export default function ConfigurationManagement() {
               <CardDescription>These options will appear during school registration and in settings.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex gap-4 mb-6">
+              <div className="flex flex-col sm:flex-row gap-4 mb-6">
                 <div className="flex-1 space-y-2">
                   <Input 
                     placeholder="New category name (e.g. Technical School)" 
@@ -486,13 +486,13 @@ export default function ConfigurationManagement() {
                     onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
                   />
                 </div>
-                <Button onClick={handleAddCategory} disabled={isAdding || !newName.trim()}>
+                <Button onClick={handleAddCategory} disabled={isAdding || !newName.trim()} className="w-full sm:w-auto">
                   {isAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
                   Add Category
                 </Button>
               </div>
 
-              <div className="border rounded-md">
+              <div className="border rounded-md overflow-x-auto w-full">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -569,7 +569,7 @@ export default function ConfigurationManagement() {
                 </Button>
               </div>
 
-              <div className="border rounded-md">
+              <div className="border rounded-md overflow-x-auto w-full">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -626,7 +626,7 @@ export default function ConfigurationManagement() {
               <CardDescription>Supported countries for system multi-tenancy.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex gap-4 mb-6 items-end">
+              <div className="flex flex-col sm:flex-row gap-4 mb-6 sm:items-end">
                 <div className="flex-1 space-y-2">
                   <Label>Country Name</Label>
                   <Input 
@@ -635,7 +635,7 @@ export default function ConfigurationManagement() {
                     onChange={(e) => setNewName(e.target.value)}
                   />
                 </div>
-                <div className="w-24 space-y-2">
+                <div className="w-full sm:w-24 space-y-2">
                   <Label>Code</Label>
                   <Input 
                     placeholder="KE" 
@@ -644,13 +644,13 @@ export default function ConfigurationManagement() {
                     maxLength={2}
                   />
                 </div>
-                <Button onClick={handleAddCountry} disabled={isAdding || !newName.trim()}>
+                <Button onClick={handleAddCountry} disabled={isAdding || !newName.trim()} className="w-full sm:w-auto">
                   {isAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
                   Add Country
                 </Button>
               </div>
 
-              <div className="border rounded-md">
+              <div className="border rounded-md overflow-x-auto w-full">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -800,7 +800,7 @@ export default function ConfigurationManagement() {
                 </Button>
               </div>
 
-              <div className="border rounded-md">
+              <div className="border rounded-md overflow-x-auto w-full">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -898,7 +898,7 @@ export default function ConfigurationManagement() {
               <CardDescription>Generate pre-paid codes for school subscription activation.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 p-4 border rounded-lg bg-slate-50 items-end">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 border rounded-lg bg-slate-50 items-end">
                 <div className="space-y-2">
                   <Label>Target Plan</Label>
                   <select 
@@ -920,7 +920,7 @@ export default function ConfigurationManagement() {
                     onChange={(e) => setNewCodeDuration(e.target.value)}
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 sm:col-span-2 md:col-span-1">
                   <Label>Admin Notes</Label>
                   <Input 
                     placeholder="e.g. Batch for XYZ Donor"
@@ -928,13 +928,13 @@ export default function ConfigurationManagement() {
                     onChange={(e) => setNewDescription(e.target.value)}
                   />
                 </div>
-                <Button onClick={handleGenerateCode} disabled={isAdding || !newCodePlan}>
+                <Button onClick={handleGenerateCode} disabled={isAdding || !newCodePlan} className="w-full sm:col-span-2 md:col-span-1">
                   {isAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
                   Generate Code
                 </Button>
               </div>
 
-              <div className="border rounded-md">
+              <div className="border rounded-md overflow-x-auto w-full">
                 <Table>
                   <TableHeader>
                     <TableRow>
