@@ -45,6 +45,7 @@ import {
 import { cn, generateSlug } from '@/lib/utils';
 import { ZAMBIAN_REGIONS } from '@/lib/regions';
 import { supabase } from '@/lib/supabase';
+import { getRoleSubdomainUrl } from '@/lib/subdomain';
 
 
 // Form Schemas
@@ -147,7 +148,12 @@ export default function SchoolRegister() {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
       return () => clearTimeout(timer);
     } else if (step === 4 && countdown === 0) {
-      navigate('/school-admin');
+      const redirectUrl = getRoleSubdomainUrl('school_admin');
+      if (redirectUrl.startsWith('http')) {
+        window.location.href = redirectUrl;
+      } else {
+        navigate(redirectUrl);
+      }
     }
   }, [step, countdown, navigate]);
 
@@ -958,7 +964,14 @@ export default function SchoolRegister() {
                 
                 <div className="mt-12 space-y-4">
                   <Button 
-                    onClick={() => navigate('/school-admin')} 
+                    onClick={() => {
+                      const redirectUrl = getRoleSubdomainUrl('school_admin');
+                      if (redirectUrl.startsWith('http')) {
+                        window.location.href = redirectUrl;
+                      } else {
+                        navigate(redirectUrl);
+                      }
+                    }} 
                     className="w-full h-16 bg-gradient-to-r from-blue-600 to-indigo-700 text-white font-bold text-xl rounded-2xl shadow-xl shadow-blue-500/30 hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition-all group"
                   >
                     Proceed to Dashboard <ArrowRight className="ml-2 h-6 w-6 group-hover:translate-x-1 transition-transform" />

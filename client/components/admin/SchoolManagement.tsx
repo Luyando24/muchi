@@ -50,6 +50,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import SchoolDetails from './SchoolDetails';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PaginationControls } from '@/components/ui/pagination-controls';
 
 // Schema for creating/editing a school
 const schoolSchema = z.object({
@@ -78,8 +80,12 @@ interface School {
   address?: string;
   contact_email?: string;
   status?: string;
+  onboarding_status?: string;
   created_at: string;
   school_licenses?: License[];
+  school_contact_logs?: { contacted_at: string; channel: string }[];
+  teacher_count?: number;
+  student_count?: number;
 }
 
 export default function SchoolManagement() {
@@ -88,6 +94,18 @@ export default function SchoolManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSchool, setEditingSchool] = useState<School | null>(null);
+
+  const getDisplayOnboardingStatus = (school: School) => {
+    const tc = school.teacher_count || 0;
+    const sc = school.student_count || 0;
+    if (school.onboarding_status === 'Active & Onboarded' || (tc > 20 && sc > 500)) {
+      return 'Active & Onboarded';
+    }
+    if (school.onboarding_status === 'In Progress' || (tc >= 5 && sc >= 100)) {
+      return 'In Progress';
+    }
+    return 'Pending';
+  };
 
   // License Management State
   const [isLicenseDialogOpen, setIsLicenseDialogOpen] = useState(false);
@@ -101,6 +119,25 @@ export default function SchoolManagement() {
   const [isDeletingTeachers, setIsDeletingTeachers] = useState(false);
 
   const { toast } = useToast();
+
+  // Tab & Pagination states for Schools Table
+  const [activeTab, setActiveTab] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Pagination states for Licenses Table
+  const [licensePage, setLicensePage] = useState(1);
+  const [licensePageSize, setLicensePageSize] = useState(5);
+
+  // Reset page when tab or search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchQuery]);
+
+  // Reset license page when selectedSchool changes
+  useEffect(() => {
+    setLicensePage(1);
+  }, [selectedSchool?.id]);
 
   const form = useForm<z.infer<typeof schoolSchema>>({
     resolver: zodResolver(schoolSchema),
@@ -131,13 +168,36 @@ export default function SchoolManagement() {
   const fetchSchools = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('schools')
-        .select('*, school_licenses(*)')
-        .order('created_at', { ascending: false });
+      const [schoolsRes, countsRes] = await Promise.all([
+        supabase
+          .from('schools')
+          .select('*, school_licenses(*), school_contact_logs(contacted_at, channel)')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('school_profile_counts')
+          .select('*')
+      ]);
 
-      if (error) throw error;
-      setSchools(data || []);
+      if (schoolsRes.error) throw schoolsRes.error;
+      if (countsRes.error) throw countsRes.error;
+
+      const schoolTeacherCounts: Record<string, number> = {};
+      const schoolStudentCounts: Record<string, number> = {};
+
+      if (countsRes.data) {
+        countsRes.data.forEach((row: any) => {
+          schoolTeacherCounts[row.school_id] = row.teacher_count;
+          schoolStudentCounts[row.school_id] = row.student_count;
+        });
+      }
+
+      const schoolsWithCounts = (schoolsRes.data || []).map((s: any) => ({
+        ...s,
+        teacher_count: schoolTeacherCounts[s.id] || 0,
+        student_count: schoolStudentCounts[s.id] || 0
+      }));
+
+      setSchools(schoolsWithCounts);
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -387,10 +447,79 @@ export default function SchoolManagement() {
     setIsDialogOpen(true);
   };
 
-  const filteredSchools = schools.filter(school =>
-    school.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    school.slug.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Sort and filter schools based on activeTab
+  const getFilteredAndSortedSchools = () => {
+    let result = [...schools];
+
+    const hasActiveLicense = (s: School) => !!getActiveLicense(s);
+    const hasExpiredLicense = (s: School) => {
+      if (!s.school_licenses || s.school_licenses.length === 0) return false;
+      return !getActiveLicense(s);
+    };
+
+    const isOverdueRegistration = (s: School) => {
+      const createdTime = new Date(s.created_at).getTime();
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      return createdTime < thirtyDaysAgo && !hasActiveLicense(s);
+    };
+
+    // Filter by search query first
+    if (searchQuery) {
+      result = result.filter(school =>
+        school.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        school.slug.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    // Apply active tab filtering / sorting
+    switch (activeTab) {
+      case 'new':
+        // Sort by created_at descending (newest first)
+        result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        break;
+      case 'oldest':
+        // Sort by created_at ascending (oldest first)
+        result.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        break;
+      case 'paid':
+        result = result.filter(s => hasActiveLicense(s));
+        break;
+      case 'overdue':
+        result = result.filter(s => 
+          hasExpiredLicense(s) || 
+          isOverdueRegistration(s)
+        );
+        break;
+      case 'unpaid':
+        // Unpaid lists schools registered less than 30 days without an active license (not overdue yet)
+        result = result.filter(s => 
+          !hasActiveLicense(s) && 
+          !isOverdueRegistration(s)
+        );
+        break;
+      case 'active':
+        result = result.filter(s => getDisplayOnboardingStatus(s) === 'Active & Onboarded');
+        break;
+      case 'in-progress':
+        result = result.filter(s => getDisplayOnboardingStatus(s) === 'In Progress');
+        break;
+      case 'pending':
+        result = result.filter(s => getDisplayOnboardingStatus(s) === 'Pending');
+        break;
+      case 'all':
+      default:
+        // Default sort: newest first
+        result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        break;
+    }
+
+    return result;
+  };
+
+  const processedSchools = getFilteredAndSortedSchools();
+  const totalItems = processedSchools.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  const paginatedSchools = processedSchools.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   if (viewingSchool) {
     return (
@@ -500,25 +629,41 @@ export default function SchoolManagement() {
         </Dialog>
       </div>
 
-      <div className="flex items-center space-x-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search schools..."
-            className="pl-8 max-w-sm"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search schools..."
+              className="pl-8"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
         </div>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full animate-in fade-in duration-300">
+          <TabsList className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 w-full h-auto gap-1 bg-slate-100 p-1 dark:bg-slate-800 rounded-lg border">
+            <TabsTrigger value="all" className="font-bold text-sm py-2.5 px-4 w-full h-full">All</TabsTrigger>
+            <TabsTrigger value="new" className="font-bold text-sm py-2.5 px-4 w-full h-full">Newest</TabsTrigger>
+            <TabsTrigger value="oldest" className="font-bold text-sm py-2.5 px-4 w-full h-full">Oldest</TabsTrigger>
+            <TabsTrigger value="paid" className="font-bold text-sm py-2.5 px-4 w-full h-full">Paid Subscriptions</TabsTrigger>
+            <TabsTrigger value="overdue" className="font-bold text-sm py-2.5 px-4 w-full h-full">Overdue & Grace</TabsTrigger>
+            <TabsTrigger value="unpaid" className="font-bold text-sm py-2.5 px-4 w-full h-full">Unpaid</TabsTrigger>
+            <TabsTrigger value="active" className="font-bold text-sm py-2.5 px-4 w-full h-full">Onboarded</TabsTrigger>
+            <TabsTrigger value="in-progress" className="font-bold text-sm py-2.5 px-4 w-full h-full">In Progress</TabsTrigger>
+            <TabsTrigger value="pending" className="font-bold text-sm py-2.5 px-4 w-full h-full">Pending Setup</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Slug</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead colSpan={1}>Name</TableHead>
+              <TableHead>Onboarding</TableHead>
+              <TableHead>Last Contact</TableHead>
               <TableHead>Plan</TableHead>
               <TableHead>License</TableHead>
               <TableHead>Created</TableHead>
@@ -528,18 +673,18 @@ export default function SchoolManagement() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                 </TableCell>
               </TableRow>
-            ) : filteredSchools.length === 0 ? (
+            ) : paginatedSchools.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                   No schools found.
                 </TableCell>
               </TableRow>
             ) : (
-              filteredSchools.map((school) => (
+              paginatedSchools.map((school) => (
                 <TableRow key={school.id}>
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
@@ -548,16 +693,40 @@ export default function SchoolManagement() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={
-                      school.status === 'Active' ? 'default' : 
-                      school.status === 'Pending' ? 'outline' : 
-                      'destructive'
-                    } className={cn(
-                      school.status === 'Active' && "bg-green-500 hover:bg-green-600",
-                      school.status === 'Pending' && "border-yellow-500 text-yellow-600",
-                    )}>
-                      {school.status || 'Active'}
-                    </Badge>
+                    {(() => {
+                      const onboardingStatusDisplay = getDisplayOnboardingStatus(school);
+                      return (
+                        <Badge variant={
+                          onboardingStatusDisplay === 'Active & Onboarded' ? 'default' :
+                          onboardingStatusDisplay === 'In Progress' ? 'secondary' :
+                          'outline'
+                        } className={cn(
+                          onboardingStatusDisplay === 'Active & Onboarded' && "bg-emerald-500 hover:bg-emerald-600 text-white font-semibold border-none",
+                          onboardingStatusDisplay === 'In Progress' && "bg-blue-500 hover:bg-blue-600 text-white font-semibold border-none",
+                          onboardingStatusDisplay === 'Pending' && "border-amber-500 text-amber-600 font-semibold"
+                        )}>
+                          {onboardingStatusDisplay}
+                        </Badge>
+                      );
+                    })()}
+                  </TableCell>
+                  <TableCell>
+                    {(() => {
+                      if (!school.school_contact_logs || school.school_contact_logs.length === 0) {
+                        return <span className="text-muted-foreground text-xs font-semibold">Never Contacted</span>;
+                      }
+                      
+                      const latestContact = school.school_contact_logs.reduce((latest, current) => {
+                        return new Date(current.contacted_at) > new Date(latest.contacted_at) ? current : latest;
+                      }, school.school_contact_logs[0]);
+                      
+                      return (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm font-semibold">{new Date(latestContact.contacted_at).toLocaleDateString()}</span>
+                          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">{latestContact.channel}</span>
+                        </div>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell>{school.plan}</TableCell>
                   <TableCell>
@@ -627,6 +796,18 @@ export default function SchoolManagement() {
         </Table>
       </div>
 
+      <PaginationControls
+        currentPage={currentPage}
+        totalPages={totalPages}
+        pageSize={pageSize}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setCurrentPage(1);
+        }}
+        totalItems={totalItems}
+      />
+
       <Dialog open={isLicenseDialogOpen} onOpenChange={setIsLicenseDialogOpen}>
         <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
@@ -650,52 +831,79 @@ export default function SchoolManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {selectedSchool?.school_licenses && selectedSchool.school_licenses.length > 0 ? (
-                    selectedSchool.school_licenses
-                      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                      .map((license) => (
-                        <TableRow key={license.id}>
-                          <TableCell>
-                            <Badge variant={
-                              license.status === 'active' && new Date(license.end_date) > new Date()
-                                ? 'default'
-                                : 'destructive'
-                            }>
-                              {license.status === 'active' && new Date(license.end_date) < new Date() ? 'expired' : license.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">{license.license_key.substring(0, 8)}...</TableCell>
-                          <TableCell>{new Date(license.start_date).toLocaleDateString()}</TableCell>
-                          <TableCell>{new Date(license.end_date).toLocaleDateString()}</TableCell>
-                          <TableCell className="text-right space-x-2">
-                            {license.status === 'active' && new Date(license.end_date) > new Date() && (
-                              <>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleExtendLicense(license.id, license.end_date)}
-                                >
-                                  Extend
-                                </Button>
-                                <Button
-                                  variant="destructive"
-                                  size="sm"
-                                  onClick={() => handleRevokeLicense(license.id)}
-                                >
-                                  Revoke
-                                </Button>
-                              </>
-                            )}
+                  {(() => {
+                    const licenses = selectedSchool?.school_licenses || [];
+                    const sortedLicenses = [...licenses].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                    const totalLicenses = sortedLicenses.length;
+                    const totalLicensePages = Math.ceil(totalLicenses / licensePageSize);
+                    const paginatedLicenses = sortedLicenses.slice((licensePage - 1) * licensePageSize, licensePage * licensePageSize);
+
+                    if (paginatedLicenses.length > 0) {
+                      return (
+                        <>
+                          {paginatedLicenses.map((license) => (
+                            <TableRow key={license.id}>
+                              <TableCell>
+                                <Badge variant={
+                                  license.status === 'active' && new Date(license.end_date) > new Date()
+                                    ? 'default'
+                                    : 'destructive'
+                                }>
+                                  {license.status === 'active' && new Date(license.end_date) < new Date() ? 'expired' : license.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="font-mono text-xs">{license.license_key.substring(0, 8)}...</TableCell>
+                              <TableCell>{new Date(license.start_date).toLocaleDateString()}</TableCell>
+                              <TableCell>{new Date(license.end_date).toLocaleDateString()}</TableCell>
+                              <TableCell className="text-right space-x-2">
+                                {license.status === 'active' && new Date(license.end_date) > new Date() && (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleExtendLicense(license.id, license.end_date)}
+                                    >
+                                      Extend
+                                    </Button>
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() => handleRevokeLicense(license.id)}
+                                    >
+                                      Revoke
+                                    </Button>
+                                  </>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          <TableRow>
+                            <TableCell colSpan={5} className="p-0">
+                              <PaginationControls
+                                currentPage={licensePage}
+                                totalPages={totalLicensePages}
+                                pageSize={licensePageSize}
+                                onPageChange={setLicensePage}
+                                onPageSizeChange={(size) => {
+                                  setLicensePageSize(size);
+                                  setLicensePage(1);
+                                }}
+                                totalItems={totalLicenses}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        </>
+                      );
+                    } else {
+                      return (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center text-muted-foreground py-4">
+                            No licenses found.
                           </TableCell>
                         </TableRow>
-                      ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-4">
-                        No licenses found.
-                      </TableCell>
-                    </TableRow>
-                  )}
+                      );
+                    }
+                  })()}
                 </TableBody>
               </Table>
             </div>

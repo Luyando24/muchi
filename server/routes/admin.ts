@@ -1861,4 +1861,498 @@ router.delete('/finances/transactions/:id', requireSystemAdmin, async (req: Requ
   }
 });
 
+
+// ==========================================
+// School Project Management & CRM Endpoints
+// ==========================================
+
+// GET /api/admin/schools/:id/project-details
+// Fetch detailed onboarding, payment, tasks, contacts, contact logs, and usage stats
+router.get('/schools/:id/project-details', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    // 1. Fetch school details
+    const { data: school, error: schoolError } = await supabaseAdmin
+      .from('schools')
+      .select('*, school_licenses(*)')
+      .eq('id', id)
+      .single();
+
+    if (schoolError) throw schoolError;
+
+    // 2. Fetch tasks
+    const { data: tasks, error: tasksError } = await supabaseAdmin
+      .from('school_tasks')
+      .select('*')
+      .eq('school_id', id)
+      .order('created_at', { ascending: false });
+
+    if (tasksError) throw tasksError;
+
+    // 3. Fetch contacts
+    const { data: contacts, error: contactsError } = await supabaseAdmin
+      .from('school_contacts')
+      .select('*')
+      .eq('school_id', id)
+      .order('name', { ascending: true });
+
+    if (contactsError) throw contactsError;
+
+    // 4. Fetch contact logs
+    const { data: contactLogs, error: contactLogsError } = await supabaseAdmin
+      .from('school_contact_logs')
+      .select(`
+        *,
+        contacted_by_profile:profiles!school_contact_logs_contacted_by_fkey(id, full_name),
+        school_contacts!school_contact_logs_contacted_with_fkey(id, name)
+      `)
+      .eq('school_id', id)
+      .order('contacted_at', { ascending: false });
+
+    if (contactLogsError) throw contactLogsError;
+
+    // 5. Gather usage statistics
+    const [studentRes, teacherRes, classRes] = await Promise.all([
+      supabaseAdmin
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('school_id', id)
+        .eq('role', 'student'),
+      supabaseAdmin
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('school_id', id)
+        .eq('role', 'teacher'),
+      supabaseAdmin
+        .from('classes')
+        .select('*', { count: 'exact', head: true })
+        .eq('school_id', id)
+    ]);
+
+    // Active users in 7d and 30d (by matching auth users to school profiles)
+    let active7d = 0;
+    let active30d = 0;
+
+    const { data: profiles, error: profilesError } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('school_id', id);
+
+    if (!profilesError && profiles && profiles.length > 0) {
+      const schoolUserIds = new Set(profiles.map(p => p.id));
+      
+      // Page through all auth users to find matching sign-ins
+      let allUsers: any[] = [];
+      let page = 1;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data: userDataObj, error: userDataErr } = await supabaseAdmin.auth.admin.listUsers({
+          page,
+          perPage: 1000
+        });
+
+        if (userDataErr) {
+          console.error('Error fetching auth users inside project-details:', userDataErr);
+          break;
+        }
+
+        const usersList = userDataObj?.users || [];
+        if (usersList.length === 0) {
+          hasMore = false;
+        } else {
+          allUsers.push(...usersList);
+          if (usersList.length < 1000) {
+            hasMore = false;
+          } else {
+            page++;
+          }
+        }
+      }
+
+      const now = Date.now();
+      const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+      const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+
+      allUsers.forEach((u: any) => {
+        if (schoolUserIds.has(u.id)) {
+          const lastSignIn = u.last_sign_in_at ? new Date(u.last_sign_in_at).getTime() : null;
+          if (lastSignIn) {
+            if (lastSignIn >= sevenDaysAgo) active7d++;
+            if (lastSignIn >= thirtyDaysAgo) active30d++;
+          }
+        }
+      });
+    }
+
+    res.json({
+      school,
+      tasks: tasks || [],
+      contacts: contacts || [],
+      contactLogs: contactLogs || [],
+      stats: {
+        studentCount: studentRes.count || 0,
+        teacherCount: teacherRes.count || 0,
+        classCount: classRes.count || 0,
+        active7d,
+        active30d
+      }
+    });
+  } catch (error: any) {
+    console.error('Fetch School Project Details Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// PUT /api/admin/schools/:id/project-details
+// Update onboarding status and admin notes
+router.put('/schools/:id/project-details', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { onboarding_status, admin_notes } = req.body;
+
+  try {
+    const { data: school, error } = await supabaseAdmin
+      .from('schools')
+      .update({
+        onboarding_status: onboarding_status !== undefined ? onboarding_status : undefined,
+        admin_notes: admin_notes !== undefined ? admin_notes : undefined
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(school);
+  } catch (error: any) {
+    console.error('Update School Project Details Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// POST /api/admin/schools/:id/tasks
+// Create a new task/reminder for a school
+router.post('/schools/:id/tasks', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { title, description, category, due_date } = req.body;
+
+  if (!title) {
+    return res.status(400).json({ message: 'Task title is required.' });
+  }
+
+  try {
+    const { data: task, error } = await supabaseAdmin
+      .from('school_tasks')
+      .insert({
+        school_id: id,
+        title,
+        description: description || '',
+        category: category || 'general',
+        due_date: due_date || null,
+        status: 'pending'
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(201).json(task);
+  } catch (error: any) {
+    console.error('Create School Task Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// PUT /api/admin/schools/:id/tasks/:taskId
+// Update a school task
+router.put('/schools/:id/tasks/:taskId', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { taskId } = req.params;
+  const { title, description, status, category, due_date } = req.body;
+
+  const updates: any = {};
+  if (title !== undefined) updates.title = title;
+  if (description !== undefined) updates.description = description;
+  if (status !== undefined) {
+    updates.status = status;
+    if (status === 'completed') {
+      updates.completed_at = new Date().toISOString();
+    } else {
+      updates.completed_at = null;
+    }
+  }
+  if (category !== undefined) updates.category = category;
+  if (due_date !== undefined) updates.due_date = due_date;
+
+  try {
+    const { data: task, error } = await supabaseAdmin
+      .from('school_tasks')
+      .update(updates)
+      .eq('id', taskId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(task);
+  } catch (error: any) {
+    console.error('Update School Task Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// DELETE /api/admin/schools/:id/tasks/:taskId
+// Delete a school task
+router.delete('/schools/:id/tasks/:taskId', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { taskId } = req.params;
+
+  try {
+    const { error } = await supabaseAdmin
+      .from('school_tasks')
+      .delete()
+      .eq('id', taskId);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Delete School Task Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// POST /api/admin/schools/:id/contacts
+// Create a new school contact
+router.post('/schools/:id/contacts', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name, role, phone, email } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ message: 'Contact name is required.' });
+  }
+
+  try {
+    const { data: contact, error } = await supabaseAdmin
+      .from('school_contacts')
+      .insert({
+        school_id: id,
+        name,
+        role: role || '',
+        phone: phone || '',
+        email: email || ''
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(201).json(contact);
+  } catch (error: any) {
+    console.error('Create School Contact Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// PUT /api/admin/schools/:id/contacts/:contactId
+// Update a school contact
+router.put('/schools/:id/contacts/:contactId', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { contactId } = req.params;
+  const { name, role, phone, email } = req.body;
+
+  try {
+    const { data: contact, error } = await supabaseAdmin
+      .from('school_contacts')
+      .update({
+        name: name !== undefined ? name : undefined,
+        role: role !== undefined ? role : undefined,
+        phone: phone !== undefined ? phone : undefined,
+        email: email !== undefined ? email : undefined
+      })
+      .eq('id', contactId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(contact);
+  } catch (error: any) {
+    console.error('Update School Contact Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// DELETE /api/admin/schools/:id/contacts/:contactId
+// Delete a school contact
+router.delete('/schools/:id/contacts/:contactId', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { contactId } = req.params;
+
+  try {
+    const { error } = await supabaseAdmin
+      .from('school_contacts')
+      .delete()
+      .eq('id', contactId);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Delete School Contact Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// POST /api/admin/schools/:id/contact-logs
+// Log a school contact interaction
+router.post('/schools/:id/contact-logs', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { contacted_at, contacted_by, contacted_with, channel, summary, status_outcome, next_step } = req.body;
+  const authUser = (req as any).user;
+
+  if (!channel || !summary) {
+    return res.status(400).json({ message: 'Channel and summary are required.' });
+  }
+
+  try {
+    // 1. Insert interaction
+    const { data: newLog, error: insertError } = await supabaseAdmin
+      .from('school_contact_logs')
+      .insert({
+        school_id: id,
+        contacted_at: contacted_at || new Date().toISOString(),
+        contacted_by: contacted_by || authUser.id,
+        contacted_with: contacted_with || null,
+        channel,
+        summary,
+        status_outcome: status_outcome || '',
+        next_step: next_step || ''
+      })
+      .select()
+      .single();
+
+    if (insertError) throw insertError;
+
+    // 2. Fetch full log with relationships so client updates nicely
+    const { data: fullLog, error: fetchError } = await supabaseAdmin
+      .from('school_contact_logs')
+      .select(`
+        *,
+        contacted_by_profile:profiles!school_contact_logs_contacted_by_fkey(id, full_name),
+        school_contacts!school_contact_logs_contacted_with_fkey(id, name)
+      `)
+      .eq('id', newLog.id)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    res.status(201).json(fullLog);
+  } catch (error: any) {
+    console.error('Log School Contact Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// DELETE /api/admin/schools/:id/contact-logs/:logId
+// Delete a school contact log
+router.delete('/schools/:id/contact-logs/:logId', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { logId } = req.params;
+
+  try {
+    const { error } = await supabaseAdmin
+      .from('school_contact_logs')
+      .delete()
+      .eq('id', logId);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Delete School Contact Log Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// ==========================================
+// Prospects CRM Management Endpoints
+// ==========================================
+
+// GET /api/admin/prospects
+router.get('/prospects', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('prospects')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    console.error('List Prospects Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// POST /api/admin/prospects
+router.post('/prospects', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { school_name, contact_name, email, phone, address, status, notes } = req.body;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('prospects')
+      .insert({
+        school_name,
+        contact_name,
+        email,
+        phone,
+        address,
+        status: status || 'New',
+        notes
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (error: any) {
+    console.error('Create Prospect Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// PUT /api/admin/prospects/:id
+router.put('/prospects/:id', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { school_name, contact_name, email, phone, address, status, notes } = req.body;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('prospects')
+      .update({
+        school_name,
+        contact_name,
+        email,
+        phone,
+        address,
+        status,
+        notes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    console.error('Update Prospect Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+// DELETE /api/admin/prospects/:id
+router.delete('/prospects/:id', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const { error } = await supabaseAdmin
+      .from('prospects')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Delete Prospect Error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
 export const adminRouter = router;
