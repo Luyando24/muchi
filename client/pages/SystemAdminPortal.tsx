@@ -185,7 +185,7 @@ export default function SystemAdminPortal() {
         )}
 
         {/* Main Content */}
-        <main className="flex-1 p-6 overflow-y-auto h-[calc(100vh-64px)]">
+        <main className="flex-1 p-6 overflow-y-auto h-[calc(100vh-64px)] pb-24 lg:pb-6">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             {/* Dashboard Tab */}
         <TabsContent value="dashboard" className="space-y-6">
@@ -502,6 +502,61 @@ export default function SystemAdminPortal() {
             </TabsContent>
           </Tabs>
         </main>
+      </div>
+
+      {/* Bottom Navigation for Mobile */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-50 flex justify-around items-center px-2 pb-safe shadow-lg">
+        <button
+          onClick={() => setActiveTab("dashboard")}
+          className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-xs font-semibold transition-colors ${
+            activeTab === "dashboard" ? "text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400"
+          }`}
+        >
+          <LayoutDashboard className="h-5 w-5 mb-0.5" />
+          <span>Dashboard</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("schools")}
+          className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-xs font-semibold transition-colors ${
+            activeTab === "schools" ? "text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400"
+          }`}
+        >
+          <Building className="h-5 w-5 mb-0.5" />
+          <span>Schools</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("prospects")}
+          className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-xs font-semibold transition-colors ${
+            activeTab === "prospects" ? "text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400"
+          }`}
+        >
+          <UserPlus className="h-5 w-5 mb-0.5" />
+          <span>CRM</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("finances")}
+          className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-xs font-semibold transition-colors ${
+            activeTab === "finances" ? "text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400"
+          }`}
+        >
+          <DollarSign className="h-5 w-5 mb-0.5" />
+          <span>Finances</span>
+        </button>
+
+        <button
+          onClick={() => setIsSidebarOpen(true)}
+          className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-xs font-semibold transition-colors ${
+            !["dashboard", "schools", "prospects", "finances"].includes(activeTab) 
+              ? "text-blue-600 dark:text-blue-400 animate-pulse" 
+              : "text-slate-500 dark:text-slate-400"
+          }`}
+        >
+          <Menu className="h-5 w-5 mb-0.5" />
+          <span>More</span>
+        </button>
       </div>
     </div>
   );
