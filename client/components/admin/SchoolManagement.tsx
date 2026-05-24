@@ -41,6 +41,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
@@ -118,6 +125,68 @@ export default function SchoolManagement() {
   const [teacherDeleteTargetId, setTeacherDeleteTargetId] = useState<string | null>(null);
   const [isDeletingTeachers, setIsDeletingTeachers] = useState(false);
 
+  // Custom Pricing Subscription Plans
+  const [plans, setPlans] = useState<any[]>([]);
+  const [selectedPlanName, setSelectedPlanName] = useState<string>('');
+  const [selectedDurationOption, setSelectedDurationOption] = useState<string>('');
+
+  const getDurationOptions = (plan: any): Array<{ label: string; value: string; months?: number; days?: number }> => {
+    if (!plan) return [];
+    
+    const cycle = plan.billing_cycle;
+    const durVal = plan.duration_value || 1;
+    const durUnit = plan.duration_unit || 'months';
+
+    if (cycle === 'termly') {
+      return [
+        { label: "1 Term (4 Months)", months: 4, value: "4m" },
+        { label: "2 Terms (8 Months)", months: 8, value: "8m" },
+        { label: "3 Terms / Full Year (12 Months)", months: 12, value: "12m" },
+        { label: "6 Terms / 2 Years (24 Months)", months: 24, value: "24m" }
+      ];
+    } else if (cycle === 'yearly') {
+      return [
+        { label: "1 Year (12 Months)", months: 12, value: "12m" },
+        { label: "2 Years (24 Months)", months: 24, value: "24m" },
+        { label: "3 Years (36 Months)", months: 36, value: "36m" }
+      ];
+    } else if (cycle === 'monthly') {
+      return [
+        { label: "1 Month", months: 1, value: "1m" },
+        { label: "3 Months (1 Term)", months: 3, value: "3m" },
+        { label: "6 Months", months: 6, value: "6m" },
+        { label: "12 Months / Full Year", months: 12, value: "12m" },
+        { label: "24 Months / 2 Years", months: 24, value: "24m" }
+      ];
+    } else {
+      if (durUnit === 'days') {
+        return [
+          { label: `1 Period (${durVal} Days)`, days: durVal, value: `${durVal}d` },
+          { label: `2 Periods (${durVal * 2} Days)`, days: durVal * 2, value: `${durVal * 2}d` },
+          { label: `3 Periods (${durVal * 3} Days)`, days: durVal * 3, value: `${durVal * 3}d` },
+          { label: `6 Periods (${durVal * 6} Days)`, days: durVal * 6, value: `${durVal * 6}d` }
+        ];
+      } else {
+        return [
+          { label: `1 Period (${durVal} Months)`, months: durVal, value: `${durVal}m` },
+          { label: `2 Periods (${durVal * 2} Months)`, months: durVal * 2, value: `${durVal * 2}m` },
+          { label: `3 Periods (${durVal * 3} Months)`, months: durVal * 3, value: `${durVal * 3}m` },
+          { label: `6 Periods (${durVal * 6} Months)`, months: durVal * 6, value: `${durVal * 6}m` }
+        ];
+      }
+    }
+  };
+
+  useEffect(() => {
+    const plan = plans.find(p => p.name === selectedPlanName);
+    if (plan) {
+      const opts = getDurationOptions(plan);
+      if (opts.length > 0) {
+        setSelectedDurationOption(opts[0].value);
+      }
+    }
+  }, [selectedPlanName, plans]);
+
   const { toast } = useToast();
 
   // Tab & Pagination states for Schools Table
@@ -153,7 +222,22 @@ export default function SchoolManagement() {
   // Fetch schools on mount
   useEffect(() => {
     fetchSchools();
+    fetchPlans();
   }, []);
+
+  const fetchPlans = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('subscription_plans')
+        .select('*')
+        .eq('is_active', true)
+        .order('price', { ascending: true });
+      if (error) throw error;
+      setPlans(data || []);
+    } catch (error: any) {
+      console.error('Error fetching subscription plans:', error);
+    }
+  };
 
   // Sync selectedSchool with schools list when it updates (to keep dialog data fresh)
   useEffect(() => {
@@ -223,17 +307,33 @@ export default function SchoolManagement() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
+      const plan = plans.find(p => p.name === selectedPlanName);
+      if (!plan) throw new Error("Please select a subscription plan");
+
+      const options = getDurationOptions(plan);
+      const selectedOpt = options.find(o => o.value === selectedDurationOption) || options[0];
+      if (!selectedOpt) throw new Error("Please select a subscription duration");
+
+      const bodyData: any = {
+        schoolId: selectedSchool.id,
+        plan: selectedPlanName
+      };
+
+      if (selectedOpt.days) {
+        bodyData.durationDays = selectedOpt.days;
+      } else if (selectedOpt.months) {
+        bodyData.durationMonths = selectedOpt.months;
+      } else {
+        bodyData.durationYears = 1;
+      }
+
       const response = await fetch('/api/admin/licenses', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session?.access_token}`
         },
-        body: JSON.stringify({
-          schoolId: selectedSchool.id,
-          plan: selectedSchool.plan,
-          durationYears: licenseDuration
-        })
+        body: JSON.stringify(bodyData)
       });
 
       if (!response.ok) {
@@ -246,8 +346,6 @@ export default function SchoolManagement() {
         description: "License generated successfully",
       });
 
-      // Keep dialog open to see the new license
-      // setIsLicenseDialogOpen(false); 
       fetchSchools();
     } catch (error: any) {
       console.error('Error generating license:', error);
@@ -760,6 +858,7 @@ export default function SchoolManagement() {
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
                         <DropdownMenuItem onClick={() => {
                           setSelectedSchool(school);
+                          setSelectedPlanName(school.plan || 'Standard');
                           setIsLicenseDialogOpen(true);
                         }}>
                           <Building className="mr-2 h-4 w-4" /> Manage License
@@ -911,23 +1010,89 @@ export default function SchoolManagement() {
             {/* Generate New License */}
             <div className="rounded-lg border p-4 bg-muted/50">
               <h4 className="font-medium mb-4">Generate New License</h4>
-              <div className="flex items-end gap-4">
+              <div className="flex flex-col md:flex-row items-start md:items-end gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="duration">Duration (Years)</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="duration"
-                      type="number"
-                      min="1"
-                      value={licenseDuration}
-                      onChange={(e) => setLicenseDuration(parseInt(e.target.value) || 1)}
-                      className="w-24"
-                    />
-                  </div>
+                  <Label htmlFor="plan-select">Subscription Plan</Label>
+                  <Select value={selectedPlanName} onValueChange={setSelectedPlanName}>
+                    <SelectTrigger className="w-56">
+                      <SelectValue placeholder="Select plan" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {plans.map((p) => (
+                        <SelectItem key={p.id} value={p.name}>
+                          {p.name} ({p.currency} {Number(p.price).toLocaleString()})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                <div className="flex-1 text-sm text-muted-foreground pb-3">
-                  New license will expire on: <span className="font-medium text-foreground">{new Date(new Date().setFullYear(new Date().getFullYear() + licenseDuration)).toLocaleDateString()}</span>
+                <div className="grid gap-2">
+                  <Label htmlFor="duration">Duration / Period</Label>
+                  <Select 
+                    value={selectedDurationOption} 
+                    onValueChange={setSelectedDurationOption}
+                  >
+                    <SelectTrigger className="w-56 bg-white dark:bg-slate-950">
+                      <SelectValue placeholder="Select duration" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(() => {
+                        const plan = plans.find(p => p.name === selectedPlanName);
+                        const opts = getDurationOptions(plan);
+                        return opts.map(opt => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ));
+                      })()}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex-1 text-sm text-muted-foreground pb-2 space-y-1">
+                  {(() => {
+                    const plan = plans.find(p => p.name === selectedPlanName);
+                    if (!plan) return null;
+                    const price = Number(plan.price);
+                    
+                    const opts = getDurationOptions(plan);
+                    const selectedOpt = opts.find(o => o.value === selectedDurationOption) || opts[0];
+                    if (!selectedOpt) return null;
+
+                    // Calculate number of cycles
+                    let cycles = 1;
+                    const planDurationVal = plan.duration_value || 1;
+                    if (selectedOpt.days) {
+                      cycles = selectedOpt.days / planDurationVal;
+                    } else if (selectedOpt.months) {
+                      cycles = selectedOpt.months / planDurationVal;
+                    }
+
+                    const totalCost = price * cycles;
+
+                    // Calculate expiration date
+                    const expDate = new Date();
+                    if (selectedOpt.days) {
+                      expDate.setDate(expDate.getDate() + selectedOpt.days);
+                    } else if (selectedOpt.months) {
+                      expDate.setMonth(expDate.getMonth() + selectedOpt.months);
+                    }
+
+                    return (
+                      <>
+                        <div>
+                          Rate: <span className="font-bold text-foreground">{plan.currency} {price.toLocaleString()} ({plan.billing_cycle === 'termly' ? 'per Term' : plan.billing_cycle === 'yearly' ? 'per Year' : plan.billing_cycle === 'monthly' ? 'per Month' : `per ${plan.duration_value} ${plan.duration_unit}`})</span>
+                        </div>
+                        <div>
+                          Total Cost: <span className="font-bold text-foreground">{plan.currency} {totalCost.toLocaleString()}</span>
+                        </div>
+                        <div>
+                          Expires on: <span className="font-semibold text-foreground">{expDate.toLocaleDateString()}</span>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <Button onClick={handleGenerateLicense} disabled={generatingLicense}>

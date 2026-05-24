@@ -100,6 +100,8 @@ export interface SubscriptionPlan {
   country_ids?: string[];
   min_students?: number;
   max_students?: number;
+  duration_value?: number;
+  duration_unit?: 'months' | 'days';
   created_at: string;
 }
 

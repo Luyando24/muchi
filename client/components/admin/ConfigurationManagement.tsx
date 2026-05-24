@@ -31,6 +31,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabase';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -59,6 +60,8 @@ export default function ConfigurationManagement() {
   const [newPrice, setNewPrice] = useState('0');
   const [newDescription, setNewDescription] = useState('');
   const [newBillingCycle, setNewBillingCycle] = useState('monthly');
+  const [newDurationValue, setNewDurationValue] = useState('1');
+  const [newDurationUnit, setNewDurationUnit] = useState<'months' | 'days'>('months');
   const [selectedCountryIds, setSelectedCountryIds] = useState<string[]>([]);
   const [newMinStudents, setNewMinStudents] = useState('0');
   const [newMaxStudents, setNewMaxStudents] = useState('');
@@ -292,7 +295,9 @@ export default function ConfigurationManagement() {
           is_active: true,
           country_ids: selectedCountryIds,
           min_students: parseInt(newMinStudents) || 0,
-          max_students: newMaxStudents ? parseInt(newMaxStudents) : null
+          max_students: newMaxStudents ? parseInt(newMaxStudents) : null,
+          duration_value: parseInt(newDurationValue) || 1,
+          duration_unit: newDurationUnit
         })
       });
 
@@ -307,6 +312,8 @@ export default function ConfigurationManagement() {
       setNewDescription('');
       setNewPrice('0');
       setNewBillingCycle('monthly');
+      setNewDurationValue('1');
+      setNewDurationUnit('months');
       setSelectedCountryIds([]);
       setNewMinStudents('0');
       setNewMaxStudents('');
@@ -338,7 +345,9 @@ export default function ConfigurationManagement() {
           is_active: true,
           country_ids: selectedCountryIds,
           min_students: parseInt(newMinStudents) || 0,
-          max_students: newMaxStudents ? parseInt(newMaxStudents) : null
+          max_students: newMaxStudents ? parseInt(newMaxStudents) : null,
+          duration_value: parseInt(newDurationValue) || 1,
+          duration_unit: newDurationUnit
         })
       });
 
@@ -730,12 +739,33 @@ export default function ConfigurationManagement() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Billing Cycle</Label>
-                    <Input 
-                      placeholder="e.g. monthly, yearly" 
+                    <Label>Billing Cycle / Period</Label>
+                    <Select 
                       value={newBillingCycle} 
-                      onChange={(e) => setNewBillingCycle(e.target.value)}
-                    />
+                      onValueChange={(val) => {
+                        setNewBillingCycle(val);
+                        if (val === 'monthly') {
+                          setNewDurationValue('1');
+                          setNewDurationUnit('months');
+                        } else if (val === 'termly') {
+                          setNewDurationValue('4');
+                          setNewDurationUnit('months');
+                        } else if (val === 'yearly') {
+                          setNewDurationValue('12');
+                          setNewDurationUnit('months');
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-full bg-white dark:bg-slate-950">
+                        <SelectValue placeholder="Select cycle" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="termly">Termly (per Term)</SelectItem>
+                        <SelectItem value="yearly">Yearly (for 1 Year)</SelectItem>
+                        <SelectItem value="custom">Custom Duration</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>Min Students</Label>
@@ -756,6 +786,36 @@ export default function ConfigurationManagement() {
                     />
                   </div>
                 </div>
+
+                {newBillingCycle === 'custom' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 border rounded-lg bg-blue-50/20 dark:bg-blue-950/10 border-blue-100 dark:border-blue-900/30">
+                    <div className="space-y-2">
+                      <Label className="text-blue-700 dark:text-blue-400 font-semibold">Custom Duration Value</Label>
+                      <Input 
+                        type="number" 
+                        min="1" 
+                        placeholder="e.g. 45" 
+                        value={newDurationValue} 
+                        onChange={(e) => setNewDurationValue(e.target.value)} 
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-blue-700 dark:text-blue-400 font-semibold">Duration Unit</Label>
+                      <Select 
+                        value={newDurationUnit} 
+                        onValueChange={(val: any) => setNewDurationUnit(val)}
+                      >
+                        <SelectTrigger className="w-full bg-white dark:bg-slate-950">
+                          <SelectValue placeholder="Unit" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="months">Months</SelectItem>
+                          <SelectItem value="days">Days</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>Description</Label>
                   <Input 
@@ -863,6 +923,8 @@ export default function ConfigurationManagement() {
                                   setNewDescription(p.description || '');
                                   setNewPrice(String(p.price));
                                   setNewBillingCycle(p.billing_cycle);
+                                  setNewDurationValue(String(p.duration_value || 1));
+                                  setNewDurationUnit(p.duration_unit || 'months');
                                   setSelectedCountryIds(p.country_ids || []);
                                   setNewMinStudents(String(p.min_students || 0));
                                   setNewMaxStudents(p.max_students ? String(p.max_students) : '');
@@ -1048,10 +1110,66 @@ export default function ConfigurationManagement() {
                 <Input type="number" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label>Billing Cycle</Label>
-                <Input value={newBillingCycle} onChange={(e) => setNewBillingCycle(e.target.value)} />
+                <Label>Billing Cycle / Period</Label>
+                <Select 
+                  value={newBillingCycle} 
+                  onValueChange={(val) => {
+                    setNewBillingCycle(val);
+                    if (val === 'monthly') {
+                      setNewDurationValue('1');
+                      setNewDurationUnit('months');
+                    } else if (val === 'termly') {
+                      setNewDurationValue('4');
+                      setNewDurationUnit('months');
+                    } else if (val === 'yearly') {
+                      setNewDurationValue('12');
+                      setNewDurationUnit('months');
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-full bg-white dark:bg-slate-950">
+                    <SelectValue placeholder="Select cycle" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="termly">Termly (per Term)</SelectItem>
+                    <SelectItem value="yearly">Yearly (for 1 Year)</SelectItem>
+                    <SelectItem value="custom">Custom Duration</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+
+            {newBillingCycle === 'custom' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 border rounded-lg bg-blue-50/20 dark:bg-blue-950/10 border-blue-100 dark:border-blue-900/30">
+                <div className="space-y-2">
+                  <Label className="text-blue-700 dark:text-blue-400 font-semibold">Custom Duration Value</Label>
+                  <Input 
+                    type="number" 
+                    min="1" 
+                    placeholder="e.g. 45" 
+                    value={newDurationValue} 
+                    onChange={(e) => setNewDurationValue(e.target.value)} 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-blue-700 dark:text-blue-400 font-semibold">Duration Unit</Label>
+                  <Select 
+                    value={newDurationUnit} 
+                    onValueChange={(val: any) => setNewDurationUnit(val)}
+                  >
+                    <SelectTrigger className="w-full bg-white dark:bg-slate-950">
+                      <SelectValue placeholder="Unit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="months">Months</SelectItem>
+                      <SelectItem value="days">Days</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Min Students</Label>

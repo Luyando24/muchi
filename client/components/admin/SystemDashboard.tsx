@@ -12,7 +12,8 @@ import {
   X,
   RefreshCw,
   DollarSign,
-  TrendingUp
+  TrendingUp,
+  Trash2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -142,6 +143,38 @@ export default function SystemDashboard({ onNavigate }: SystemDashboardProps) {
       onNavigate('schools');
     }
   };
+
+  const handleDeleteTransaction = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this transaction record?')) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/admin/finances/transactions/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Deleted",
+          description: "Transaction removed successfully."
+        });
+        fetchDashboardData();
+      } else {
+        throw new Error('Failed to delete transaction');
+      }
+    } catch (err: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: err.message || "Failed to delete transaction"
+      });
+    }
+  };
+
 
   if (loading) {
     return (
@@ -362,18 +395,34 @@ export default function SystemDashboard({ onNavigate }: SystemDashboardProps) {
                     ) : (
                       <CheckCircle className="h-5 w-5 text-blue-500 shrink-0" />
                     )}
-                    <div className="flex-1">
-                      <p className="font-semibold text-slate-950 dark:text-white leading-normal pr-2">
-                        {activity.message}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <Badge variant="secondary" className="text-[9px] py-0 px-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                          {activity.source}
-                        </Badge>
-                        <span className="text-[10px] text-slate-500">
-                          {new Date(activity.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                    <div className="flex-1 flex justify-between items-start gap-2">
+                      <div>
+                        <p className="font-semibold text-slate-950 dark:text-white leading-normal pr-2">
+                          {activity.message}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <Badge variant="secondary" className="text-[9px] py-0 px-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                            {activity.source}
+                          </Badge>
+                          <span className="text-[10px] text-slate-500">
+                            {new Date(activity.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
                       </div>
+                      {activity.source === 'Finance' && (
+                        <Button
+                          onClick={() => {
+                            const txId = activity.id.replace('tx-', '');
+                            handleDeleteTransaction(txId);
+                          }}
+                          variant="ghost"
+                          size="sm"
+                          className="hover:bg-rose-50 hover:text-rose-600 text-slate-400 dark:text-slate-500 dark:hover:bg-rose-950/30 dark:hover:text-rose-400 h-7 w-7 p-0 shrink-0"
+                          title="Delete Transaction"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))

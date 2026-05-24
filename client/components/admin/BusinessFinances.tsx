@@ -13,8 +13,11 @@ import {
   RefreshCw,
   TrendingDown,
   Trash2,
-  ListFilter
+  ListFilter,
+  FileText
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +29,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   AreaChart, 
   Area, 
@@ -51,6 +55,8 @@ interface Plan {
   is_active: boolean;
   min_students: number;
   max_students: number | null;
+  duration_value?: number;
+  duration_unit?: 'months' | 'days';
 }
 
 interface LicenseData {
@@ -112,7 +118,9 @@ export default function BusinessFinances() {
     billing_cycle: 'monthly',
     is_active: true,
     min_students: 0,
-    max_students: '' as string | number
+    max_students: '' as string | number,
+    duration_value: 1,
+    duration_unit: 'months'
   });
   const [savingPlan, setSavingPlan] = useState(false);
 
@@ -128,6 +136,12 @@ export default function BusinessFinances() {
   });
   const [savingTx, setSavingTx] = useState(false);
   const [periodFilter, setPeriodFilter] = useState<'all' | '30days' | 'thisMonth' | 'lastMonth' | 'thisYear'>('all');
+
+  // Export Modal states
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportPeriod, setExportPeriod] = useState<'all' | '30days' | 'thisMonth' | 'lastMonth' | 'thisYear' | 'custom'>('all');
+  const [exportStartDate, setExportStartDate] = useState('');
+  const [exportEndDate, setExportEndDate] = useState('');
 
   const fetchFinanceData = async () => {
     try {
@@ -237,7 +251,9 @@ export default function BusinessFinances() {
         billing_cycle: plan.billing_cycle || 'monthly',
         is_active: plan.is_active,
         min_students: plan.min_students || 0,
-        max_students: plan.max_students !== null ? plan.max_students : ''
+        max_students: plan.max_students !== null ? plan.max_students : '',
+        duration_value: plan.duration_value || 1,
+        duration_unit: plan.duration_unit || 'months'
       });
     } else {
       setSelectedPlan(null);
@@ -249,7 +265,9 @@ export default function BusinessFinances() {
         billing_cycle: 'monthly',
         is_active: true,
         min_students: 0,
-        max_students: ''
+        max_students: '',
+        duration_value: 1,
+        duration_unit: 'months'
       });
     }
     setIsPlanModalOpen(true);
@@ -366,6 +384,7 @@ export default function BusinessFinances() {
       if (response.ok) {
         toast({ title: "Deleted", description: "Transaction removed successfully." });
         fetchTransactions();
+        fetchFinanceData();
       } else {
         throw new Error('Failed to delete transaction');
       }
@@ -374,8 +393,389 @@ export default function BusinessFinances() {
     }
   };
 
+  const handleDeletePlan = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this subscription plan? Existing schools on this plan will remain mapped to it, but it will no longer be available for new selections.')) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/admin/configurations/plans/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      });
+
+      if (response.ok) {
+        toast({ title: "Deleted", description: "Subscription plan removed successfully" });
+        fetchPlans();
+        fetchFinanceData();
+      } else {
+        throw new Error('Failed to delete subscription plan');
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleDeleteLicense = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this school subscription license? This will permanently remove the license and any auto-recorded transaction from the LIFETIME REVENUE calculations.')) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/admin/licenses/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      });
+
+      if (response.ok) {
+        toast({ title: "Deleted", description: "Subscription license and associated revenue transaction removed successfully." });
+        fetchFinanceData();
+        fetchTransactions();
+      } else {
+        throw new Error('Failed to delete subscription license');
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
   const formatCurrency = (amount: number, currency: string = 'ZMW') => {
     return new Intl.NumberFormat('en-ZM', { style: 'currency', currency }).format(amount);
+  };
+
+  const handleExportPDF = () => {
+    if (!stats) {
+      toast({
+        title: "Export Failed",
+        description: "Financial statistics are still loading. Please try again in a moment.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      // 1. Calculate Date Boundaries
+      let startDateBoundary: Date | null = null;
+      let endDateBoundary: Date | null = null;
+
+      const now = new Date();
+      const startOfDay = (d: Date | string | number): Date => {
+        const res = new Date(d);
+        res.setHours(0, 0, 0, 0);
+        return res;
+      };
+      const endOfDay = (d: Date | string | number): Date => {
+        const res = new Date(d);
+        res.setHours(23, 59, 59, 999);
+        return res;
+      };
+
+      let filterLabel = "All Time";
+
+      if (exportPeriod === '30days') {
+        const d = new Date();
+        d.setDate(now.getDate() - 30);
+        startDateBoundary = startOfDay(d);
+        endDateBoundary = endOfDay(now);
+        filterLabel = "Last 30 Days";
+      } else if (exportPeriod === 'thisMonth') {
+        startDateBoundary = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1));
+        endDateBoundary = endOfDay(now);
+        filterLabel = "This Month";
+      } else if (exportPeriod === 'lastMonth') {
+        startDateBoundary = startOfDay(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+        endDateBoundary = endOfDay(new Date(now.getFullYear(), now.getMonth(), 0));
+        filterLabel = "Last Month";
+      } else if (exportPeriod === 'thisYear') {
+        startDateBoundary = startOfDay(new Date(now.getFullYear(), 0, 1));
+        endDateBoundary = endOfDay(now);
+        filterLabel = "This Year";
+      } else if (exportPeriod === 'custom') {
+        if (!exportStartDate || !exportEndDate) {
+          toast({
+            title: "Export Failed",
+            description: "Please select both start and end dates for custom date range.",
+            variant: "destructive"
+          });
+          return;
+        }
+        startDateBoundary = startOfDay(new Date(exportStartDate));
+        endDateBoundary = endOfDay(new Date(exportEndDate));
+        filterLabel = `${new Date(exportStartDate).toLocaleDateString()} - ${new Date(exportEndDate).toLocaleDateString()}`;
+      }
+
+      // Helper to match dates within boundaries
+      const isWithinBoundaries = (dateStr: string): boolean => {
+        if (!dateStr) return false;
+        const d = new Date(dateStr);
+        if (startDateBoundary && d < startDateBoundary) return false;
+        if (endDateBoundary && d > endDateBoundary) return false;
+        return true;
+      };
+
+      // 2. Filter data
+      const filteredLicenses = stats.licenses.filter(l => isWithinBoundaries(l.startDate));
+      const filteredLedger = transactions.filter(t => isWithinBoundaries(t.date));
+
+      // 3. Recalculate metrics for the selected period
+      const periodSubscriptionRevenue = filteredLicenses.reduce((sum, l) => sum + Number(l.totalCost), 0);
+      const periodOpIncome = filteredLedger.filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0);
+      const periodOpExpense = filteredLedger.filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount), 0);
+      const periodNetBalance = periodOpIncome - periodOpExpense;
+
+      // Count active licenses in the period
+      const periodActiveLicensesCount = filteredLicenses.filter(l => l.status === 'active').length;
+
+      // PDF Generation
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.width;
+      const pageHeight = doc.internal.pageSize.height;
+      const margin = 14;
+
+      // Branded Header Block
+      doc.setFillColor(15, 23, 42); // Slate 900
+      doc.rect(0, 0, pageWidth, 42, 'F');
+
+      // Muchi logo
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(22);
+      doc.text("MUCHI", margin, 18);
+
+      // Subtitle
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(59, 130, 246); // Accent blue
+      doc.text("PLATFORM FINANCIAL REPORT", margin, 26);
+
+      // Meta info
+      doc.setFontSize(8.5);
+      doc.setTextColor(241, 245, 249);
+      const dateStr = `Generated: ${new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}`;
+      doc.text(dateStr, margin, 34);
+
+      // Filter Badge text
+      doc.setFont('helvetica', 'bold');
+      doc.text(`PERIOD: ${filterLabel.toUpperCase()}`, pageWidth - margin - 80, 18, { align: 'left' });
+
+      // Clean divider
+      doc.setDrawColor(59, 130, 246);
+      doc.setLineWidth(0.8);
+      doc.line(0, 42, pageWidth, 42);
+
+      let currentY = 52;
+
+      // Section Title: Metrics Summary
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(15, 23, 42);
+      doc.text("1. Financial Summary (Selected Period)", margin, currentY);
+      currentY += 6;
+
+      // Draw Summary Cards 2x2 grid
+      const cardW = (pageWidth - (margin * 2) - 6) / 2;
+      const cardH = 22;
+
+      const drawMetricCard = (x: number, y: number, label: string, value: string, accentColor: [number, number, number]) => {
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(x, y, cardW, cardH, 2, 2, 'F');
+
+        doc.setFillColor(...accentColor);
+        doc.rect(x, y, 1.5, cardH, 'F');
+
+        doc.setTextColor(100, 116, 139);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.text(label.toUpperCase(), x + 4, y + 6);
+
+        doc.setTextColor(15, 23, 42);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.text(value, x + 4, y + 15);
+      };
+
+      // Row 1 Cards
+      drawMetricCard(
+        margin, 
+        currentY, 
+        "Subscription Revenue", 
+        formatCurrency(periodSubscriptionRevenue), 
+        [59, 130, 246]
+      );
+      
+      drawMetricCard(
+        margin + cardW + 6, 
+        currentY, 
+        "Active / Matching Licenses", 
+        `${periodActiveLicensesCount} Active / ${filteredLicenses.length} Total`, 
+        [16, 185, 129]
+      );
+
+      currentY += cardH + 4;
+
+      // Row 2 Cards
+      drawMetricCard(
+        margin, 
+        currentY, 
+        "Operational Ledger (Net Balance)", 
+        formatCurrency(periodNetBalance), 
+        periodNetBalance >= 0 ? [59, 130, 246] : [239, 68, 68]
+      );
+      
+      drawMetricCard(
+        margin + cardW + 6, 
+        currentY, 
+        "Operational Incomes vs Expenses", 
+        `In: ${formatCurrency(periodOpIncome)} | Out: ${formatCurrency(periodOpExpense)}`, 
+        [245, 158, 11]
+      );
+
+      currentY += cardH + 12;
+
+      const drawSectionHeader = (title: string, yPos: number): number => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.setTextColor(15, 23, 42);
+        doc.text(title, margin, yPos);
+        return yPos + 4;
+      };
+
+      // Table 1: Subscription Tiers (Configs are period-independent)
+      currentY = drawSectionHeader("2. Platform Subscription Tiers", currentY);
+      autoTable(doc, {
+        head: [["Plan Name", "Billing Cycle", "Price", "Capacity Limits", "Status"]],
+        body: plans.map(p => [
+          p.name,
+          p.billing_cycle,
+          formatCurrency(p.price, p.currency),
+          p.max_students ? `${p.min_students} - ${p.max_students} students` : `${p.min_students}+ students (Unlimited)`,
+          p.is_active ? "Active" : "Disabled"
+        ]),
+        startY: currentY,
+        theme: 'striped',
+        styles: { fontSize: 8.5, cellPadding: 2.5 },
+        headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' },
+        columnStyles: { 2: { fontStyle: 'bold' } }
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 12;
+
+      // Table 2: School Subscription Registry
+      if (currentY > pageHeight - 40) {
+        doc.addPage();
+        currentY = 20;
+      }
+      currentY = drawSectionHeader("3. School Subscription Registry (Period Filtered)", currentY);
+
+      if (filteredLicenses.length === 0) {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(9);
+        doc.setTextColor(100);
+        doc.text("No licenses generated during this period.", margin, currentY + 4);
+        currentY += 12;
+      } else {
+        autoTable(doc, {
+          head: [["School Name", "Plan Tier", "End Date", "Contract Value", "Status"]],
+          body: filteredLicenses.map(l => [
+            l.schoolName,
+            l.plan,
+            new Date(l.endDate).toLocaleDateString(),
+            formatCurrency(l.totalCost, l.currency),
+            l.status.toUpperCase()
+          ]),
+          startY: currentY,
+          theme: 'striped',
+          styles: { fontSize: 8.5, cellPadding: 2.5 },
+          headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' },
+          columnStyles: { 3: { fontStyle: 'bold' } },
+          didParseCell: (data) => {
+            if (data.section === 'body' && data.column.index === 4) {
+              if (data.cell.text[0] === 'ACTIVE') {
+                data.cell.styles.textColor = [16, 185, 129];
+              } else {
+                data.cell.styles.textColor = [239, 68, 68];
+              }
+            }
+          }
+        });
+        currentY = (doc as any).lastAutoTable.finalY + 12;
+      }
+
+      // Table 3: Operational Ledger
+      if (currentY > pageHeight - 40) {
+        doc.addPage();
+        currentY = 20;
+      }
+      currentY = drawSectionHeader("4. Operational Ledger (Period Filtered)", currentY);
+
+      if (filteredLedger.length === 0) {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(9);
+        doc.setTextColor(100);
+        doc.text("No operational transactions recorded during this period.", margin, currentY + 4);
+      } else {
+        autoTable(doc, {
+          head: [["Type", "Category", "Date", "Amount", "Description"]],
+          body: filteredLedger.map(t => [
+            t.type.toUpperCase(),
+            t.category,
+            new Date(t.date).toLocaleDateString(),
+            `${t.type === 'expense' ? '-' : '+'}${formatCurrency(t.amount, t.currency)}`,
+            t.description || '-'
+          ]),
+          startY: currentY,
+          theme: 'striped',
+          styles: { fontSize: 8.5, cellPadding: 2.5 },
+          headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' },
+          columnStyles: { 3: { fontStyle: 'bold' } },
+          didParseCell: (data) => {
+            if (data.section === 'body' && data.column.index === 3) {
+              if (data.cell.text[0].startsWith('+')) {
+                data.cell.styles.textColor = [16, 185, 129];
+              } else {
+                data.cell.styles.textColor = [239, 68, 68];
+              }
+            }
+          }
+        });
+      }
+
+      // Page numbers and footers
+      const pageCount = (doc as any).internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(148, 163, 184);
+        
+        doc.setDrawColor(241, 245, 249);
+        doc.setLineWidth(0.3);
+        doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+
+        doc.setFont('helvetica', 'normal');
+        doc.text("MUCHI Platform Finance Report - Confidential", margin, pageHeight - 7);
+        doc.text(`Page ${i} of ${pageCount}`, pageWidth - margin - 15, pageHeight - 7);
+      }
+
+      const safePeriodName = exportPeriod === 'custom' ? 'Custom' : exportPeriod;
+      doc.save(`MUCHI_Financial_Report_${safePeriodName}.pdf`);
+
+      toast({
+        title: "Success",
+        description: `Financial report PDF for period (${filterLabel}) downloaded successfully.`
+      });
+      setIsExportModalOpen(false);
+    } catch (err: any) {
+      console.error("PDF Export Error:", err);
+      toast({
+        title: "Error",
+        description: "Failed to generate financial PDF report: " + err.message,
+        variant: "destructive"
+      });
+    }
   };
 
   // Compute Ledger details
@@ -441,10 +841,16 @@ export default function BusinessFinances() {
           <h2 className="text-2xl font-black text-slate-900 dark:text-white leading-tight">Business Finances</h2>
           <p className="text-slate-600 dark:text-slate-400">Track subscriptions revenue, trends, active licenses and manage plans.</p>
         </div>
-        <Button onClick={refreshAll} variant="outline" className="h-10 font-bold self-start sm:self-center">
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh Stats
-        </Button>
+        <div className="flex flex-wrap gap-2 self-start sm:self-center">
+          <Button onClick={() => setIsExportModalOpen(true)} className="h-10 font-bold bg-blue-600 hover:bg-blue-700 text-white">
+            <FileText className="h-4 w-4 mr-2" />
+            Export PDF
+          </Button>
+          <Button onClick={refreshAll} variant="outline" className="h-10 font-bold">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh Stats
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="subscriptions" className="w-full">
@@ -682,9 +1088,19 @@ export default function BusinessFinances() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button onClick={() => handleOpenPlanModal(plan)} variant="ghost" size="sm" className="hover:bg-slate-100 dark:hover:bg-slate-800">
-                              <Edit className="h-4 w-4 text-blue-600" />
-                            </Button>
+                            <div className="flex justify-end gap-2">
+                              <Button onClick={() => handleOpenPlanModal(plan)} variant="ghost" size="sm" className="hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-blue-600">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                onClick={() => handleDeletePlan(plan.id)} 
+                                variant="ghost" 
+                                size="sm" 
+                                className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -718,6 +1134,7 @@ export default function BusinessFinances() {
                         <TableHead>Contract Value</TableHead>
                         <TableHead>License Key</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -773,6 +1190,17 @@ export default function BusinessFinances() {
                             }>
                               {license.status}
                             </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button 
+                              onClick={() => handleDeleteLicense(license.id)} 
+                              variant="ghost" 
+                              size="sm" 
+                              className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              title="Delete License"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -977,7 +1405,12 @@ export default function BusinessFinances() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <Label htmlFor="plan_price">Monthly Price</Label>
+                  <Label htmlFor="plan_price">
+                    {planForm.billing_cycle === 'monthly' && 'Monthly Price'}
+                    {planForm.billing_cycle === 'termly' && 'Price per Term'}
+                    {planForm.billing_cycle === 'yearly' && 'Price per Year'}
+                    {planForm.billing_cycle === 'custom' && 'Price per Period'}
+                  </Label>
                   <div className="relative">
                     <span className="absolute left-3 top-2.5 text-xs text-slate-500 font-bold">K</span>
                     <Input 
@@ -992,18 +1425,71 @@ export default function BusinessFinances() {
                 </div>
 
                 <div className="space-y-1">
-                  <Label htmlFor="plan_cycle">Billing Cycle</Label>
-                  <Input 
-                    id="plan_cycle" 
+                  <Label htmlFor="plan_cycle">Billing Cycle / Period</Label>
+                  <Select 
                     value={planForm.billing_cycle} 
-                    onChange={(e) => setPlanForm(prev => ({ ...prev, billing_cycle: e.target.value }))}
-                    required 
-                    placeholder="monthly"
-                    disabled
-                    className="bg-slate-50 text-slate-500"
-                  />
+                    onValueChange={(val) => {
+                      let durVal = planForm.duration_value;
+                      let durUnit = planForm.duration_unit;
+                      if (val === 'monthly') {
+                        durVal = 1;
+                        durUnit = 'months';
+                      } else if (val === 'termly') {
+                        durVal = 4;
+                        durUnit = 'months';
+                      } else if (val === 'yearly') {
+                        durVal = 12;
+                        durUnit = 'months';
+                      }
+                      setPlanForm(prev => ({ 
+                        ...prev, 
+                        billing_cycle: val,
+                        duration_value: durVal,
+                        duration_unit: durUnit as any
+                      }));
+                    }}
+                  >
+                    <SelectTrigger className="w-full bg-white dark:bg-slate-950">
+                      <SelectValue placeholder="Select cycle" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="termly">Termly (per Term)</SelectItem>
+                      <SelectItem value="yearly">Yearly (for 1 Year)</SelectItem>
+                      <SelectItem value="custom">Custom Duration</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
+
+              {planForm.billing_cycle === 'custom' && (
+                <div className="grid grid-cols-2 gap-4 p-3 border rounded-lg bg-blue-50/20 dark:bg-blue-950/10 border-blue-100 dark:border-blue-900/30">
+                  <div className="space-y-1">
+                    <Label className="text-blue-700 dark:text-blue-400 font-semibold">Custom Duration Value</Label>
+                    <Input 
+                      type="number" 
+                      min="1"
+                      value={planForm.duration_value} 
+                      onChange={(e) => setPlanForm(prev => ({ ...prev, duration_value: Number(e.target.value) || 1 }))} 
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-blue-700 dark:text-blue-400 font-semibold">Duration Unit</Label>
+                    <Select 
+                      value={planForm.duration_unit} 
+                      onValueChange={(val: any) => setPlanForm(prev => ({ ...prev, duration_unit: val }))}
+                    >
+                      <SelectTrigger className="w-full bg-white dark:bg-slate-950">
+                        <SelectValue placeholder="Unit" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="months">Months</SelectItem>
+                        <SelectItem value="days">Days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
@@ -1180,6 +1666,68 @@ export default function BusinessFinances() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Export Report Dialog */}
+      <Dialog open={isExportModalOpen} onOpenChange={setIsExportModalOpen}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle>Export Financial Report</DialogTitle>
+            <DialogDescription>
+              Select a period filter or define a custom date range for the generated MUCHI financial PDF report.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-1">
+              <Label htmlFor="export_period">Report Period</Label>
+              <select
+                id="export_period"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                value={exportPeriod}
+                onChange={(e) => setExportPeriod(e.target.value as any)}
+              >
+                <option value="all">All Time</option>
+                <option value="30days">Last 30 Days</option>
+                <option value="thisMonth">This Month</option>
+                <option value="lastMonth">Last Month</option>
+                <option value="thisYear">This Year</option>
+                <option value="custom">Custom Date Range</option>
+              </select>
+            </div>
+
+            {exportPeriod === 'custom' && (
+              <div className="grid grid-cols-2 gap-4 p-3 border rounded-lg bg-blue-50/20 dark:bg-blue-950/10 border-blue-100 dark:border-blue-900/30">
+                <div className="space-y-1">
+                  <Label htmlFor="export_start_date" className="text-blue-700 dark:text-blue-400 font-semibold">Start Date</Label>
+                  <Input
+                    id="export_start_date"
+                    type="date"
+                    value={exportStartDate}
+                    onChange={(e) => setExportStartDate(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="export_end_date" className="text-blue-700 dark:text-blue-400 font-semibold">End Date</Label>
+                  <Input
+                    id="export_end_date"
+                    type="date"
+                    value={exportEndDate}
+                    onChange={(e) => setExportEndDate(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsExportModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleExportPDF} className="bg-blue-600 hover:bg-blue-700 text-white">
+              <FileText className="h-4 w-4 mr-1.5" />
+              Generate PDF
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

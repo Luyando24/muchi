@@ -642,7 +642,19 @@ router.get('/dashboard', requireSystemAdmin, async (req: Request, res: Response)
           p.name.toLowerCase().includes(planName.toLowerCase()) ||
           planName.toLowerCase().includes(p.name.toLowerCase())
         );
-        return found ? { price: Number(found.price), currency: found.currency || 'ZMW' } : { price: 500, currency: 'ZMW' };
+        return found 
+          ? { 
+              price: Number(found.price), 
+              currency: found.currency || 'ZMW',
+              durationValue: Number(found.duration_value) || 1,
+              durationUnit: found.duration_unit || 'months'
+            } 
+          : { 
+              price: 500, 
+              currency: 'ZMW',
+              durationValue: 1,
+              durationUnit: 'months'
+            };
       };
 
       licenses.forEach((license: any) => {
@@ -650,12 +662,23 @@ router.get('/dashboard', requireSystemAdmin, async (req: Request, res: Response)
         const startDate = new Date(license.start_date);
         const endDate = new Date(license.end_date);
         
-        // Calculate months duration
+        let numberOfCycles = 1;
         const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        const durationMonths = Math.max(1, Math.round(diffDays / 30));
         
-        const totalCost = planInfo.price * durationMonths;
+        if (planInfo.durationUnit === 'days') {
+          const diffDays = Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24)));
+          numberOfCycles = diffDays / planInfo.durationValue;
+        } else {
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          const durationMonths = Math.max(1, Math.round(diffDays / 30));
+          numberOfCycles = durationMonths / planInfo.durationValue;
+        }
+
+        if (numberOfCycles < 0.1) {
+          numberOfCycles = 1;
+        }
+
+        const totalCost = planInfo.price * numberOfCycles;
         totalRevenue += totalCost;
       });
     }
@@ -988,14 +1011,10 @@ router.get('/search', requireSystemAdmin, async (req: Request, res: Response) =>
 // POST /api/admin/licenses
 // Generate a software license for a school
 router.post('/licenses', requireSystemAdmin, async (req: Request, res: Response) => {
-  const { schoolId, plan, durationYears } = req.body;
+  const { schoolId, plan, durationYears, durationMonths, durationDays } = req.body;
 
-  if (!schoolId || !durationYears) {
-    return res.status(400).json({ message: 'Missing required fields: schoolId, durationYears' });
-  }
-
-  if (durationYears < 1) {
-    return res.status(400).json({ message: 'Minimum subscription duration is 1 year' });
+  if (!schoolId || (!durationYears && !durationMonths && !durationDays)) {
+    return res.status(400).json({ message: 'Missing required fields: schoolId, and one of durationYears, durationMonths, or durationDays' });
   }
 
   try {
@@ -1013,7 +1032,15 @@ router.post('/licenses', requireSystemAdmin, async (req: Request, res: Response)
     // Calculate dates
     const startDate = new Date();
     const endDate = new Date(startDate);
-    endDate.setFullYear(endDate.getFullYear() + durationYears);
+    if (durationDays) {
+      endDate.setDate(endDate.getDate() + parseInt(String(durationDays)));
+    } else if (durationMonths) {
+      endDate.setMonth(endDate.getMonth() + parseInt(String(durationMonths)));
+    } else if (durationYears) {
+      endDate.setFullYear(endDate.getFullYear() + parseInt(String(durationYears)));
+    } else {
+      endDate.setFullYear(endDate.getFullYear() + 1);
+    }
 
     // Generate license key (simple UUID for now, could be more complex)
     const licenseKey = crypto.randomUUID();
@@ -1033,6 +1060,16 @@ router.post('/licenses', requireSystemAdmin, async (req: Request, res: Response)
       .single();
 
     if (licenseError) throw licenseError;
+
+    // Update school's plan in schools table to match
+    const { error: schoolUpdateError } = await supabaseAdmin
+      .from('schools')
+      .update({ plan: plan || 'Standard' })
+      .eq('id', schoolId);
+
+    if (schoolUpdateError) {
+      console.error('Error updating school plan during license generation:', schoolUpdateError);
+    }
 
     res.status(201).json({
       message: 'License generated successfully',
@@ -1106,6 +1143,25 @@ router.put('/licenses/:id', requireSystemAdmin, async (req: Request, res: Respon
     res.json({ message: 'License updated successfully', license });
   } catch (error: any) {
     console.error('Update License Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE /api/admin/licenses/:id
+// Delete a license
+router.delete('/licenses/:id', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const { error } = await supabaseAdmin
+      .from('school_licenses')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    res.json({ message: 'License deleted successfully' });
+  } catch (error: any) {
+    console.error('Delete License Error:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -1532,7 +1588,7 @@ router.get('/configurations/plans', requireSystemAdmin, async (req: Request, res
 router.post('/configurations/plans', requireSystemAdmin, async (req: Request, res: Response) => {
     const { 
       name, description, price, currency, billing_cycle, is_active, country_ids,
-      min_students, max_students 
+      min_students, max_students, duration_value, duration_unit
     } = req.body;
     try {
       const { data, error } = await supabaseAdmin
@@ -1540,7 +1596,9 @@ router.post('/configurations/plans', requireSystemAdmin, async (req: Request, re
         .insert({ 
           name, description, price, currency, billing_cycle, is_active, country_ids,
           min_students: min_students ? parseInt(String(min_students)) : 0,
-          max_students: max_students ? parseInt(String(max_students)) : null
+          max_students: max_students ? parseInt(String(max_students)) : null,
+          duration_value: duration_value ? parseInt(String(duration_value)) : 1,
+          duration_unit: duration_unit || 'months'
         })
         .select()
         .single();
@@ -1557,7 +1615,7 @@ router.put('/configurations/plans/:id', requireSystemAdmin, async (req: Request,
   const { id } = req.params;
     const { 
       name, description, price, currency, billing_cycle, is_active, country_ids,
-      min_students, max_students
+      min_students, max_students, duration_value, duration_unit
     } = req.body;
     try {
       const { data, error } = await supabaseAdmin
@@ -1566,6 +1624,8 @@ router.put('/configurations/plans/:id', requireSystemAdmin, async (req: Request,
           name, description, price, currency, billing_cycle, is_active, country_ids, 
           min_students: min_students ? parseInt(String(min_students)) : 0,
           max_students: (max_students === null || max_students === '') ? null : parseInt(String(max_students)),
+          duration_value: duration_value ? parseInt(String(duration_value)) : 1,
+          duration_unit: duration_unit || 'months',
           updated_at: new Date() 
         })
         .eq('id', id)
@@ -1686,14 +1746,26 @@ router.get('/finances/stats', requireSystemAdmin, async (req: Request, res: Resp
     const plans = plansRes.data || [];
     const schools = schoolsRes.data || [];
 
-    // Helper to find price for a plan
+    // Helper to find price and duration details for a plan
     const getPlanInfo = (planName: string) => {
       const found = plans.find(p => 
         p.name.toLowerCase() === planName.toLowerCase() ||
         p.name.toLowerCase().includes(planName.toLowerCase()) ||
         planName.toLowerCase().includes(p.name.toLowerCase())
       );
-      return found ? { price: Number(found.price), currency: found.currency || 'ZMW' } : { price: 500, currency: 'ZMW' };
+      return found 
+        ? { 
+            price: Number(found.price), 
+            currency: found.currency || 'ZMW',
+            durationValue: Number(found.duration_value) || 1,
+            durationUnit: found.duration_unit || 'months'
+          } 
+        : { 
+            price: 500, 
+            currency: 'ZMW',
+            durationValue: 1,
+            durationUnit: 'months'
+          };
     };
 
     let totalRevenue = 0;
@@ -1707,17 +1779,36 @@ router.get('/finances/stats', requireSystemAdmin, async (req: Request, res: Resp
       const startDate = new Date(license.start_date);
       const endDate = new Date(license.end_date);
       
-      // Calculate months duration
+      // Calculate duration cycles based on plan duration value/unit
+      let numberOfCycles = 1;
       const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      const durationMonths = Math.max(1, Math.round(diffDays / 30));
       
-      const totalCost = planInfo.price * durationMonths;
+      if (planInfo.durationUnit === 'days') {
+        const diffDays = Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24)));
+        numberOfCycles = diffDays / planInfo.durationValue;
+      } else {
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const durationMonths = Math.max(1, Math.round(diffDays / 30));
+        numberOfCycles = durationMonths / planInfo.durationValue;
+      }
+
+      if (numberOfCycles < 0.1) {
+        numberOfCycles = 1;
+      }
+
+      const totalCost = planInfo.price * numberOfCycles;
       totalRevenue += totalCost;
 
       const isActive = license.status === 'active' && endDate > now;
       if (isActive) {
-        mrr += planInfo.price;
+        // Normalize MRR to monthly value
+        let monthlyContribution = planInfo.price;
+        if (planInfo.durationUnit === 'months' && planInfo.durationValue > 0) {
+          monthlyContribution = planInfo.price / planInfo.durationValue;
+        } else if (planInfo.durationUnit === 'days' && planInfo.durationValue > 0) {
+          monthlyContribution = (planInfo.price / planInfo.durationValue) * 30;
+        }
+        mrr += monthlyContribution;
         activeSubscriptionsCount++;
       }
 
