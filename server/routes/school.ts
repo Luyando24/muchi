@@ -761,7 +761,10 @@ router.get(
         { key: "district", label: "District" },
         { key: "logo_url", label: "School Logo" },
         { key: "headteacher_name", label: "Headteacher Name" },
-        { key: "signature_url", label: "Headteacher Signature" }
+        { key: "signature_url", label: "Headteacher Signature" },
+        { key: "ict_name", label: "ICT Support Name" },
+        { key: "ict_email", label: "ICT Support Email" },
+        { key: "ict_phone", label: "ICT Support Phone" }
       ];
 
       const missingFields: string[] = [];
@@ -6962,6 +6965,9 @@ router.put(
       category,
       country,
       location_type,
+      ict_name,
+      ict_email,
+      ict_phone,
     } = req.body;
 
     try {
@@ -6999,6 +7005,9 @@ router.put(
           category,
           country,
           location_type,
+          ict_name,
+          ict_email,
+          ict_phone,
           updated_at: new Date(),
         })
         .eq("id", schoolId)
