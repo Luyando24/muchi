@@ -13,6 +13,7 @@ import {
 import ThemeToggle from '@/components/navigation/ThemeToggle';
 import { supabase } from '@/lib/supabase';
 import { OfflineIndicator } from '@/components/navigation/OfflineIndicator';
+import { getSubdomainUrl } from '@/lib/subdomain';
 
 interface GovernmentNavbarProps {
   isSidebarOpen: boolean;
@@ -125,7 +126,7 @@ export default function GovernmentNavbar({
                     <DropdownMenuItem 
                       className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold"
                       onClick={() => {
-                        window.location.href = '/school-admin';
+                        window.location.href = getSubdomainUrl('admin');
                       }}
                     >
                       <GraduationCap className="mr-2 h-4 w-4" />

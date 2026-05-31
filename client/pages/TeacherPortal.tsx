@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import { getSubdomainUrl } from '@/lib/subdomain';
 import StudentDetailsView from '@/components/school-admin/StudentDetailsView';
 import {
   BookOpen,
@@ -1231,7 +1232,7 @@ export default function TeacherPortal() {
                       <DropdownMenuItem 
                         className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold"
                         onClick={() => {
-                          window.location.href = '/school-admin';
+                          window.location.href = getSubdomainUrl('admin');
                         }}
                       >
                         <ShieldAlert className="mr-2 h-4 w-4" />
