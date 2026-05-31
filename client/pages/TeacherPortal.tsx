@@ -210,6 +210,7 @@ export default function TeacherPortal() {
   const [isCreateAssignmentOpen, setIsCreateAssignmentOpen] = useState(false);
   const [isSelfAssignOpen, setIsSelfAssignOpen] = useState(false);
   const [savingAttendance, setSavingAttendance] = useState(false);
+  const [isTeacherWarningOpen, setIsTeacherWarningOpen] = useState(false);
 
   const portalBase = isOnSubdomain() ? '' : '/teacher-portal';
 
@@ -307,6 +308,31 @@ export default function TeacherPortal() {
       fetchStudentsAndAttendance();
     }
   }, [selectedClassId, selectedDate]);
+
+  useEffect(() => {
+    if (profile) {
+      const teacherFieldsToCheck = [
+        "full_name", "email", "phone_number", "address", "gender", "date_of_birth",
+        "department", "marital_status", "housing_status", "disability_status",
+        "accommodation_provided", "highest_qualification", "institution_name",
+        "completion_year", "field_of_study", "current_role", "location_type"
+      ];
+      let filled = 0;
+      teacherFieldsToCheck.forEach((field) => {
+        const val = profile[field];
+        if (val !== undefined && val !== null && String(val).trim() !== "") {
+          filled++;
+        }
+      });
+      const completeness = Math.round((filled / teacherFieldsToCheck.length) * 100);
+      if (completeness < 100) {
+        const dismissed = sessionStorage.getItem('teacher_portal_completion_warning_dismissed');
+        if (!dismissed) {
+          setIsTeacherWarningOpen(true);
+        }
+      }
+    }
+  }, [profile]);
 
   const handleUpdatePassword = async () => {
     if (!newPassword || !confirmPassword) {
@@ -2148,7 +2174,12 @@ export default function TeacherPortal() {
                           </div>
                           <div className="space-y-2">
                             <Label>Email Address</Label>
-                            <Input value={user?.email || ''} disabled />
+                            <Input
+                              type="email"
+                              placeholder="email@example.com"
+                              value={profile?.email || ''}
+                              onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                            />
                           </div>
                         </div>
 
@@ -2166,7 +2197,7 @@ export default function TeacherPortal() {
                             <Input
                               placeholder="123 Main St"
                               value={profile?.address || ''}
-                              onChange={(e) => setProfile({ ...profile, address: e.target.value })}
+                              disabled
                             />
                           </div>
                         </div>
@@ -2178,7 +2209,7 @@ export default function TeacherPortal() {
                               <Label>Marital Status</Label>
                               <Select 
                                 value={profile?.marital_status || ''} 
-                                onValueChange={(val) => setProfile({ ...profile, marital_status: val })}
+                                disabled
                               >
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select marital status" />
@@ -2192,11 +2223,11 @@ export default function TeacherPortal() {
                               </Select>
                             </div>
                             {profile?.marital_status === 'Married' && (
-                              <div className="flex items-center justify-between border border-slate-200 dark:border-slate-700 rounded-lg p-3 h-10 mt-8">
-                                <Label className="cursor-pointer">Living with Spouse</Label>
+                              <div className="flex items-center justify-between border border-slate-200 dark:border-slate-700 rounded-lg p-3 h-10 mt-8 opacity-60">
+                                <Label className="cursor-not-allowed">Living with Spouse</Label>
                                 <Switch 
                                   checked={profile?.living_with_spouse || false}
-                                  onCheckedChange={(checked) => setProfile({ ...profile, living_with_spouse: checked })}
+                                  disabled
                                 />
                               </div>
                             )}
@@ -2204,7 +2235,7 @@ export default function TeacherPortal() {
                               <Label>Disability Status</Label>
                               <Select 
                                 value={profile?.disability_status || ''} 
-                                onValueChange={(val) => setProfile({ ...profile, disability_status: val })}
+                                disabled
                               >
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select disability status" />
@@ -2230,8 +2261,8 @@ export default function TeacherPortal() {
                                    {profile?.schools?.location_type || 'Urban'}
                                  </span>
                                  <span className="text-xs text-slate-400">Set by your school admin</span>
-                               </div>
-                             </div>
+                                </div>
+                              </div>
                           </div>
                         </div>
 
@@ -2242,7 +2273,7 @@ export default function TeacherPortal() {
                               <Label>Housing Status</Label>
                               <Select 
                                 value={profile?.housing_status || ''} 
-                                onValueChange={(val) => setProfile({ ...profile, housing_status: val })}
+                                disabled
                               >
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select housing status" />
@@ -2259,7 +2290,7 @@ export default function TeacherPortal() {
                               <Label>Accommodation Provided by School</Label>
                               <Select 
                                 value={profile?.accommodation_provided || ''} 
-                                onValueChange={(val) => setProfile({ ...profile, accommodation_provided: val })}
+                                disabled
                               >
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select option" />
@@ -2281,7 +2312,7 @@ export default function TeacherPortal() {
                               <Label>Highest Qualification</Label>
                               <Select 
                                 value={profile?.highest_qualification || ''} 
-                                onValueChange={(val) => setProfile({ ...profile, highest_qualification: val })}
+                                disabled
                               >
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select qualification" />
@@ -2301,7 +2332,7 @@ export default function TeacherPortal() {
                               <Input 
                                 placeholder="e.g. Mathematics, Education"
                                 value={profile?.field_of_study || ''}
-                                onChange={(e) => setProfile({ ...profile, field_of_study: e.target.value })}
+                                disabled
                               />
                             </div>
                             <div className="space-y-2">
@@ -2309,7 +2340,7 @@ export default function TeacherPortal() {
                               <Input 
                                 placeholder="e.g. University of Zambia"
                                 value={profile?.institution_name || ''}
-                                onChange={(e) => setProfile({ ...profile, institution_name: e.target.value })}
+                                disabled
                               />
                             </div>
                             <div className="space-y-2">
@@ -2318,7 +2349,7 @@ export default function TeacherPortal() {
                                 type="number"
                                 placeholder="e.g. 2018"
                                 value={profile?.completion_year || ''}
-                                onChange={(e) => setProfile({ ...profile, completion_year: e.target.value ? parseInt(e.target.value) : '' })}
+                                disabled
                               />
                             </div>
                             <div className="space-y-2 sm:col-span-2">
@@ -2326,7 +2357,7 @@ export default function TeacherPortal() {
                               <Input 
                                 placeholder="e.g. Senior Teacher, Head of Science Department"
                                 value={profile?.current_role || ''}
-                                onChange={(e) => setProfile({ ...profile, current_role: e.target.value })}
+                                disabled
                               />
                             </div>
                           </div>
@@ -2340,18 +2371,7 @@ export default function TeacherPortal() {
                                 method: 'PUT',
                                 body: JSON.stringify({
                                   phone_number: profile.phone_number,
-                                  address: profile.address,
-                                  marital_status: profile.marital_status,
-                                  housing_status: profile.housing_status,
-                                  living_with_spouse: profile.marital_status === 'Married' ? profile.living_with_spouse : null,
-                                  disability_status: profile.disability_status,
-                                  accommodation_provided: profile.accommodation_provided,
-                                  highest_qualification: profile.highest_qualification,
-                                  institution_name: profile.institution_name,
-                                  completion_year: profile.completion_year,
-                                  field_of_study: profile.field_of_study,
-                                  current_role: profile.current_role,
-                                  location_type: profile.location_type
+                                  email: profile.email
                                 })
                               });
                               toast({
@@ -2550,6 +2570,49 @@ export default function TeacherPortal() {
               ) : (
                 "Save Assignment"
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isTeacherWarningOpen} onOpenChange={setIsTeacherWarningOpen}>
+        <DialogContent className="sm:max-w-[500px] border border-amber-200 dark:border-amber-900 bg-white dark:bg-slate-900">
+          <DialogHeader>
+            <div className="h-12 w-12 rounded-full bg-amber-100 dark:bg-amber-950/40 flex items-center justify-center mb-4 border border-amber-200 dark:border-amber-900/50">
+              <Users className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+            </div>
+            <DialogTitle className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+              Complete Your Profile
+            </DialogTitle>
+            <DialogDescription className="text-slate-600 dark:text-slate-400 text-sm mt-2">
+              Your teacher profile is currently incomplete. Having a complete profile is required for government compliance, official reporting, and proper access permissions.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 my-4 text-xs font-semibold text-slate-700 dark:text-slate-300 leading-relaxed">
+            Please complete your profile through the school data or ICT personnel.
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                sessionStorage.setItem('teacher_portal_completion_warning_dismissed', 'true');
+                setIsTeacherWarningOpen(false);
+              }}
+              className="font-bold uppercase tracking-wider text-xs"
+            >
+              Remind Me Later
+            </Button>
+            <Button
+              onClick={() => {
+                sessionStorage.setItem('teacher_portal_completion_warning_dismissed', 'true');
+                setIsTeacherWarningOpen(false);
+                handleTabChange("profile");
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-wider text-xs shadow-md"
+            >
+              View Profile
             </Button>
           </DialogFooter>
         </DialogContent>

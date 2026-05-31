@@ -29,6 +29,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -78,6 +79,9 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
   const [pageSize, setPageSize] = useState(50);
   const [totalTeachers, setTotalTeachers] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'incomplete'>('all');
+  const [allCount, setAllCount] = useState<number | null>(null);
+  const [incompleteCount, setIncompleteCount] = useState<number | null>(null);
 
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -162,14 +166,15 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
       const queryParams = new URLSearchParams({
         page: currentPage.toString(),
         limit: pageSize.toString(),
-        ...(debouncedSearch ? { search: debouncedSearch } : {})
+        ...(debouncedSearch ? { search: debouncedSearch } : {}),
+        ...(activeFilter === 'incomplete' ? { incomplete: 'true' } : {})
       });
 
       const data = await syncFetch(`/api/school/teachers?${queryParams.toString()}`, {
         headers: {
           'Authorization': `Bearer ${session.access_token}`
         },
-        cacheKey: `school-teachers-list-${currentPage}-${pageSize}-${debouncedSearch}`
+        cacheKey: `school-teachers-list-${currentPage}-${pageSize}-${debouncedSearch}-${activeFilter}`
       });
 
       // Parse PaginatedResponse shape
@@ -178,6 +183,13 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
         setTeachers(paginatedData.data);
         setTotalTeachers(paginatedData.metadata.total);
         setTotalPages(paginatedData.metadata.totalPages);
+        
+        if (paginatedData.metadata.allCount !== undefined) {
+          setAllCount(paginatedData.metadata.allCount);
+        }
+        if (paginatedData.metadata.incompleteCount !== undefined) {
+          setIncompleteCount(paginatedData.metadata.incompleteCount);
+        }
       } else if (Array.isArray(data)) {
         // Fallback for offline cached arrays
         setTeachers(data);
@@ -211,7 +223,7 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
 
   useEffect(() => {
     fetchTeachers();
-  }, [currentPage, pageSize, debouncedSearch]);
+  }, [currentPage, pageSize, debouncedSearch, activeFilter]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -578,6 +590,31 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
               </Button>
             </div>
           </div>
+          <div className="mt-4">
+            <Tabs defaultValue="all" value={activeFilter} onValueChange={(val) => {
+              setActiveFilter(val as 'all' | 'incomplete');
+              setCurrentPage(1);
+            }} className="w-full">
+              <TabsList className="bg-slate-100 dark:bg-slate-800">
+                <TabsTrigger value="all" className="gap-2">
+                  All Staff
+                  {allCount !== null && (
+                    <Badge variant="secondary" className="ml-1 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold px-1.5 py-0 h-5 text-[10px] min-w-5 flex items-center justify-center rounded-full">
+                      {allCount}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="incomplete" className="gap-2">
+                  Incomplete Profiles
+                  {incompleteCount !== null && (
+                    <Badge variant="secondary" className="ml-1 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 font-bold px-1.5 py-0 h-5 text-[10px] min-w-5 flex items-center justify-center rounded-full border border-amber-200/50 dark:border-amber-800/30 animate-pulse">
+                      {incompleteCount}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -666,34 +703,41 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => {
+                        <div className="flex items-center justify-end gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 font-bold text-xs uppercase tracking-wider h-8"
+                            onClick={() => {
                               setViewTeacherId(teacher.id);
                               setTeacherViewMode('view');
-                            }}>
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleEditClick(teacher)}>
-                              <Edit className="h-4 w-4 mr-2" />
-                              Edit Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setPromoteTargetId(teacher.id)}>
-                              <ShieldCheck className="h-4 w-4 mr-2 text-blue-600" />
-                              Promote to Admin
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="text-red-600" onClick={() => setDeleteTargetId(teacher.id)}>
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete Account
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                            }}
+                          >
+                            <Eye className="h-4 w-4 mr-1.5 text-blue-600" />
+                            View profile
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleEditClick(teacher)}>
+                                <Edit className="h-4 w-4 mr-2" />
+                                Edit Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setPromoteTargetId(teacher.id)}>
+                                <ShieldCheck className="h-4 w-4 mr-2 text-blue-600" />
+                                Promote to Admin
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="text-red-600" onClick={() => setDeleteTargetId(teacher.id)}>
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete Account
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))

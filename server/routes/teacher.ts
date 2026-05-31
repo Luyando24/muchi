@@ -762,44 +762,32 @@ router.get('/subjects', requireTeacher, async (req: Request, res: Response) => {
 });
 
 // PUT /api/teacher/profile
-// Update teacher profile details
+// Update teacher profile details (only email and phone_number allowed)
 router.put('/profile', requireTeacher, async (req: Request, res: Response) => {
   const profile = (req as any).profile;
-  const {
-    phone_number,
-    address,
-    marital_status,
-    housing_status,
-    living_with_spouse,
-    disability_status,
-    accommodation_provided,
-    highest_qualification,
-    institution_name,
-    completion_year,
-    field_of_study,
-    current_role,
-    location_type
-  } = req.body;
+  const { phone_number, email } = req.body;
 
   try {
+    // 1. If email is provided and differs, update Auth user first
+    if (email && email.trim() !== '' && email.trim().toLowerCase() !== (profile.email || '').toLowerCase()) {
+      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(profile.id, { email: email.trim() });
+      if (authError) {
+        return res.status(400).json({ message: authError.message || "Failed to update email in authentication service" });
+      }
+    }
+
+    // 2. Update profiles table
+    const updateData: any = {
+      phone_number: phone_number || null,
+      updated_at: new Date().toISOString()
+    };
+    if (email && email.trim() !== '') {
+      updateData.email = email.trim();
+    }
+
     const { data, error } = await supabaseAdmin
       .from('profiles')
-      .update({
-        phone_number,
-        address,
-        marital_status,
-        housing_status,
-        living_with_spouse: typeof living_with_spouse === 'boolean' ? living_with_spouse : null,
-        disability_status,
-        accommodation_provided,
-        highest_qualification,
-        institution_name,
-        completion_year: completion_year ? parseInt(completion_year, 10) : null,
-        field_of_study,
-        current_role,
-        location_type,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', profile.id)
       .select()
       .single();

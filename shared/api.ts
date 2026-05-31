@@ -20,6 +20,8 @@ export interface PaginatedResponse<T> {
     page: number;
     pageSize: number;
     totalPages: number;
+    allCount?: number;
+    incompleteCount?: number;
   };
 }
 
@@ -224,6 +226,13 @@ export interface SchoolDashboardStats {
     expense: number;
   }[];
   settingsCompletion?: SettingsCompletionInfo;
+  teacherProfilesCompletion?: TeacherProfilesCompletionInfo;
+}
+
+export interface TeacherProfilesCompletionInfo {
+  totalTeachers: number;
+  incompleteCount: number;
+  isComplete: boolean;
 }
 
 // --- Finance Types ---

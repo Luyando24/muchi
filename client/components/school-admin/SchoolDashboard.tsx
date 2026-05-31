@@ -69,6 +69,7 @@ export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardP
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const [isCompletionWarningOpen, setIsCompletionWarningOpen] = useState(false);
+  const [isTeacherCompletionWarningOpen, setIsTeacherCompletionWarningOpen] = useState(false);
 
   // Announcement Form State
   const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(false);
@@ -76,6 +77,15 @@ export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardP
   const [submitting, setSubmitting] = useState(false);
   const [deleteAnnouncementId, setDeleteAnnouncementId] = useState<string | null>(null);
   const [isDeletingAnnouncement, setIsDeletingAnnouncement] = useState(false);
+
+  const checkTeacherProfilesCompleteness = () => {
+    if (data && data.teacherProfilesCompletion && !data.teacherProfilesCompletion.isComplete) {
+      const dismissed = sessionStorage.getItem('teacher_completion_warning_dismissed');
+      if (!dismissed) {
+        setIsTeacherCompletionWarningOpen(true);
+      }
+    }
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -111,6 +121,8 @@ export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardP
       if (!dismissed) {
         setIsCompletionWarningOpen(true);
       }
+    } else {
+      checkTeacherProfilesCompleteness();
     }
   }, [data]);
 
@@ -332,6 +344,7 @@ export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardP
               onClick={() => {
                 sessionStorage.setItem('settings_completion_warning_dismissed', 'true');
                 setIsCompletionWarningOpen(false);
+                checkTeacherProfilesCompleteness();
               }}
               className="font-bold uppercase tracking-wider text-xs"
             >
@@ -346,6 +359,49 @@ export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardP
               className="bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-wider text-xs shadow-md"
             >
               Go to Settings
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isTeacherCompletionWarningOpen} onOpenChange={setIsTeacherCompletionWarningOpen}>
+        <DialogContent className="sm:max-w-[500px] border border-amber-200 dark:border-amber-900 bg-white dark:bg-slate-900">
+          <DialogHeader>
+            <div className="h-12 w-12 rounded-full bg-amber-100 dark:bg-amber-950/40 flex items-center justify-center mb-4 border border-amber-200 dark:border-amber-900/50">
+              <Users className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+            </div>
+            <DialogTitle className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+              Incomplete Teacher Profiles Detected
+            </DialogTitle>
+            <DialogDescription className="text-slate-600 dark:text-slate-400 text-sm mt-2">
+              We found that <span className="font-bold text-amber-600 dark:text-amber-400">{data?.teacherProfilesCompletion?.incompleteCount} out of {data?.teacherProfilesCompletion?.totalTeachers} teacher profiles</span> are less than 100% complete. Completing these profiles is necessary for government reporting, RLS access control, and official records.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 my-4 text-xs font-medium text-slate-600 dark:text-slate-400 leading-relaxed">
+            Please make sure that all demographic details, location types, highest qualifications, and contact details are filled in for each teacher in your school.
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                sessionStorage.setItem('teacher_completion_warning_dismissed', 'true');
+                setIsTeacherCompletionWarningOpen(false);
+              }}
+              className="font-bold uppercase tracking-wider text-xs"
+            >
+              Remind Me Later
+            </Button>
+            <Button
+              onClick={() => {
+                sessionStorage.setItem('teacher_completion_warning_dismissed', 'true');
+                setIsTeacherCompletionWarningOpen(false);
+                navigate(`${isOnSubdomain() ? '' : '/school-admin'}/teachers`);
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-wider text-xs shadow-md"
+            >
+              Go to Teachers
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -790,6 +790,61 @@ router.get(
         isComplete: percentage >= 90
       };
 
+      // Calculate teacher profile completion details
+      const { data: activeTeachersList, error: activeTeachersError } = await supabaseAdmin
+        .from("profiles")
+        .select("full_name, email, phone_number, address, gender, date_of_birth, department, marital_status, housing_status, disability_status, accommodation_provided, highest_qualification, institution_name, completion_year, field_of_study, current_role, location_type")
+        .eq("school_id", schoolId)
+        .eq("role", "teacher")
+        .or('employment_status.neq.Terminated,employment_status.is.null');
+
+      if (activeTeachersError) {
+        console.error("[Dashboard] Active Teachers Query Error:", activeTeachersError);
+      }
+
+      const teacherFieldsToCheck = [
+        "full_name",
+        "email",
+        "phone_number",
+        "address",
+        "gender",
+        "date_of_birth",
+        "department",
+        "marital_status",
+        "housing_status",
+        "disability_status",
+        "accommodation_provided",
+        "highest_qualification",
+        "institution_name",
+        "completion_year",
+        "field_of_study",
+        "current_role",
+        "location_type"
+      ];
+
+      let incompleteCount = 0;
+      if (activeTeachersList) {
+        activeTeachersList.forEach((teacher: any) => {
+          let filled = 0;
+          teacherFieldsToCheck.forEach((field) => {
+            const val = teacher[field];
+            if (val !== undefined && val !== null && String(val).trim() !== "") {
+              filled++;
+            }
+          });
+          const completeness = Math.round((filled / teacherFieldsToCheck.length) * 100);
+          if (completeness < 100) {
+            incompleteCount++;
+          }
+        });
+      }
+
+      const teacherProfilesCompletion = {
+        totalTeachers: activeTeachersList?.length || 0,
+        incompleteCount,
+        isComplete: incompleteCount === 0
+      };
+
       // 5. Calculate Attendance Rate (Term-wide for "real data" as in reports)
       let attendanceRateValue = "--";
       let attendanceTrend = "+0%";
@@ -936,6 +991,7 @@ router.get(
         enrollmentDistribution,
         financeTrends,
         settingsCompletion,
+        teacherProfilesCompletion,
       };
 
       console.log(
@@ -3566,29 +3622,65 @@ router.get(
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 50;
     const search = req.query.search as string;
+    const incomplete = req.query.incomplete as string;
 
     try {
       let query = supabaseAdmin
         .from("profiles")
-        .select("*", { count: 'exact' })
+        .select("*")
         .eq("school_id", schoolId)
         .eq("role", "teacher")
-        .or('employment_status.neq.Terminated,employment_status.is.null');
+        .or('employment_status.neq.Terminated,employment_status.is.null')
+        .order("full_name", { ascending: true });
 
-      if (search) {
-        query = query.or(`full_name.ilike.%${search}%,department.ilike.%${search}%`);
-      }
-
-      const from = (page - 1) * limit;
-      const to = from + limit - 1;
-
-      const { data: teachers, error, count } = await query
-        .order("full_name", { ascending: true })
-        .range(from, to);
+      const { data: teachers, error } = await query;
 
       if (error) throw error;
 
-      const formattedTeachers = teachers.map((teacher: any) => ({
+      let filtered = teachers || [];
+
+      // In-memory filter for search
+      if (search) {
+        const searchLower = search.toLowerCase();
+        filtered = filtered.filter((t: any) => 
+          (t.full_name && t.full_name.toLowerCase().includes(searchLower)) ||
+          (t.department && t.department.toLowerCase().includes(searchLower)) ||
+          (t.staff_number && t.staff_number.toLowerCase().includes(searchLower))
+        );
+      }
+
+      const allCount = filtered.length;
+
+      const teacherFieldsToCheck = [
+        "full_name", "email", "phone_number", "address", "gender", "date_of_birth",
+        "department", "marital_status", "housing_status", "disability_status",
+        "accommodation_provided", "highest_qualification", "institution_name",
+        "completion_year", "field_of_study", "current_role", "location_type"
+      ];
+
+      const incompleteTeachers = filtered.filter((t: any) => {
+        let filled = 0;
+        teacherFieldsToCheck.forEach((field) => {
+          const val = t[field];
+          if (val !== undefined && val !== null && String(val).trim() !== "") {
+            filled++;
+          }
+        });
+        const completeness = Math.round((filled / teacherFieldsToCheck.length) * 100);
+        return completeness < 100;
+      });
+
+      const incompleteCount = incompleteTeachers.length;
+
+      // In-memory filter for incomplete profiles
+      if (incomplete === "true") {
+        filtered = incompleteTeachers;
+      }
+
+      const totalCount = filtered.length;
+      const paginated = filtered.slice((page - 1) * limit, page * limit);
+
+      const formattedTeachers = paginated.map((teacher: any) => ({
         id: teacher.id,
         firstName: teacher.full_name?.split(" ")[0] || "",
         lastName: teacher.full_name?.split(" ").slice(1).join(" ") || "",
@@ -3604,10 +3696,12 @@ router.get(
       res.json({
         data: formattedTeachers,
         metadata: {
-          total: count || 0,
+          total: totalCount,
           page,
           pageSize: limit,
-          totalPages: Math.ceil((count || 0) / limit)
+          totalPages: Math.ceil(totalCount / limit),
+          allCount,
+          incompleteCount
         }
       });
     } catch (error: any) {

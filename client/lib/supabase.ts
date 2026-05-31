@@ -138,6 +138,10 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     storage: subdomainCookieStorage,
     persistSession: true,
     detectSessionInUrl: true,
-    autoRefreshToken: true
+    autoRefreshToken: true,
+    // Custom no-op lock to completely bypass navigator.locks issues
+    lock: async (name, acquireTimeout, fn) => {
+      return await fn();
+    }
   }
 });
