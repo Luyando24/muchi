@@ -67,7 +67,7 @@ export default function StudentList() {
   const renderStudent = ({ item }: { item: Student }) => (
     <TouchableOpacity 
       className="p-4 bg-white border-b border-border flex-row items-center gap-4"
-      onPress={() => {}} // Could link to a details view if needed
+      onPress={() => router.push('/(app)/school-admin/student-' + item.id)} 
     >
       <View className="w-10 h-10 bg-indigo-100 rounded-full items-center justify-center">
         <User size={20} color="#4f46e5" />

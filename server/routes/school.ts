@@ -4,6 +4,7 @@ import { WhatsAppService } from "../services/whatsappService.js";
 import { requireActiveLicense } from "../middleware/license.js";
 import { ensureSchoolSettings } from "../lib/school-settings.js";
 import { findBestClassMatch, normalizeClassName } from "../lib/class-matching.js";
+import { standardizeSubjectName, standardizeClassName, standardizeDepartmentName } from "../../shared/name-standardization.js";
 
 // Helper function to bypass Supabase's max_rows limit by paginating
 async function fetchAll(queryBuilder: any, limit = 1000) {
@@ -3071,7 +3072,7 @@ router.get(
       const { data: schoolDetails } = await supabaseAdmin
         .from("schools")
         .select(
-          "name, address, email, phone, website, logo_url, signature_url, seal_url, coat_of_arms_url, school_type, headteacher_name, headteacher_title",
+          "name, address, email, phone, website, logo_url, signature_url, seal_url, coat_of_arms_url, school_type, headteacher_name, headteacher_title, compulsory_subjects_primary, compulsory_subjects_secondary",
         )
         .eq("id", schoolId)
         .single();
@@ -3137,7 +3138,7 @@ router.get(
       const { data: schoolDetails } = await supabaseAdmin
         .from("schools")
         .select(
-          "name, address, email, phone, website, logo_url, signature_url, seal_url, coat_of_arms_url, school_type, headteacher_name, headteacher_title",
+          "name, address, email, phone, website, logo_url, signature_url, seal_url, coat_of_arms_url, school_type, headteacher_name, headteacher_title, compulsory_subjects_primary, compulsory_subjects_secondary",
         )
         .eq("id", schoolId)
         .single();
@@ -3835,13 +3836,8 @@ router.post(
       return res.status(400).json({ message: "Department name is required" });
     }
 
-    // Capitalize each word logic (optional but good for consistency)
-    const formattedName = name
-      .toLowerCase()
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ')
-      .trim();
+    // Standardize department name
+    const formattedName = standardizeDepartmentName(name);
 
     try {
       // Check if already exists (case insensitive)
@@ -3894,12 +3890,7 @@ router.put(
       return res.status(400).json({ message: "Department name is required" });
     }
 
-    const formattedName = name
-      .toLowerCase()
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ')
-      .trim();
+    const formattedName = standardizeDepartmentName(name);
 
     try {
       // Check if another department with same name exists
@@ -3960,12 +3951,7 @@ router.post(
           throw new Error("Department name is required");
         }
 
-        const formattedName = dept.name
-          .toLowerCase()
-          .split(" ")
-          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
-          .join(" ")
-          .trim();
+        const formattedName = standardizeDepartmentName(dept.name);
 
         // Check if already exists
         const { data: existing } = await supabaseAdmin
@@ -4044,12 +4030,15 @@ router.post(
           throw new Error("Subject name is required");
         }
 
+        const standardizedName = standardizeSubjectName(subj.name);
+        const standardizedDept = subj.department ? standardizeDepartmentName(subj.department) : null;
+
         // Check duplicate by name within school
         const { data: existing } = await supabaseAdmin
           .from("subjects")
           .select("id")
           .eq("school_id", schoolId)
-          .ilike("name", subj.name.trim())
+          .ilike("name", standardizedName)
           .maybeSingle();
 
         if (existing) {
@@ -4061,9 +4050,9 @@ router.post(
           .from("subjects")
           .insert({
             school_id: schoolId,
-            name: subj.name.trim(),
+            name: standardizedName,
             code: subj.code?.trim() || null,
-            department: subj.department?.trim() || null,
+            department: standardizedDept,
           });
 
         if (error) throw error;
@@ -4101,12 +4090,14 @@ router.post(
           throw new Error("Class name is required");
         }
 
+        const standardizedName = standardizeClassName(cls.name);
+
         // Check duplicate by name within school
         const { data: existing } = await supabaseAdmin
           .from("classes")
           .select("id")
           .eq("school_id", schoolId)
-          .ilike("name", cls.name.trim())
+          .ilike("name", standardizedName)
           .maybeSingle();
 
         if (existing) {
@@ -4118,7 +4109,7 @@ router.post(
           .from("classes")
           .insert({
             school_id: schoolId,
-            name: cls.name.trim(),
+            name: standardizedName,
             level: cls.level?.trim() || null,
             room: cls.room?.trim() || null,
             capacity: cls.capacity ? parseInt(cls.capacity) : 40,
@@ -4242,12 +4233,14 @@ router.post(
     const { name, department, headTeacherId, code } = req.body;
 
     try {
+      const standardizedName = standardizeSubjectName(name);
+      const standardizedDept = department ? standardizeDepartmentName(department) : null;
       const { data, error } = await supabaseAdmin
         .from("subjects")
         .insert({
           school_id: schoolId,
-          name,
-          department,
+          name: standardizedName,
+          department: standardizedDept,
           head_teacher_id: headTeacherId || null,
           code,
         })
@@ -4274,11 +4267,13 @@ router.put(
     const { name, department, headTeacherId, code } = req.body;
 
     try {
+      const standardizedName = standardizeSubjectName(name);
+      const standardizedDept = department ? standardizeDepartmentName(department) : null;
       const { data, error } = await supabaseAdmin
         .from("subjects")
         .update({
-          name,
-          department,
+          name: standardizedName,
+          department: standardizedDept,
           head_teacher_id: headTeacherId || null,
           code,
           // updated_at: new Date() // updated_at column might be missing
@@ -4479,11 +4474,12 @@ router.post(
     const { name, level, room, capacity, classTeacherId } = req.body;
 
     try {
+      const standardizedName = standardizeClassName(name);
       const { data, error } = await supabaseAdmin
         .from("classes")
         .insert({
           school_id: schoolId,
-          name,
+          name: standardizedName,
           level,
           room,
           capacity: capacity || 40,
@@ -4512,10 +4508,11 @@ router.put(
     const { name, level, room, capacity, classTeacherId } = req.body;
 
     try {
+      const standardizedName = standardizeClassName(name);
       const { data, error } = await supabaseAdmin
         .from("classes")
         .update({
-          name,
+          name: standardizedName,
           level,
           room,
           capacity,
@@ -6579,6 +6576,8 @@ router.put(
       academic_year,
       current_term,
       exam_types,
+      compulsory_subjects_primary,
+      compulsory_subjects_secondary,
       email,
       phone,
       address,
@@ -6598,6 +6597,13 @@ router.put(
     } = req.body;
 
     try {
+      const stdPrimary = Array.isArray(compulsory_subjects_primary)
+        ? compulsory_subjects_primary.map((s: string) => standardizeSubjectName(s))
+        : undefined;
+      const stdSecondary = Array.isArray(compulsory_subjects_secondary)
+        ? compulsory_subjects_secondary.map((s: string) => standardizeSubjectName(s))
+        : undefined;
+
       const { data, error } = await supabaseAdmin
         .from("schools")
         .update({
@@ -6605,6 +6611,8 @@ router.put(
           academic_year,
           current_term,
           exam_types,
+          compulsory_subjects_primary: stdPrimary,
+          compulsory_subjects_secondary: stdSecondary,
           email,
           phone,
           address,

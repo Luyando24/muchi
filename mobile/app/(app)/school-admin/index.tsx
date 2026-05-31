@@ -166,7 +166,7 @@ export default function SchoolAdminDashboard() {
                 <Button 
                   title="Class Schedule" 
                   variant="outline"
-                  onPress={() => {}} // TODO: Navigate to timetable
+                  onPress={() => router.push('/(app)/school-admin/timetable')} 
                 />
               </View>
             </CardContent>

@@ -3,7 +3,7 @@ import { View, Text, SafeAreaView, FlatList, ActivityIndicator, TouchableOpacity
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Search, Briefcase } from 'lucide-react-native';
+import { ArrowLeft, Search, Briefcase, ChevronRight } from 'lucide-react-native';
 import { Input } from '../../../components/ui/Input';
 
 interface Teacher {
@@ -63,15 +63,21 @@ export default function TeacherList() {
   };
 
   const renderTeacher = ({ item }: { item: Teacher }) => (
-    <View className="p-4 bg-white border-b border-border flex-row items-center gap-4">
-      <View className="w-10 h-10 bg-emerald-100 rounded-full items-center justify-center">
-        <Briefcase size={20} color="#10b981" />
+    <TouchableOpacity 
+      className="p-4 bg-white border-b border-border flex-row items-center justify-between"
+      onPress={() => router.push('/(app)/school-admin/teacher-' + item.id)}
+    >
+      <View className="flex-row items-center gap-4 flex-1">
+        <View className="w-10 h-10 bg-emerald-100 rounded-full items-center justify-center">
+          <Briefcase size={20} color="#10b981" />
+        </View>
+        <View className="flex-1">
+          <Text className="font-bold text-slate-800">{item.full_name}</Text>
+          <Text className="text-[10px] text-muted-foreground">{item.email}</Text>
+        </View>
       </View>
-      <View className="flex-1">
-        <Text className="font-bold text-slate-800">{item.full_name}</Text>
-        <Text className="text-[10px] text-muted-foreground">{item.email}</Text>
-      </View>
-    </View>
+      <ChevronRight size={18} color="#cbd5e1" />
+    </TouchableOpacity>
   );
 
   return (

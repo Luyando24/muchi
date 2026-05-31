@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, SafeAreaView, ScrollView, ActivityIndicator, TouchableOpacity, RefreshControl } from 'react-native';
-import { Calendar, Clock, BookOpen, MapPin, ArrowLeft } from 'lucide-react-native';
+import { Calendar, Clock, BookOpen, MapPin, User, ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '../../../hooks/useAuth';
 import { Card, CardContent } from '../../../components/ui/Card';
 import { useRouter } from 'expo-router';
@@ -11,11 +11,12 @@ interface TimetableEntry {
   start_time: string;
   end_time: string;
   room?: string;
-  classes?: { name: string };
-  subjects?: { name: string; code: string };
+  class?: { name: string };
+  subject?: { name: string; code: string };
+  teacher?: { full_name: string };
 }
 
-export default function TimetableScreen() {
+export default function AdminTimetableScreen() {
   const { session } = useAuth();
   const router = useRouter();
   
@@ -23,7 +24,6 @@ export default function TimetableScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   
-  // Selected day: 'Monday', 'Tuesday', etc. Defaults to current day or 'Monday'
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   const currentDayStr = new Date().toLocaleDateString('en-US', { weekday: 'long' });
   const initialDay = daysOfWeek.includes(currentDayStr) ? currentDayStr : 'Monday';
@@ -35,17 +35,17 @@ export default function TimetableScreen() {
       if (!token) return;
 
       const baseUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8080';
-      const response = await fetch(`${baseUrl}/api/teacher/timetable`, {
+      const response = await fetch(`${baseUrl}/api/school/timetables`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
 
-      if (!response.ok) throw new Error('Failed to fetch timetable');
+      if (!response.ok) throw new Error('Failed to fetch timetables');
       const data = await response.json();
       setTimetable(data || []);
     } catch (error) {
-      console.error('Error fetching timetable:', error);
+      console.error('Error fetching admin timetables:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -61,35 +61,34 @@ export default function TimetableScreen() {
     fetchTimetable();
   };
 
-  // Filter slots for the selected day and sort by start time
   const daySlots = timetable
     .filter(t => t.day_of_week?.toLowerCase() === selectedDay.toLowerCase())
     .sort((a, b) => a.start_time.localeCompare(b.start_time));
 
   const formatTimeStr = (time: string) => {
     if (!time) return '';
-    return time.substring(0, 5); // Take HH:MM from HH:MM:SS
+    return time.substring(0, 5);
   };
 
   if (loading) {
     return (
       <View className="flex-1 justify-center items-center bg-white">
-        <ActivityIndicator size="large" color="#4f46e5" />
+        <ActivityIndicator size="large" color="#10b981" />
       </View>
     );
   }
 
   return (
     <SafeAreaView className="flex-1 bg-[#f8fafc]">
-      {/* Navbar header */}
+      {/* Header */}
       <View className="px-5 py-4 border-b border-slate-100 bg-white flex-row items-center gap-4">
         <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
           <ArrowLeft size={20} color="#64748b" />
         </TouchableOpacity>
-        <Text className="text-xl font-extrabold text-slate-900">Weekly Schedule</Text>
+        <Text className="text-xl font-extrabold text-slate-900">Master Schedule</Text>
       </View>
 
-      {/* Horizontal Day selection bar */}
+      {/* Days Filter */}
       <View className="bg-white border-b border-slate-100 py-3 px-5">
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row gap-3">
           {daysOfWeek.map((day) => {
@@ -101,7 +100,7 @@ export default function TimetableScreen() {
                 onPress={() => setSelectedDay(day)}
                 className={`px-5 py-2.5 rounded-2xl border ${
                   isActive 
-                    ? 'bg-indigo-600 border-indigo-600 shadow-sm shadow-indigo-200' 
+                    ? 'bg-emerald-600 border-emerald-600 shadow-sm shadow-emerald-200' 
                     : 'bg-slate-50 border-slate-100'
                 }`}
               >
@@ -118,7 +117,7 @@ export default function TimetableScreen() {
         </ScrollView>
       </View>
 
-      {/* Main schedule scroll area */}
+      {/* Schedule list */}
       <ScrollView 
         className="flex-1 p-5"
         showsVerticalScrollIndicator={false}
@@ -129,38 +128,40 @@ export default function TimetableScreen() {
         <View className="space-y-4 mb-20">
           <View className="flex-row justify-between items-center px-1 mb-1">
             <Text className="text-xs font-extrabold text-slate-500">{selectedDay} Schedule</Text>
-            <Text className="text-[10px] font-black text-slate-400 uppercase">{daySlots.length} Slots Assigned</Text>
+            <Text className="text-[10px] font-black text-slate-400 uppercase">{daySlots.length} Periods Scheduled</Text>
           </View>
 
           {daySlots.length > 0 ? (
             daySlots.map((slot) => (
               <Card key={slot.id} className="bg-white border-slate-100 shadow-sm overflow-hidden">
                 <CardContent className="p-4 flex-row items-center gap-4">
-                  {/* Left Side: Time slot indicator */}
+                  {/* Time box */}
                   <View className="bg-slate-50 border border-slate-100 px-3 py-3 rounded-2xl items-center justify-center min-w-[70px]">
-                    <Clock size={16} color="#4f46e5" className="mb-1" />
+                    <Clock size={16} color="#10b981" className="mb-1" />
                     <Text className="font-extrabold text-slate-700 text-xs">{formatTimeStr(slot.start_time)}</Text>
                     <Text className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{formatTimeStr(slot.end_time)}</Text>
                   </View>
 
-                  {/* Right Side: Class & Subject details */}
+                  {/* Details box */}
                   <View className="flex-1">
-                    <Text className="text-[9px] font-black text-indigo-600 uppercase tracking-widest">
-                      {slot.subjects?.code || 'SUBJ'}
+                    <Text className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">
+                      {slot.subject?.code || 'SUBJ'} • {slot.class?.name || 'Class'}
                     </Text>
                     <Text className="font-extrabold text-slate-800 text-sm mt-0.5">
-                      {slot.subjects?.name || 'Subject'}
+                      {slot.subject?.name || 'Subject'}
                     </Text>
                     
                     <View className="flex-row items-center gap-4 mt-2">
                       <View className="flex-row items-center gap-1">
-                        <BookOpen size={12} color="#94a3b8" />
-                        <Text className="text-xs text-slate-500 font-bold">{slot.classes?.name || 'Class'}</Text>
+                        <User size={12} color="#94a3b8" />
+                        <Text className="text-[10px] text-slate-500 font-bold">
+                          {slot.teacher?.full_name || 'No Teacher'}
+                        </Text>
                       </View>
                       
                       <View className="flex-row items-center gap-1">
                         <MapPin size={12} color="#94a3b8" />
-                        <Text className="text-[10px] text-slate-400 font-medium">
+                        <Text className="text-[9px] text-slate-400 font-medium">
                           {slot.room || 'Room ' + Math.floor(1 + Math.random() * 20)}
                         </Text>
                       </View>
@@ -174,7 +175,7 @@ export default function TimetableScreen() {
               <Calendar size={48} color="#cbd5e1" className="mb-2" />
               <Text className="text-slate-400 font-bold">No Scheduled Classes</Text>
               <Text className="text-slate-400 text-[10px] mt-1 text-center px-6">
-                You have no teaching periods assigned for {selectedDay}. Enjoy your day off!
+                There are no scheduled class periods for {selectedDay}.
               </Text>
             </Card>
           )}

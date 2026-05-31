@@ -4,7 +4,7 @@ import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../../components/ui/Card';
 import { Button } from '../../../../components/ui/Button';
-import { ArrowLeft, CheckCircle2, XCircle, Clock, AlertCircle, ClipboardList } from 'lucide-react-native';
+import { ArrowLeft, CheckCircle2, XCircle, Clock, AlertCircle, ClipboardList, Users } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 
 interface ClassInfo {

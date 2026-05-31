@@ -76,6 +76,68 @@ interface GradingScale {
   min_percentage: number;
   max_percentage: number;
   description?: string;
+  section?: string; // 'lower_primary' | 'upper_primary' | 'secondary' | etc.
+}
+
+// ─── Class-Level Detection Utility ────────────────────────────────────────────
+// Returns 'lower_primary' (Grades 1-4), 'upper_primary' (Grades 5-7), or
+// 'secondary' (Form / Grades 8-12) from any class name a school may use.
+// Handles: "Form 1", "FORM ONE", "form one", "Grade 9", "grade9", "G9",
+//          "Std 5", "Standard 4", "Class 3", "Year 2", etc.
+function detectClassSection(className: string): 'lower_primary' | 'upper_primary' | 'secondary' {
+  const raw = className.toLowerCase().trim();
+
+  // Word-number map for written-out ordinals/cardinals
+  const wordToNum: Record<string, number> = {
+    one: 1, two: 2, three: 3, four: 4, five: 5,
+    six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+    eleven: 11, twelve: 12,
+    first: 1, second: 2, third: 3, fourth: 4, fifth: 5,
+    sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10,
+  };
+
+  // ----- Step 1: detect explicit "form" keyword → always secondary -----
+  if (/\bform\b/.test(raw)) return 'secondary';
+
+  // ----- Step 2: extract numeric level -----
+  // Try digit first (e.g. "Grade 9", "grade9", "G9", "Std 5", "Class 12")
+  let level: number | null = null;
+
+  const digitMatch = raw.match(
+    /\b(?:grade|gr|g|std|standard|class|year|level)\s*(\d{1,2})\b|(\d{1,2})\s*(?:grade|gr|g|std|standard|class|year|level)\b|\b(\d{1,2})$/
+  );
+  if (digitMatch) {
+    const numStr = digitMatch[1] || digitMatch[2] || digitMatch[3];
+    level = numStr ? parseInt(numStr, 10) : null;
+  }
+
+  // If no digit found, try written-out number AFTER a keyword
+  if (level === null) {
+    for (const [word, num] of Object.entries(wordToNum)) {
+      // Match patterns like "grade five", "class two", "std one"
+      const pattern = new RegExp(
+        `\\b(?:grade|gr|g|std|standard|class|year|level|form)\\s+${word}\\b`
+      );
+      if (pattern.test(raw)) { level = num; break; }
+    }
+  }
+
+  // If still nothing, try a bare word-number at end of string
+  if (level === null) {
+    for (const [word, num] of Object.entries(wordToNum)) {
+      if (new RegExp(`\\b${word}\\b`).test(raw)) { level = num; break; }
+    }
+  }
+
+  // ----- Step 3: map level to section -----
+  if (level !== null) {
+    if (level >= 8) return 'secondary';        // Grades 8-12
+    if (level >= 5) return 'upper_primary';    // Grades 5-7
+    if (level >= 1) return 'lower_primary';    // Grades 1-4
+  }
+
+  // Default: treat as secondary if we can't determine
+  return 'secondary';
 }
 
 export default function GradebookView() {
@@ -103,18 +165,30 @@ export default function GradebookView() {
   const [selectedYear, setSelectedYear] = useState<string>(defaultState.defaultYear || '');
   const [availableExamTypes, setAvailableExamTypes] = useState<string[]>(['Mid Term', 'End of Term']);
   
-  // Calculate max allowed marks based on grade level
+  // Determine class section using intelligent detection based on school settings + class name
   const currentClassObj = classes.find(c => c.id === selectedClass);
-  const currentGradeStr = (currentClassObj?.name || "").toLowerCase();
-  
-  // Robust Grade Detection
-  const isSecondaryGrade = currentGradeStr.includes("form") || 
-                           /\b(8|9|10|11|12)\b/.test(currentGradeStr);
-  const isG57GradeForMax = !isSecondaryGrade && 
-                           /\b(5|6|7)\b/.test(currentGradeStr) && 
-                           !/\b(1|2|3|4)\b/.test(currentGradeStr);
-  
-  const maxAllowed = isG57GradeForMax ? 150 : 100;
+  const type = (schoolType || "").toLowerCase();
+
+  // School-type overrides: if explicitly set to a single-level type, trust it
+  const isExplicitlyLowerPrimary = type === "lower primary";
+  const isExplicitlyUpperPrimary = type === "upper primary";
+  const isExplicitlySecondary    = type === "secondary school" || type === "secondary";
+
+  // Detect section from class name (handles any naming convention)
+  const detectedSection = currentClassObj ? detectClassSection(currentClassObj.name) : 'secondary';
+
+  // Final section resolution:
+  // 1. Explicit school-type overrides win outright (single-section schools)
+  // 2. For multi-section schools (combined/basic), use per-class detection
+  // 3. Default: class-name detection
+  const classSection: 'lower_primary' | 'upper_primary' | 'secondary' =
+    isExplicitlyLowerPrimary ? 'lower_primary' :
+    isExplicitlyUpperPrimary ? 'upper_primary' :
+    isExplicitlySecondary    ? 'secondary' :
+    detectedSection;  // covers combined, basic, and unknown types
+
+  // Max marks: upper_primary G5-7 = 150, everything else = 100
+  const maxAllowed = classSection === 'upper_primary' ? 150 : 100;
 
   // Data State
   const [students, setStudents] = useState<Student[]>([]);
@@ -375,73 +449,92 @@ export default function GradebookView() {
   };
 
   const getScale = (percentage: number) => {
-    // Auto-detect if we should use the specialized formats
-    const classObj = classes.find(c => c.id === selectedClass);
-    const gradeStr = (classObj?.name || "").toLowerCase();
-    const type = (schoolType || "").toLowerCase();
-    
-    // Specific School Types
-    const isLowerPrimarySchool = type === "lower primary";
-    const isUpperPrimarySchool = type === "upper primary";
-    const isCombinedPrimarySchool = type === "combined primary" || type === "primary school";
-    
-    // Grade-based detection
-    const isSecondary = currentGradeStr.includes("form") || /\b(8|9|10|11|12)\b/.test(currentGradeStr);
-    
-    const isG57Grade = !isSecondary && 
-                       /\b(5|6|7)\b/.test(currentGradeStr) && 
-                       !/\b(1|2|3|4)\b/.test(currentGradeStr);
+    // Use the pre-computed classSection (determined from school_type + class name)
+    // to select the correct grading scale — NOT from the mark entered.
 
-    const isG14Grade = !isSecondary && 
-                       /\b(1|2|3|4)\b/.test(currentGradeStr) && 
-                       !/\b(5|6|7|8|9|10|11|12)\b/.test(currentGradeStr);
+    // ── Helper: find best match in a subset of scales ──────────────────────
+    const findInScales = (scales: GradingScale[]) =>
+      scales.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage) || null;
 
-    if (isUpperPrimarySchool || (isCombinedPrimarySchool && isG57Grade)) {
-      const g57Scale = gradingScales.filter(s => ['A+', 'A', 'B+', 'B', 'C+', 'C', 'F'].includes(s.grade.trim().toUpperCase()));
-      const matchedScale = g57Scale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage);
-      if (matchedScale) return matchedScale;
-      
-      // Fallback to default G5-7 scale
-      if (percentage >= 86) return { grade: "A+", description: "Distinction" };
-      if (percentage >= 76) return { grade: "A", description: "Distinction" };
-      if (percentage >= 66) return { grade: "B+", description: "Merit" };
-      if (percentage >= 56) return { grade: "B", description: "Credit" };
-      if (percentage >= 46) return { grade: "C+", description: "Definite Pass" };
-      if (percentage >= 40) return { grade: "C", description: "Pass" };
-      return { grade: "F", description: "Fail" };
+    // ── 1. Prefer scales that have an explicit `section` field (admin-defined) ──
+    const scalesWithSection = gradingScales.filter(s => s.section && s.section.trim() !== '');
+    if (scalesWithSection.length > 0) {
+      // Map our canonical section to possible section values schools may use
+      const sectionAliases: Record<string, string[]> = {
+        lower_primary: ['lower_primary', 'lower primary', 'primary_lower', 'g1-4', 'grades1-4', 'junior'],
+        upper_primary: ['upper_primary', 'upper primary', 'primary_upper', 'g5-7', 'grades5-7', 'upper'],
+        secondary:     ['secondary', 'secondary_school', 'high school', 'g8-12', 'grades8-12'],
+      };
+      const aliases = sectionAliases[classSection] || [classSection];
+      const sectionScales = scalesWithSection.filter(s =>
+        aliases.some(alias => s.section!.toLowerCase().replace(/\s+/g, '_') === alias.replace(/\s+/g, '_'))
+      );
+      if (sectionScales.length > 0) {
+        const match = findInScales(sectionScales);
+        if (match) return match;
+      }
     }
 
-    if (isLowerPrimarySchool || (isCombinedPrimarySchool && isG14Grade)) {
-      const g14Scale = gradingScales.filter(s => ['A RED', 'B ORANGE', 'C YELLOW', 'D BLUE'].some(prefix => s.grade.trim().toUpperCase().includes(prefix)));
-      const matchedScale = g14Scale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage);
-      if (matchedScale) return matchedScale;
-      
-      // Fallback to default G1-4 scale
-      if (percentage >= 75) return { grade: "A Red", description: "Excellent" };
-      if (percentage >= 60) return { grade: "B Orange", description: "Very Good" };
-      if (percentage >= 50) return { grade: "C Yellow", description: "Good" };
-      return { grade: "D Blue", description: "Average Below" };
+    // ── 2. No section field — fall back to grade-pattern matching per section ──
+    if (classSection === 'upper_primary') {
+      // G5-7 uses letter grades: A+, A, B+, B, C+, C, F
+      const g57Patterns = ['A+', 'A', 'B+', 'B', 'C+', 'C', 'F'];
+      const g57Scales = gradingScales.filter(s =>
+        g57Patterns.includes(s.grade.trim().toUpperCase())
+      );
+      const match = findInScales(g57Scales);
+      if (match) return match;
+      // Built-in fallback
+      if (percentage >= 86) return { grade: 'A+', description: 'Distinction' };
+      if (percentage >= 76) return { grade: 'A',  description: 'Distinction' };
+      if (percentage >= 66) return { grade: 'B+', description: 'Merit' };
+      if (percentage >= 56) return { grade: 'B',  description: 'Credit' };
+      if (percentage >= 46) return { grade: 'C+', description: 'Definite Pass' };
+      if (percentage >= 40) return { grade: 'C',  description: 'Pass' };
+      return { grade: 'F', description: 'Fail' };
     }
 
-    // Default Secondary fallback if no scales defined
-    const secondaryScale = gradingScales.filter(s => ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', '1', '2', '3', '4', '5', '6', '7', '8', '9'].includes(s.grade.trim().toUpperCase()));
-    const matchedSecondary = secondaryScale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage);
-    if (matchedSecondary) return matchedSecondary;
-    
-    if (gradingScales.length === 0 || !matchedSecondary) {
-      // Standard Secondary Fallback
-      if (percentage >= 75) return { grade: "One", description: "Distinction" };
-      if (percentage >= 70) return { grade: "Two", description: "Distinction" };
-      if (percentage >= 65) return { grade: "Three", description: "Merit" };
-      if (percentage >= 60) return { grade: "Four", description: "Merit" };
-      if (percentage >= 55) return { grade: "Five", description: "Credit" };
-      if (percentage >= 50) return { grade: "Six", description: "Credit" };
-      if (percentage >= 45) return { grade: "Seven", description: "Satisfactory" };
-      if (percentage >= 40) return { grade: "Eight", description: "Satisfactory" };
-      return { grade: "Nine", description: "Unsatisfactory" };
+    if (classSection === 'lower_primary') {
+      // G1-4 uses colour/letter bands: A Red, B Orange, C Yellow, D Blue
+      const g14Keywords = ['A RED', 'B ORANGE', 'C YELLOW', 'D BLUE'];
+      const g14Scales = gradingScales.filter(s =>
+        g14Keywords.some(kw => s.grade.trim().toUpperCase().includes(kw))
+      );
+      const match = findInScales(g14Scales);
+      if (match) return match;
+      // Built-in fallback
+      if (percentage >= 75) return { grade: 'A Red',    description: 'Excellent' };
+      if (percentage >= 60) return { grade: 'B Orange',  description: 'Very Good' };
+      if (percentage >= 50) return { grade: 'C Yellow',  description: 'Good' };
+      return { grade: 'D Blue', description: 'Average Below' };
     }
 
-    return gradingScales.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage) || null;
+    // ── Secondary (default) ──
+    // Match numeric or written-out grade names (1-9 / One-Nine)
+    const secPatterns = [
+      'ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE',
+      '1','2','3','4','5','6','7','8','9'
+    ];
+    const secScales = gradingScales.filter(s =>
+      secPatterns.includes(s.grade.trim().toUpperCase())
+    );
+    const secMatch = findInScales(secScales);
+    if (secMatch) return secMatch;
+
+    // Try any remaining custom scales (e.g., schools that use A/B/C for secondary)
+    const anyMatch = findInScales(gradingScales);
+    if (anyMatch) return anyMatch;
+
+    // Built-in ECZ secondary fallback
+    if (percentage >= 75) return { grade: 'One',   description: 'Distinction' };
+    if (percentage >= 70) return { grade: 'Two',   description: 'Distinction' };
+    if (percentage >= 65) return { grade: 'Three', description: 'Merit' };
+    if (percentage >= 60) return { grade: 'Four',  description: 'Merit' };
+    if (percentage >= 55) return { grade: 'Five',  description: 'Credit' };
+    if (percentage >= 50) return { grade: 'Six',   description: 'Credit' };
+    if (percentage >= 45) return { grade: 'Seven', description: 'Satisfactory' };
+    if (percentage >= 40) return { grade: 'Eight', description: 'Satisfactory' };
+    return { grade: 'Nine', description: 'Unsatisfactory' };
   };
 
   const calculateGrade = (percentage: number) => {

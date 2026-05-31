@@ -13,6 +13,7 @@ import {
   School as SchoolIcon // imported School for the type
 } from 'lucide-react';
 import { ZAMBIAN_REGIONS } from '@/lib/regions';
+import { standardizeSubjectName } from '@shared/name-standardization';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -61,7 +62,9 @@ export default function SchoolSettings() {
     school_type: 'Secondary School' as string,
     category: '',
     country: 'Zambia',
-    location_type: 'Urban'
+    location_type: 'Urban',
+    compulsory_subjects_primary: [] as string[],
+    compulsory_subjects_secondary: [] as string[]
   });
 
   const [categories, setCategories] = useState<SchoolCategory[]>([]);
@@ -69,6 +72,9 @@ export default function SchoolSettings() {
   const [isLoadingMeta, setIsLoadingMeta] = useState(false);
 
   const [newExamType, setNewExamType] = useState('');
+  const [newCompulsorySubjectPrimary, setNewCompulsorySubjectPrimary] = useState('');
+  const [newCompulsorySubjectSecondary, setNewCompulsorySubjectSecondary] = useState('');
+  const [availableSubjects, setAvailableSubjects] = useState<{ id: string; name: string }[]>([]);
 
   const fetchMetadata = async () => {
     setIsLoadingMeta(true);
@@ -132,7 +138,9 @@ export default function SchoolSettings() {
         school_type: data.school_type || 'Secondary School',
         category: data.category || '',
         country: data.country || 'Zambia',
-        location_type: data.location_type || 'Urban'
+        location_type: data.location_type || 'Urban',
+        compulsory_subjects_primary: data.compulsory_subjects_primary || ['Special Paper 1', 'Special Paper 2'],
+        compulsory_subjects_secondary: data.compulsory_subjects_secondary || ['English']
       });
     } catch (error: any) {
       console.error('Error fetching settings:', error);
@@ -157,8 +165,25 @@ export default function SchoolSettings() {
     }
   };
 
+  const fetchAvailableSubjects = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch('/api/school/subjects', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableSubjects(data || []);
+      }
+    } catch (err) {
+      console.error('Error fetching available subjects:', err);
+    }
+  };
+
   useEffect(() => {
     fetchSettings();
+    fetchAvailableSubjects();
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -446,6 +471,184 @@ export default function SchoolSettings() {
                           <Button type="button" onClick={addExamType} variant="secondary">Add</Button>
                         </div>
                         <p className="text-xs text-slate-500">Press enter or click Add to create a new assessment type. These will be available when teachers enter grades.</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Compulsory Subjects (for Senior Secondary Points Calculation)</Label>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {(formData.compulsory_subjects_secondary || []).map((subject, idx) => (
+                            <span 
+                              key={idx} 
+                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                            >
+                              {subject}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    compulsory_subjects_secondary: prev.compulsory_subjects_secondary.filter(s => s !== subject)
+                                  }));
+                                }}
+                                className="text-indigo-500 hover:text-indigo-900 dark:hover:text-indigo-100 transition-colors"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </span>
+                          ))}
+                          {(!formData.compulsory_subjects_secondary || formData.compulsory_subjects_secondary.length === 0) && (
+                            <span className="text-sm text-slate-500 italic">No secondary compulsory subjects configured (defaulting to English)</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Select
+                            onValueChange={(value) => {
+                              if (value && !formData.compulsory_subjects_secondary.includes(value)) {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  compulsory_subjects_secondary: [...prev.compulsory_subjects_secondary, value]
+                                }));
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="max-w-xs bg-white dark:bg-slate-950">
+                              <SelectValue placeholder="Select from school subjects..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableSubjects.map(sub => (
+                                <SelectItem key={sub.id} value={sub.name}>{sub.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <span className="text-slate-400 text-xs px-1">or</span>
+                          <Input
+                            placeholder="Type custom subject name..."
+                            value={newCompulsorySubjectSecondary}
+                            onChange={(e) => setNewCompulsorySubjectSecondary(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const standardized = standardizeSubjectName(newCompulsorySubjectSecondary.trim());
+                                if (standardized && !formData.compulsory_subjects_secondary.includes(standardized)) {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    compulsory_subjects_secondary: [...prev.compulsory_subjects_secondary, standardized]
+                                  }));
+                                  setNewCompulsorySubjectSecondary('');
+                                }
+                              }
+                            }}
+                            className="max-w-xs"
+                          />
+                          <Button 
+                            type="button" 
+                            onClick={() => {
+                              const standardized = standardizeSubjectName(newCompulsorySubjectSecondary.trim());
+                              if (standardized && !formData.compulsory_subjects_secondary.includes(standardized)) {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  compulsory_subjects_secondary: [...prev.compulsory_subjects_secondary, standardized]
+                                }));
+                                setNewCompulsorySubjectSecondary('');
+                              }
+                            }} 
+                            variant="secondary"
+                          >
+                            Add Custom
+                          </Button>
+                        </div>
+                        <p className="text-xs text-slate-500">Configure secondary compulsory subjects. Default is English.</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Compulsory Subjects (for Primary Grade 5-7 Marks Calculation)</Label>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {(formData.compulsory_subjects_primary || []).map((subject, idx) => (
+                            <span 
+                              key={idx} 
+                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                            >
+                              {subject}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    compulsory_subjects_primary: prev.compulsory_subjects_primary.filter(s => s !== subject)
+                                  }));
+                                }}
+                                className="text-emerald-500 hover:text-emerald-900 dark:hover:text-emerald-100 transition-colors"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </span>
+                          ))}
+                          {(!formData.compulsory_subjects_primary || formData.compulsory_subjects_primary.length === 0) && (
+                            <span className="text-sm text-slate-500 italic">No primary compulsory subjects configured (defaulting to Special Paper 1 & 2)</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Select
+                            onValueChange={(value) => {
+                              if (value && !formData.compulsory_subjects_primary.includes(value)) {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  compulsory_subjects_primary: [...prev.compulsory_subjects_primary, value]
+                                }));
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="max-w-xs bg-white dark:bg-slate-950">
+                              <SelectValue placeholder="Select from school subjects..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableSubjects.map(sub => (
+                                <SelectItem key={sub.id} value={sub.name}>{sub.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <span className="text-slate-400 text-xs px-1">or</span>
+                          <Input
+                            placeholder="Type custom subject name..."
+                            value={newCompulsorySubjectPrimary}
+                            onChange={(e) => setNewCompulsorySubjectPrimary(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const standardized = standardizeSubjectName(newCompulsorySubjectPrimary.trim());
+                                if (standardized && !formData.compulsory_subjects_primary.includes(standardized)) {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    compulsory_subjects_primary: [...prev.compulsory_subjects_primary, standardized]
+                                  }));
+                                  setNewCompulsorySubjectPrimary('');
+                                }
+                              }
+                            }}
+                            className="max-w-xs"
+                          />
+                          <Button 
+                            type="button" 
+                            onClick={() => {
+                              const standardized = standardizeSubjectName(newCompulsorySubjectPrimary.trim());
+                              if (standardized && !formData.compulsory_subjects_primary.includes(standardized)) {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  compulsory_subjects_primary: [...prev.compulsory_subjects_primary, standardized]
+                                }));
+                                setNewCompulsorySubjectPrimary('');
+                              }
+                            }} 
+                            variant="secondary"
+                          >
+                            Add Custom
+                          </Button>
+                        </div>
+                        <p className="text-xs text-slate-500">Configure primary compulsory subjects. Default is Special Paper 1 & Special Paper 2.</p>
                       </div>
                     </div>
 

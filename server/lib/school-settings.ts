@@ -37,6 +37,16 @@ export async function ensureSchoolSettings(schoolId: string) {
     updated = true;
   }
 
+  if (!school.compulsory_subjects_secondary || school.compulsory_subjects_secondary.length === 0) {
+    updates.compulsory_subjects_secondary = ['English'];
+    updated = true;
+  }
+
+  if (!school.compulsory_subjects_primary || school.compulsory_subjects_primary.length === 0) {
+    updates.compulsory_subjects_primary = ['Special Paper 1', 'Special Paper 2'];
+    updated = true;
+  }
+
   if (updated) {
     const { data: updatedSchool, error: updateError } = await supabaseAdmin
       .from('schools')

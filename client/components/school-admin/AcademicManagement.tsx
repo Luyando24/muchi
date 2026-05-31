@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { standardizeSubjectName, standardizeClassName, standardizeDepartmentName } from '@shared/name-standardization';
 import { Plus, Trash2, Edit, Save, Search, Settings, BookOpen, Calculator, CheckCircle2, AlertTriangle, Loader2, ClipboardList, Send, ArrowRightLeft, Download, Layers, Building, Calendar, Printer, FileSpreadsheet, Lock, ShieldAlert } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -1096,7 +1097,7 @@ export default function AcademicManagement() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Class Name</Label>
-                        <Input required placeholder="e.g. Grade 10A" value={classForm.name} onChange={e => setClassForm({ ...classForm, name: e.target.value })} />
+                        <Input required placeholder="e.g. Grade 10A" value={classForm.name} onChange={e => setClassForm({ ...classForm, name: e.target.value })} onBlur={e => setClassForm({ ...classForm, name: standardizeClassName(e.target.value) })} />
                       </div>
                       <div className="space-y-2">
                         <Label>Level</Label>
@@ -1253,7 +1254,7 @@ export default function AcademicManagement() {
                     <form onSubmit={(e) => handleDeptSubmit(e, false)} className="space-y-4">
                       <div className="space-y-2">
                         <Label>Department Name</Label>
-                        <Input required placeholder="e.g. Science" value={deptForm.name} onChange={e => setDeptForm({ ...deptForm, name: e.target.value })} />
+                        <Input required placeholder="e.g. Science" value={deptForm.name} onChange={e => setDeptForm({ ...deptForm, name: e.target.value })} onBlur={e => setDeptForm({ ...deptForm, name: standardizeDepartmentName(e.target.value) })} />
                       </div>
                       <div className="space-y-2">
                         <Label>Head of Department (Optional)</Label>
@@ -1342,7 +1343,7 @@ export default function AcademicManagement() {
               <form onSubmit={(e) => handleDeptSubmit(e, true)} className="space-y-4">
                 <div className="space-y-2">
                   <Label>Department Name</Label>
-                  <Input required placeholder="e.g. Science" value={deptForm.name} onChange={e => setDeptForm({ ...deptForm, name: e.target.value })} />
+                  <Input required placeholder="e.g. Science" value={deptForm.name} onChange={e => setDeptForm({ ...deptForm, name: e.target.value })} onBlur={e => setDeptForm({ ...deptForm, name: standardizeDepartmentName(e.target.value) })} />
                 </div>
                 <div className="space-y-2">
                   <Label>Head of Department (Optional)</Label>
@@ -1416,7 +1417,17 @@ export default function AcademicManagement() {
                               name: newName,
                               code: (!subjectForm.code || subjectForm.code === oldAutoCode) ? newAutoCode : subjectForm.code
                             });
-                          }} 
+                          }}
+                          onBlur={e => {
+                             const stdName = standardizeSubjectName(e.target.value);
+                             const oldAutoCode = generateSubjectCode(subjectForm.name);
+                             const newAutoCode = generateSubjectCode(stdName);
+                             setSubjectForm({
+                               ...subjectForm,
+                               name: stdName,
+                               code: (!subjectForm.code || subjectForm.code === oldAutoCode) ? newAutoCode : subjectForm.code
+                             });
+                           }}
                         />
                       </div>
                       <div className="space-y-2">
@@ -2518,7 +2529,7 @@ export default function AcademicManagement() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Class Name</Label>
-                <Input required value={classForm.name} onChange={e => setClassForm({ ...classForm, name: e.target.value })} />
+                <Input required value={classForm.name} onChange={e => setClassForm({ ...classForm, name: e.target.value })} onBlur={e => setClassForm({ ...classForm, name: standardizeClassName(e.target.value) })} />
               </div>
               <div className="space-y-2">
                 <Label>Level</Label>
@@ -2574,6 +2585,16 @@ export default function AcademicManagement() {
                       code: (!subjectForm.code || subjectForm.code === oldAutoCode) ? newAutoCode : subjectForm.code
                     });
                   }} 
+                  onBlur={e => {
+                    const stdName = standardizeSubjectName(e.target.value);
+                    const oldAutoCode = generateSubjectCode(subjectForm.name);
+                    const newAutoCode = generateSubjectCode(stdName);
+                    setSubjectForm({
+                      ...subjectForm,
+                      name: stdName,
+                      code: (!subjectForm.code || subjectForm.code === oldAutoCode) ? newAutoCode : subjectForm.code
+                    });
+                  }}
                 />
               </div>
               <div className="space-y-2">

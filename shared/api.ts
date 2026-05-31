@@ -57,6 +57,8 @@ export interface School {
   academic_year?: string;
   current_term?: string;
   exam_types?: string[];
+  compulsory_subjects_secondary?: string[];
+  compulsory_subjects_primary?: string[];
   email?: string;
   phone?: string;
   address?: string;

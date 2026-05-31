@@ -6,10 +6,10 @@ const supabase = createClient(process.env.VITE_SUPABASE_URL!, process.env.SUPABA
 
 async function test() {
   const query = `
-    ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS headteacher_name TEXT;
-    ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS headteacher_title TEXT DEFAULT 'Headteacher';
+    ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS compulsory_subjects TEXT[] DEFAULT ARRAY['English'];
   `;
   const { data, error } = await supabase.rpc('execute_sql', { sql_query: query });
   console.log('Result:', error || 'Success');
 }
 test();
+

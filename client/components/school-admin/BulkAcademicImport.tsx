@@ -10,6 +10,7 @@ import { Upload, FileSpreadsheet, CheckCircle2, Loader2, Download, AlertCircle, 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase';
+import { standardizeSubjectName, standardizeClassName, standardizeDepartmentName } from '@shared/name-standardization';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -134,7 +135,7 @@ function DepartmentsPanel({ onSuccess }: { onSuccess: () => void }) {
       const rows: any[] = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
       setPreview(
         rows
-          .map(r => ({ name: findValue(r, ['Department Name', 'Name', 'Department']) }))
+          .map(r => ({ name: standardizeDepartmentName(findValue(r, ['Department Name', 'Name', 'Department'])) }))
           .filter(d => d.name)
       );
     };
@@ -233,9 +234,9 @@ function SubjectsPanel({ onSuccess }: { onSuccess: () => void }) {
       setPreview(
         rows
           .map(r => ({
-            name: findValue(r, ['Subject Name', 'Name', 'Subject']),
+            name: standardizeSubjectName(findValue(r, ['Subject Name', 'Name', 'Subject'])),
             code: findValue(r, ['Code', 'Subject Code']),
-            department: findValue(r, ['Department', 'Dept', 'Faculty']),
+            department: standardizeDepartmentName(findValue(r, ['Department', 'Dept', 'Faculty'])),
           }))
           .filter(s => s.name)
       );
@@ -345,7 +346,7 @@ function ClassesPanel({ onSuccess }: { onSuccess: () => void }) {
       setPreview(
         rows
           .map(r => ({
-            name: findValue(r, ['Class Name', 'Name', 'Class']),
+            name: standardizeClassName(findValue(r, ['Class Name', 'Name', 'Class'])),
             level: findValue(r, ['Level', 'Grade Level', 'Year']),
             room: findValue(r, ['Room', 'Room Number', 'Classroom']),
             capacity: findValue(r, ['Capacity', 'Max Students', 'Size']),
