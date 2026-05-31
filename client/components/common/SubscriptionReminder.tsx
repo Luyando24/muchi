@@ -8,11 +8,14 @@ interface SubscriptionReminderProps {
   onClose: () => void;
   onSnooze: () => void;
   schoolName: string;
+  variant?: 'renew' | 'onboarding';
 }
 
-export default function SubscriptionReminder({ isOpen, onClose, onSnooze, schoolName }: SubscriptionReminderProps) {
+export default function SubscriptionReminder({ isOpen, onClose, onSnooze, schoolName, variant = 'renew' }: SubscriptionReminderProps) {
   const [whatsappNumber, setWhatsappNumber] = useState("260570260374");
   const [loading, setLoading] = useState(false);
+
+  const isOnboarding = variant === 'onboarding';
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -38,7 +41,11 @@ export default function SubscriptionReminder({ isOpen, onClose, onSnooze, school
   }, [isOpen]);
 
   const handleWhatsAppClick = () => {
-    const text = encodeURIComponent(`Hello, I am the school admin for ${schoolName}. I need assistance with our school subscription renewal.`);
+    const text = encodeURIComponent(
+      isOnboarding
+        ? `Hello, I am the school admin for ${schoolName}. We are setting up our portal and would like assistance with onboarding and trial options.`
+        : `Hello, I am the school admin for ${schoolName}. I need assistance with our school subscription renewal.`
+    );
     window.open(`https://wa.me/${whatsappNumber}?text=${text}`, '_blank');
   };
 
@@ -54,35 +61,72 @@ export default function SubscriptionReminder({ isOpen, onClose, onSnooze, school
               <Sparkles className="h-6 w-6 animate-pulse" />
             </div>
             <div>
-              <span className="text-xs font-semibold uppercase tracking-widest text-indigo-400">Subscription Status</span>
-              <h3 className="text-xl sm:text-2xl font-black text-slate-100 mt-0.5">Renew School Subscription</h3>
+              <span className="text-xs font-semibold uppercase tracking-widest text-indigo-400">
+                {isOnboarding ? 'Onboarding & Support' : 'Subscription Status'}
+              </span>
+              <h3 className="text-xl sm:text-2xl font-black text-slate-100 mt-0.5">
+                {isOnboarding ? 'Complete School Setup' : 'Renew School Subscription'}
+              </h3>
             </div>
           </div>
 
           <div className="space-y-4">
             <p className="text-slate-300 text-sm sm:text-base leading-relaxed font-normal">
-              Your trial period for <strong className="text-white font-bold">{schoolName}</strong> has completed. To ensure uninterrupted access to the admin dashboard, gradebooks, financial records, and reports for all your teachers and students, please activate a license.
+              {isOnboarding ? (
+                <>
+                  Your trial period for <strong className="text-white font-bold">{schoolName}</strong> has completed. Since you are still setting up your portal, we'd love to help you get fully onboarded! Contact our support team for a free trial extension, raw data migration, or staff training.
+                </>
+              ) : (
+                <>
+                  Your trial period for <strong className="text-white font-bold">{schoolName}</strong> has completed. To ensure uninterrupted access to the admin dashboard, gradebooks, financial records, and reports for all your teachers and students, please activate a license.
+                </>
+              )}
             </p>
 
             <div className="bg-slate-800/40 border border-slate-800 rounded-xl p-4 space-y-3">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Included Features:</span>
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+                {isOnboarding ? 'Onboarding Benefits:' : 'Included Features:'}
+              </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm text-slate-300">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                  <span>Gradebooks & Report Cards</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                  <span>Tuition & Fee Ledger</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                  <span>Teacher & Student Portals</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                  <span>Daily Attendance & Schedules</span>
-                </div>
+                {isOnboarding ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span>Free Setup Guidance</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span>Staff Training & Demos</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span>Bulk Data Upload Help</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span>Direct WhatsApp Support</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span>Gradebooks & Report Cards</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span>Tuition & Fee Ledger</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span>Teacher & Student Portals</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span>Daily Attendance & Schedules</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -98,7 +142,7 @@ export default function SubscriptionReminder({ isOpen, onClose, onSnooze, school
               ) : (
                 <MessageCircle className="h-5 w-5 group-hover:scale-110 transition-transform" />
               )}
-              Contact Support to Renew
+              {isOnboarding ? 'Contact Support for Setup Help' : 'Contact Support to Renew'}
             </Button>
             <Button
               variant="ghost"

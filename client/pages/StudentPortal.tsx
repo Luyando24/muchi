@@ -275,8 +275,30 @@ export default function StudentPortal() {
     
     // Fallback if percentage is 0 and no grades exist
     if (percentage === 0) return 'N/A';
-    
-    // Fallback logic if no scale provided
+
+    // Detect if student is in G5-7 using their class name
+    const classStr = (gradesData?.student?.class || student?.class || '').toLowerCase();
+    const getGradeLevel = (name: string) => {
+      const raw = name.toLowerCase().trim();
+      if (raw.includes("form")) return 8; // Secondary
+      const match = raw.match(/(\d{1,2})/);
+      return match ? parseInt(match[1], 10) : null;
+    };
+    const gradeLevel = getGradeLevel(classStr);
+    const isG57Student = !classStr.includes('form') && gradeLevel !== null && gradeLevel >= 5 && gradeLevel <= 7;
+
+    if (isG57Student) {
+      // G5-7 upper primary: A+/A/B+/B/C+/C/F scale
+      if (percentage >= 86) return 'DISTINCTION';
+      if (percentage >= 76) return 'DISTINCTION';
+      if (percentage >= 66) return 'MERIT';
+      if (percentage >= 56) return 'CREDIT';
+      if (percentage >= 46) return 'DEFINITE PASS';
+      if (percentage >= 40) return 'PASS';
+      return 'FAIL';
+    }
+
+    // Secondary ECZ fallback
     if (percentage >= 75) return 'DISTINCTION';
     if (percentage >= 70) return 'DISTINCTION';
     if (percentage >= 65) return 'MERIT';

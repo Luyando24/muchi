@@ -57,6 +57,8 @@ export interface School {
   academic_year?: string;
   current_term?: string;
   exam_types?: string[];
+  test_types?: string[];
+  test_types_enabled?: boolean;
   compulsory_subjects_secondary?: string[];
   compulsory_subjects_primary?: string[];
   email?: string;
@@ -174,6 +176,12 @@ export interface Notification {
   created_at: string;
 }
 
+export interface SettingsCompletionInfo {
+  percentage: number;
+  missingFields: string[];
+  isComplete: boolean;
+}
+
 export interface SchoolDashboardStats {
   overview: {
     totalStudents: { value: number | string; trend: string; status: 'up' | 'down' };
@@ -215,6 +223,7 @@ export interface SchoolDashboardStats {
     income: number;
     expense: number;
   }[];
+  settingsCompletion?: SettingsCompletionInfo;
 }
 
 // --- Finance Types ---

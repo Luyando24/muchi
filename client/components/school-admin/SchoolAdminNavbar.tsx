@@ -207,7 +207,7 @@ export default function SchoolAdminNavbar({
       case 'teachers': return 'Teacher Management';
       case 'academics': return 'Academics & Results';
       case 'finance': return 'Financial Overview';
-      case 'reports': return 'Reports & Analytics';
+      case 'reports': return 'Academic performance';
       case 'calendar': return 'School Calendar';
       case 'settings': return 'System Settings';
       default: return 'Dashboard';

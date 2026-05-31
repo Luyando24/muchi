@@ -74,6 +74,7 @@ export default function SchoolAdminPortal() {
   const [showSubscriptionReminder, setShowSubscriptionReminder] = useState(false);
   const [schoolNameForReminder, setSchoolNameForReminder] = useState("");
   const [schoolIdForReminder, setSchoolIdForReminder] = useState("");
+  const [subscriptionVariant, setSubscriptionVariant] = useState<'renew' | 'onboarding'>('renew');
 
 
   // Listen for hash changes to support direct linking to tabs
@@ -119,10 +120,10 @@ export default function SchoolAdminPortal() {
             const schoolId = profile.school_id;
             setSchoolIdForReminder(schoolId);
             
-            // 1. Fetch school details (registration date, name)
+            // 1. Fetch school details (registration date, name, category)
             const { data: school } = await supabase
               .from('schools')
-              .select('created_at, name')
+              .select('created_at, name, category')
               .eq('id', schoolId)
               .single();
               
@@ -145,6 +146,31 @@ export default function SchoolAdminPortal() {
                 if (!hasLicense) {
                   const dismissedUntil = localStorage.getItem(`school_license_reminder_dismissed_until_${schoolId}`);
                   if (!dismissedUntil || Date.now() > parseInt(dismissedUntil)) {
+                    // 3. Determine variant based on school size & category
+                    const isPrivate = school.category?.toLowerCase().includes('private');
+                    let isOnboarded = isPrivate;
+
+                    if (!isPrivate) {
+                      // Count teachers and students in parallel
+                      const [teacherRes, studentRes] = await Promise.all([
+                        supabase
+                          .from('profiles')
+                          .select('id', { count: 'exact', head: true })
+                          .eq('school_id', schoolId)
+                          .eq('role', 'teacher')
+                          .or('employment_status.neq.Terminated,employment_status.is.null'),
+                        supabase
+                          .from('profiles')
+                          .select('id', { count: 'exact', head: true })
+                          .eq('school_id', schoolId)
+                          .eq('role', 'student')
+                      ]);
+                      const teacherCount = teacherRes.count || 0;
+                      const studentCount = studentRes.count || 0;
+                      isOnboarded = teacherCount > 20 && studentCount > 500;
+                    }
+
+                    setSubscriptionVariant(isOnboarded ? 'renew' : 'onboarding');
                     setShowSubscriptionReminder(true);
                   }
                 }
@@ -259,7 +285,7 @@ export default function SchoolAdminPortal() {
       items: [
         { id: "academics", label: "Academics & Results", icon: Building2, roles: ["school_admin", "registrar", "exam_officer", "academic_auditor"] },
         { id: "gradebook", label: "Gradebook", icon: GraduationCap, roles: ["school_admin", "teacher", "exam_officer"] },
-        { id: "reports", label: "Reports", icon: PieChart, roles: ["school_admin", "academic_auditor"] },
+        { id: "reports", label: "Academic performance", icon: PieChart, roles: ["school_admin", "academic_auditor"] },
         { id: "data-audit", label: "Data Audit", icon: ShieldAlert, roles: ["school_admin", "exam_officer", "academic_auditor"] },
       ]
     },
@@ -482,6 +508,7 @@ export default function SchoolAdminPortal() {
         onClose={handleCloseReminder}
         onSnooze={handleSnoozeReminder}
         schoolName={schoolNameForReminder}
+        variant={subscriptionVariant}
       />
 
       {/* Mobile Bottom Navigation */}

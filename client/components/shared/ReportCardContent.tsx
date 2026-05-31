@@ -23,16 +23,16 @@ export const ReportCardContent: React.FC<ReportCardContentProps> = ({ data, term
   const isCombinedPrimarySchool = schoolType === "combined primary" || schoolType === "primary school";
   
   // Grade-based detection for Combined schools
-  // Prioritize "Grade" or "G" prefixes and explicitly exclude "Form" (Secondary)
-  const isG57Grade = (gradeStr.includes("5") || gradeStr.includes("6") || gradeStr.includes("7")) && 
-                     !gradeStr.includes("1") && // Avoid matching 15, 16, 17
-                     !gradeStr.includes("form") &&
-                     (gradeStr.includes("grade") || gradeStr.includes("g"));
-
-  const isG14Grade = (gradeStr.includes("1") || gradeStr.includes("2") || gradeStr.includes("3") || gradeStr.includes("4")) && 
-                     !gradeStr.includes("10") && !gradeStr.includes("11") && !gradeStr.includes("12") &&
-                     !gradeStr.includes("form") &&
-                     (gradeStr.includes("grade") || gradeStr.includes("g"));
+  // Prioritize digit-based level and explicitly exclude "Form" (Secondary)
+  const getGradeLevel = (name: string) => {
+    const raw = name.toLowerCase().trim();
+    if (raw.includes("form")) return null; // Secondary
+    const match = raw.match(/(\d{1,2})/);
+    return match ? parseInt(match[1], 10) : null;
+  };
+  const gradeLevel = getGradeLevel(gradeStr);
+  const isG57Grade = gradeLevel !== null && gradeLevel >= 5 && gradeLevel <= 7;
+  const isG14Grade = gradeLevel !== null && gradeLevel >= 1 && gradeLevel <= 4;
 
   // Selection Logic
   // 1. If explicitly Lower Primary school, use Junior format

@@ -58,10 +58,15 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
   const studentGrade = (student.className || student.grade || student.class || "").toLowerCase();
   
   // Robust Grade Detection
-  const isSecondary = studentGrade.includes("form") || /\b(8|9|10|11|12)\b/.test(studentGrade);
-  const isG57 = !isSecondary && 
-                /\b(5|6|7)\b/.test(studentGrade) && 
-                !/\b(1|2|3|4)\b/.test(studentGrade);
+  const getGradeLevel = (name: string) => {
+    const raw = name.toLowerCase().trim();
+    if (raw.includes("form")) return 8; // Secondary
+    const match = raw.match(/(\d{1,2})/);
+    return match ? parseInt(match[1], 10) : null;
+  };
+  const gradeLevel = getGradeLevel(studentGrade);
+  const isSecondary = studentGrade.includes("form") || (gradeLevel !== null && gradeLevel >= 8);
+  const isG57 = !isSecondary && gradeLevel !== null && gradeLevel >= 5 && gradeLevel <= 7;
                 
   const maxMark = isG57 ? 150 : 100;
 
@@ -81,41 +86,38 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
       if (g.includes('YELLOW') || g === 'C+' || g === 'C') return { name: "Yellow", class: "text-yellow-600 font-bold" };
       return { name: "Blue", class: "text-blue-600 font-bold" };
     }
-    
-    // Fallback
-    const pct = (percentage / maxMark) * 100;
-    if (pct >= 75) return { name: "Red", class: "text-red-600 font-bold" };
-    if (pct >= 60) return { name: "Orange", class: "text-orange-500 font-bold" };
-    if (pct >= 50) return { name: "Yellow", class: "text-yellow-600 font-bold" };
+
+    // Fallback — percentage is already 0-100
+    if (percentage >= 75) return { name: "Red",    class: "text-red-600 font-bold" };
+    if (percentage >= 60) return { name: "Orange", class: "text-orange-500 font-bold" };
+    if (percentage >= 50) return { name: "Yellow", class: "text-yellow-600 font-bold" };
     return { name: "Blue", class: "text-blue-600 font-bold" };
   };
 
   const getGradeLetter = (percentage: number) => {
     const scale = getScaleMatch(percentage);
     if (scale) return scale.grade;
-    
-    // Fallback
-    const pct = (percentage / maxMark) * 100;
-    if (pct >= 86) return "A+";
-    if (pct >= 76) return "A";
-    if (pct >= 66) return "B+";
-    if (pct >= 56) return "B";
-    if (pct >= 46) return "C+";
-    if (pct >= 40) return "C";
+
+    // Fallback — percentage is already 0-100
+    if (percentage >= 86) return "A+";
+    if (percentage >= 76) return "A";
+    if (percentage >= 66) return "B+";
+    if (percentage >= 56) return "B";
+    if (percentage >= 46) return "C+";
+    if (percentage >= 40) return "C";
     return "F";
   };
 
   const getGradeDescription = (percentage: number) => {
     const scale = getScaleMatch(percentage);
     if (scale) return scale.description || scale.remark || "Satisfactory";
-    
-    // Fallback
-    const pct = (percentage / maxMark) * 100;
-    if (pct >= 76) return "Distinction";
-    if (pct >= 66) return "Merit";
-    if (pct >= 56) return "Credit";
-    if (pct >= 46) return "Definite Pass";
-    if (pct >= 40) return "Pass";
+
+    // Fallback — percentage is already 0-100
+    if (percentage >= 76) return "Distinction";
+    if (percentage >= 66) return "Merit";
+    if (percentage >= 56) return "Credit";
+    if (percentage >= 46) return "Definite Pass";
+    if (percentage >= 40) return "Pass";
     return "Fail";
   };
 
@@ -237,7 +239,9 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
                     <TableCell className="border border-slate-300 text-center py-1">{sub.tests['Test 2'] ?? '-'}</TableCell>
                     <TableCell className="border border-slate-300 text-center py-1">{sub.tests['Test 3'] ?? '-'}</TableCell>
                     <TableCell className="border border-slate-300 text-center py-1 font-bold">{finalPercentage ? Math.round(finalPercentage) + '%' : '-'}</TableCell>
-                    <TableCell className="border border-slate-300 text-center py-1 font-bold">{finalPercentage ? Math.round(finalPercentage) : '-'}</TableCell>
+                    <TableCell className="border border-slate-300 text-center py-1 font-bold">
+                      {finalPercentage ? Math.round(isG57 ? (finalPercentage / 100) * 150 : finalPercentage) : '-'}
+                    </TableCell>
                     <TableCell className="border border-slate-300 text-center py-1">{maxMark}</TableCell>
                     <TableCell className={`border border-slate-300 text-center py-1 ${color.class}`}>
                       {color.name}
@@ -269,15 +273,15 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] font-bold uppercase">
               <div className="flex justify-between items-center bg-red-50 p-1 px-2 rounded">
                 <span className="text-red-700">A. Red - Excellent</span>
-                <span>{Math.round(maxMark * 0.75)}-{maxMark}%</span>
+                <span>{Math.round(maxMark * 0.75)}-{maxMark}{maxMark === 100 ? '%' : ''}</span>
               </div>
               <div className="flex justify-between items-center bg-orange-50 p-1 px-2 rounded">
                 <span className="text-orange-700">B. Orange - Very Good</span>
-                <span>{Math.round(maxMark * 0.60)}-{Math.round(maxMark * 0.74)}%</span>
+                <span>{Math.round(maxMark * 0.60)}-{Math.round(maxMark * 0.74)}{maxMark === 100 ? '%' : ''}</span>
               </div>
               <div className="flex justify-between items-center bg-yellow-50 p-1 px-2 rounded">
                 <span className="text-yellow-700">C. Yellow - Good</span>
-                <span>{Math.round(maxMark * 0.50)}-{Math.round(maxMark * 0.59)}%</span>
+                <span>{Math.round(maxMark * 0.50)}-{Math.round(maxMark * 0.59)}{maxMark === 100 ? '%' : ''}</span>
               </div>
               <div className="flex justify-between items-center bg-blue-50 p-1 px-2 rounded">
                 <span className="text-blue-700">D. Blue - B. Average</span>

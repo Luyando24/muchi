@@ -31,6 +31,9 @@ import { supabase } from '@/lib/supabase';
 import { syncFetch } from '@/lib/syncService';
 import ThemeToggle from '@/components/navigation/ThemeToggle';
 import { School, SchoolCategory, Country } from '@shared/api';
+import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AdminManagement from './AdminManagement';
@@ -47,6 +50,8 @@ export default function SchoolSettings() {
     academic_year: '',
     current_term: '',
     exam_types: [] as string[],
+    test_types: [] as string[],
+    test_types_enabled: false,
     email: '',
     phone: '',
     address: '',
@@ -72,9 +77,34 @@ export default function SchoolSettings() {
   const [isLoadingMeta, setIsLoadingMeta] = useState(false);
 
   const [newExamType, setNewExamType] = useState('');
+  const [newTestType, setNewTestType] = useState('');
   const [newCompulsorySubjectPrimary, setNewCompulsorySubjectPrimary] = useState('');
   const [newCompulsorySubjectSecondary, setNewCompulsorySubjectSecondary] = useState('');
   const [availableSubjects, setAvailableSubjects] = useState<{ id: string; name: string }[]>([]);
+
+  const mandatoryFields = [
+    { key: "name", label: "School Name" },
+    { key: "school_type", label: "School Type" },
+    { key: "academic_year", label: "Academic Year" },
+    { key: "current_term", label: "Current Term" },
+    { key: "email", label: "Contact Email" },
+    { key: "phone", label: "Phone Number" },
+    { key: "province", label: "Province" },
+    { key: "district", label: "District" },
+    { key: "logo_url", label: "School Logo" },
+    { key: "headteacher_name", label: "Headteacher Name" },
+    { key: "signature_url", label: "Headteacher Signature" }
+  ];
+
+  const missingFieldsOnClient = mandatoryFields.filter(
+    field => !formData[field.key as keyof typeof formData] || 
+             (typeof formData[field.key as keyof typeof formData] === 'string' && 
+              (formData[field.key as keyof typeof formData] as string).trim() === '')
+  );
+
+  const completionPercentage = Math.round(
+    ((mandatoryFields.length - missingFieldsOnClient.length) / mandatoryFields.length) * 100
+  );
 
   const fetchMetadata = async () => {
     setIsLoadingMeta(true);
@@ -123,6 +153,8 @@ export default function SchoolSettings() {
         academic_year: data.academic_year || '',
         current_term: data.current_term || '',
         exam_types: data.exam_types || ['Mid Term', 'End of Term'],
+        test_types: data.test_types || [],
+        test_types_enabled: data.test_types_enabled ?? false,
         email: data.email || '',
         phone: data.phone || '',
         address: data.address || '',
@@ -208,6 +240,23 @@ export default function SchoolSettings() {
     }));
   };
 
+  const addTestType = () => {
+    if (newTestType.trim() && !(formData.test_types || []).includes(newTestType.trim())) {
+      setFormData(prev => ({
+        ...prev,
+        test_types: [...(prev.test_types || []), newTestType.trim()]
+      }));
+      setNewTestType('');
+    }
+  };
+
+  const removeTestType = (typeToRemove: string) => {
+    setFormData(prev => ({
+      ...prev,
+      test_types: (prev.test_types || []).filter(type => type !== typeToRemove)
+    }));
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
@@ -221,7 +270,10 @@ export default function SchoolSettings() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          ...formData,
+          exam_types: ['Mid Term', 'End of Term']
+        })
       });
 
       if (!response.ok) {
@@ -264,6 +316,80 @@ export default function SchoolSettings() {
         </div>
       </div>
 
+      {/* Settings Completion Progress Tracker */}
+      <Card className={cn(
+        "border shadow-sm overflow-hidden",
+        completionPercentage >= 90
+          ? "border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/20 dark:bg-emerald-950/5"
+          : "border-amber-200 dark:border-amber-900/50 bg-amber-50/20 dark:bg-amber-950/5"
+      )}>
+        <CardContent className="p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="space-y-2 flex-1 w-full">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className={cn(
+                  "text-base font-black flex items-center gap-2",
+                  completionPercentage >= 90
+                    ? "text-emerald-800 dark:text-emerald-300"
+                    : "text-amber-800 dark:text-amber-300"
+                )}>
+                  <span>Profile Completion</span>
+                  <Badge variant="outline" className={cn(
+                    "font-bold uppercase tracking-wider text-[10px]",
+                    completionPercentage >= 90
+                      ? "border-emerald-300 text-emerald-700 bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:bg-emerald-950/30"
+                      : "border-amber-300 text-amber-700 bg-amber-50 dark:border-amber-800 dark:text-amber-300 dark:bg-amber-950/30"
+                  )}>
+                    {completionPercentage >= 90 ? "Ready to Use" : "Action Required"}
+                  </Badge>
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                  Mandatory fields must be at least 90% complete to use all system features.
+                </p>
+              </div>
+              <div className="text-right shrink-0">
+                <span className={cn(
+                  "text-2xl font-black",
+                  completionPercentage >= 90 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+                )}>
+                  {completionPercentage}%
+                </span>
+              </div>
+            </div>
+            <Progress
+              value={completionPercentage}
+              className={cn(
+                "h-2 bg-slate-100 dark:bg-slate-800",
+                completionPercentage >= 90 ? "[&>div]:bg-emerald-500" : "[&>div]:bg-amber-500"
+              )}
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2 md:max-w-md">
+            {mandatoryFields.map((field) => {
+              const isFilled = formData[field.key as keyof typeof formData] &&
+                (typeof formData[field.key as keyof typeof formData] !== 'string' ||
+                 (formData[field.key as keyof typeof formData] as string).trim() !== '');
+              return (
+                <Badge
+                  key={field.key}
+                  variant="outline"
+                  className={cn(
+                    "text-[10px] font-semibold transition-all duration-200",
+                    isFilled
+                      ? "border-emerald-200 text-emerald-700 bg-emerald-50/50 dark:border-emerald-900 dark:text-emerald-400 dark:bg-emerald-950/20"
+                      : "border-slate-200 text-slate-400 bg-slate-50 dark:border-slate-800 dark:text-slate-500 dark:bg-slate-900/50"
+                  )}
+                >
+                  <span className="mr-1">{isFilled ? "✓" : "○"}</span>
+                  {field.label}
+                </Badge>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
       <style dangerouslySetInnerHTML={{
         __html: `
         .asset-upload-card {
@@ -284,16 +410,18 @@ export default function SchoolSettings() {
 
         <TabsContent value="general">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle>General Configuration</CardTitle>
-                <CardDescription>School information and academic year</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSave} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="lg:col-span-2 space-y-6">
+              <form onSubmit={handleSave} className="space-y-6">
+                
+                {/* CARD 1: School Identity */}
+                <Card className="border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800/50">
+                    <CardTitle className="text-lg font-black text-slate-900 dark:text-white">School Identity</CardTitle>
+                    <CardDescription className="text-xs text-slate-500 dark:text-slate-400">Official name, registration identifiers, and school type configuration.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="name">School Name</Label>
+                      <Label htmlFor="name" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">School Name <span className="text-rose-500">*</span></Label>
                       <div className="relative">
                         <Building2 className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                         <Input
@@ -308,34 +436,12 @@ export default function SchoolSettings() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label>School ID</Label>
-                      <Input value={school?.id || ''} disabled className="bg-slate-50 font-mono text-sm" />
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">School ID</Label>
+                      <Input value={school?.id || ''} disabled className="bg-slate-50 dark:bg-slate-900/50 font-mono text-sm border-slate-200 dark:border-slate-800" />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="academic_year">Academic Year</Label>
-                      <Input
-                        id="academic_year"
-                        name="academic_year"
-                        value={formData.academic_year}
-                        onChange={handleInputChange}
-                        placeholder="e.g. 2024"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="current_term">Current Term</Label>
-                      <Input
-                        id="current_term"
-                        name="current_term"
-                        value={formData.current_term}
-                        onChange={handleInputChange}
-                        placeholder="e.g. Term 1"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="school_type">School Type</Label>
+                      <Label htmlFor="school_type" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">School Type <span className="text-rose-500">*</span></Label>
                       <Select
                         value={formData.school_type}
                         onValueChange={(value: 'Primary School' | 'Secondary School' | 'Basic School' | 'Combined School') =>
@@ -358,7 +464,7 @@ export default function SchoolSettings() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="category">School Category</Label>
+                      <Label htmlFor="category" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">School Category</Label>
                       <Select
                         value={formData.category}
                         onValueChange={(value) =>
@@ -388,11 +494,11 @@ export default function SchoolSettings() {
                           )}
                         </SelectContent>
                       </Select>
-                      <p className="text-[10px] text-slate-500 italic">* Collected for Ministry of Education statistical purposes.</p>
+                      <p className="text-[9px] text-slate-500 italic">* Collected for Ministry of Education statistical purposes.</p>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="location_type">School Location Type</Label>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="location_type" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">School Location Type</Label>
                       <Select
                         value={formData.location_type}
                         onValueChange={(value) =>
@@ -407,81 +513,135 @@ export default function SchoolSettings() {
                           <SelectItem value="Rural">Rural (Village / Remote Area)</SelectItem>
                         </SelectContent>
                       </Select>
-                      <p className="text-[10px] text-slate-500 italic">* Used by the government to track teacher deployment and rural shortages.</p>
+                      <p className="text-[9px] text-slate-500 italic">* Used by the government to track teacher deployment and rural shortages.</p>
                     </div>
+                  </CardContent>
+                </Card>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="headteacher_title">Headteacher Qualifications (Title)</Label>
-                      <Input
-                        id="headteacher_title"
-                        name="headteacher_title"
-                        value={formData.headteacher_title}
-                        onChange={handleInputChange}
-                        placeholder="e.g. MA(Edn Mgt), BA(Edn)"
-                      />
-                    </div>
+                {/* CARD 2: Academic Period & Grading */}
+                <Card className="border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800/50">
+                    <CardTitle className="text-lg font-black text-slate-900 dark:text-white">Academic Calendar & Grading</CardTitle>
+                    <CardDescription className="text-xs text-slate-500 dark:text-slate-400">Active calendar period, assessment types, and nested test structures.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-6 space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="academic_year" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Academic Year <span className="text-rose-500">*</span></Label>
+                        <Input
+                          id="academic_year"
+                          name="academic_year"
+                          value={formData.academic_year}
+                          onChange={handleInputChange}
+                          placeholder="e.g. 2024"
+                        />
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="headteacher_name">Headteacher Name</Label>
-                      <Input
-                        id="headteacher_name"
-                        name="headteacher_name"
-                        value={formData.headteacher_name}
-                        onChange={handleInputChange}
-                        placeholder="e.g. Mr. John Doe"
-                      />
-                    </div>
-
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>Assessment/Exam Types</Label>
-                      <div className="flex flex-col gap-2">
-                        <div className="flex flex-wrap gap-2 mb-2">
-                          {formData.exam_types.map((type, idx) => (
-                            <span 
-                              key={idx} 
-                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
-                            >
-                              {type}
-                              <button
-                                type="button"
-                                onClick={() => removeExamType(type)}
-                                className="text-indigo-500 hover:text-indigo-900 dark:hover:text-indigo-100 transition-colors"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            </span>
-                          ))}
-                          {formData.exam_types.length === 0 && (
-                            <span className="text-sm text-slate-500 italic">No custom exam types defined</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Input
-                            placeholder="e.g. Test 1, Mid-Term"
-                            value={newExamType}
-                            onChange={(e) => setNewExamType(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                addExamType();
-                              }
-                            }}
-                            className="max-w-xs"
-                          />
-                          <Button type="button" onClick={addExamType} variant="secondary">Add</Button>
-                        </div>
-                        <p className="text-xs text-slate-500">Press enter or click Add to create a new assessment type. These will be available when teachers enter grades.</p>
+                      <div className="space-y-2">
+                        <Label htmlFor="current_term" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Current Term <span className="text-rose-500">*</span></Label>
+                        <Input
+                          id="current_term"
+                          name="current_term"
+                          value={formData.current_term}
+                          onChange={handleInputChange}
+                          placeholder="e.g. Term 1"
+                        />
                       </div>
                     </div>
 
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>Compulsory Subjects (for Senior Secondary Points Calculation)</Label>
+                    <div className="space-y-2 border-t pt-4 border-slate-100 dark:border-slate-800/50">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Assessment/Exam Types</Label>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex flex-wrap gap-2 mb-1">
+                          {['Mid Term', 'End of Term'].map((type, idx) => (
+                            <span 
+                              key={idx} 
+                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-semibold"
+                            >
+                              {type}
+                            </span>
+                          ))}
+                        </div>
+                        <p className="text-xs text-slate-500">Assessment types are locked to the standard "Mid Term" and "End of Term" defaults.</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 border-t pt-4 border-slate-100 dark:border-slate-800/50">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label className="text-base font-bold text-slate-900 dark:text-white">Enable Nested Test Types</Label>
+                          <p className="text-xs text-slate-500">Record individual test scores (e.g. Test 1, Test 2, Test 3) under Mid Term or End of Term assessments.</p>
+                        </div>
+                        <Switch
+                          checked={formData.test_types_enabled}
+                          onCheckedChange={(checked) =>
+                            setFormData(prev => ({ ...prev, test_types_enabled: checked }))
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    {formData.test_types_enabled && (
+                      <div className="space-y-4 bg-slate-50 dark:bg-slate-900/30 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Configure Active Test Types</Label>
+                        <div className="flex flex-col gap-2">
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            {(formData.test_types || []).map((type, idx) => (
+                              <span 
+                                key={idx} 
+                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                              >
+                                {type}
+                                <button
+                                  type="button"
+                                  onClick={() => removeTestType(type)}
+                                  className="text-blue-500 hover:text-blue-900 dark:hover:text-blue-100 transition-colors"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </span>
+                            ))}
+                            {(!formData.test_types || formData.test_types.length === 0) && (
+                              <span className="text-sm text-slate-500 italic">No custom test types defined (defaulting to Test 1, Test 2, Test 3)</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              placeholder="e.g. Test 1, Test 2"
+                              value={newTestType}
+                              onChange={(e) => setNewTestType(e.target.value)}
+                              onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    addTestType();
+                                  }
+                                }}
+                              className="max-w-xs bg-white dark:bg-slate-950"
+                            />
+                            <Button type="button" onClick={addTestType} variant="secondary">Add</Button>
+                          </div>
+                          <p className="text-[11px] text-slate-500">Configure nested test types. These will appear as sub-selections in the Gradebook and render as columns on Report Cards.</p>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* CARD 3: Compulsory Subjects */}
+                <Card className="border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800/50">
+                    <CardTitle className="text-lg font-black text-slate-900 dark:text-white">Compulsory Subjects</CardTitle>
+                    <CardDescription className="text-xs text-slate-500 dark:text-slate-400">Required core subjects for overall averages and point calculations.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-6 space-y-6">
+                    <div className="space-y-3">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Compulsory Subjects (Senior Secondary Points Calculation)</Label>
                       <div className="flex flex-col gap-2">
                         <div className="flex flex-wrap gap-2 mb-2">
                           {(formData.compulsory_subjects_secondary || []).map((subject, idx) => (
                             <span 
                               key={idx} 
-                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
                             >
                               {subject}
                               <button
@@ -563,14 +723,14 @@ export default function SchoolSettings() {
                       </div>
                     </div>
 
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>Compulsory Subjects (for Primary Grade 5-7 Marks Calculation)</Label>
+                    <div className="space-y-3 border-t pt-6 border-slate-100 dark:border-slate-800/50">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Compulsory Subjects (Primary Grade 5-7 Marks Calculation)</Label>
                       <div className="flex flex-col gap-2">
                         <div className="flex flex-wrap gap-2 mb-2">
                           {(formData.compulsory_subjects_primary || []).map((subject, idx) => (
                             <span 
                               key={idx} 
-                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
                             >
                               {subject}
                               <button
@@ -651,9 +811,49 @@ export default function SchoolSettings() {
                         <p className="text-xs text-slate-500">Configure primary compulsory subjects. Default is Special Paper 1 & Special Paper 2.</p>
                       </div>
                     </div>
+                  </CardContent>
+                </Card>
+
+                {/* CARD 4: School Administration */}
+                <Card className="border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800/50">
+                    <CardTitle className="text-lg font-black text-slate-900 dark:text-white">Administration</CardTitle>
+                    <CardDescription className="text-xs text-slate-500 dark:text-slate-400">Headteacher credentials appearing on official reports.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="headteacher_name" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Headteacher Name <span className="text-rose-500">*</span></Label>
+                      <Input
+                        id="headteacher_name"
+                        name="headteacher_name"
+                        value={formData.headteacher_name}
+                        onChange={handleInputChange}
+                        placeholder="e.g. Mr. John Doe"
+                      />
+                    </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="email">Contact Email</Label>
+                      <Label htmlFor="headteacher_title" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Headteacher Qualifications (Title)</Label>
+                      <Input
+                        id="headteacher_title"
+                        name="headteacher_title"
+                        value={formData.headteacher_title}
+                        onChange={handleInputChange}
+                        placeholder="e.g. MA(Edn Mgt), BA(Edn)"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* CARD 5: Contact & Location */}
+                <Card className="border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800/50">
+                    <CardTitle className="text-lg font-black text-slate-900 dark:text-white">Contact & Location</CardTitle>
+                    <CardDescription className="text-xs text-slate-500 dark:text-slate-400">Manage contact information and geographic region details.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="email" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Contact Email <span className="text-rose-500">*</span></Label>
                       <div className="relative">
                         <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                         <Input
@@ -669,7 +869,7 @@ export default function SchoolSettings() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="phone">Phone Number</Label>
+                      <Label htmlFor="phone" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Phone Number <span className="text-rose-500">*</span></Label>
                       <div className="relative">
                         <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                         <Input
@@ -684,7 +884,7 @@ export default function SchoolSettings() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="country">Country</Label>
+                      <Label htmlFor="country" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Country</Label>
                       <Select
                         value={formData.country}
                         onValueChange={(value) =>
@@ -711,7 +911,7 @@ export default function SchoolSettings() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="province">Province</Label>
+                      <Label htmlFor="province" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Province <span className="text-rose-500">*</span></Label>
                       <Select
                         value={formData.province}
                         onValueChange={(value) =>
@@ -730,7 +930,7 @@ export default function SchoolSettings() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="district">District</Label>
+                      <Label htmlFor="district" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">District <span className="text-rose-500">*</span></Label>
                       <Select
                         value={formData.district}
                         onValueChange={(value) =>
@@ -749,19 +949,8 @@ export default function SchoolSettings() {
                       </Select>
                     </div>
 
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="address">Address</Label>
-                      <Input
-                        id="address"
-                        name="address"
-                        value={formData.address}
-                        onChange={handleInputChange}
-                        placeholder="School physical address"
-                      />
-                    </div>
-
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="website">Website</Label>
+                    <div className="space-y-2">
+                      <Label htmlFor="website" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Website</Label>
                       <div className="relative">
                         <Globe className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                         <Input
@@ -774,18 +963,30 @@ export default function SchoolSettings() {
                         />
                       </div>
                     </div>
-                  </div>
 
-                  <div className="flex justify-end">
-                    <Button type="submit" disabled={isSaving}>
-                      {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Changes
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="address" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Address</Label>
+                      <Input
+                        id="address"
+                        name="address"
+                        value={formData.address}
+                        onChange={handleInputChange}
+                        placeholder="School physical address"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Submit Action */}
+                <div className="flex justify-end pt-2">
+                  <Button type="submit" disabled={isSaving}>
+                    {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Save className="mr-2 h-4 w-4" />
+                    Save Changes
+                  </Button>
+                </div>
+              </form>
+            </div>
 
             <div className="space-y-6">
               <Card>
@@ -853,14 +1054,16 @@ export default function SchoolSettings() {
         <TabsContent value="certification">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
-              { id: 'logo_url', label: 'School Logo', description: 'Appears on headers and website' },
-              { id: 'signature_url', label: 'Headteacher Signature', description: 'Official digitized signature' },
-              { id: 'seal_url', label: 'Official School Seal', description: 'Used for report card authenticity' },
-              { id: 'coat_of_arms_url', label: 'Coat of Arms Logo', description: 'Appears on top right of report card' }
+              { id: 'logo_url', label: 'School Logo', required: true, description: 'Appears on headers and website' },
+              { id: 'signature_url', label: 'Headteacher Signature', required: true, description: 'Official digitized signature' },
+              { id: 'seal_url', label: 'Official School Seal', required: false, description: 'Used for report card authenticity' },
+              { id: 'coat_of_arms_url', label: 'Coat of Arms Logo', required: false, description: 'Appears on top right of report card' }
             ].map((asset) => (
               <Card key={asset.id} className="asset-upload-card overflow-hidden">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">{asset.label}</CardTitle>
+                  <CardTitle className="text-base">
+                    {asset.label} {asset.required && <span className="text-rose-500">*</span>}
+                  </CardTitle>
                   <CardDescription className="text-xs">{asset.description}</CardDescription>
                 </CardHeader>
                 <CardContent>

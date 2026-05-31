@@ -34,6 +34,8 @@ import LicenseAccessDenied from '@/components/common/LicenseAccessDenied';
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { syncFetch } from '@/lib/syncService';
+import { useNavigate } from 'react-router-dom';
+import { isOnSubdomain } from '@/lib/subdomain';
 
 import {
   LineChart,
@@ -60,11 +62,13 @@ interface SchoolDashboardProps {
 }
 
 export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardProps) {
+  const navigate = useNavigate();
   const [data, setData] = useState<SchoolDashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  const [isCompletionWarningOpen, setIsCompletionWarningOpen] = useState(false);
 
   // Announcement Form State
   const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(false);
@@ -100,6 +104,15 @@ export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardP
     const interval = setInterval(fetchDashboardData, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (data && data.settingsCompletion && !data.settingsCompletion.isComplete) {
+      const dismissed = sessionStorage.getItem('settings_completion_warning_dismissed');
+      if (!dismissed) {
+        setIsCompletionWarningOpen(true);
+      }
+    }
+  }, [data]);
 
   const handleCreateAnnouncement = async () => {
     if (!newAnnouncement.title || !newAnnouncement.content) {
@@ -253,6 +266,91 @@ export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardP
 
   return (
     <div className="space-y-6 pb-10">
+      {data.settingsCompletion && !data.settingsCompletion.isComplete && (
+        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-xl p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold">
+              <Settings className="h-5 w-5 text-amber-500 animate-pulse" />
+              <span>School Profile Settings Incomplete ({data.settingsCompletion.percentage}%)</span>
+            </div>
+            <p className="text-sm text-amber-700 dark:text-amber-400">
+              Your settings are incomplete. Missing fields: <span className="font-semibold">{data.settingsCompletion.missingFields.join(', ')}</span>.
+            </p>
+          </div>
+          <Button
+            onClick={() => {
+              navigate(`${isOnSubdomain() ? '' : '/school-admin'}/settings`);
+            }}
+            className="bg-amber-600 hover:bg-amber-700 text-white border-0 font-bold shrink-0 shadow-md text-xs uppercase tracking-wider"
+          >
+            Configure Now
+          </Button>
+        </div>
+      )}
+
+      <Dialog open={isCompletionWarningOpen} onOpenChange={setIsCompletionWarningOpen}>
+        <DialogContent className="sm:max-w-[500px] border border-amber-200 dark:border-amber-900 bg-white dark:bg-slate-900">
+          <DialogHeader>
+            <div className="h-12 w-12 rounded-full bg-amber-100 dark:bg-amber-950/40 flex items-center justify-center mb-4 border border-amber-200 dark:border-amber-900/50">
+              <Settings className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+            </div>
+            <DialogTitle className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+              Complete School Profile Settings
+            </DialogTitle>
+            <DialogDescription className="text-slate-600 dark:text-slate-400 text-sm mt-2">
+              Your school's profile settings are currently <span className="font-bold text-amber-600 dark:text-amber-400">{data?.settingsCompletion?.percentage}% complete</span>. To unlock full features (such as report card generation, official document exports, and communication tools), you must complete at least 90% of the mandatory fields.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 my-4">
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
+                <span>Setup Progress</span>
+                <span>{data?.settingsCompletion?.percentage}%</span>
+              </div>
+              <Progress value={data?.settingsCompletion?.percentage || 0} className="h-2 bg-slate-100 dark:bg-slate-800" />
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+              <h4 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                Missing Mandatory Fields
+              </h4>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-medium text-slate-600 dark:text-slate-400">
+                {data?.settingsCompletion?.missingFields.map((field, idx) => (
+                  <li key={idx} className="flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+                    {field}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                sessionStorage.setItem('settings_completion_warning_dismissed', 'true');
+                setIsCompletionWarningOpen(false);
+              }}
+              className="font-bold uppercase tracking-wider text-xs"
+            >
+              Remind Me Later
+            </Button>
+            <Button
+              onClick={() => {
+                sessionStorage.setItem('settings_completion_warning_dismissed', 'true');
+                setIsCompletionWarningOpen(false);
+                navigate(`${isOnSubdomain() ? '' : '/school-admin'}/settings`);
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-wider text-xs shadow-md"
+            >
+              Go to Settings
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">

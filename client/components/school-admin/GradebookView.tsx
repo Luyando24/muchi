@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Save,
   Send,
@@ -97,35 +97,22 @@ function detectClassSection(className: string): 'lower_primary' | 'upper_primary
   };
 
   // ----- Step 1: detect explicit "form" keyword → always secondary -----
-  if (/\bform\b/.test(raw)) return 'secondary';
+  if (raw.includes('form')) return 'secondary';
 
   // ----- Step 2: extract numeric level -----
-  // Try digit first (e.g. "Grade 9", "grade9", "G9", "Std 5", "Class 12")
   let level: number | null = null;
 
-  const digitMatch = raw.match(
-    /\b(?:grade|gr|g|std|standard|class|year|level)\s*(\d{1,2})\b|(\d{1,2})\s*(?:grade|gr|g|std|standard|class|year|level)\b|\b(\d{1,2})$/
-  );
+  // Try digit first (e.g. "Grade 9", "grade9", "G9", "Std 5", "Class 12", "5A")
+  const digitMatch = raw.match(/(\d{1,2})/);
   if (digitMatch) {
-    const numStr = digitMatch[1] || digitMatch[2] || digitMatch[3];
-    level = numStr ? parseInt(numStr, 10) : null;
-  }
-
-  // If no digit found, try written-out number AFTER a keyword
-  if (level === null) {
+    level = parseInt(digitMatch[1], 10);
+  } else {
+    // If no digit found, try written-out number
     for (const [word, num] of Object.entries(wordToNum)) {
-      // Match patterns like "grade five", "class two", "std one"
-      const pattern = new RegExp(
-        `\\b(?:grade|gr|g|std|standard|class|year|level|form)\\s+${word}\\b`
-      );
-      if (pattern.test(raw)) { level = num; break; }
-    }
-  }
-
-  // If still nothing, try a bare word-number at end of string
-  if (level === null) {
-    for (const [word, num] of Object.entries(wordToNum)) {
-      if (new RegExp(`\\b${word}\\b`).test(raw)) { level = num; break; }
+      if (new RegExp(`\\b${word}\\b`).test(raw)) {
+        level = num;
+        break;
+      }
     }
   }
 
@@ -148,6 +135,8 @@ export default function GradebookView() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [gradingScales, setGradingScales] = useState<GradingScale[]>([]);
   const [schoolType, setSchoolType] = useState<string>('');
+  const [errorStudentId, setErrorStudentId] = useState<string | null>(null);
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const defaultState = location.state as {
     defaultClassId?: string;
@@ -162,8 +151,11 @@ export default function GradebookView() {
   const [selectedSubject, setSelectedSubject] = useState<string>(defaultState.defaultSubjectId || '');
   const [selectedTerm, setSelectedTerm] = useState<string>(defaultState.defaultTerm || '');
   const [selectedExamType, setSelectedExamType] = useState<string>(defaultState.defaultExamType || 'End of Term');
+  const [selectedTestType, setSelectedTestType] = useState<string>('none');
   const [selectedYear, setSelectedYear] = useState<string>(defaultState.defaultYear || '');
   const [availableExamTypes, setAvailableExamTypes] = useState<string[]>(['Mid Term', 'End of Term']);
+  const [schoolTestTypes, setSchoolTestTypes] = useState<string[]>([]);
+  const [testTypesEnabled, setTestTypesEnabled] = useState<boolean>(false);
   
   // Determine class section using intelligent detection based on school settings + class name
   const currentClassObj = classes.find(c => c.id === selectedClass);
@@ -217,6 +209,8 @@ export default function GradebookView() {
         
         if (settings) {
           setSchoolType(settings.school_type || '');
+          setSchoolTestTypes(settings.test_types || []);
+          setTestTypesEnabled(!!settings.test_types_enabled);
           if (!defaultState.defaultTerm) setSelectedTerm(settings.current_term || 'Term 1');
           if (!defaultState.defaultYear) setSelectedYear(settings.academic_year || new Date().getFullYear().toString());
           if (settings.exam_types && settings.exam_types.length > 0) {
@@ -226,6 +220,8 @@ export default function GradebookView() {
         } else {
           // Fallback
           setSchoolType('');
+          setSchoolTestTypes([]);
+          setTestTypesEnabled(false);
           if (!defaultState.defaultTerm) setSelectedTerm('Term 1');
           if (!defaultState.defaultYear) setSelectedYear(new Date().getFullYear().toString());
         }
@@ -253,7 +249,7 @@ export default function GradebookView() {
     if (selectedClass && selectedSubject && selectedTerm && selectedExamType && selectedYear) {
       loadGradebookData();
     }
-  }, [selectedClass, selectedSubject, selectedTerm, selectedExamType, selectedYear]);
+  }, [selectedClass, selectedSubject, selectedTerm, selectedExamType, selectedTestType, selectedYear]);
 
 
 
@@ -261,6 +257,19 @@ export default function GradebookView() {
     const dirtyGrades = Object.values(grades).filter(g => g.isDirty);
     if (dirtyGrades.length === 0) {
       if (!autoSave) toast({ title: "No changes", description: "No grades have been modified." });
+      return;
+    }
+
+    // Block saving if any grade is invalid (> maxAllowed)
+    const hasInvalidGrades = Object.values(grades).some(g => g.percentage !== '' && Number(g.percentage) > maxAllowed);
+    if (hasInvalidGrades) {
+      if (!autoSave) {
+        toast({
+          title: "Cannot Save Grades",
+          description: `Please correct the marks. For this class, marks cannot exceed ${maxAllowed}.`,
+          variant: "destructive"
+        });
+      }
       return;
     }
 
@@ -272,15 +281,22 @@ export default function GradebookView() {
       if (!session) return;
 
       const payload = {
-        grades: dirtyGrades.map(g => ({
-          studentId: g.studentId,
-          subjectId: selectedSubject,
-          term: selectedTerm,
-          examType: selectedExamType,
-          academicYear: selectedYear,
-          percentage: g.percentage === '' ? null : g.percentage,
-          comments: g.comments || (g.percentage === '' ? 'Absent' : '')
-        }))
+        grades: dirtyGrades.map(g => {
+          const rawVal = g.percentage === '' ? null : Number(g.percentage);
+          const pctVal = rawVal !== null 
+            ? (classSection === 'upper_primary' ? (rawVal / 150) * 100 : rawVal) 
+            : null;
+          return {
+            studentId: g.studentId,
+            subjectId: selectedSubject,
+            term: selectedTerm,
+            examType: selectedExamType,
+            testType: selectedTestType === 'none' ? '' : selectedTestType,
+            academicYear: selectedYear,
+            percentage: pctVal,
+            comments: g.comments || (g.percentage === '' ? 'Absent' : '')
+          };
+        })
       };
 
       const result = await syncFetch('/api/school/grades/batch', {
@@ -396,9 +412,10 @@ export default function GradebookView() {
 
       // 2. Fetch Existing Grades via new API endpoint for better offline support
       const studentIdsStr = loadedStudents.map((s: any) => s.id).join(',');
-      const gradesData = await syncFetch(`/api/school/grades/batch?subjectId=${selectedSubject}&term=${encodeURIComponent(selectedTerm)}&examType=${encodeURIComponent(selectedExamType)}&academicYear=${selectedYear}&studentIds=${studentIdsStr}`, {
+      const finalTestType = selectedTestType === 'none' ? '' : selectedTestType;
+      const gradesData = await syncFetch(`/api/school/grades/batch?subjectId=${selectedSubject}&term=${encodeURIComponent(selectedTerm)}&examType=${encodeURIComponent(selectedExamType)}&testType=${encodeURIComponent(finalTestType)}&academicYear=${selectedYear}&studentIds=${studentIdsStr}`, {
         headers,
-        cacheKey: `school-gradebook-${selectedClass}-${selectedSubject}-${selectedTerm}-${selectedExamType}-${selectedYear}`
+        cacheKey: `school-gradebook-${selectedClass}-${selectedSubject}-${selectedTerm}-${selectedExamType}-${finalTestType}-${selectedYear}`
       });
 
       const gradesMap: Record<string, GradeEntry> = {};
@@ -418,9 +435,16 @@ export default function GradebookView() {
       // Fill in actual grades if they exist
       if (gradesData && Array.isArray(gradesData)) {
         gradesData.forEach((g: any) => {
+          let displayPercentage: number | '' = '';
+          if (g.grade !== 'ABSENT' && g.percentage !== null && g.percentage !== undefined && g.percentage !== '') {
+            const pctVal = Number(g.percentage);
+            displayPercentage = classSection === 'upper_primary' 
+              ? Math.round((pctVal / 100) * 150 * 10) / 10 
+              : pctVal;
+          }
           gradesMap[g.student_id] = {
             studentId: g.student_id,
-            percentage: g.grade === 'ABSENT' ? '' : (g.percentage === null ? '' : g.percentage),
+            percentage: displayPercentage,
             grade: g.grade,
             comments: g.comments || '',
             status: g.status || 'Draft',
@@ -461,9 +485,9 @@ export default function GradebookView() {
     if (scalesWithSection.length > 0) {
       // Map our canonical section to possible section values schools may use
       const sectionAliases: Record<string, string[]> = {
-        lower_primary: ['lower_primary', 'lower primary', 'primary_lower', 'g1-4', 'grades1-4', 'junior'],
-        upper_primary: ['upper_primary', 'upper primary', 'primary_upper', 'g5-7', 'grades5-7', 'upper'],
-        secondary:     ['secondary', 'secondary_school', 'high school', 'g8-12', 'grades8-12'],
+        lower_primary: ['lower_primary', 'lower primary', 'primary_lower', 'g1-4', 'grades1-4', 'junior', 'primary-junior'],
+        upper_primary: ['upper_primary', 'upper primary', 'primary_upper', 'g5-7', 'grades5-7', 'upper', 'primary-senior'],
+        secondary:     ['secondary', 'secondary_school', 'high school', 'g8-12', 'grades8-12', 'standard'],
       };
       const aliases = sectionAliases[classSection] || [classSection];
       const sectionScales = scalesWithSection.filter(s =>
@@ -558,23 +582,25 @@ export default function GradebookView() {
           if (isNaN(pct)) pct = 0;
           if (pct < 0) pct = 0;
 
-          // Rejection logic for > 150 (absolute max)
-          if (pct > 150) {
+          if (pct > maxAllowed) {
+            setErrorStudentId(studentId);
             toast({ 
               title: "Double Check Mark", 
-              description: "Marks above 150 are not accepted. Please verify the input.", 
+              description: `Marks above ${maxAllowed} are not accepted. Please verify the input.`, 
               variant: "destructive" 
             });
-            return prev;
-          }
-
-          // Cap logic for maxAllowed (threshold for current class)
-          if (pct > maxAllowed) {
-            pct = maxAllowed;
+            // Focus back immediately
+            setTimeout(() => {
+              inputRefs.current[studentId]?.focus();
+              inputRefs.current[studentId]?.select();
+            }, 0);
+          } else if (studentId === errorStudentId) {
+            setErrorStudentId(null);
           }
           
           entry.percentage = pct;
-          const scale = getScale(pct);
+          const normalizedPct = classSection === 'upper_primary' ? (pct / 150) * 100 : pct;
+          const scale = getScale(normalizedPct);
           entry.grade = scale ? scale.grade : '-';
           entry.comments = scale?.description || '';
         }
@@ -595,6 +621,18 @@ export default function GradebookView() {
   const [targetExamType, setTargetExamType] = useState<string>('');
 
   const handleSubmit = async () => {
+    // Block submission if any grade is invalid (> maxAllowed)
+    const hasInvalidGrades = Object.values(grades).some(g => g.percentage !== '' && Number(g.percentage) > maxAllowed);
+    if (hasInvalidGrades) {
+      toast({
+        title: "Cannot Submit Grades",
+        description: `Please correct the marks. For this class, marks cannot exceed ${maxAllowed}.`,
+        variant: "destructive"
+      });
+      setIsSubmitModalOpen(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -785,7 +823,7 @@ export default function GradebookView() {
           </div>
         </CardHeader>
         <CardContent className="p-3 sm:p-6">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-4">
+          <div className={cn("grid grid-cols-2 gap-2 sm:gap-4", schoolTestTypes.length > 0 && testTypesEnabled && (selectedExamType === 'Mid Term' || selectedExamType === 'End of Term') ? "md:grid-cols-3 lg:grid-cols-6" : "md:grid-cols-5")}>
             <div className="space-y-1">
               <Label className="hidden sm:block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Year</Label>
               <Select value={selectedYear} onValueChange={setSelectedYear}>
@@ -814,7 +852,10 @@ export default function GradebookView() {
             </div>
             <div className="space-y-1">
               <Label className="hidden sm:block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Assessment</Label>
-              <Select value={selectedExamType} onValueChange={setSelectedExamType}>
+              <Select value={selectedExamType} onValueChange={(val) => {
+                setSelectedExamType(val);
+                setSelectedTestType('none'); // Reset test type when assessment type changes
+              }}>
                 <SelectTrigger className="h-11 sm:h-9 text-sm sm:text-sm">
                   <SelectValue placeholder="Type" />
                 </SelectTrigger>
@@ -825,6 +866,22 @@ export default function GradebookView() {
                 </SelectContent>
               </Select>
             </div>
+            {schoolTestTypes.length > 0 && testTypesEnabled && (selectedExamType === 'Mid Term' || selectedExamType === 'End of Term') && (
+              <div className="space-y-1">
+                <Label className="hidden sm:block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Test Type</Label>
+                <Select value={selectedTestType} onValueChange={setSelectedTestType}>
+                  <SelectTrigger className="h-11 sm:h-9 text-sm sm:text-sm">
+                    <SelectValue placeholder="Select test type..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Standard</SelectItem>
+                    {schoolTestTypes.map(type => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-1">
               <Label className="hidden sm:block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Class</Label>
               <Select value={selectedClass} onValueChange={setSelectedClass}>
@@ -959,7 +1016,7 @@ export default function GradebookView() {
                         <TableHead className="w-[200px] text-[10px] font-bold uppercase tracking-wider text-slate-500">Student Name</TableHead>
                         <TableHead className="w-[120px] text-[10px] font-bold uppercase tracking-wider text-slate-500 text-center">Percentage (%)</TableHead>
                         <TableHead className="w-[80px] text-[10px] font-bold uppercase tracking-wider text-slate-500 text-center">Grade</TableHead>
-                        <TableHead className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Comments</TableHead>
+                        <TableHead className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Grade Description</TableHead>
                         <TableHead className="w-[120px] text-[10px] font-bold uppercase tracking-wider text-slate-500">Status</TableHead>
                         <TableHead className="w-[60px] text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">View</TableHead>
                       </TableRow>
@@ -987,6 +1044,7 @@ export default function GradebookView() {
                             status: 'Draft',
                             isDirty: false
                           };
+                          const isBlocked = errorStudentId !== null && errorStudentId !== student.id;
                           return (
                             <TableRow key={student.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
                               <TableCell className="py-4">
@@ -994,17 +1052,36 @@ export default function GradebookView() {
                                 <div className="text-[10px] text-slate-500 font-mono uppercase tracking-tight">{student.studentNumber}</div>
                               </TableCell>
                               <TableCell className="py-4">
-                              <div className="flex justify-center">
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  max={maxAllowed}
-                                  className="h-9 w-20 text-center font-bold focus:ring-2 focus:ring-blue-500/20 border-slate-200 dark:border-slate-700"
-                                  value={entry.percentage}
-                                  onChange={(e) => handleGradeChange(student.id, 'percentage', e.target.value)}
-                                />
-                              </div>
-                            </TableCell>
+                                <div className="flex flex-col items-center gap-1">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    max={maxAllowed}
+                                    disabled={isBlocked}
+                                    ref={el => { inputRefs.current[student.id] = el; }}
+                                    onBlur={(e) => {
+                                      if (errorStudentId === student.id) {
+                                        e.preventDefault();
+                                        setTimeout(() => {
+                                          inputRefs.current[student.id]?.focus();
+                                          inputRefs.current[student.id]?.select();
+                                        }, 0);
+                                      }
+                                    }}
+                                    className={cn(
+                                      "h-9 w-20 text-center font-bold focus:ring-2 border-slate-200 dark:border-slate-700 transition-all duration-200",
+                                      entry.percentage !== '' && Number(entry.percentage) > maxAllowed 
+                                        ? "border-red-500 focus:ring-red-500/20 text-red-600 bg-red-50 dark:bg-red-950/20 shadow-[0_0_0_2px_rgba(239,68,68,0.2)] font-black animate-pulse"
+                                        : "focus:ring-blue-500/20"
+                                    )}
+                                    value={entry.percentage}
+                                    onChange={(e) => handleGradeChange(student.id, 'percentage', e.target.value)}
+                                  />
+                                  {entry.percentage !== '' && Number(entry.percentage) > maxAllowed && (
+                                    <span className="text-[9px] font-bold text-red-600">Max {maxAllowed}%</span>
+                                  )}
+                                </div>
+                              </TableCell>
                               <TableCell className="py-4 text-center">
                                 <Badge 
                                   variant={entry.grade === 'F' || entry.grade === '9' ? 'destructive' : 'secondary'}
@@ -1013,14 +1090,20 @@ export default function GradebookView() {
                                   {entry.grade}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="py-4">
-                              <Input
-                                placeholder="Add comments..."
-                                className="h-9 text-sm bg-slate-50/50 focus:bg-white border-slate-200 dark:border-slate-700"
-                                 value={entry.comments}
-                                 onChange={(e) => handleGradeChange(student.id, 'comments', e.target.value)}
-                               />
-                             </TableCell>
+                              <TableCell className="py-4 font-semibold text-slate-700 dark:text-slate-300 text-sm">
+                                {entry.comments ? (
+                                  <span className={cn(
+                                    "transition-colors duration-200",
+                                    entry.grade === 'F' || entry.grade === '9' ? "text-red-500 font-bold" : "text-slate-700 dark:text-slate-300"
+                                  )}>
+                                    {entry.comments}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 dark:text-slate-600 font-normal italic">
+                                    Grade description...
+                                  </span>
+                                )}
+                              </TableCell>
                               <TableCell className="py-4">
                                 <div className="flex flex-col gap-1 items-start">
                                   {(() => {
@@ -1045,7 +1128,7 @@ export default function GradebookView() {
                               <TableCell className="py-4 text-right">
                                 <Dialog>
                                   <DialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-blue-50 dark:hover:bg-blue-900/20">
+                                    <Button variant="ghost" size="icon" disabled={isBlocked} className="h-8 w-8 hover:bg-blue-50 dark:hover:bg-blue-900/20">
                                       <Eye className="h-4 w-4 text-blue-600" />
                                     </Button>
                                   </DialogTrigger>
@@ -1090,8 +1173,9 @@ export default function GradebookView() {
                         status: 'Draft',
                         isDirty: false
                       };
+                      const isBlocked = errorStudentId !== null && errorStudentId !== student.id;
                       return (
-                        <div key={student.id} className="p-5 space-y-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div key={student.id} className="p-5 space-y-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
                           <div className="flex items-start justify-between">
                             <div>
                               <div className="font-black text-slate-900 dark:text-white text-lg leading-tight">{student.fullName}</div>
@@ -1106,7 +1190,7 @@ export default function GradebookView() {
                               </Badge>
                               <Dialog>
                                 <DialogTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600">
+                                  <Button variant="ghost" size="icon" disabled={isBlocked} className="h-8 w-8 text-blue-600">
                                     <Eye className="h-5 w-5" />
                                   </Button>
                                 </DialogTrigger>
@@ -1129,11 +1213,26 @@ export default function GradebookView() {
                                 type="number"
                                 min="0"
                                 max={maxAllowed}
-                                className="h-14 text-center font-black text-2xl border-slate-300 focus:ring-4 focus:ring-blue-500/20"
+                                disabled={isBlocked}
+                                ref={el => { inputRefs.current[student.id] = el; }}
+                                onBlur={(e) => {
+                                  if (errorStudentId === student.id) {
+                                    e.preventDefault();
+                                    setTimeout(() => {
+                                      inputRefs.current[student.id]?.focus();
+                                      inputRefs.current[student.id]?.select();
+                                    }, 0);
+                                  }
+                                }}
+                                className={cn(
+                                  "h-14 text-center font-black text-2xl border-slate-300 focus:ring-4 transition-all duration-200",
+                                  entry.percentage !== '' && Number(entry.percentage) > maxAllowed 
+                                    ? "border-red-500 focus:ring-red-500/20 text-red-600 bg-red-50 dark:bg-red-950/20 shadow-[0_0_0_2px_rgba(239,68,68,0.2)] animate-pulse"
+                                    : "focus:ring-blue-500/20"
+                                )}
                                 value={entry.percentage}
                                 onChange={(e) => handleGradeChange(student.id, 'percentage', e.target.value)}
                                 onFocus={() => setIsInputFocused(true)}
-                                onBlur={() => setIsInputFocused(false)}
                               />
                             </div>
                             <div className="col-span-7 space-y-1.5">

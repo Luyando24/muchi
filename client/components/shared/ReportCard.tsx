@@ -12,7 +12,13 @@ import {
 import { Badge } from '@/components/ui/badge';
 
 interface ReportCardProps {
-  data: any;
+  data: {
+    student: any;
+    grades: any[];
+    gradingScale: any[];
+    school: any;
+    classGradesKeys?: string[];
+  };
   term: string;
   examType: string;
   academicYear: string;
@@ -93,6 +99,7 @@ function matchesCompulsorySubject(subjectName: string, configuredSubject: string
 // ─── Primary G5-7 Helpers ─────────────────────────────────────────────────────
 function isPrimaryG57(className: string): boolean {
   const raw = (className || '').toLowerCase().trim();
+  if (raw.includes('form')) return false;
   const digitMatch = raw.match(/(?:grade|gr|g|std|standard|class|year)?\s*(\d{1,2})/);
   if (digitMatch) {
     const level = parseInt(digitMatch[1], 10);
@@ -103,6 +110,7 @@ function isPrimaryG57(className: string): boolean {
 
 function isGrade7(className: string): boolean {
   const raw = (className || '').toLowerCase().trim();
+  if (raw.includes('form')) return false;
   const digitMatch = raw.match(/(?:grade|gr|g|std|standard|class|year)?\s*(\d{1,2})/);
   if (digitMatch) {
     const level = parseInt(digitMatch[1], 10);
@@ -293,36 +301,248 @@ function computeBestFivePoints(grades: any[], gradingScale: any[], compulsorySub
 }
 
 export const ReportCard = ({ data, term, examType, academicYear, className = "" }: ReportCardProps) => {
-  const { student, grades, gradingScale, school } = data;
+  const { student, grades, gradingScale, school, classGradesKeys } = data;
+
+  // Senior secondary detection
+  const isSeniorSec = isSeniorSecondary(student.class || '');
+
+  // Primary G5-7 detection
+  const isG57 = isPrimaryG57(student.class || '');
+
+  // Helper to determine the final percentage for a grouped subject
+  const getFinalPercentage = (item: any) => {
+    const activeTestTypes = school?.test_types_enabled ? (school?.test_types || []) : [];
+    
+    if (activeTestTypes.length > 0) {
+      // If school has active test types, the average is computed across all active tests.
+      // If student missed any of the active test types, display ABSENT (final percentage = null).
+      const hasActiveTest1 = activeTestTypes.includes('Test 1');
+      const hasActiveTest2 = activeTestTypes.includes('Test 2');
+      const hasActiveTest3 = activeTestTypes.includes('Test 3');
+      
+      const missingTest1 = hasActiveTest1 && (item.test1 === null || item.test1 === undefined);
+      const missingTest2 = hasActiveTest2 && (item.test2 === null || item.test2 === undefined);
+      const missingTest3 = hasActiveTest3 && (item.test3 === null || item.test3 === undefined);
+      
+      if (missingTest1 || missingTest2 || missingTest3) {
+        return null;
+      }
+      
+      const scores = [
+        hasActiveTest1 ? item.test1 : null,
+        hasActiveTest2 ? item.test2 : null,
+        hasActiveTest3 ? item.test3 : null
+      ].filter(t => t !== null) as number[];
+      
+      if (scores.length > 0) {
+        return parseFloat((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1));
+      }
+      return null;
+    }
+
+    if (item.exam !== null) return item.exam;
+    // Fallback to average of tests if no active test types are set but tests exist
+    const tests = [item.test1, item.test2, item.test3].filter(t => t !== null) as number[];
+    if (tests.length > 0) {
+      return parseFloat((tests.reduce((a, b) => a + b, 0) / tests.length).toFixed(1));
+    }
+    return null;
+  };
+
+  // Group raw grades by subject
+  const groupedGradesBySubject = React.useMemo(() => {
+    const map = new Map<string, {
+      subject: any;
+      test1: number | null;
+      test2: number | null;
+      test3: number | null;
+      exam: number | null;
+      mainGrade: any;
+    }>();
+
+    for (const g of grades) {
+      const subId = g.subject_id || g.subjects?.id || g.subjects?.code;
+      if (!subId) continue;
+      
+      if (!map.has(subId)) {
+        map.set(subId, {
+          subject: g.subjects,
+          test1: null,
+          test2: null,
+          test3: null,
+          exam: null,
+          mainGrade: null
+        });
+      }
+      
+      const item = map.get(subId)!;
+      
+      const isTest1 = g.test_type === 'Test 1' || g.exam_type === 'Test 1';
+      const isTest2 = g.test_type === 'Test 2' || g.exam_type === 'Test 2';
+      const isTest3 = g.test_type === 'Test 3' || g.exam_type === 'Test 3';
+      
+      const percentage = (g.percentage !== null && g.percentage !== undefined && g.percentage !== '') ? Number(g.percentage) : null;
+      
+      if (isTest1) {
+        item.test1 = percentage;
+      } else if (isTest2) {
+        item.test2 = percentage;
+      } else if (isTest3) {
+        item.test3 = percentage;
+      } else if (g.exam_type === examType) {
+        item.exam = percentage;
+        item.mainGrade = g;
+      }
+      
+      if (!item.mainGrade) {
+        item.mainGrade = g;
+      }
+    }
+    
+    return Array.from(map.values());
+  }, [grades, examType]);
+
+  // Determine visibility of test columns
+  const hasStandardGrades = grades.some((g: any) => 
+    g.exam_type === examType && (!g.test_type || g.test_type === '' || g.test_type === 'none') && g.percentage !== null && g.percentage !== undefined && g.percentage !== ''
+  );
+
+  const showTest1 = !!school?.test_types_enabled && !hasStandardGrades && (school?.test_types || []).includes('Test 1');
+  const showTest2 = !!school?.test_types_enabled && !hasStandardGrades && (school?.test_types || []).includes('Test 2');
+  const showTest3 = !!school?.test_types_enabled && !hasStandardGrades && (school?.test_types || []).includes('Test 3');
+
+  // Helper to determine the standard from percentage using the grading scale
+  const getStandardFromScale = (percentage: any) => {
+    const isAbsent = percentage === null || percentage === undefined || percentage === '';
+    if (isAbsent) return { grade: 'ABSENT', standard: 'NOT RECORDED' };
+
+    const score = Number(percentage);
+    
+    if (gradingScale && gradingScale.length > 0) {
+      const sortedScale = [...gradingScale].sort((a: any, b: any) => b.min_percentage - a.min_percentage);
+      for (const scale of sortedScale) {
+        if (score >= scale.min_percentage) {
+          return { grade: scale.grade, standard: scale.description.toUpperCase() };
+        }
+      }
+      return { grade: 'F', standard: 'FAIL' };
+    }
+
+    // Fallback — choose the correct built-in scale based on class level
+    if (isG57) {
+      // G5-7 upper primary: A+/A/B+/B/C+/C/F scale
+      if (score >= 86) return { grade: 'A+', standard: 'DISTINCTION' };
+      if (score >= 76) return { grade: 'A',  standard: 'DISTINCTION' };
+      if (score >= 66) return { grade: 'B+', standard: 'MERIT' };
+      if (score >= 56) return { grade: 'B',  standard: 'CREDIT' };
+      if (score >= 46) return { grade: 'C+', standard: 'DEFINITE PASS' };
+      if (score >= 40) return { grade: 'C',  standard: 'PASS' };
+      return { grade: 'F', standard: 'FAIL' };
+    }
+
+    // Secondary ECZ-style fallback
+    if (score >= 75) return { grade: 'ONE',   standard: 'DISTINCTION' };
+    if (score >= 70) return { grade: 'TWO',   standard: 'DISTINCTION' };
+    if (score >= 65) return { grade: 'THREE', standard: 'MERIT' };
+    if (score >= 60) return { grade: 'FOUR',  standard: 'MERIT' };
+    if (score >= 55) return { grade: 'FIVE',  standard: 'CREDIT' };
+    if (score >= 50) return { grade: 'SIX',   standard: 'CREDIT' };
+    if (score >= 45) return { grade: 'SEVEN', standard: 'PASS' };
+    if (score >= 40) return { grade: 'EIGHT', standard: 'PASS' };
+    return { grade: 'NINE', standard: 'FAIL' };
+  };
+
+  // Helper to determine subject assessment state (RECORDED, WAITING, ABSENT)
+  const getSubjectAssessmentState = React.useCallback((item: any) => {
+    const subId = item.subject?.id || item.subject?.code;
+    const activeTestTypes = school?.test_types_enabled ? (school?.test_types || []) : [];
+    
+    if (activeTestTypes.length > 0) {
+      const hasActiveTest1 = activeTestTypes.includes('Test 1');
+      const hasActiveTest2 = activeTestTypes.includes('Test 2');
+      const hasActiveTest3 = activeTestTypes.includes('Test 3');
+      
+      const missingTest1 = hasActiveTest1 && (item.test1 === null || item.test1 === undefined);
+      const missingTest2 = hasActiveTest2 && (item.test2 === null || item.test2 === undefined);
+      const missingTest3 = hasActiveTest3 && (item.test3 === null || item.test3 === undefined);
+      
+      if (missingTest1 || missingTest2 || missingTest3) {
+        // Check if any missing active test is WAITING (i.e. no class grades recorded for it)
+        const isTest1Waiting = hasActiveTest1 && missingTest1 && (!classGradesKeys || !classGradesKeys.includes(`${subId}-${examType}-Test 1`));
+        const isTest2Waiting = hasActiveTest2 && missingTest2 && (!classGradesKeys || !classGradesKeys.includes(`${subId}-${examType}-Test 2`));
+        const isTest3Waiting = hasActiveTest3 && missingTest3 && (!classGradesKeys || !classGradesKeys.includes(`${subId}-${examType}-Test 3`));
+        
+        if (isTest1Waiting || isTest2Waiting || isTest3Waiting) {
+          return 'WAITING';
+        }
+        return 'ABSENT';
+      }
+      return 'RECORDED';
+    } else {
+      if (item.exam !== null && item.exam !== undefined && item.exam !== '') return 'RECORDED';
+      const tests = [item.test1, item.test2, item.test3].filter(t => t !== null && t !== undefined && t !== '');
+      if (tests.length > 0) return 'RECORDED';
+      
+      // Fallback: check if main exam is waiting or absent
+      const isExamWaiting = !classGradesKeys || !classGradesKeys.includes(`${subId}-${examType}-`);
+      return isExamWaiting ? 'WAITING' : 'ABSENT';
+    }
+  }, [school, examType, classGradesKeys]);
+
+  // Generate synthetic single-row grades list for metric calculations
+  const syntheticGrades = React.useMemo(() => {
+    return groupedGradesBySubject.map(item => {
+      const finalPct = getFinalPercentage(item);
+      const state = getSubjectAssessmentState(item);
+      
+      let grade = 'ABSENT';
+      let standard = 'NOT RECORDED';
+      
+      if (state === 'RECORDED') {
+        const std = getStandardFromScale(finalPct);
+        grade = std.grade;
+        standard = std.standard;
+      } else if (state === 'WAITING') {
+        grade = 'WAITING';
+        standard = 'WAITING';
+      }
+      
+      return {
+        id: item.mainGrade?.id || item.subject?.id,
+        student_id: item.mainGrade?.student_id || student.id,
+        subject_id: item.subject?.id,
+        subjects: item.subject,
+        percentage: finalPct,
+        grade,
+        standard,
+        remarks: state === 'WAITING' ? 'Waiting for Grades' : (item.mainGrade?.remarks || ''),
+      };
+    });
+  }, [groupedGradesBySubject, student.id, getSubjectAssessmentState]);
 
   // Calculate Metrics
-  const totalPercentage = grades.reduce((sum: number, g: any) => sum + (g.percentage || 0), 0);
-  const average = grades.length > 0 ? (totalPercentage / grades.length).toFixed(1) : 0;
+  const activeGrades = syntheticGrades.filter(g => g.percentage !== null);
+  const totalPercentage = activeGrades.reduce((sum: number, g: any) => sum + (g.percentage || 0), 0);
+  const average = activeGrades.length > 0 ? (totalPercentage / activeGrades.length).toFixed(1) : 0;
 
   // Generate a deterministic verification string
   const rawData = `VERIFY|${student.studentNumber}|${student.name}|${term}|${examType}|${academicYear}|${average}|${school?.name || 'School'}`;
   const verificationUrl = `${window.location.origin}/verify/${btoa(encodeURIComponent(rawData))}`;
 
-  // Senior secondary detection
-  const isSeniorSec = isSeniorSecondary(student.class || '');
+  // Compute points only for senior secondary using synthetic grades
+  const pointsData = isSeniorSec ? computeBestFivePoints(syntheticGrades, gradingScale, school?.compulsory_subjects_secondary) : null;
 
-  // Compute points only for senior secondary
-  const pointsData = isSeniorSec ? computeBestFivePoints(grades, gradingScale, school?.compulsory_subjects_secondary) : null;
-
-  // Primary G5-7 detection
-  const isG57 = isPrimaryG57(student.class || '');
-
-  // Compute marks for G5-7
-  const primaryMarksData = isG57 ? computePrimaryMarks(grades, student.class || '', school?.compulsory_subjects_primary) : null;
+  // Compute marks for G5-7 using synthetic grades
+  const primaryMarksData = isG57 ? computePrimaryMarks(syntheticGrades, student.class || '', school?.compulsory_subjects_primary) : null;
 
   // Build a display name map for Physics/Chemistry → Science
   // Maps original subject id → display name override
   const subjectDisplayOverride = new Map<string, string>();
   if (isSeniorSec) {
-    for (const g of grades) {
-      const name = (g.subjects?.name || '').toLowerCase();
+    for (const item of groupedGradesBySubject) {
+      const name = (item.subject?.name || '').toLowerCase();
       if (name.includes('physics') || name.includes('chem')) {
-        subjectDisplayOverride.set(g.subject_id, 'Science');
+        subjectDisplayOverride.set(item.subject?.id, 'Science');
       }
     }
   }
@@ -428,47 +648,35 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                 <Table>
                   <TableHeader className="border-b border-slate-900">
                     <TableRow className="hover:bg-transparent border-none h-12">
-                      <TableHead className="w-[40%] text-xs font-bold text-slate-900 uppercase tracking-widest pl-0">Subject</TableHead>
-                      <TableHead className="w-[20%] text-xs font-bold text-slate-900 uppercase tracking-widest text-center">Score %</TableHead>
-                      <TableHead className="w-[20%] text-xs font-bold text-slate-900 uppercase tracking-widest text-center">Grade</TableHead>
-                      <TableHead className="w-[20%] text-xs font-bold text-slate-900 uppercase tracking-widest text-right pr-0">Standard</TableHead>
+                      <TableHead className={`${showTest1 || showTest2 || showTest3 ? 'w-[30%]' : 'w-[40%]'} text-xs font-bold text-slate-900 uppercase tracking-widest pl-0`}>Subject</TableHead>
+                      {showTest1 && (
+                        <TableHead className="w-[10%] text-xs font-bold text-slate-900 uppercase tracking-widest text-center">Test 1</TableHead>
+                      )}
+                      {showTest2 && (
+                        <TableHead className="w-[10%] text-xs font-bold text-slate-900 uppercase tracking-widest text-center">Test 2</TableHead>
+                      )}
+                      {showTest3 && (
+                        <TableHead className="w-[10%] text-xs font-bold text-slate-900 uppercase tracking-widest text-center">Test 3</TableHead>
+                      )}
+                      <TableHead className={`${showTest1 || showTest2 || showTest3 ? 'w-[15%]' : 'w-[20%]'} text-xs font-bold text-slate-900 uppercase tracking-widest text-center`}>
+                        {showTest1 || showTest2 || showTest3 ? 'Final %' : 'Score %'}
+                      </TableHead>
+                      <TableHead className={`${showTest1 || showTest2 || showTest3 ? 'w-[15%]' : 'w-[20%]'} text-xs font-bold text-slate-900 uppercase tracking-widest text-center`}>Grade</TableHead>
+                      <TableHead className={`${showTest1 || showTest2 || showTest3 ? 'w-[20%]' : 'w-[20%]'} text-xs font-bold text-slate-900 uppercase tracking-widest text-right pr-0`}>Standard</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {(() => {
-                      const getStandardFromScale = (percentage: any) => {
-                        const isAbsent = percentage === null || percentage === undefined || percentage === '';
-                        if (isAbsent) return { grade: 'ABSENT', standard: 'NOT RECORDED' };
-
-                        const score = Number(percentage);
-                        
-                        if (gradingScale && gradingScale.length > 0) {
-                          const sortedScale = [...gradingScale].sort((a: any, b: any) => b.min_percentage - a.min_percentage);
-                          for (const scale of sortedScale) {
-                            if (score >= scale.min_percentage) {
-                              return { grade: scale.grade, standard: scale.description.toUpperCase() };
-                            }
-                          }
-                          return { grade: 'F', standard: 'FAIL' };
-                        }
-
-                        // Fallback to ECZ-style
-                        if (score >= 75) return { grade: 'ONE', standard: 'DISTINCTION' };
-                        if (score >= 70) return { grade: 'TWO', standard: 'DISTINCTION' };
-                        if (score >= 65) return { grade: 'THREE', standard: 'MERIT' };
-                        if (score >= 60) return { grade: 'FOUR', standard: 'MERIT' };
-                        if (score >= 55) return { grade: 'FIVE', standard: 'CREDIT' };
-                        if (score >= 50) return { grade: 'SIX', standard: 'CREDIT' };
-                        if (score >= 45) return { grade: 'SEVEN', standard: 'PASS' };
-                        if (score >= 40) return { grade: 'EIGHT', standard: 'PASS' };
-                        return { grade: 'NINE', standard: 'FAIL' };
-                      };
-
-                      // For senior secondary, group Physics+Chemistry together as "Science"
                       // Build display rows — merge Physics+Chemistry into one Science row
                       type DisplayRow = {
                         key: string;
                         displayName: string;
+                        test1: number | null;
+                        test2: number | null;
+                        test3: number | null;
+                        test1Display: string;
+                        test2Display: string;
+                        test3Display: string;
                         percentage: number | null;
                         gradeStr: string;
                         points: number | null;
@@ -481,63 +689,123 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                       const scienceHandled = new Set<string>();
 
                       if (isSeniorSec) {
-                        // Find Physics and Chemistry
-                        const physGrade = grades.find((g: any) =>
-                          (g.subjects?.name || '').toLowerCase().includes('physics')
+                        const physItem = groupedGradesBySubject.find(item =>
+                          (item.subject?.name || '').toLowerCase().includes('physics')
                         );
-                        const chemGrade = grades.find((g: any) =>
-                          (g.subjects?.name || '').toLowerCase().includes('chem')
+                        const chemItem = groupedGradesBySubject.find(item =>
+                          (item.subject?.name || '').toLowerCase().includes('chem')
                         );
 
-                        // If either exists, emit one Science row
-                        if (physGrade || chemGrade) {
-                          if (physGrade) scienceHandled.add(physGrade.subject_id || physGrade.id);
-                          if (chemGrade) scienceHandled.add(chemGrade.subject_id || chemGrade.id);
+                        if (physItem || chemItem) {
+                          if (physItem) scienceHandled.add(physItem.subject?.id || physItem.subject?.code);
+                          if (chemItem) scienceHandled.add(chemItem.subject?.id || chemItem.subject?.code);
 
-                          const phyPts = physGrade ? gradeToPoints(getStandardFromScale(physGrade.percentage).grade) : null;
-                          const chePts = chemGrade ? gradeToPoints(getStandardFromScale(chemGrade.percentage).grade) : null;
-                          let sciPts: number | null = null;
-                          if (phyPts !== null && chePts !== null) sciPts = (phyPts + chePts) / 2;
-                          else if (phyPts !== null) sciPts = phyPts;
-                          else if (chePts !== null) sciPts = chePts;
+                          const physId = physItem?.subject?.id;
+                          const chemId = chemItem?.subject?.id;
 
-                          // Use lower (better) percentage for display
-                          const phyPct = physGrade?.percentage ?? null;
-                          const chePct = chemGrade?.percentage ?? null;
-                          const combinedPct = phyPct !== null && chePct !== null
-                            ? ((Number(phyPct) + Number(chePct)) / 2)
-                            : (phyPct ?? chePct);
+                          const phyPct = physItem ? getFinalPercentage(physItem) : null;
+                          const chemPct = chemItem ? getFinalPercentage(chemItem) : null;
+                          const combinedPct = phyPct !== null && chemPct !== null
+                            ? ((Number(phyPct) + Number(chemPct)) / 2)
+                            : (phyPct ?? chemPct);
 
-                          const sciAbsent = combinedPct === null;
-                          const sciGradeStr = sciAbsent ? 'ABSENT' : getStandardFromScale(combinedPct).grade;
+                          const phyState = physItem ? getSubjectAssessmentState(physItem) : 'WAITING';
+                          const chemState = chemItem ? getSubjectAssessmentState(chemItem) : 'WAITING';
+
+                          let sciGradeStr = 'ABSENT';
+                          let sciAbsent = true;
+                          if (phyState === 'RECORDED' || chemState === 'RECORDED') {
+                            sciAbsent = combinedPct === null;
+                            sciGradeStr = sciAbsent ? 'ABSENT' : getStandardFromScale(combinedPct).grade;
+                          } else if (phyState === 'WAITING' || chemState === 'WAITING') {
+                            sciGradeStr = 'WAITING';
+                            sciAbsent = true;
+                          }
+
+                          const pts = sciAbsent ? null : gradeToPoints(sciGradeStr);
+
+                          const sciTest1 = physItem || chemItem ? (
+                            (physItem?.test1 !== null && chemItem?.test1 !== null) ? (physItem.test1! + chemItem.test1!) / 2 :
+                            (physItem?.test1 ?? chemItem?.test1 ?? null)
+                          ) : null;
+                          
+                          const sciTest2 = physItem || chemItem ? (
+                            (physItem?.test2 !== null && chemItem?.test2 !== null) ? (physItem.test2! + chemItem.test2!) / 2 :
+                            (physItem?.test2 ?? chemItem?.test2 ?? null)
+                          ) : null;
+
+                          const sciTest3 = physItem || chemItem ? (
+                            (physItem?.test3 !== null && chemItem?.test3 !== null) ? (physItem.test3! + chemItem.test3!) / 2 :
+                            (physItem?.test3 ?? chemItem?.test3 ?? null)
+                          ) : null;
+
+                          const hasClassTest1 = (physId && classGradesKeys?.includes(`${physId}-${examType}-Test 1`)) ||
+                                                (chemId && classGradesKeys?.includes(`${chemId}-${examType}-Test 1`));
+                          const hasClassTest2 = (physId && classGradesKeys?.includes(`${physId}-${examType}-Test 2`)) ||
+                                                (chemId && classGradesKeys?.includes(`${chemId}-${examType}-Test 2`));
+                          const hasClassTest3 = (physId && classGradesKeys?.includes(`${physId}-${examType}-Test 3`)) ||
+                                                (chemId && classGradesKeys?.includes(`${chemId}-${examType}-Test 3`));
+
+                          const test1Display = sciTest1 !== null ? `${parseFloat(sciTest1.toFixed(1))}%` : (hasClassTest1 ? 'ABSENT' : 'WAITING');
+                          const test2Display = sciTest2 !== null ? `${parseFloat(sciTest2.toFixed(1))}%` : (hasClassTest2 ? 'ABSENT' : 'WAITING');
+                          const test3Display = sciTest3 !== null ? `${parseFloat(sciTest3.toFixed(1))}%` : (hasClassTest3 ? 'ABSENT' : 'WAITING');
 
                           displayRows.push({
                             key: 'science-combined',
                             displayName: 'Science',
+                            test1: sciTest1 !== null ? parseFloat(sciTest1.toFixed(1)) : null,
+                            test2: sciTest2 !== null ? parseFloat(sciTest2.toFixed(1)) : null,
+                            test3: sciTest3 !== null ? parseFloat(sciTest3.toFixed(1)) : null,
+                            test1Display,
+                            test2Display,
+                            test3Display,
                             percentage: combinedPct !== null ? parseFloat(combinedPct.toFixed(1)) : null,
                             gradeStr: sciGradeStr,
-                            points: sciPts !== null ? parseFloat(sciPts.toFixed(1)) : null,
+                            points: pts !== null ? parseFloat(pts.toFixed(1)) : null,
                             isAbsent: sciAbsent,
                             isCombined: true,
-                            combinedNote: [physGrade?.subjects?.name, chemGrade?.subjects?.name].filter(Boolean).join(' + '),
+                            combinedNote: [physItem?.subject?.name, chemItem?.subject?.name].filter(Boolean).join(' + '),
                           });
                         }
                       }
 
                       // All other subjects
-                      for (const g of grades) {
-                        const gKey = g.subject_id || g.id;
+                      for (const item of groupedGradesBySubject) {
+                        const gKey = item.subject?.id || item.subject?.code;
                         if (isSeniorSec && scienceHandled.has(gKey)) continue;
 
-                        const isAbsent = g.percentage === null || g.percentage === undefined || g.percentage === '' || g.grade === 'ABSENT';
-                        const stdData = getStandardFromScale(g.percentage);
-                        const pts = isSeniorSec ? gradeToPoints(stdData.grade) : null;
+                        const finalPct = getFinalPercentage(item);
+                        const state = getSubjectAssessmentState(item);
+                        const isAbsent = finalPct === null;
+                        
+                        let gradeStr = 'ABSENT';
+                        if (state === 'RECORDED') {
+                          gradeStr = getStandardFromScale(finalPct).grade;
+                        } else if (state === 'WAITING') {
+                          gradeStr = 'WAITING';
+                        }
+                        
+                        const pts = isSeniorSec ? gradeToPoints(gradeStr) : null;
+
+                        const hasClassTest1 = classGradesKeys?.includes(`${gKey}-${examType}-Test 1`);
+                        const hasClassTest2 = classGradesKeys?.includes(`${gKey}-${examType}-Test 2`);
+                        const hasClassTest3 = classGradesKeys?.includes(`${gKey}-${examType}-Test 3`);
+
+                        const test1Display = item.test1 !== null ? `${item.test1}%` : (hasClassTest1 ? 'ABSENT' : 'WAITING');
+                        const test2Display = item.test2 !== null ? `${item.test2}%` : (hasClassTest2 ? 'ABSENT' : 'WAITING');
+                        const test3Display = item.test3 !== null ? `${item.test3}%` : (hasClassTest3 ? 'ABSENT' : 'WAITING');
 
                         displayRows.push({
                           key: gKey || `row-${displayRows.length}`,
-                          displayName: g.subjects?.name || 'Unknown Subject',
-                          percentage: isAbsent ? null : g.percentage,
-                          gradeStr: stdData.grade,
+                          displayName: item.subject?.name || 'Unknown Subject',
+                          test1: item.test1,
+                          test2: item.test2,
+                          test3: item.test3,
+                          test1Display,
+                          test2Display,
+                          test3Display,
+                          percentage: finalPct,
+                          gradeStr,
                           points: pts,
                           isAbsent,
                         });
@@ -570,6 +838,21 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                                     )}
                                   </div>
                                 </TableCell>
+                                {showTest1 && (
+                                  <TableCell className="py-1 px-4 text-center font-semibold text-slate-600 text-sm print:text-[11px]">
+                                    {row.test1Display}
+                                  </TableCell>
+                                )}
+                                {showTest2 && (
+                                  <TableCell className="py-1 px-4 text-center font-semibold text-slate-600 text-sm print:text-[11px]">
+                                    {row.test2Display}
+                                  </TableCell>
+                                )}
+                                {showTest3 && (
+                                  <TableCell className="py-1 px-4 text-center font-semibold text-slate-600 text-sm print:text-[11px]">
+                                    {row.test3Display}
+                                  </TableCell>
+                                )}
                                 <TableCell className="py-1 px-4 text-center font-bold text-slate-700 text-sm print:text-[11px]">
                                   {row.isAbsent ? '-' : `${row.percentage}%`}
                                 </TableCell>
@@ -579,7 +862,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                                 <TableCell className="py-1 pr-0 text-right font-bold text-slate-500 text-[10px] print:text-[9px] uppercase tracking-widest">
                                   {row.isAbsent ? (
                                     <span className="text-slate-300 italic font-medium">
-                                      {getStandardFromScale(null).standard}
+                                      {row.gradeStr === 'WAITING' ? 'WAITING' : 'NOT RECORDED'}
                                     </span>
                                   ) : (
                                     getStandardFromScale(row.percentage).standard
@@ -589,7 +872,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                             ))
                           ) : (
                             <TableRow>
-                              <TableCell colSpan={5} className="text-center py-16">
+                              <TableCell colSpan={5 + (showTest1 ? 1 : 0) + (showTest2 ? 1 : 0) + (showTest3 ? 1 : 0)} className="text-center py-16">
                                 <div className="flex flex-col items-center gap-2 text-slate-400">
                                   <p className="text-sm font-medium">No academic records found</p>
                                   <p className="text-xs opacity-70">Grades for this term have not been published yet.</p>
@@ -599,7 +882,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                           )}
                           {displayRows.length > 0 && (
                             <TableRow className="border-t border-slate-900 mt-8 print:mt-4 block">
-                              <TableCell colSpan={4} className="p-4 print:p-2 pl-0">
+                              <TableCell colSpan={4 + (showTest1 ? 1 : 0) + (showTest2 ? 1 : 0) + (showTest3 ? 1 : 0)} className="p-4 print:p-2 pl-0">
                                 <div className="flex justify-between items-center text-xs font-bold text-slate-900 uppercase tracking-widest gap-4">
                                   <div>RECORDED: {subjectsRecorded}</div>
                                   {school?.school_type === 'Basic' && (

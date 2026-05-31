@@ -27,8 +27,23 @@ export async function ensureSchoolSettings(schoolId: string) {
     updated = true;
   }
 
-  if (!school.exam_types || school.exam_types.length === 0) {
+  const hasExactExamTypes = school.exam_types && 
+    school.exam_types.length === 2 && 
+    school.exam_types.includes('Mid Term') && 
+    school.exam_types.includes('End of Term');
+
+  if (!hasExactExamTypes) {
     updates.exam_types = ['Mid Term', 'End of Term'];
+    updated = true;
+  }
+
+  if (!school.test_types || school.test_types.length === 0) {
+    updates.test_types = ['Test 1', 'Test 2', 'Test 3'];
+    updated = true;
+  }
+
+  if (school.test_types_enabled === undefined || school.test_types_enabled === null) {
+    updates.test_types_enabled = false;
     updated = true;
   }
 

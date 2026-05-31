@@ -700,6 +700,14 @@ export default function TeacherPortal() {
 
   const handleSaveGrade = async (studentId: string, score: number, feedback: string) => {
     if (!selectedAssignment) return;
+    if (score > 100) {
+      toast({
+        title: "Double Check Score",
+        description: "Marks above 100% are not accepted. Please verify the input.",
+        variant: "destructive"
+      });
+      return;
+    }
     try {
       const response = await fetchWithAuth('/api/teacher/grades', {
         method: 'POST',

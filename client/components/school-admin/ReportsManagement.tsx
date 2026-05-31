@@ -109,11 +109,19 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
   
   const getGradeInfo = (pct: number, className: string = "") => {
     const n = className.toLowerCase();
-    const isSecondary = n.includes("form") || /\b(8|9|10|11|12)\b/.test(n);
-    const isG57 = !isSecondary && /\b(5|6|7)\b/.test(n) && !/\b(1|2|3|4)\b/.test(n);
+    const getGradeLevel = (name: string) => {
+      const raw = name.toLowerCase().trim();
+      if (raw.includes("form")) return 8; // Secondary
+      const match = raw.match(/(\d{1,2})/);
+      return match ? parseInt(match[1], 10) : null;
+    };
+    const gradeLevel = getGradeLevel(n);
+    const isSecondary = n.includes("form") || (gradeLevel !== null && gradeLevel >= 8);
+    const isG57 = !isSecondary && gradeLevel !== null && gradeLevel >= 5 && gradeLevel <= 7;
     
-    const maxMark = isG57 ? 150 : 100;
-    const normalizedPct = (pct / maxMark) * 100;
+    // Percentage in database is already 0-100, so maxMark is 100
+    const maxMark = 100;
+    const normalizedPct = pct;
 
     if (normalizedPct >= 75) return { label: 'Distinction', color: 'bg-emerald-500 hover:bg-emerald-600', text: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30' };
     if (normalizedPct >= 60) return { label: 'Merit', color: 'bg-blue-500 hover:bg-blue-600', text: 'text-blue-700 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30' };
@@ -573,11 +581,7 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={liveStats?.performance?.bySubject} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" domain={[0, liveStats?.performance?.byClass?.some((c: any) => {
-                      const n = c.name.toLowerCase();
-                      const isSec = n.includes("form") || /\b(8|9|10|11|12)\b/.test(n);
-                      return !isSec && /\b(5|6|7)\b/.test(n) && !/\b(1|2|3|4)\b/.test(n);
-                    }) ? 150 : 100]} />
+                    <XAxis type="number" domain={[0, 100]} />
                     <YAxis dataKey="name" type="category" width={120} />
                     <Tooltip />
                     <Bar dataKey="average" fill="#8b5cf6" radius={[0, 4, 4, 0]} />

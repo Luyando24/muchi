@@ -34,6 +34,20 @@ async function fetchAll(queryBuilder: any, limit = 1000) {
 
 // Helper to calculate class rankings and averages
 async function getClassRankings(classId: string, term: string, examType: string, academicYear: string) {
+  const { data: classObj } = await supabaseAdmin
+    .from('classes')
+    .select('school_id')
+    .eq('id', classId)
+    .single();
+  const schoolId = classObj?.school_id;
+  
+  const { data: school } = schoolId ? await supabaseAdmin
+    .from('schools')
+    .select('test_types, test_types_enabled, school_type')
+    .eq('id', schoolId)
+    .single() : { data: null };
+  const activeTestTypes = school?.test_types_enabled ? (school?.test_types || []) : [];
+
   const { data: enrollments } = await supabaseAdmin
     .from('enrollments')
     .select('student_id')
@@ -45,33 +59,102 @@ async function getClassRankings(classId: string, term: string, examType: string,
   const studentIds = enrollments.map(e => e.student_id);
   
   // Need to use fetchAll to bypass 1000 row limit for grades if class is large
+  // Fetch all grades for the term and year to resolve exam & test combinations
   const gradesQuery = supabaseAdmin
     .from('student_grades')
-    .select('student_id, percentage')
+    .select('student_id, subject_id, percentage, exam_type, test_type')
     .in('student_id', studentIds)
     .eq('term', term)
-    .eq('exam_type', examType)
     .eq('academic_year', academicYear);
     
   const grades = await fetchAll(gradesQuery);
   
-  const studentAverages: Record<string, { total: number, count: number, avg: number }> = {};
-  studentIds.forEach(id => studentAverages[id] = { total: 0, count: 0, avg: 0 });
+  const studentGradesMap: Record<string, Record<string, any[]>> = {};
+  studentIds.forEach(id => {
+    studentGradesMap[id] = {};
+  });
   
   if (grades) {
     grades.forEach((g: any) => {
-      if (g.percentage !== null && g.percentage !== undefined && g.percentage !== '') {
-         studentAverages[g.student_id].total += Number(g.percentage);
-         studentAverages[g.student_id].count += 1;
+      if (studentGradesMap[g.student_id]) {
+        if (!studentGradesMap[g.student_id][g.subject_id]) {
+          studentGradesMap[g.student_id][g.subject_id] = [];
+        }
+        studentGradesMap[g.student_id][g.subject_id].push(g);
       }
     });
   }
+  
+  const studentAverages: Record<string, { total: number, count: number, avg: number }> = {};
+  
+  studentIds.forEach(studentId => {
+    let total = 0;
+    let count = 0;
+    
+    const subjectsMap = studentGradesMap[studentId];
+    Object.values(subjectsMap).forEach((subjectGrades: any[]) => {
+      let percentage: number | null = null;
+      
+      if (activeTestTypes.length > 0) {
+        // If school has active test types, require all active tests to calculate average
+        const hasActiveTest1 = activeTestTypes.includes('Test 1');
+        const hasActiveTest2 = activeTestTypes.includes('Test 2');
+        const hasActiveTest3 = activeTestTypes.includes('Test 3');
+        
+        const test1Grade = subjectGrades.find(g => (g.test_type === 'Test 1' || g.exam_type === 'Test 1'));
+        const test2Grade = subjectGrades.find(g => (g.test_type === 'Test 2' || g.exam_type === 'Test 2'));
+        const test3Grade = subjectGrades.find(g => (g.test_type === 'Test 3' || g.exam_type === 'Test 3'));
+        
+        const missingTest1 = hasActiveTest1 && (!test1Grade || test1Grade.percentage === null || test1Grade.percentage === undefined || test1Grade.percentage === '');
+        const missingTest2 = hasActiveTest2 && (!test2Grade || test2Grade.percentage === null || test2Grade.percentage === undefined || test2Grade.percentage === '');
+        const missingTest3 = hasActiveTest3 && (!test3Grade || test3Grade.percentage === null || test3Grade.percentage === undefined || test3Grade.percentage === '');
+        
+        if (missingTest1 || missingTest2 || missingTest3) {
+          percentage = null;
+        } else {
+          const scores = [
+            hasActiveTest1 ? test1Grade?.percentage : null,
+            hasActiveTest2 ? test2Grade?.percentage : null,
+            hasActiveTest3 ? test3Grade?.percentage : null
+          ].filter(t => t !== null && t !== undefined && t !== '') as number[];
+          
+          if (scores.length > 0) {
+            percentage = scores.reduce((sum, s) => sum + Number(s), 0) / scores.length;
+          }
+        }
+      } else {
+        // Standard/no test types configuration:
+        // Try exact match: exam_type = examType AND test_type is empty
+        let match = subjectGrades.find(g => g.exam_type === examType && (!g.test_type || g.test_type === '' || g.test_type === 'none'));
+        if (match) {
+          percentage = match.percentage;
+        } else {
+          // Fallback to average of tests if no active test types are set but tests exist
+          const test1Grade = subjectGrades.find(g => (g.test_type === 'Test 1' || g.exam_type === 'Test 1'));
+          const test2Grade = subjectGrades.find(g => (g.test_type === 'Test 2' || g.exam_type === 'Test 2'));
+          const test3Grade = subjectGrades.find(g => (g.test_type === 'Test 3' || g.exam_type === 'Test 3'));
+          
+          const scores = [test1Grade?.percentage, test2Grade?.percentage, test3Grade?.percentage].filter(t => t !== null && t !== undefined && t !== '') as number[];
+          if (scores.length > 0) {
+            percentage = scores.reduce((sum, s) => sum + Number(s), 0) / scores.length;
+          }
+        }
+      }
+      
+      if (percentage !== null && percentage !== undefined) {
+        total += Number(percentage);
+        count += 1;
+      }
+    });
+    
+    studentAverages[studentId] = { total, count, avg: count > 0 ? total / count : 0 };
+  });
   
   let classTotal = 0;
   let classCount = 0;
   
   const averagesList = Object.entries(studentAverages).map(([id, data]) => {
-     const avg = data.count > 0 ? data.total / data.count : 0;
+     const avg = data.avg;
      if (data.count > 0) {
        classTotal += avg;
        classCount += 1;
@@ -95,6 +178,28 @@ async function getClassRankings(classId: string, term: string, examType: string,
   };
 }
 
+function isG57Class(grade: string): boolean {
+  const raw = (grade || "").toLowerCase().trim();
+  if (raw.includes("form")) return false;
+  const match = raw.match(/(\d{1,2})/);
+  if (match) {
+    const level = parseInt(match[1], 10);
+    return level >= 5 && level <= 7;
+  }
+  return false;
+}
+
+function isG14Class(grade: string): boolean {
+  const raw = (grade || "").toLowerCase().trim();
+  if (raw.includes("form")) return false;
+  const match = raw.match(/(\d{1,2})/);
+  if (match) {
+    const level = parseInt(match[1], 10);
+    return level >= 1 && level <= 4;
+  }
+  return false;
+}
+
 // Helper to select the correct grading scale based on grade level and school type
 // Helper to select the correct grading scale based on grade level and school type
 function getGradingScaleForGrade(percentage: number, grade: string, schoolType: string, allScales: any[]) {
@@ -107,16 +212,8 @@ function getGradingScaleForGrade(percentage: number, grade: string, schoolType: 
   const isCombinedPrimarySchool = type === "combined primary" || type === "primary school";
 
   // Grade-based detection for Combined schools
-  // Prioritize "Grade" or "G" prefixes and explicitly exclude "Form"
-  const isG57Grade = (gradeStr.includes("5") || gradeStr.includes("6") || gradeStr.includes("7")) &&
-                     !gradeStr.includes("1") && // Avoid matching 15, 16, 17
-                     !gradeStr.includes("form") &&
-                     (gradeStr.includes("grade") || gradeStr.includes("g"));
-
-  const isG14Grade = (gradeStr.includes("1") || gradeStr.includes("2") || gradeStr.includes("3") || gradeStr.includes("4")) &&
-                     !gradeStr.includes("10") && !gradeStr.includes("11") && !gradeStr.includes("12") &&
-                     !gradeStr.includes("form") &&
-                     (gradeStr.includes("grade") || gradeStr.includes("g"));
+  const isG57Grade = isG57Class(gradeStr);
+  const isG14Grade = isG14Class(gradeStr);
 
   if (isUpperPrimarySchool || (isCombinedPrimarySchool && isG57Grade)) {
     // Try to filter by section first
@@ -645,16 +742,53 @@ router.get(
         .order("created_at", { ascending: false })
         .limit(5);
 
-      // 4. Get current term/year from settings first (needed for Attendance and Revenue)
-      const { data: settings } = await supabaseAdmin
-        .from("school_settings")
-        .select("current_term, academic_year")
-        .eq("school_id", schoolId)
-        .maybeSingle();
+      // 4. Get current term/year and settings (needed for Attendance, Revenue, and Completion Rate)
+      const settings = await ensureSchoolSettings(schoolId);
 
       const currentTerm = settings?.current_term || "Term 1";
       const currentYear =
         settings?.academic_year || new Date().getFullYear().toString();
+
+      // Calculate settings completion details
+      const mandatoryFields = [
+        { key: "name", label: "School Name" },
+        { key: "school_type", label: "School Type" },
+        { key: "academic_year", label: "Academic Year" },
+        { key: "current_term", label: "Current Term" },
+        { key: "email", label: "Contact Email" },
+        { key: "phone", label: "Phone Number" },
+        { key: "province", label: "Province" },
+        { key: "district", label: "District" },
+        { key: "logo_url", label: "School Logo" },
+        { key: "headteacher_name", label: "Headteacher Name" },
+        { key: "signature_url", label: "Headteacher Signature" }
+      ];
+
+      const missingFields: string[] = [];
+      let filledCount = 0;
+
+      if (settings) {
+        mandatoryFields.forEach(field => {
+          const value = (settings as any)[field.key];
+          if (value && typeof value === 'string' && value.trim() !== '') {
+            filledCount++;
+          } else {
+            missingFields.push(field.label);
+          }
+        });
+      } else {
+        mandatoryFields.forEach(field => missingFields.push(field.label));
+      }
+
+      const percentage = mandatoryFields.length > 0
+        ? Math.round((filledCount / mandatoryFields.length) * 100)
+        : 100;
+
+      const settingsCompletion = {
+        percentage,
+        missingFields,
+        isComplete: percentage >= 90
+      };
 
       // 5. Calculate Attendance Rate (Term-wide for "real data" as in reports)
       let attendanceRateValue = "--";
@@ -801,6 +935,7 @@ router.get(
         academicPerformance,
         enrollmentDistribution,
         financeTrends,
+        settingsCompletion,
       };
 
       console.log(
@@ -2191,7 +2326,7 @@ router.post(
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
     const { id } = req.params;
-    const { subjectId, term, examType, academicYear, percentage, comments } =
+    const { subjectId, term, examType, academicYear, percentage, comments, testType } =
       req.body;
 
     if (
@@ -2215,6 +2350,7 @@ router.post(
           subject_id: subjectId,
           term,
           exam_type: examType,
+          test_type: testType || "",
           academic_year: academicYear,
           grade,
           percentage: percentage === null || percentage === undefined ? 0 : percentage,
@@ -2222,7 +2358,7 @@ router.post(
           status: "Draft",
         },
         {
-          onConflict: "student_id, subject_id, term, academic_year, exam_type",
+          onConflict: "student_id, subject_id, term, academic_year, exam_type, test_type",
         },
       );
 
@@ -2244,7 +2380,7 @@ router.get(
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
-    const { subjectId, term, examType, academicYear, studentIds } = req.query;
+    const { subjectId, term, examType, academicYear, studentIds, testType } = req.query;
 
     if (!subjectId || !term || !examType || !academicYear || !studentIds) {
       return res.status(400).json({ message: "Missing required parameters" });
@@ -2260,6 +2396,7 @@ router.get(
         .eq("subject_id", subjectId)
         .eq("term", term)
         .eq("exam_type", examType)
+        .eq("test_type", testType || "")
         .eq("academic_year", academicYear)
         .in("student_id", idsArray);
 
@@ -2280,7 +2417,7 @@ router.post(
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
-    const { grades } = req.body; // Array of { studentId, subjectId, term, examType, academicYear, percentage, comments }
+    const { grades } = req.body; // Array of { studentId, subjectId, term, examType, testType, academicYear, percentage, comments }
 
     if (!grades || !Array.isArray(grades)) {
       return res.status(400).json({ message: "Invalid grades data" });
@@ -2308,6 +2445,7 @@ router.post(
           subject_id: g.subjectId,
           term: g.term,
           exam_type: g.examType || "End of Term",
+          test_type: g.testType || "",
           academic_year: g.academicYear,
           grade: isAbsent ? "ABSENT" : (scale ? scale.grade : "N/A"),
           percentage: isAbsent ? 0 : g.percentage,
@@ -2319,7 +2457,7 @@ router.post(
       const { error } = await supabaseAdmin
         .from("student_grades")
         .upsert(processedGrades, {
-          onConflict: "student_id, subject_id, term, academic_year, exam_type",
+          onConflict: "student_id, subject_id, term, academic_year, exam_type, test_type",
         });
 
       if (error) throw error;
@@ -2983,12 +3121,7 @@ router.get(
       }
 
       // 3. Fetch Grades
-      // For Primary G5-7, we might want to show multiple test scores, so we fetch all exam types for the term
-      const gradeStr = (student.grade || student.className || "").toString().toLowerCase();
-      const isPrimaryG57 = (gradeStr.includes("5") || gradeStr.includes("6") || gradeStr.includes("7")) && 
-                           !gradeStr.includes("1") && 
-                           (gradeStr.includes("grade") || gradeStr.includes("g"));
-
+      // Fetch all grades for this student for the term to allow processing tests in memory
       let gradesQuery = supabaseAdmin
         .from("student_grades")
         .select("*, subjects(id, name, code, department)")
@@ -2996,64 +3129,75 @@ router.get(
         .eq("term", term)
         .eq("academic_year", academicYear);
 
-      // If not primary G5-7, we can still filter by examType for backward compatibility 
-      // but keeping it broader allows for more flexible reporting.
-      // However, to avoid breaking expected behavior, we'll keep the filter if provided, 
-      // UNLESS it's the new Primary format which specifically needs multiple scores.
-      if (!isPrimaryG57 && examType) {
-        gradesQuery = gradesQuery.eq("exam_type", examType);
-      }
-
       if (profile.role === "student") {
         gradesQuery = gradesQuery.eq("status", "Published");
       }
 
       const { data: rawGrades } = await gradesQuery;
 
+      // Filter in-memory to keep grades that belong to this examType or are test_types
+      const filteredGrades = (rawGrades || []).filter((g: any) => {
+        if (!examType) return true;
+        if (g.exam_type === examType) return true;
+        if (['Test 1', 'Test 2', 'Test 3'].includes(g.exam_type)) return true;
+        return false;
+      });
+
       // Remove duplicates manually (keeping the most recently calculated one if any)
       const gradesMap = new Map();
-      if (rawGrades && rawGrades.length > 0) {
-        const sortedGrades = [...rawGrades].sort((a, b) => {
+      if (filteredGrades && filteredGrades.length > 0) {
+        const sortedGrades = [...filteredGrades].sort((a, b) => {
           const timeA = new Date(a.calculated_at || a.created_at).getTime();
           const timeB = new Date(b.calculated_at || b.created_at).getTime();
           return timeB - timeA; // descending
         });
 
         for (const grade of sortedGrades) {
-          // Use subject_id as key if available, fallback to code
-          const key = grade.subject_id || grade.subjects?.code;
-          if (key && !gradesMap.has(key)) {
+          const subId = grade.subject_id || grade.subjects?.id || grade.subjects?.code;
+          if (!subId) continue;
+          // Key by subject + exam_type + test_type
+          const key = `${subId}-${grade.exam_type}-${grade.test_type || ''}`;
+          if (!gradesMap.has(key)) {
             gradesMap.set(key, grade);
           }
         }
       }
 
-      // Merge: Ensure all class subjects are present
-      const finalGrades = allClassSubjects.map((subject) => {
-        // Check if we have a grade for this subject
-        const existingGrade =
-          gradesMap.get(subject.id) || gradesMap.get(subject.code);
-
-        if (existingGrade) {
-          return existingGrade;
+      // Group deduplicated grades by subject_id
+      const gradesBySubject = new Map<string, any[]>();
+      for (const grade of gradesMap.values()) {
+        const subId = grade.subject_id;
+        if (!gradesBySubject.has(subId)) {
+          gradesBySubject.set(subId, []);
         }
+        gradesBySubject.get(subId)!.push(grade);
+      }
 
-        // Return placeholder for absent/missing grade
-        return {
-          id: `missing-${subject.id}`,
-          student_id: studentId,
-          subject_id: subject.id,
-          subjects: subject,
-          percentage: null,
-          grade: "ABSENT", // Special marker
-          remarks: "Not Recorded",
-          term,
-          academic_year: academicYear,
-        };
+      // Merge: Ensure all class subjects are present
+      const finalGrades: any[] = [];
+      allClassSubjects.forEach((subject) => {
+        const subjectGrades = gradesBySubject.get(subject.id) || [];
+        if (subjectGrades.length > 0) {
+          finalGrades.push(...subjectGrades);
+        } else {
+          // Return placeholder for absent/missing grade
+          finalGrades.push({
+            id: `missing-${subject.id}`,
+            student_id: studentId,
+            subject_id: subject.id,
+            subjects: subject,
+            percentage: null,
+            grade: "ABSENT", // Special marker
+            remarks: "Not Recorded",
+            term,
+            exam_type: examType || "End of Term",
+            test_type: '',
+            academic_year: academicYear,
+          });
+        }
       });
 
       // Add any grades that might not be in class_subjects (e.g. electives or errors)
-      // Only add if not already in finalGrades
       const processedSubjectIds = new Set(allClassSubjects.map((s) => s.id));
       for (const grade of gradesMap.values()) {
         if (grade.subject_id && !processedSubjectIds.has(grade.subject_id)) {
@@ -3072,7 +3216,7 @@ router.get(
       const { data: schoolDetails } = await supabaseAdmin
         .from("schools")
         .select(
-          "name, address, email, phone, website, logo_url, signature_url, seal_url, coat_of_arms_url, school_type, headteacher_name, headteacher_title, compulsory_subjects_primary, compulsory_subjects_secondary",
+          "name, address, email, phone, website, logo_url, signature_url, seal_url, coat_of_arms_url, school_type, headteacher_name, headteacher_title, compulsory_subjects_primary, compulsory_subjects_secondary, test_types, test_types_enabled",
         )
         .eq("id", schoolId)
         .single();
@@ -3081,12 +3225,37 @@ router.get(
       let position = 0;
       let totalStudents = 0;
       let classAverage = 0;
+      let classGradesKeys: string[] = [];
       
       if (classId) {
         const rankingsData = await getClassRankings(classId, term, examType, academicYear);
         position = rankingsData.rankings[studentId] || 0;
         totalStudents = rankingsData.totalStudents;
         classAverage = rankingsData.classAverage;
+
+        const { data: classStudents } = await supabaseAdmin
+          .from("enrollments")
+          .select("student_id")
+          .eq("class_id", classId)
+          .eq("academic_year", academicYear);
+        
+        const classStudentIds = classStudents?.map(cs => cs.student_id) || [];
+        if (classStudentIds.length > 0) {
+          const { data: classGrades } = await supabaseAdmin
+            .from("student_grades")
+            .select("subject_id, exam_type, test_type")
+            .in("student_id", classStudentIds)
+            .eq("term", term)
+            .eq("academic_year", academicYear)
+            .not("percentage", "is", null);
+
+          if (classGrades) {
+            const keysSet = new Set<string>(
+              classGrades.map((g: any) => `${g.subject_id}-${g.exam_type}-${g.test_type || ''}`)
+            );
+            classGradesKeys = Array.from(keysSet);
+          }
+        }
       }
 
       res.json({
@@ -3106,6 +3275,7 @@ router.get(
         academicYear,
         grades: finalGrades || [],
         gradingScale: scales || [],
+        classGradesKeys,
       });
     } catch (error: any) {
       console.error("Report Card Error:", error);
@@ -3138,7 +3308,7 @@ router.get(
       const { data: schoolDetails } = await supabaseAdmin
         .from("schools")
         .select(
-          "name, address, email, phone, website, logo_url, signature_url, seal_url, coat_of_arms_url, school_type, headteacher_name, headteacher_title, compulsory_subjects_primary, compulsory_subjects_secondary",
+          "name, address, email, phone, website, logo_url, signature_url, seal_url, coat_of_arms_url, school_type, headteacher_name, headteacher_title, compulsory_subjects_primary, compulsory_subjects_secondary, test_types, test_types_enabled",
         )
         .eq("id", schoolId)
         .single();
@@ -3175,16 +3345,30 @@ router.get(
         .map((cs: any) => cs.subjects)
         .filter(Boolean);
 
-      // 3. Fetch all grades for these students
+      // 3. Fetch all grades for these students for this term & year (without database exam_type filter)
       const { data: allGrades, error: gradesError } = await supabaseAdmin
         .from("student_grades")
         .select("*, subjects(id, name, code, department)")
         .in("student_id", studentIds)
         .eq("term", term)
-        .eq("exam_type", examType)
         .eq("academic_year", academicYear);
 
       if (gradesError) throw gradesError;
+
+      const classGradesKeysSet = new Set<string>(
+        (allGrades || [])
+          .filter(g => g.percentage !== null && g.percentage !== undefined && g.percentage !== '')
+          .map((g: any) => `${g.subject_id}-${g.exam_type}-${g.test_type || ''}`)
+      );
+      const classGradesKeys = Array.from(classGradesKeysSet);
+
+      // Filter in-memory to keep grades that belong to this examType or are test_types
+      const filteredGrades = (allGrades || []).filter((g: any) => {
+        if (!examType) return true;
+        if (g.exam_type === examType) return true;
+        if (['Test 1', 'Test 2', 'Test 3'].includes(g.exam_type)) return true;
+        return false;
+      });
 
       // 3b. Calculate rankings and class average
       const rankingsData = await getClassRankings(classId, term, examType, academicYear);
@@ -3193,42 +3377,65 @@ router.get(
       const reportCards = enrollments.map((enrollment) => {
         const studentId = enrollment.student_id;
         // Get recorded grades for this student
-        const recordedGrades =
-          allGrades?.filter((g) => g.student_id === studentId) || [];
+        const studentRawGrades =
+          filteredGrades?.filter((g) => g.student_id === studentId) || [];
 
         // Deduplicate grades (keeping newest)
         const gradesMap = new Map();
-        const sortedGrades = [...recordedGrades].sort((a, b) => {
+        const sortedGrades = [...studentRawGrades].sort((a, b) => {
           const timeA = new Date(a.calculated_at || a.created_at).getTime();
           const timeB = new Date(b.calculated_at || b.created_at).getTime();
           return timeB - timeA;
         });
 
         for (const grade of sortedGrades) {
-          const subjectCode = grade.subjects?.code || grade.subject_id;
-          if (!gradesMap.has(subjectCode)) {
-            gradesMap.set(subjectCode, grade);
+          const subId = grade.subject_id || grade.subjects?.id || grade.subjects?.code;
+          if (!subId) continue;
+          // Key by subject + exam_type + test_type
+          const key = `${subId}-${grade.exam_type}-${grade.test_type || ''}`;
+          if (!gradesMap.has(key)) {
+            gradesMap.set(key, grade);
           }
         }
 
-        // Merge with Class Subjects to include "ABSENT" entries
-        const finalGrades = allClassSubjects.map((subject: any) => {
-          const existingGrade = gradesMap.get(subject.code || subject.id);
-
-          if (existingGrade) {
-            return existingGrade;
+        // Group deduplicated grades by subject_id
+        const gradesBySubject = new Map<string, any[]>();
+        for (const grade of gradesMap.values()) {
+          const subId = grade.subject_id;
+          if (!gradesBySubject.has(subId)) {
+            gradesBySubject.set(subId, []);
           }
+          gradesBySubject.get(subId)!.push(grade);
+        }
 
-          // Return an "ABSENT" grade object if no grade exists
-          return {
-            student_id: studentId,
-            subject_id: subject.id,
-            subjects: subject,
-            grade: "ABSENT",
-            percentage: null,
-            status: "Published", // Assuming generated reports treat absent as published state for printing
-          };
+        // Merge with Class Subjects to include "ABSENT" entries
+        const finalGrades: any[] = [];
+        allClassSubjects.forEach((subject: any) => {
+          const subjectGrades = gradesBySubject.get(subject.id) || [];
+          if (subjectGrades.length > 0) {
+            finalGrades.push(...subjectGrades);
+          } else {
+            // Return an "ABSENT" grade object if no grade exists
+            finalGrades.push({
+              student_id: studentId,
+              subject_id: subject.id,
+              subjects: subject,
+              grade: "ABSENT",
+              percentage: null,
+              exam_type: examType || "End of Term",
+              test_type: '',
+              status: "Published", // Assuming generated reports treat absent as published state for printing
+            });
+          }
         });
+
+        // Add any grades that might not be in class_subjects
+        const processedSubjectIds = new Set(allClassSubjects.map((s) => s.id));
+        for (const grade of gradesMap.values()) {
+          if (grade.subject_id && !processedSubjectIds.has(grade.subject_id)) {
+            finalGrades.push(grade);
+          }
+        }
 
         return {
           school: schoolDetails,
@@ -3247,6 +3454,7 @@ router.get(
           academicYear,
           grades: finalGrades,
           gradingScale: scales || [],
+          classGradesKeys,
         };
       });
 
@@ -5323,12 +5531,9 @@ router.get(
           const a = s.assignments as any;
           const student = studentProfileMap.get(s.student_id);
           const studentGrade = (student?.grade || "").toLowerCase();
-          const isG57 = (studentGrade.includes("5") || studentGrade.includes("6") || studentGrade.includes("7")) && 
-                       !studentGrade.includes("1") && 
-                       !studentGrade.includes("form") &&
-                       (studentGrade.includes("grade") || studentGrade.includes("g"));
+          const isG57 = isG57Class(studentGrade);
           
-          const scale = isG57 ? 150 : 100;
+          const scale = 100;
           let percentage = s.max_score > 0 ? (s.score / s.max_score) * scale : 0;
           if (percentage > scale) percentage = scale;
           if (percentage < 0) percentage = 0;
@@ -5385,12 +5590,9 @@ router.get(
         let percentage = Number(g.percentage) || 0;
         
         const studentGrade = (g.profiles?.grade || "").toLowerCase();
-        const isG57 = (studentGrade.includes("5") || studentGrade.includes("6") || studentGrade.includes("7")) && 
-                     !studentGrade.includes("1") && 
-                     !studentGrade.includes("form") &&
-                     (studentGrade.includes("grade") || studentGrade.includes("g"));
+        const isG57 = isG57Class(studentGrade);
         
-        const maxAllowed = isG57 ? 150 : 100;
+        const maxAllowed = 100;
         if (percentage > maxAllowed) percentage = maxAllowed;
         if (percentage < 0) percentage = 0;
 
@@ -5717,12 +5919,9 @@ router.get(
         if (!studentProfileMap.has(g.student_id)) return;
         
         const className = studentClassMap.get(g.student_id) || "Unassigned";
-        const isG57 = (className.toLowerCase().includes("5") || className.toLowerCase().includes("6") || className.toLowerCase().includes("7")) && 
-                     !className.toLowerCase().includes("1") && 
-                     !className.toLowerCase().includes("form") &&
-                     (className.toLowerCase().includes("grade") || className.toLowerCase().includes("g"));
+        const isG57 = isG57Class(className);
         
-        const maxAllowed = isG57 ? 150 : 100;
+        const maxAllowed = 100;
         let percentage = Number(g.percentage) || 0;
         if (percentage > maxAllowed) percentage = maxAllowed;
         if (percentage < 0) percentage = 0;
@@ -5747,8 +5946,8 @@ router.get(
       const supportList = Object.values(studentPerformance)
         .map((s: any) => {
           const avg = s.count > 0 ? s.total / s.count : 0;
-          const maxMark = s.isG57 ? 150 : 100;
-          const pct = (avg / maxMark) * 100;
+          const maxMark = 100;
+          const pct = avg;
           return { ...s, average: Math.round(avg), percentage: pct };
         })
         .filter((s: any) => s.percentage < 50)
@@ -5783,13 +5982,14 @@ router.get(
     const schoolId = profile.school_id;
     const { term, academic_year, examType, gradeLevel, classId, subjectId } = req.query;
     
-    // Fetch school type for grade-aware logic
+    // Fetch school type and test types for grade-aware logic
     const { data: school } = await supabaseAdmin
       .from("schools")
-      .select("school_type")
+      .select("school_type, test_types, test_types_enabled")
       .eq("id", schoolId)
       .single();
     const schoolType = school?.school_type || "Secondary";
+    const activeTestTypes = school?.test_types_enabled ? (school?.test_types || []) : [];
 
     const isAdmin = ADMIN_ROLES.includes(profile.role) || (profile.secondary_role && ADMIN_ROLES.includes(profile.secondary_role));
     const isTeacher = (profile.role === 'teacher' || profile.secondary_role === 'teacher') && !isAdmin;
@@ -5897,7 +6097,7 @@ router.get(
       // 4. Fetch Grades (Fetch all for school and filter in-memory to avoid URI length issues)
       let gradesQuery = supabaseAdmin
         .from("student_grades")
-        .select("student_id, subject_id, percentage, grade")
+        .select("student_id, subject_id, percentage, grade, test_type, exam_type")
         .eq("school_id", schoolId)
         .in("status", ["Submitted", "Published"]);
 
@@ -5908,6 +6108,78 @@ router.get(
       const allGrades = await fetchAll(gradesQuery.order("id"));
       const studentIdsSet = new Set(studentIds);
       const gradesData = allGrades.filter((g: any) => studentIdsSet.has(g.student_id));
+
+      // Group and resolve final percentages/grades (handling missing tests as ABSENT)
+      const groupedGradesMap = new Map<string, any[]>();
+      gradesData.forEach((g: any) => {
+        const key = `${g.student_id}|${g.subject_id}`;
+        if (!groupedGradesMap.has(key)) {
+          groupedGradesMap.set(key, []);
+        }
+        groupedGradesMap.get(key)!.push(g);
+      });
+
+      const processedGradesList: any[] = [];
+      for (const [key, subjectGrades] of groupedGradesMap.entries()) {
+        const [studentId, subjectId] = key.split('|');
+        let percentage: number | null = null;
+        let gradeStr = 'ABSENT';
+
+        if (activeTestTypes.length > 0) {
+          const hasActiveTest1 = activeTestTypes.includes('Test 1');
+          const hasActiveTest2 = activeTestTypes.includes('Test 2');
+          const hasActiveTest3 = activeTestTypes.includes('Test 3');
+
+          const test1Grade = subjectGrades.find(g => (g.test_type === 'Test 1' || g.exam_type === 'Test 1'));
+          const test2Grade = subjectGrades.find(g => (g.test_type === 'Test 2' || g.exam_type === 'Test 2'));
+          const test3Grade = subjectGrades.find(g => (g.test_type === 'Test 3' || g.exam_type === 'Test 3'));
+
+          const missingTest1 = hasActiveTest1 && (!test1Grade || test1Grade.percentage === null || test1Grade.percentage === undefined || test1Grade.percentage === '');
+          const missingTest2 = hasActiveTest2 && (!test2Grade || test2Grade.percentage === null || test2Grade.percentage === undefined || test2Grade.percentage === '');
+          const missingTest3 = hasActiveTest3 && (!test3Grade || test3Grade.percentage === null || test3Grade.percentage === undefined || test3Grade.percentage === '');
+
+          if (missingTest1 || missingTest2 || missingTest3) {
+            percentage = null;
+            gradeStr = 'ABSENT';
+          } else {
+            const scores = [
+              hasActiveTest1 ? test1Grade?.percentage : null,
+              hasActiveTest2 ? test2Grade?.percentage : null,
+              hasActiveTest3 ? test3Grade?.percentage : null
+            ].filter(t => t !== null && t !== undefined && t !== '') as number[];
+
+            if (scores.length > 0) {
+              percentage = scores.reduce((sum, s) => sum + Number(s), 0) / scores.length;
+              gradeStr = 'PASSED';
+            }
+          }
+        } else {
+          // Standard / no test types:
+          let match = subjectGrades.find(g => (!g.test_type || g.test_type === '' || g.test_type === 'none'));
+          if (match) {
+            percentage = match.percentage;
+            gradeStr = match.grade;
+          } else {
+            // Fallback to average of tests
+            const test1Grade = subjectGrades.find(g => (g.test_type === 'Test 1' || g.exam_type === 'Test 1'));
+            const test2Grade = subjectGrades.find(g => (g.test_type === 'Test 2' || g.exam_type === 'Test 2'));
+            const test3Grade = subjectGrades.find(g => (g.test_type === 'Test 3' || g.exam_type === 'Test 3'));
+
+            const scores = [test1Grade?.percentage, test2Grade?.percentage, test3Grade?.percentage].filter(t => t !== null && t !== undefined && t !== '') as number[];
+            if (scores.length > 0) {
+              percentage = scores.reduce((sum, s) => sum + Number(s), 0) / scores.length;
+              gradeStr = 'PASSED';
+            }
+          }
+        }
+
+        processedGradesList.push({
+          student_id: studentId,
+          subject_id: subjectId,
+          percentage: percentage,
+          grade: percentage === null ? 'ABSENT' : gradeStr
+        });
+      }
 
       // 5. Initialize Analysis
       const analysis: Record<string, any> = {};
@@ -5979,7 +6251,7 @@ router.get(
         });
       });
 
-      gradesData?.forEach((g: any) => {
+      processedGradesList.forEach((g: any) => {
         const student = studentMap.get(g.student_id);
         if (!student || !analysis[g.subject_id]) return;
 
@@ -6576,6 +6848,8 @@ router.put(
       academic_year,
       current_term,
       exam_types,
+      test_types,
+      test_types_enabled,
       compulsory_subjects_primary,
       compulsory_subjects_secondary,
       email,
@@ -6610,7 +6884,9 @@ router.put(
           name,
           academic_year,
           current_term,
-          exam_types,
+          exam_types: ["Mid Term", "End of Term"],
+          test_types,
+          test_types_enabled,
           compulsory_subjects_primary: stdPrimary,
           compulsory_subjects_secondary: stdSecondary,
           email,
@@ -8331,11 +8607,7 @@ router.get(
       }).filter((a: any) => {
         // Dynamic threshold check
         const className = (a.className || "").toLowerCase();
-        const isG57Grade = (className.includes("5") || className.includes("6") || className.includes("7")) && 
-                           !className.includes("1") && 
-                           !className.includes("form") &&
-                           (className.includes("grade") || className.includes("g"));
-        
+        const isG57Grade = isG57Class(className);
         const threshold = isG57Grade ? 150 : 100;
         return a.percentage > threshold;
       });
