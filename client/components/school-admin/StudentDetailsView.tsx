@@ -127,6 +127,7 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
   const [profileForm, setProfileForm] = useState<any>({});
   const [enrollForm, setEnrollForm] = useState({ classId: '', academicYear: '' });
   const [gradeForm, setGradeForm] = useState({ subjectId: '', term: '', academicYear: '', grade: '', percentage: '', comments: '' });
+  const lastRoundingToastTime = React.useRef<number>(0);
   const [attendanceForm, setAttendanceForm] = useState({ date: new Date().toISOString().split('T')[0], status: 'present', remarks: '', term: '', academicYear: '' });
   const [isFinanceOpen, setIsFinanceOpen] = useState(false);
   const [isFormSaving, setIsFormSaving] = useState(false);
@@ -277,7 +278,7 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify({ ...gradeForm, percentage: gradeForm.percentage ? parseInt(gradeForm.percentage) : 0 })
+        body: JSON.stringify({ ...gradeForm, percentage: gradeForm.percentage ? Math.round(parseFloat(gradeForm.percentage)) : 0 })
       });
 
       if (!res.ok) throw new Error('Failed to add grade');
@@ -930,7 +931,31 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
               </div>
               <div className="space-y-2">
                 <Label>Percentage</Label>
-                <Input type="number" value={gradeForm.percentage} onChange={e => setGradeForm({...gradeForm, percentage: e.target.value})} required />
+                <Input 
+                  type="number" 
+                  value={gradeForm.percentage} 
+                  onChange={e => {
+                    const val = e.target.value;
+                    const floatVal = parseFloat(val);
+                    if (!isNaN(floatVal) && floatVal % 1 !== 0) {
+                      const now = Date.now();
+                      if (now - lastRoundingToastTime.current > 4000) {
+                        toast({
+                          title: "Mark Rounded",
+                          description: "Decimal scores are automatically rounded to the nearest integer.",
+                        });
+                        lastRoundingToastTime.current = now;
+                      }
+                      setGradeForm({
+                        ...gradeForm,
+                        percentage: Math.round(floatVal).toString()
+                      });
+                    } else {
+                      setGradeForm({ ...gradeForm, percentage: val });
+                    }
+                  }} 
+                  required 
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">

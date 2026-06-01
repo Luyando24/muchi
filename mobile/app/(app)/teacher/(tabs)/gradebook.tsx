@@ -208,11 +208,22 @@ export default function GradebookScreen() {
   };
 
   const handleScoreChange = (studentId: string, text: string) => {
-    // Validate score to be 0-100 or empty
-    const sanitized = text.replace(/[^0-9]/g, '');
+    // Allow digits and a single decimal point
+    let sanitized = text.replace(/[^0-9.]/g, '');
+    const parts = sanitized.split('.');
+    if (parts.length > 2) {
+      sanitized = parts[0] + '.' + parts.slice(1).join('');
+    }
+
     if (sanitized !== '') {
-      const num = parseInt(sanitized);
-      if (num < 0 || num > 100) return;
+      const floatVal = parseFloat(sanitized);
+      if (!isNaN(floatVal)) {
+        let pct = Math.round(floatVal);
+        if (pct < 0 || pct > 100) return;
+        if (sanitized.includes('.') && floatVal % 1 !== 0) {
+          sanitized = pct.toString();
+        }
+      }
     }
 
     setRoster(prev => prev.map(s => s.studentId === studentId ? { ...s, percentage: sanitized } : s));
@@ -519,6 +530,11 @@ export default function GradebookScreen() {
                     <View className="flex-row justify-between items-center px-1 mb-1">
                       <Text className="text-xs font-extrabold text-slate-500">{roster.length} Students Listed</Text>
                       <Text className="text-[10px] font-black text-slate-400 uppercase">Year: {academicYear}</Text>
+                    </View>
+                    <View className="px-1 mb-2">
+                      <Text className="text-[9px] text-slate-400 font-bold italic">
+                        Note: Decimal marks will be automatically rounded to the nearest integer.
+                      </Text>
                     </View>
 
                     {roster.map((student) => (

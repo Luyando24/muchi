@@ -143,6 +143,7 @@ export default function GradebookView() {
   const [schoolType, setSchoolType] = useState<string>('');
   const [errorStudentId, setErrorStudentId] = useState<string | null>(null);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const lastRoundingToastTime = useRef<number>(0);
 
   const defaultState = location.state as {
     defaultClassId?: string;
@@ -510,6 +511,20 @@ export default function GradebookView() {
   };
 
   const handleGradeChange = (studentId: string, field: keyof GradeEntry, value: any) => {
+    if (field === 'percentage' && value !== '') {
+      const floatVal = parseFloat(value);
+      if (!isNaN(floatVal) && floatVal % 1 !== 0) {
+        const now = Date.now();
+        if (now - lastRoundingToastTime.current > 4000) {
+          toast({
+            title: "Mark Rounded",
+            description: "Decimal scores are automatically rounded to the nearest integer.",
+          });
+          lastRoundingToastTime.current = now;
+        }
+      }
+    }
+
     setGrades(prev => {
       const entry = { ...prev[studentId] };
 
