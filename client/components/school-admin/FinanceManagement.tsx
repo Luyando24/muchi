@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/ui/submit-button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -59,6 +60,7 @@ export default function FinanceManagement() {
   const [currentTransaction, setCurrentTransaction] = useState<FinanceRecord | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isFormSubmitting, setIsFormSubmitting] = useState(false);
   const [selectedTerm, setSelectedTerm] = useState<string>("");
   const [selectedYear, setSelectedYear] = useState<string>("");
   const [schoolSettings, setSchoolSettings] = useState<any>(null);
@@ -193,6 +195,7 @@ export default function FinanceManagement() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsFormSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -237,6 +240,8 @@ export default function FinanceManagement() {
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setIsFormSubmitting(false);
     }
   };
 
@@ -473,7 +478,7 @@ export default function FinanceManagement() {
 
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
-                  <Button type="submit">Save Transaction</Button>
+                  <SubmitButton loading={isFormSubmitting} loadingText="Saving...">Save Transaction</SubmitButton>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -605,7 +610,7 @@ export default function FinanceManagement() {
 
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
-                  <Button type="submit">Update Transaction</Button>
+                  <SubmitButton loading={isFormSubmitting} loadingText="Updating...">Update Transaction</SubmitButton>
                 </DialogFooter>
               </form>
             </DialogContent>

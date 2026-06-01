@@ -5,6 +5,13 @@ import { requireActiveLicense } from "../middleware/license.js";
 import { ensureSchoolSettings } from "../lib/school-settings.js";
 import { findBestClassMatch, normalizeClassName } from "../lib/class-matching.js";
 import { standardizeSubjectName, standardizeClassName, standardizeDepartmentName } from "../../shared/name-standardization.js";
+import {
+  isG57Class,
+  isG14Class,
+  resolveClassSection,
+  resolveGradingScale,
+  resolveGradingScaleForStudent,
+} from "../../shared/gradingScale.js";
 
 // Helper function to bypass Supabase's max_rows limit by paginating
 async function fetchAll(queryBuilder: any, limit = 1000) {
@@ -178,96 +185,40 @@ async function getClassRankings(classId: string, term: string, examType: string,
   };
 }
 
-function isG57Class(grade: string): boolean {
-  const raw = (grade || "").toLowerCase().trim();
-  if (raw.includes("form")) return false;
-  const match = raw.match(/(\d{1,2})/);
-  if (match) {
-    const level = parseInt(match[1], 10);
-    return level >= 5 && level <= 7;
-  }
-  return false;
+function getGradingScaleForGrade(
+  percentage: number,
+  grade: string,
+  schoolType: string,
+  allScales: any[],
+) {
+  return resolveGradingScaleForStudent(allScales, grade, schoolType, {
+    storedPercentage: Math.round(percentage),
+  });
 }
 
-function isG14Class(grade: string): boolean {
-  const raw = (grade || "").toLowerCase().trim();
-  if (raw.includes("form")) return false;
-  const match = raw.match(/(\d{1,2})/);
-  if (match) {
-    const level = parseInt(match[1], 10);
-    return level >= 1 && level <= 4;
+/** Grading scales are always scoped to the authenticated user's school. */
+function resolveProfileSchoolId(
+  profile: { school_id?: string | null },
+  res: Response,
+): string | null {
+  if (!profile?.school_id) {
+    res.status(403).json({
+      message: "Forbidden: Your account is not linked to a school.",
+    });
+    return null;
   }
-  return false;
+  return profile.school_id;
 }
 
-// Helper to select the correct grading scale based on grade level and school type
-// Helper to select the correct grading scale based on grade level and school type
-function getGradingScaleForGrade(percentage: number, grade: string, schoolType: string, allScales: any[]) {
-  const gradeStr = (grade || "").toLowerCase();
-  const type = (schoolType || "").toLowerCase();
+async function fetchGradingScalesForSchool(schoolId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("grading_scales")
+    .select("*")
+    .eq("school_id", schoolId)
+    .order("min_percentage", { ascending: false });
 
-  // Specific School Types
-  const isLowerPrimarySchool = type === "lower primary";
-  const isUpperPrimarySchool = type === "upper primary";
-  const isCombinedPrimarySchool = type === "combined primary" || type === "primary school";
-
-  // Grade-based detection for Combined schools
-  const isG57Grade = isG57Class(gradeStr);
-  const isG14Grade = isG14Class(gradeStr);
-
-  if (isUpperPrimarySchool || (isCombinedPrimarySchool && isG57Grade)) {
-    // Try to filter by section first
-    let g57Scale = allScales.filter(s => s.section === 'primary-senior');
-    
-    // Fallback to name-based filtering if no scales have the section set
-    if (g57Scale.length === 0) {
-      g57Scale = allScales.filter(s => ['A+', 'A', 'B+', 'B', 'C+', 'C', 'F'].includes(s.grade.trim().toUpperCase()));
-    }
-
-    const matchedScale = g57Scale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage);
-    if (matchedScale) return matchedScale;
-    
-    // Fallback to default G5-7 scale
-    if (percentage >= 86) return { grade: "A+", description: "Distinction" };
-    if (percentage >= 76) return { grade: "A", description: "Distinction" };
-    if (percentage >= 66) return { grade: "B+", description: "Merit" };
-    if (percentage >= 56) return { grade: "B", description: "Credit" };
-    if (percentage >= 46) return { grade: "C+", description: "Definite Pass" };
-    if (percentage >= 40) return { grade: "C", description: "Pass" };
-    return { grade: "F", description: "Fail" };
-  }
-
-  if (isLowerPrimarySchool || (isCombinedPrimarySchool && isG14Grade)) {
-    // Try to filter by section first
-    let g14Scale = allScales.filter(s => s.section === 'primary-junior');
-    
-    // Fallback to name-based filtering if no scales have the section set
-    if (g14Scale.length === 0) {
-      g14Scale = allScales.filter(s => ['A RED', 'B ORANGE', 'C YELLOW', 'D BLUE'].some(prefix => s.grade.trim().toUpperCase().includes(prefix)));
-    }
-
-    const matchedScale = g14Scale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage);
-    if (matchedScale) return matchedScale;
-
-    // Fallback to default G1-4 scale
-    if (percentage >= 75) return { grade: "A Red", description: "Excellent" };
-    if (percentage >= 60) return { grade: "B Orange", description: "Very Good" };
-    if (percentage >= 50) return { grade: "C Yellow", description: "Good" };
-    return { grade: "D Blue", description: "Average Below" };
-  }
-
-  // Default Secondary fallback (includes Form classes)
-  let secondaryScale = allScales.filter(s => s.section === 'secondary');
-  
-  if (secondaryScale.length === 0) {
-    secondaryScale = allScales.filter(s => ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'D'].includes(s.grade.trim().toUpperCase()));
-  }
-
-  const matchedSecondary = secondaryScale.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage);
-  if (matchedSecondary) return matchedSecondary;
-
-  // Final fallback to the first scale that matches the percentage
-  return allScales.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage) || null;
+  if (error) throw error;
+  return data || [];
 }
 
 const router = Router();
@@ -2475,28 +2426,44 @@ router.post(
   requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
-    const schoolId = profile.school_id;
-    const { grades } = req.body; // Array of { studentId, subjectId, term, examType, testType, academicYear, percentage, comments }
+    const schoolId = resolveProfileSchoolId(profile, res);
+    if (!schoolId) return;
+    const { grades, className, schoolType: bodySchoolType } = req.body;
 
     if (!grades || !Array.isArray(grades)) {
       return res.status(400).json({ message: "Invalid grades data" });
     }
 
     try {
-      // Optimize: Fetch scales once
-      const { data: scales } = await supabaseAdmin
-        .from("grading_scales")
-        .select("*")
-        .eq("school_id", schoolId);
+      const scales = await fetchGradingScalesForSchool(schoolId);
+
+      let schoolType = bodySchoolType || "";
+      if (!schoolType) {
+        const { data: schoolRow } = await supabaseAdmin
+          .from("schools")
+          .select("school_type")
+          .eq("id", schoolId)
+          .single();
+        schoolType = schoolRow?.school_type || "";
+      }
+
+      const classSection = resolveClassSection(className || "", schoolType);
 
       const processedGrades = grades.map((g) => {
-        const isAbsent = g.percentage === null || g.percentage === undefined || g.percentage === '';
-        
-        const scale = !isAbsent ? scales?.find(
-          (s) =>
-            g.percentage >= s.min_percentage &&
-            g.percentage <= s.max_percentage,
-        ) : null;
+        const isAbsent =
+          g.percentage === null ||
+          g.percentage === undefined ||
+          g.percentage === "";
+
+        const storedPercentage = isAbsent
+          ? 0
+          : Math.round(Number(g.percentage));
+
+        const scale = !isAbsent
+          ? resolveGradingScale(scales || [], classSection, {
+              storedPercentage,
+            })
+          : null;
 
         return {
           school_id: schoolId,
@@ -2506,9 +2473,9 @@ router.post(
           exam_type: g.examType || "End of Term",
           test_type: g.testType || "",
           academic_year: g.academicYear,
-          grade: isAbsent ? "ABSENT" : (scale ? scale.grade : "N/A"),
-          percentage: isAbsent ? 0 : g.percentage,
-          comments: g.comments || (isAbsent ? "Absent" : ""),
+          grade: isAbsent ? "ABSENT" : scale.grade,
+          percentage: storedPercentage,
+          comments: g.comments || (isAbsent ? "Absent" : scale.description || ""),
           status: "Draft",
         };
       });
@@ -7134,16 +7101,11 @@ router.get(
   requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
-    const schoolId = profile.school_id;
+    const schoolId = resolveProfileSchoolId(profile, res);
+    if (!schoolId) return;
 
     try {
-      const { data, error } = await supabaseAdmin
-        .from("grading_scales")
-        .select("*")
-        .eq("school_id", schoolId)
-        .order("min_percentage", { ascending: false });
-
-      if (error) throw error;
+      const data = await fetchGradingScalesForSchool(schoolId);
       res.json(data);
     } catch (error: any) {
       console.error("Get Grading Scales Error:", error);
@@ -7158,24 +7120,42 @@ router.post(
   requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
-    const schoolId = profile.school_id;
+    const schoolId = resolveProfileSchoolId(profile, res);
+    if (!schoolId) return;
     const { grade, min_percentage, max_percentage, description, section } = req.body;
 
     try {
+      const minPct = Math.round(Number(min_percentage));
+      const maxPct = Math.round(Number(max_percentage));
+      if (!grade?.trim()) {
+        return res.status(400).json({ message: "Grade label is required." });
+      }
+      if (Number.isNaN(minPct) || Number.isNaN(maxPct)) {
+        return res.status(400).json({ message: "Min and max marks must be valid numbers." });
+      }
+
       const { data, error } = await supabaseAdmin
         .from("grading_scales")
         .insert({
           school_id: schoolId,
-          grade,
-          min_percentage,
-          max_percentage,
-          description,
-          section: section || 'secondary',
+          grade: grade.trim(),
+          min_percentage: minPct,
+          max_percentage: maxPct,
+          description: description || null,
+          section: section || "secondary",
         })
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === "23505") {
+          return res.status(409).json({
+            message:
+              "A grading scale with this grade already exists for this section. Edit the existing row or choose a different grade label.",
+          });
+        }
+        throw error;
+      }
       res.status(201).json(data);
     } catch (error: any) {
       console.error("Create Grading Scale Error:", error);
@@ -7190,19 +7170,42 @@ router.put(
   requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
-    const schoolId = profile.school_id;
+    const schoolId = resolveProfileSchoolId(profile, res);
+    if (!schoolId) return;
     const { id } = req.params;
     const { grade, min_percentage, max_percentage, description, section } = req.body;
 
     try {
+      const minPct = Math.round(Number(min_percentage));
+      const maxPct = Math.round(Number(max_percentage));
+      if (!grade?.trim()) {
+        return res.status(400).json({ message: "Grade label is required." });
+      }
+      if (Number.isNaN(minPct) || Number.isNaN(maxPct)) {
+        return res.status(400).json({ message: "Min and max marks must be valid numbers." });
+      }
+
+      const { data: existing } = await supabaseAdmin
+        .from("grading_scales")
+        .select("id")
+        .eq("id", id)
+        .eq("school_id", schoolId)
+        .maybeSingle();
+
+      if (!existing) {
+        return res.status(404).json({
+          message: "Grading scale not found for your school.",
+        });
+      }
+
       const { data, error } = await supabaseAdmin
         .from("grading_scales")
         .update({
-          grade,
-          min_percentage,
-          max_percentage,
-          description,
-          section,
+          grade: grade.trim(),
+          min_percentage: minPct,
+          max_percentage: maxPct,
+          description: description || null,
+          section: section || "secondary",
           updated_at: new Date(),
         })
         .eq("id", id)
@@ -7210,7 +7213,15 @@ router.put(
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === "23505") {
+          return res.status(409).json({
+            message:
+              "A grading scale with this grade already exists for this section. Edit the existing row or choose a different grade label.",
+          });
+        }
+        throw error;
+      }
       res.json(data);
     } catch (error: any) {
       console.error("Update Grading Scale Error:", error);
@@ -7225,17 +7236,24 @@ router.delete(
   requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
-    const schoolId = profile.school_id;
+    const schoolId = resolveProfileSchoolId(profile, res);
+    if (!schoolId) return;
     const { id } = req.params;
 
     try {
-      const { error } = await supabaseAdmin
+      const { data: deleted, error } = await supabaseAdmin
         .from("grading_scales")
         .delete()
         .eq("id", id)
-        .eq("school_id", schoolId);
+        .eq("school_id", schoolId)
+        .select("id");
 
       if (error) throw error;
+      if (!deleted?.length) {
+        return res.status(404).json({
+          message: "Grading scale not found for your school.",
+        });
+      }
       res.json({ message: "Grading scale deleted successfully" });
     } catch (error: any) {
       console.error("Delete Grading Scale Error:", error);
@@ -7839,16 +7857,36 @@ router.post(
             });
         }
 
+        const { data: schoolRow } = await supabaseAdmin
+          .from("schools")
+          .select("school_type")
+          .eq("id", schoolId)
+          .single();
+        const schoolTypeForCalc = schoolRow?.school_type || "";
+
+        let classNameForCalc = "";
+        if (classId && classId !== "all") {
+          const { data: classRow } = await supabaseAdmin
+            .from("classes")
+            .select("name")
+            .eq("id", classId)
+            .single();
+          classNameForCalc = classRow?.name || "";
+        }
+        const classSectionForCalc = resolveClassSection(
+          classNameForCalc,
+          schoolTypeForCalc,
+        );
+
         for (const g of existingGrades) {
           const roundedPercentage = Math.round(g.percentage || 0);
-          const gradeScale = scales.find(
-            (s: any) => roundedPercentage >= s.min_percentage,
-          );
-          const letterGrade = gradeScale ? gradeScale.grade : "F";
+          const gradeScale = resolveGradingScale(scales, classSectionForCalc, {
+            storedPercentage: roundedPercentage,
+          });
 
           gradesToUpsert.push({
             ...g,
-            grade: letterGrade,
+            grade: gradeScale.grade,
             percentage: roundedPercentage,
             calculated_at: new Date().toISOString(),
           });
@@ -7948,6 +7986,25 @@ router.post(
           assignmentsBySubject.get(sId)?.push(a);
         });
 
+        const { data: schoolRowCalc } = await supabaseAdmin
+          .from("schools")
+          .select("school_type")
+          .eq("id", schoolId)
+          .single();
+        let classNameForWeightedCalc = "";
+        if (classId && classId !== "all") {
+          const { data: classRowCalc } = await supabaseAdmin
+            .from("classes")
+            .select("name")
+            .eq("id", classId)
+            .single();
+          classNameForWeightedCalc = classRowCalc?.name || "";
+        }
+        const weightedCalcSection = resolveClassSection(
+          classNameForWeightedCalc,
+          schoolRowCalc?.school_type || "",
+        );
+
         // Iterate over each subject found in assignments
         for (const [
           subjId,
@@ -8002,12 +8059,11 @@ router.post(
               finalPercentage = (totalWeightedScore / totalWeightUsed) * 100;
             }
 
-            // Determine Letter Grade
             const roundedPercentage = Math.round(finalPercentage);
-            const gradeScale = scales.find(
-              (s: any) => roundedPercentage >= s.min_percentage,
-            );
-            const letterGrade = gradeScale ? gradeScale.grade : "F"; // Default to F if no match (or lowest)
+            const gradeScale = resolveGradingScale(scales, weightedCalcSection, {
+              storedPercentage: roundedPercentage,
+            });
+            const letterGrade = gradeScale.grade;
 
             gradesToUpsert.push({
               school_id: schoolId,

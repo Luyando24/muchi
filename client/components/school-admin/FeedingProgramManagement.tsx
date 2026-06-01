@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/ui/submit-button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -52,6 +53,7 @@ export default function FeedingProgramManagement() {
   const [procForm, setProcForm] = useState({ itemName: '', quantity: '', unit: '', estimatedCost: '' });
   const [isMealModalOpen, setIsMealModalOpen] = useState(false);
   const [mealForm, setMealForm] = useState({ mealType: '', beneficiaries: '', itemsUsed: '' });
+  const [isFormSubmitting, setIsFormSubmitting] = useState(false);
 
   // State for data
   const [inventory, setInventory] = useState<any[]>([]);
@@ -97,7 +99,8 @@ export default function FeedingProgramManagement() {
       toast({ title: "Error", description: "Please fill in all fields", variant: "destructive" });
       return;
     }
-    
+
+    setIsFormSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/api/school/feeding-program/procurements', {
@@ -126,6 +129,8 @@ export default function FeedingProgramManagement() {
     } catch (e) {
       console.error(e);
       toast({ title: "Error", description: "An error occurred.", variant: "destructive" });
+    } finally {
+      setIsFormSubmitting(false);
     }
   };
 
@@ -136,6 +141,7 @@ export default function FeedingProgramManagement() {
       return;
     }
 
+    setIsFormSubmitting(true);
     const items_used: any = {};
     mealForm.itemsUsed.split(',').forEach(i => {
       const [k, v] = i.split(':');
@@ -170,6 +176,8 @@ export default function FeedingProgramManagement() {
     } catch (e) {
       console.error(e);
       toast({ title: "Error", description: "An error occurred.", variant: "destructive" });
+    } finally {
+      setIsFormSubmitting(false);
     }
   };
 
@@ -543,7 +551,7 @@ export default function FeedingProgramManagement() {
             </div>
             <DialogFooter className="pt-4">
               <Button type="button" variant="outline" onClick={() => setIsProcurementModalOpen(false)}>Cancel</Button>
-              <Button type="submit">Submit Request</Button>
+              <SubmitButton loading={isFormSubmitting} loadingText="Submitting...">Submit Request</SubmitButton>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -582,7 +590,7 @@ export default function FeedingProgramManagement() {
             </div>
             <DialogFooter className="pt-4">
               <Button type="button" variant="outline" onClick={() => setIsMealModalOpen(false)}>Cancel</Button>
-              <Button type="submit">Save Record</Button>
+              <SubmitButton loading={isFormSubmitting} loadingText="Saving...">Save Record</SubmitButton>
             </DialogFooter>
           </form>
         </DialogContent>

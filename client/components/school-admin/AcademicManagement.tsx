@@ -4,6 +4,7 @@ import { standardizeSubjectName, standardizeClassName, standardizeDepartmentName
 import { Plus, Trash2, Edit, Save, Search, Settings, BookOpen, Calculator, CheckCircle2, AlertTriangle, Loader2, ClipboardList, Send, ArrowRightLeft, Download, Layers, Building, Calendar, Printer, FileSpreadsheet, Lock, ShieldAlert } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/ui/submit-button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -37,6 +38,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { syncFetch } from '@/lib/syncService';
+import { getProfileSchoolId, schoolCacheKey, filterBySchoolId } from '@/lib/schoolScope';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import BulkAcademicImport from './BulkAcademicImport';
@@ -70,6 +72,7 @@ interface Class {
 
 interface GradingScale {
   id: string;
+  school_id: string;
   grade: string;
   min_percentage: number;
   max_percentage: number;
@@ -112,6 +115,7 @@ export default function AcademicManagement() {
   const [classes, setClasses] = useState<Class[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [gradingScales, setGradingScales] = useState<GradingScale[]>([]);
+  const [currentSchoolId, setCurrentSchoolId] = useState<string | null>(null);
   const [gradingWeights, setGradingWeights] = useState<GradingWeight[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [activeGradingTab, setActiveGradingTab] = useState('primary-senior');
@@ -186,27 +190,30 @@ export default function AcademicManagement() {
       if (!session) return;
 
       const headers = { 'Authorization': `Bearer ${session.access_token}` };
+      const schoolId = await getProfileSchoolId();
+      setCurrentSchoolId(schoolId);
 
       const [subjectsData, classesData, teachersData, scalesData, weightsData, settingsData, departmentsData] = await Promise.all([
-        syncFetch('/api/school/subjects', { headers, cacheKey: 'school-subjects-list' }),
-        syncFetch('/api/school/classes?limit=500', { headers, cacheKey: 'school-classes-list-max' }),
-        syncFetch('/api/school/teachers?limit=500', { headers, cacheKey: 'school-teachers-list-max' }),
-        syncFetch('/api/school/grading-scales', { headers, cacheKey: 'school-grading-scales' }),
-        syncFetch('/api/school/grading-weights', { headers, cacheKey: 'school-grading-weights' }),
-        syncFetch('/api/school/settings', { headers, cacheKey: 'school-settings' }),
-        syncFetch('/api/school/departments', { headers, cacheKey: 'school-departments' })
+        syncFetch('/api/school/subjects', { headers, cacheKey: schoolCacheKey('school-subjects-list', schoolId) }),
+        syncFetch('/api/school/classes?limit=500', { headers, cacheKey: schoolCacheKey('school-classes-list-max', schoolId) }),
+        syncFetch('/api/school/teachers?limit=500', { headers, cacheKey: schoolCacheKey('school-teachers-list-max', schoolId) }),
+        syncFetch('/api/school/grading-scales', { headers, cacheKey: schoolCacheKey('school-grading-scales', schoolId) }),
+        syncFetch('/api/school/grading-weights', { headers, cacheKey: schoolCacheKey('school-grading-weights', schoolId) }),
+        syncFetch('/api/school/settings', { headers, cacheKey: schoolCacheKey('school-settings', schoolId) }),
+        syncFetch('/api/school/departments', { headers, cacheKey: schoolCacheKey('school-departments', schoolId) })
       ]);
 
       setSubjects(subjectsData);
       // Handle the PaginatedResponse shape for endpoints that were updated
       setClasses(classesData?.data || classesData);
       setTeachers(teachersData?.data || teachersData);
-      setGradingScales(scalesData);
+      setGradingScales(filterBySchoolId(scalesData, schoolId));
       setGradingWeights(weightsData);
       setDepartments(departmentsData || []);
 
       if (settingsData) {
         setSchoolSettings(settingsData);
+        if (settingsData.id) setCurrentSchoolId(settingsData.id);
         let examTypes = ['Mid Term', 'End of Term'];
         if (settingsData.exam_types && settingsData.exam_types.length > 0) {
           examTypes = settingsData.exam_types;
@@ -322,6 +329,7 @@ export default function AcademicManagement() {
   // Subject Handlers
   const handleSubjectSubmit = async (e: React.FormEvent, isEdit: boolean) => {
     e.preventDefault();
+    setIsActionLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -350,6 +358,8 @@ export default function AcademicManagement() {
       fetchData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsActionLoading(false);
     }
   };
 
@@ -380,6 +390,7 @@ export default function AcademicManagement() {
   // Class Handlers
   const handleClassSubmit = async (e: React.FormEvent, isEdit: boolean) => {
     e.preventDefault();
+    setIsActionLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -408,6 +419,8 @@ export default function AcademicManagement() {
       fetchData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsActionLoading(false);
     }
   };
 
@@ -438,6 +451,7 @@ export default function AcademicManagement() {
   // Department Handlers
   const handleDeptSubmit = async (e: React.FormEvent, isEdit: boolean) => {
     e.preventDefault();
+    setIsActionLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -463,6 +477,8 @@ export default function AcademicManagement() {
       fetchData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsActionLoading(false);
     }
   };
 
@@ -538,6 +554,7 @@ export default function AcademicManagement() {
   // Grading Scale Handlers
   const handleScaleSubmit = async (e: React.FormEvent, isEdit: boolean) => {
     e.preventDefault();
+    setIsActionLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -546,16 +563,34 @@ export default function AcademicManagement() {
       const url = isUpdate ? `/api/school/grading-scales/${scaleForm.id}` : '/api/school/grading-scales';
       const method = isUpdate ? 'PUT' : 'POST';
 
+      const payload = {
+        grade: scaleForm.grade.trim(),
+        min_percentage: Math.round(Number(scaleForm.min_percentage)),
+        max_percentage: Math.round(Number(scaleForm.max_percentage)),
+        description: scaleForm.description,
+        section: scaleForm.section || activeGradingTab || 'secondary',
+      };
+
+      if (!payload.grade) {
+        throw new Error('Grade label is required.');
+      }
+      if (Number.isNaN(payload.min_percentage) || Number.isNaN(payload.max_percentage)) {
+        throw new Error('Min and max values must be valid numbers.');
+      }
+
       const response = await fetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify(scaleForm)
+        body: JSON.stringify(payload)
       });
 
-      if (!response.ok) throw new Error('Failed to save grading scale');
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.message || 'Failed to save grading scale');
+      }
 
       toast({ title: "Success", description: `Grading scale ${isEdit ? 'updated' : 'created'} successfully` });
       setIsAddScaleOpen(false);
@@ -564,6 +599,8 @@ export default function AcademicManagement() {
       fetchData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsActionLoading(false);
     }
   };
 
@@ -594,6 +631,7 @@ export default function AcademicManagement() {
   // Grading Weight Handlers
   const handleWeightSubmit = async (e: React.FormEvent, isEdit: boolean) => {
     e.preventDefault();
+    setIsActionLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -619,6 +657,8 @@ export default function AcademicManagement() {
       fetchData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsActionLoading(false);
     }
   };
 
@@ -669,6 +709,7 @@ export default function AcademicManagement() {
 
   const handleSaveClassSubjects = async () => {
     if (!selectedClassId) return;
+    setIsActionLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -685,6 +726,8 @@ export default function AcademicManagement() {
       setIsManageSubjectsOpen(false);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsActionLoading(false);
     }
   };
 
@@ -1124,7 +1167,7 @@ export default function AcademicManagement() {
                       />
                     </div>
                     <DialogFooter>
-                      <Button type="submit">Create Class</Button>
+                      <SubmitButton loading={isActionLoading} loadingText="Creating...">Create Class</SubmitButton>
                     </DialogFooter>
                   </form>
                 </DialogContent>
@@ -1266,7 +1309,7 @@ export default function AcademicManagement() {
                         />
                       </div>
                       <DialogFooter>
-                        <Button type="submit">Create Department</Button>
+                        <SubmitButton loading={isActionLoading} loadingText="Creating...">Create Department</SubmitButton>
                       </DialogFooter>
                     </form>
                   </DialogContent>
@@ -1355,7 +1398,7 @@ export default function AcademicManagement() {
                   />
                 </div>
                 <DialogFooter>
-                  <Button type="submit">Update Department</Button>
+                  <SubmitButton loading={isActionLoading} loadingText="Updating...">Update Department</SubmitButton>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -1501,7 +1544,7 @@ export default function AcademicManagement() {
                       />
                     </div>
                     <DialogFooter>
-                      <Button type="submit">Create Subject</Button>
+                      <SubmitButton loading={isActionLoading} loadingText="Creating...">Create Subject</SubmitButton>
                     </DialogFooter>
                   </form>
                 </DialogContent>
@@ -1640,7 +1683,10 @@ export default function AcademicManagement() {
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button onClick={handleAllocationSubmit} disabled={!allocationForm.subjectId}>Assign</Button>
+                      <Button onClick={handleAllocationSubmit} disabled={!allocationForm.subjectId || isActionLoading}>
+                        {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {isActionLoading ? 'Assigning...' : 'Assign'}
+                      </Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
@@ -1788,7 +1834,7 @@ export default function AcademicManagement() {
                         </div>
                       </div>
                       <DialogFooter>
-                        <Button type="submit">Save</Button>
+                        <SubmitButton loading={isActionLoading}>Save</SubmitButton>
                       </DialogFooter>
                     </form>
                   </DialogContent>
@@ -1868,7 +1914,11 @@ export default function AcademicManagement() {
                                   {!scale.id && <Badge variant="outline" className="text-[10px] uppercase font-black bg-blue-50 text-blue-600 border-blue-100">Default</Badge>}
                                 </div>
                               </TableCell>
-                              <TableCell>{scale.min_percentage}% - {scale.max_percentage}%</TableCell>
+                              <TableCell>
+                                {group === 'primary-senior' && scale.max_percentage > 100
+                                  ? `${scale.min_percentage} - ${scale.max_percentage} (out of 150 marks)`
+                                  : `${scale.min_percentage}% - ${scale.max_percentage}%`}
+                              </TableCell>
                               <TableCell>{scale.description}</TableCell>
                               <TableCell className="text-right">
                                 {!scale.id ? (
@@ -1888,7 +1938,7 @@ export default function AcademicManagement() {
                                   }}>
                                     <Edit className="h-4 w-4" />
                                   </Button>
-                                  {scale.id && (
+                                  {scale.id && scale.school_id === currentSchoolId && (
                                     <Button variant="ghost" size="sm" className="text-red-500" onClick={() => setConfirmState({ type: 'scale', id: scale.id })}>
                                       <Trash2 className="h-4 w-4" />
                                     </Button>
@@ -1945,7 +1995,7 @@ export default function AcademicManagement() {
                       <Input type="number" required value={weightForm.weight_percentage} onChange={e => setWeightForm({ ...weightForm, weight_percentage: parseInt(e.target.value) })} />
                     </div>
                     <DialogFooter>
-                      <Button type="submit">Save</Button>
+                      <SubmitButton loading={isActionLoading}>Save</SubmitButton>
                     </DialogFooter>
                   </form>
                 </DialogContent>
@@ -2481,8 +2531,26 @@ export default function AcademicManagement() {
                 <Input value={scaleForm.description} onChange={e => setScaleForm({ ...scaleForm, description: e.target.value })} />
               </div>
             </div>
+            <div className="space-y-2">
+              <Label>Section</Label>
+              <Select
+                value={scaleForm.section || activeGradingTab || 'secondary'}
+                onValueChange={v => setScaleForm({ ...scaleForm, section: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="primary-junior">Grade 1 - 4</SelectItem>
+                  <SelectItem value="primary-senior">Grade 5 - 7</SelectItem>
+                  <SelectItem value="secondary">Secondary</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <DialogFooter>
-              <Button type="submit">Update</Button>
+              <SubmitButton loading={isActionLoading} loadingText={scaleForm.id ? 'Updating...' : 'Creating...'}>
+                {scaleForm.id ? 'Update' : 'Create'}
+              </SubmitButton>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -2514,7 +2582,7 @@ export default function AcademicManagement() {
               <Input type="number" required value={weightForm.weight_percentage} onChange={e => setWeightForm({ ...weightForm, weight_percentage: parseInt(e.target.value) })} />
             </div>
             <DialogFooter>
-              <Button type="submit">Update</Button>
+              <SubmitButton loading={isActionLoading} loadingText="Updating...">Update</SubmitButton>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -2556,7 +2624,7 @@ export default function AcademicManagement() {
               />
             </div>
             <DialogFooter>
-              <Button type="submit">Update Class</Button>
+              <SubmitButton loading={isActionLoading} loadingText="Updating...">Update Class</SubmitButton>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -2668,7 +2736,7 @@ export default function AcademicManagement() {
               />
             </div>
             <DialogFooter>
-              <Button type="submit">Update Subject</Button>
+              <SubmitButton loading={isActionLoading} loadingText="Updating...">Update Subject</SubmitButton>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -2723,7 +2791,10 @@ export default function AcademicManagement() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsManageSubjectsOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveClassSubjects}>Save Changes</Button>
+            <Button onClick={handleSaveClassSubjects} disabled={isActionLoading}>
+              {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isActionLoading ? 'Saving...' : 'Save Changes'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

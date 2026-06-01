@@ -13,7 +13,8 @@ import {
   Filter,
   Eye,
   Check,
-  X
+  X,
+  Loader2
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -351,7 +352,8 @@ export default function ApplicationsView() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEnrollDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleEnroll} disabled={submitting}>
-              {submitting ? "Enrolling..." : "Complete Enrollment"}
+              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {submitting ? 'Enrolling...' : 'Complete Enrollment'}
             </Button>
           </DialogFooter>
         </DialogContent>

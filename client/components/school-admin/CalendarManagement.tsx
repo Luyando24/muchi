@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/ui/submit-button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -45,6 +46,7 @@ export default function CalendarManagement() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isFormSubmitting, setIsFormSubmitting] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -134,6 +136,7 @@ export default function CalendarManagement() {
 
   const handleAddEvent = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsFormSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!navigator.onLine) {
@@ -177,6 +180,8 @@ export default function CalendarManagement() {
         description: error.message || "Failed to save event.",
         variant: "destructive",
       });
+    } finally {
+      setIsFormSubmitting(false);
     }
   };
 
@@ -317,7 +322,9 @@ export default function CalendarManagement() {
 
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
-                  <Button type="submit">{editingId ? 'Update Event' : 'Add Event'}</Button>
+                  <SubmitButton loading={isFormSubmitting} loadingText={editingId ? 'Updating...' : 'Adding...'}>
+                    {editingId ? 'Update Event' : 'Add Event'}
+                  </SubmitButton>
                 </DialogFooter>
               </form>
             </DialogContent>

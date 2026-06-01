@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/ui/submit-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -20,6 +21,7 @@ export default function SchoolFeesManagement() {
   const [classes, setClasses] = useState<any[]>([]);
   const [feeType, setFeeType] = useState('tuition');
   const [applicableTo, setApplicableTo] = useState('grade');
+  const [isFormSubmitting, setIsFormSubmitting] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -88,6 +90,7 @@ export default function SchoolFeesManagement() {
 
   const handleCreateStructure = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setIsFormSubmitting(true);
     const formData = new FormData(e.currentTarget);
     const data = Object.fromEntries(formData.entries());
 
@@ -108,6 +111,8 @@ export default function SchoolFeesManagement() {
       fetchData();
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Error', description: err.message });
+    } finally {
+      setIsFormSubmitting(false);
     }
   };
 
@@ -295,7 +300,7 @@ export default function SchoolFeesManagement() {
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button type="submit">Create</Button>
+                      <SubmitButton loading={isFormSubmitting} loadingText="Creating...">Create</SubmitButton>
                     </DialogFooter>
                   </form>
                 </DialogContent>

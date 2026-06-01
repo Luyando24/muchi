@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/ui/submit-button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
@@ -83,6 +84,7 @@ export default function TimetableManagement() {
   // Dialog State
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isFormSubmitting, setIsFormSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     id: '',
     day_of_week: 'Monday',
@@ -173,6 +175,7 @@ export default function TimetableManagement() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsFormSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -205,6 +208,8 @@ export default function TimetableManagement() {
       resetForm();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsFormSubmitting(false);
     }
   };
 
@@ -397,7 +402,7 @@ export default function TimetableManagement() {
                     </div>
 
                     <DialogFooter>
-                      <Button type="submit">Save</Button>
+                      <SubmitButton loading={isFormSubmitting} loadingText="Saving...">Save</SubmitButton>
                     </DialogFooter>
                   </form>
                 </DialogContent>

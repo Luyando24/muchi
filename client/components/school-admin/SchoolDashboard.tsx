@@ -20,6 +20,7 @@ import {
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/ui/submit-button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -443,6 +444,48 @@ export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardP
             >
               Go to Teachers
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isAnnouncementOpen} onOpenChange={setIsAnnouncementOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Post Announcement</DialogTitle>
+            <DialogDescription>
+              Share an update with teachers and students on the school portal.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="announcement-title">Title</Label>
+              <Input
+                id="announcement-title"
+                value={newAnnouncement.title}
+                onChange={(e) => setNewAnnouncement({ ...newAnnouncement, title: e.target.value })}
+                placeholder="Announcement title"
+                disabled={submitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="announcement-content">Message</Label>
+              <Textarea
+                id="announcement-content"
+                value={newAnnouncement.content}
+                onChange={(e) => setNewAnnouncement({ ...newAnnouncement, content: e.target.value })}
+                placeholder="Write your announcement..."
+                rows={4}
+                disabled={submitting}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setIsAnnouncementOpen(false)} disabled={submitting}>
+              Cancel
+            </Button>
+            <SubmitButton type="button" onClick={handleCreateAnnouncement} loading={submitting} loadingText="Posting...">
+              Post Announcement
+            </SubmitButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>

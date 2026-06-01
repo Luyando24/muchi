@@ -17,11 +17,11 @@ import {
   Receipt,
   Mail,
   Phone,
-  Save,
-  Loader2
+  Save
 } from 'lucide-react';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/ui/submit-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import SchoolDashboard from '@/components/school-admin/SchoolDashboard';
@@ -46,6 +46,7 @@ import OnboardingTutorial from '@/components/school-admin/OnboardingTutorial';
 import { cn } from '@/lib/utils';
 import { isOnSubdomain } from '@/lib/subdomain';
 import { markSettingsCompletionPopupEligibleInOneMinute } from '@/lib/settingsCompletionPrompt';
+import { getProfileSchoolId, schoolCacheKey } from '@/lib/schoolScope';
 import SubscriptionReminder from '@/components/common/SubscriptionReminder';
 import {
   Dialog,
@@ -217,12 +218,15 @@ export default function SchoolAdminPortal() {
           setLicenseError(errorData.message || "Your school license has expired or is invalid.");
         }
 
+        const profileSchoolId = profile?.school_id ?? (await getProfileSchoolId());
+
         // 2. Pre-fetch School Settings (Foundation for all other data)
         const settings = await syncFetch('/api/school/settings', { 
           headers, 
-          cacheKey: 'school-settings' 
+          cacheKey: schoolCacheKey('school-settings', profileSchoolId),
         });
         setSchoolSettings(settings);
+        const schoolId = profileSchoolId ?? settings?.id ?? null;
 
         // 3. If settings available, pre-fetch current term finance data
         if (settings) {
@@ -249,7 +253,7 @@ export default function SchoolAdminPortal() {
         syncFetch('/api/school/students', { headers, cacheKey: 'school-students-list' }).catch(() => {});
         syncFetch('/api/school/classes', { headers, cacheKey: 'school-classes-list' }).catch(() => {});
         syncFetch('/api/school/calendar', { headers, cacheKey: 'school-calendar-events' }).catch(() => {});
-        syncFetch('/api/school/grading-scales', { headers, cacheKey: 'school-grading-scales' }).catch(() => {});
+        syncFetch('/api/school/grading-scales', { headers, cacheKey: schoolCacheKey('school-grading-scales', schoolId) }).catch(() => {});
 
       } catch (error) {
         console.error("Portal initialization failed:", error);
@@ -704,14 +708,16 @@ export default function SchoolAdminPortal() {
                   />
                 </div>
               </div>
-              <Button type="submit" className="w-full" disabled={isSavingIct || !schoolSettings}>
-                {isSavingIct ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="mr-2 h-4 w-4" />
-                )}
+              <SubmitButton
+                type="submit"
+                className="w-full"
+                loading={isSavingIct}
+                loadingText="Saving..."
+                disabled={!schoolSettings}
+              >
+                <Save className="mr-2 h-4 w-4" />
                 Save & Continue
-              </Button>
+              </SubmitButton>
             </form>
           </DialogContent>
         </Dialog>

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/ui/submit-button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -122,6 +123,7 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
   
   // Form States
   const [profileForm, setProfileForm] = useState<any>({});
+  const [isFormSaving, setIsFormSaving] = useState(false);
   const [availableSubjects, setAvailableSubjects] = useState<Option[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
 
@@ -216,6 +218,7 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
     e.preventDefault();
     if (!teacher) return;
 
+    setIsFormSaving(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -255,6 +258,8 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
       
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsFormSaving(false);
     }
   };
 
@@ -1144,7 +1149,9 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
 
               <div className="flex justify-end gap-3 pt-6 border-t">
                 <Button type="button" variant="outline" onClick={() => setViewMode('view')}>Cancel</Button>
-                <Button type="submit" size="lg" className="px-8">Save Changes</Button>
+                <SubmitButton loading={isFormSaving} loadingText="Saving..." size="lg" className="px-8">
+                  Save Changes
+                </SubmitButton>
               </div>
             </form>
           </CardContent>

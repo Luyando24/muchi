@@ -18,6 +18,7 @@ import TeacherDetailsView from './TeacherDetailsView';
 import BulkTeacherImport from './BulkTeacherImport';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/ui/submit-button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -93,6 +94,7 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
   const [selectedTeachers, setSelectedTeachers] = useState<string[]>([]);
   const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isFormSubmitting, setIsFormSubmitting] = useState(false);
   const { toast } = useToast();
   const [availableSubjects, setAvailableSubjects] = useState<Option[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
@@ -250,6 +252,7 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsFormSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -295,6 +298,8 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setIsFormSubmitting(false);
     }
   };
 
@@ -560,7 +565,7 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
                 </div>
 
                 <DialogFooter>
-                  <Button type="submit">Register Teacher</Button>
+                  <SubmitButton loading={isFormSubmitting} loadingText="Registering...">Register Teacher</SubmitButton>
                 </DialogFooter>
               </form>
             </DialogContent>

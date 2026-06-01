@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/ui/submit-button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -128,6 +129,7 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
   const [gradeForm, setGradeForm] = useState({ subjectId: '', term: '', academicYear: '', grade: '', percentage: '', comments: '' });
   const [attendanceForm, setAttendanceForm] = useState({ date: new Date().toISOString().split('T')[0], status: 'present', remarks: '', term: '', academicYear: '' });
   const [isFinanceOpen, setIsFinanceOpen] = useState(false);
+  const [isFormSaving, setIsFormSaving] = useState(false);
   const [financeForm, setFinanceForm] = useState({ status: 'Pending' });
 
   useEffect(() => {
@@ -208,6 +210,7 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsFormSaving(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -229,11 +232,14 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
       window.location.reload(); // Simplest way to refresh for now, or re-fetch
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsFormSaving(false);
     }
   };
 
   const handleEnroll = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsFormSaving(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -253,11 +259,14 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
       setIsEnrollOpen(false);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsFormSaving(false);
     }
   };
 
   const handleAddGrade = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsFormSaving(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -277,11 +286,14 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
       setIsGradeOpen(false);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsFormSaving(false);
     }
   };
 
   const handleAddAttendance = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsFormSaving(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -301,11 +313,14 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
       setIsAttendanceOpen(false);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsFormSaving(false);
     }
   };
 
   const handleFinanceUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsFormSaving(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -326,6 +341,8 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
       window.location.reload();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsFormSaving(false);
     }
   };
 
@@ -853,7 +870,7 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
               </div>
             </div>
             <DialogFooter>
-              <Button type="submit">Save Changes</Button>
+              <SubmitButton loading={isFormSaving} loadingText="Saving...">Save Changes</SubmitButton>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -882,7 +899,7 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
               <Input value={enrollForm.academicYear} onChange={e => setEnrollForm({...enrollForm, academicYear: e.target.value})} />
             </div>
             <DialogFooter>
-              <Button type="submit">Update Enrollment</Button>
+              <SubmitButton loading={isFormSaving} loadingText="Saving...">Update Enrollment</SubmitButton>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -938,7 +955,7 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
               <Textarea value={gradeForm.comments} onChange={e => setGradeForm({...gradeForm, comments: e.target.value})} />
             </div>
             <DialogFooter>
-              <Button type="submit">Save Grade</Button>
+              <SubmitButton loading={isFormSaving} loadingText="Saving...">Save Grade</SubmitButton>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -982,7 +999,7 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
               <Textarea value={attendanceForm.remarks} onChange={e => setAttendanceForm({...attendanceForm, remarks: e.target.value})} />
             </div>
             <DialogFooter>
-              <Button type="submit">Record Attendance</Button>
+              <SubmitButton loading={isFormSaving} loadingText="Saving...">Record Attendance</SubmitButton>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -1008,7 +1025,7 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
               </Select>
             </div>
             <DialogFooter>
-              <Button type="submit">Update Status</Button>
+              <SubmitButton loading={isFormSaving} loadingText="Saving...">Update Status</SubmitButton>
             </DialogFooter>
           </form>
         </DialogContent>

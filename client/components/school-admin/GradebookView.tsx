@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Save,
   Send,
@@ -39,11 +39,18 @@ import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { supabase } from '@/lib/supabase';
 import { syncFetch } from '@/lib/syncService';
+import { getProfileSchoolId, schoolCacheKey, filterBySchoolId } from '@/lib/schoolScope';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useLocation } from 'react-router-dom';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import ReportCardPreview from './ReportCardPreview';
+import {
+  resolveGradingScale,
+  rawMarkToStoredPercentage,
+  storedPercentageToRawMark,
+  type GradingScaleEntry,
+} from '@shared/gradingScale';
 
 interface Student {
   id: string;
@@ -71,13 +78,7 @@ interface Subject {
   code: string;
 }
 
-interface GradingScale {
-  grade: string;
-  min_percentage: number;
-  max_percentage: number;
-  description?: string;
-  section?: string; // 'lower_primary' | 'upper_primary' | 'secondary' | etc.
-}
+type GradingScale = GradingScaleEntry;
 
 // ─── Class-Level Detection Utility ────────────────────────────────────────────
 // Returns 'lower_primary' (Grades 1-4), 'upper_primary' (Grades 5-7), or
@@ -127,6 +128,11 @@ function detectClassSection(className: string): 'lower_primary' | 'upper_primary
   return 'secondary';
 }
 
+/** Radix Select forbids SelectItem values of "" — filter bad options at the source. */
+function sanitizeSelectStrings(items: string[]): string[] {
+  return items.filter((item) => typeof item === 'string' && item.trim() !== '');
+}
+
 export default function GradebookView() {
   const { toast } = useToast();
   const location = useLocation();
@@ -156,7 +162,24 @@ export default function GradebookView() {
   const [availableExamTypes, setAvailableExamTypes] = useState<string[]>(['Mid Term', 'End of Term']);
   const [schoolTestTypes, setSchoolTestTypes] = useState<string[]>([]);
   const [testTypesEnabled, setTestTypesEnabled] = useState<boolean>(false);
-  
+
+  const validExamTypes = useMemo(
+    () => sanitizeSelectStrings(availableExamTypes),
+    [availableExamTypes],
+  );
+  const validTestTypes = useMemo(
+    () => sanitizeSelectStrings(schoolTestTypes),
+    [schoolTestTypes],
+  );
+  const validClasses = useMemo(
+    () => classes.filter((c) => c.id?.trim()),
+    [classes],
+  );
+  const validSubjects = useMemo(
+    () => subjects.filter((s) => s.id?.trim()),
+    [subjects],
+  );
+
   // Determine class section using intelligent detection based on school settings + class name
   const currentClassObj = classes.find(c => c.id === selectedClass);
   const type = (schoolType || "").toLowerCase();
@@ -200,22 +223,28 @@ export default function GradebookView() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
         const headers = { 'Authorization': `Bearer ${session.access_token}` };
+        const schoolId = await getProfileSchoolId();
 
         // Fetch school settings first for defaults
         const settings = await syncFetch('/api/school/settings', { 
           headers,
-          cacheKey: 'school-settings'
+          cacheKey: schoolCacheKey('school-settings', schoolId)
         });
         
         if (settings) {
           setSchoolType(settings.school_type || '');
-          setSchoolTestTypes(settings.test_types || []);
+          setSchoolTestTypes(sanitizeSelectStrings(settings.test_types || []));
           setTestTypesEnabled(!!settings.test_types_enabled);
           if (!defaultState.defaultTerm) setSelectedTerm(settings.current_term || 'Term 1');
           if (!defaultState.defaultYear) setSelectedYear(settings.academic_year || new Date().getFullYear().toString());
-          if (settings.exam_types && settings.exam_types.length > 0) {
-            setAvailableExamTypes(settings.exam_types);
-            if (!defaultState.defaultExamType) setSelectedExamType(settings.exam_types.includes('End of Term') ? 'End of Term' : settings.exam_types[0]);
+          const examTypes = sanitizeSelectStrings(settings.exam_types || []);
+          if (examTypes.length > 0) {
+            setAvailableExamTypes(examTypes);
+            if (!defaultState.defaultExamType) {
+              setSelectedExamType(
+                examTypes.includes('End of Term') ? 'End of Term' : examTypes[0],
+              );
+            }
           }
         } else {
           // Fallback
@@ -227,14 +256,14 @@ export default function GradebookView() {
         }
 
         const [classesData, subjectsData, scalesData] = await Promise.all([
-          syncFetch('/api/school/classes', { headers, cacheKey: 'school-classes-list' }),
-          syncFetch('/api/school/subjects', { headers, cacheKey: 'school-subjects-list' }),
-          syncFetch('/api/school/grading-scales', { headers, cacheKey: 'school-grading-scales' })
+          syncFetch('/api/school/classes', { headers, cacheKey: schoolCacheKey('school-classes-list', schoolId) }),
+          syncFetch('/api/school/subjects', { headers, cacheKey: schoolCacheKey('school-subjects-list', schoolId) }),
+          syncFetch('/api/school/grading-scales', { headers, cacheKey: schoolCacheKey('school-grading-scales', schoolId) })
         ]);
 
         if (classesData) setClasses(classesData?.data || classesData);
         if (subjectsData) setSubjects(subjectsData);
-        if (scalesData) setGradingScales(scalesData);
+        if (scalesData) setGradingScales(filterBySchoolId(scalesData, schoolId ?? settings?.id));
 
       } catch (error) {
         console.error('Error loading metadata:', error);
@@ -281,10 +310,12 @@ export default function GradebookView() {
       if (!session) return;
 
       const payload = {
+        className: currentClassObj?.name || '',
+        schoolType: schoolType || '',
         grades: dirtyGrades.map(g => {
           const rawVal = g.percentage === '' ? null : Number(g.percentage);
-          const pctVal = rawVal !== null 
-            ? (classSection === 'upper_primary' ? (rawVal / 150) * 100 : rawVal) 
+          const pctVal = rawVal !== null
+            ? rawMarkToStoredPercentage(rawVal, classSection)
             : null;
           return {
             studentId: g.studentId,
@@ -294,9 +325,9 @@ export default function GradebookView() {
             testType: selectedTestType === 'none' ? '' : selectedTestType,
             academicYear: selectedYear,
             percentage: pctVal,
-            comments: g.comments || (g.percentage === '' ? 'Absent' : '')
+            comments: g.comments || (g.percentage === '' ? 'Absent' : ''),
           };
-        })
+        }),
       };
 
       const result = await syncFetch('/api/school/grades/batch', {
@@ -438,9 +469,7 @@ export default function GradebookView() {
           let displayPercentage: number | '' = '';
           if (g.grade !== 'ABSENT' && g.percentage !== null && g.percentage !== undefined && g.percentage !== '') {
             const pctVal = Number(g.percentage);
-            displayPercentage = classSection === 'upper_primary' 
-              ? Math.round((pctVal / 100) * 150 * 10) / 10 
-              : pctVal;
+            displayPercentage = storedPercentageToRawMark(pctVal, classSection);
           }
           gradesMap[g.student_id] = {
             studentId: g.student_id,
@@ -472,97 +501,11 @@ export default function GradebookView() {
     }
   };
 
-  const getScale = (percentage: number) => {
-    // Use the pre-computed classSection (determined from school_type + class name)
-    // to select the correct grading scale — NOT from the mark entered.
+  const getScale = (rawMark: number) =>
+    resolveGradingScale(gradingScales, classSection, { rawMark });
 
-    // ── Helper: find best match in a subset of scales ──────────────────────
-    const findInScales = (scales: GradingScale[]) =>
-      scales.find(s => percentage >= s.min_percentage && percentage <= s.max_percentage) || null;
-
-    // ── 1. Prefer scales that have an explicit `section` field (admin-defined) ──
-    const scalesWithSection = gradingScales.filter(s => s.section && s.section.trim() !== '');
-    if (scalesWithSection.length > 0) {
-      // Map our canonical section to possible section values schools may use
-      const sectionAliases: Record<string, string[]> = {
-        lower_primary: ['lower_primary', 'lower primary', 'primary_lower', 'g1-4', 'grades1-4', 'junior', 'primary-junior'],
-        upper_primary: ['upper_primary', 'upper primary', 'primary_upper', 'g5-7', 'grades5-7', 'upper', 'primary-senior'],
-        secondary:     ['secondary', 'secondary_school', 'high school', 'g8-12', 'grades8-12', 'standard'],
-      };
-      const aliases = sectionAliases[classSection] || [classSection];
-      const sectionScales = scalesWithSection.filter(s =>
-        aliases.some(alias => s.section!.toLowerCase().replace(/\s+/g, '_') === alias.replace(/\s+/g, '_'))
-      );
-      if (sectionScales.length > 0) {
-        const match = findInScales(sectionScales);
-        if (match) return match;
-      }
-    }
-
-    // ── 2. No section field — fall back to grade-pattern matching per section ──
-    if (classSection === 'upper_primary') {
-      // G5-7 uses letter grades: A+, A, B+, B, C+, C, F
-      const g57Patterns = ['A+', 'A', 'B+', 'B', 'C+', 'C', 'F'];
-      const g57Scales = gradingScales.filter(s =>
-        g57Patterns.includes(s.grade.trim().toUpperCase())
-      );
-      const match = findInScales(g57Scales);
-      if (match) return match;
-      // Built-in fallback
-      if (percentage >= 86) return { grade: 'A+', description: 'Distinction' };
-      if (percentage >= 76) return { grade: 'A',  description: 'Distinction' };
-      if (percentage >= 66) return { grade: 'B+', description: 'Merit' };
-      if (percentage >= 56) return { grade: 'B',  description: 'Credit' };
-      if (percentage >= 46) return { grade: 'C+', description: 'Definite Pass' };
-      if (percentage >= 40) return { grade: 'C',  description: 'Pass' };
-      return { grade: 'F', description: 'Fail' };
-    }
-
-    if (classSection === 'lower_primary') {
-      // G1-4 uses colour/letter bands: A Red, B Orange, C Yellow, D Blue
-      const g14Keywords = ['A RED', 'B ORANGE', 'C YELLOW', 'D BLUE'];
-      const g14Scales = gradingScales.filter(s =>
-        g14Keywords.some(kw => s.grade.trim().toUpperCase().includes(kw))
-      );
-      const match = findInScales(g14Scales);
-      if (match) return match;
-      // Built-in fallback
-      if (percentage >= 75) return { grade: 'A Red',    description: 'Excellent' };
-      if (percentage >= 60) return { grade: 'B Orange',  description: 'Very Good' };
-      if (percentage >= 50) return { grade: 'C Yellow',  description: 'Good' };
-      return { grade: 'D Blue', description: 'Average Below' };
-    }
-
-    // ── Secondary (default) ──
-    // Match numeric or written-out grade names (1-9 / One-Nine)
-    const secPatterns = [
-      'ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE',
-      '1','2','3','4','5','6','7','8','9'
-    ];
-    const secScales = gradingScales.filter(s =>
-      secPatterns.includes(s.grade.trim().toUpperCase())
-    );
-    const secMatch = findInScales(secScales);
-    if (secMatch) return secMatch;
-
-    // Try any remaining custom scales (e.g., schools that use A/B/C for secondary)
-    const anyMatch = findInScales(gradingScales);
-    if (anyMatch) return anyMatch;
-
-    // Built-in ECZ secondary fallback
-    if (percentage >= 75) return { grade: 'One',   description: 'Distinction' };
-    if (percentage >= 70) return { grade: 'Two',   description: 'Distinction' };
-    if (percentage >= 65) return { grade: 'Three', description: 'Merit' };
-    if (percentage >= 60) return { grade: 'Four',  description: 'Merit' };
-    if (percentage >= 55) return { grade: 'Five',  description: 'Credit' };
-    if (percentage >= 50) return { grade: 'Six',   description: 'Credit' };
-    if (percentage >= 45) return { grade: 'Seven', description: 'Satisfactory' };
-    if (percentage >= 40) return { grade: 'Eight', description: 'Satisfactory' };
-    return { grade: 'Nine', description: 'Unsatisfactory' };
-  };
-
-  const calculateGrade = (percentage: number) => {
-    const scale = getScale(percentage);
+  const calculateGrade = (rawMark: number) => {
+    const scale = getScale(rawMark);
     return scale ? scale.grade : '-';
   };
 
@@ -599,8 +542,7 @@ export default function GradebookView() {
           }
           
           entry.percentage = pct;
-          const normalizedPct = classSection === 'upper_primary' ? (pct / 150) * 100 : pct;
-          const scale = getScale(normalizedPct);
+          const scale = getScale(pct);
           entry.grade = scale ? scale.grade : '-';
           entry.comments = scale?.description || '';
         }
@@ -823,7 +765,7 @@ export default function GradebookView() {
           </div>
         </CardHeader>
         <CardContent className="p-3 sm:p-6">
-          <div className={cn("grid grid-cols-2 gap-2 sm:gap-4", schoolTestTypes.length > 0 && testTypesEnabled && (selectedExamType === 'Mid Term' || selectedExamType === 'End of Term') ? "md:grid-cols-3 lg:grid-cols-6" : "md:grid-cols-5")}>
+          <div className={cn("grid grid-cols-2 gap-2 sm:gap-4", validTestTypes.length > 0 && testTypesEnabled && (selectedExamType === 'Mid Term' || selectedExamType === 'End of Term') ? "md:grid-cols-3 lg:grid-cols-6" : "md:grid-cols-5")}>
             <div className="space-y-1">
               <Label className="hidden sm:block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Year</Label>
               <Select value={selectedYear} onValueChange={setSelectedYear}>
@@ -860,13 +802,13 @@ export default function GradebookView() {
                   <SelectValue placeholder="Type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableExamTypes.map(type => (
+                  {validExamTypes.map(type => (
                     <SelectItem key={type} value={type}>{type}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            {schoolTestTypes.length > 0 && testTypesEnabled && (selectedExamType === 'Mid Term' || selectedExamType === 'End of Term') && (
+            {validTestTypes.length > 0 && testTypesEnabled && (selectedExamType === 'Mid Term' || selectedExamType === 'End of Term') && (
               <div className="space-y-1">
                 <Label className="hidden sm:block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Test Type</Label>
                 <Select value={selectedTestType} onValueChange={setSelectedTestType}>
@@ -875,7 +817,7 @@ export default function GradebookView() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Standard</SelectItem>
-                    {schoolTestTypes.map(type => (
+                    {validTestTypes.map(type => (
                       <SelectItem key={type} value={type}>{type}</SelectItem>
                     ))}
                   </SelectContent>
@@ -889,7 +831,7 @@ export default function GradebookView() {
                   <SelectValue placeholder="Class" />
                 </SelectTrigger>
                 <SelectContent>
-                  {classes.map(c => (
+                  {validClasses.map(c => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -902,7 +844,7 @@ export default function GradebookView() {
                   <SelectValue placeholder="Subject" />
                 </SelectTrigger>
                 <SelectContent>
-                  {subjects.map(s => (
+                  {validSubjects.map(s => (
                     <SelectItem key={s.id} value={s.id}>{s.name} ({s.code})</SelectItem>
                   ))}
                 </SelectContent>
@@ -956,7 +898,7 @@ export default function GradebookView() {
                   <SelectValue placeholder="Select destination..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableExamTypes.filter(t => t !== selectedExamType).map(type => (
+                  {validExamTypes.filter(t => t !== selectedExamType).map(type => (
                     <SelectItem key={type} value={type}>{type}</SelectItem>
                   ))}
                 </SelectContent>

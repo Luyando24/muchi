@@ -19,6 +19,7 @@ import StudentDetailsView from './StudentDetailsView';
 import BulkStudentImport from './BulkStudentImport';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/ui/submit-button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -95,6 +96,7 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isFormSubmitting, setIsFormSubmitting] = useState(false);
   const [isRematching, setIsRematching] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [schoolInfo, setSchoolInfo] = useState<any>(null);
@@ -241,6 +243,7 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsFormSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -279,6 +282,8 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setIsFormSubmitting(false);
     }
   };
 
@@ -305,6 +310,7 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
     e.preventDefault();
     if (!currentStudent) return;
 
+    setIsFormSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -340,6 +346,8 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setIsFormSubmitting(false);
     }
   };
 
@@ -697,7 +705,7 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
                   <Input id="guardian" name="guardian" value={formData.guardian} onChange={handleInputChange} required />
                 </div>
                 <DialogFooter>
-                  <Button type="submit">Register Student</Button>
+                  <SubmitButton loading={isFormSubmitting} loadingText="Registering...">Register Student</SubmitButton>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -930,7 +938,7 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
               </div>
             </div>
             <DialogFooter>
-              <Button type="submit">Save Changes</Button>
+              <SubmitButton loading={isFormSubmitting} loadingText="Saving...">Save Changes</SubmitButton>
             </DialogFooter>
           </form>
         </DialogContent>
