@@ -9080,7 +9080,7 @@ router.post(
         .eq("key", "setup_completion_reward_days")
         .maybeSingle();
 
-      const rewardDays = parseInt(settingsData?.value || "5") || 5;
+      const rewardDays = parseInt(settingsData?.value || "30") || 30;
 
       // 4. Check if school has an active license
       const { data: activeLicenses } = await supabaseAdmin

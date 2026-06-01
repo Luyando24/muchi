@@ -34,7 +34,7 @@ const defaultSettings: SystemSettings = {
   whatsappNumber: "260570260374",
   defaultCurrency: "ZMW",
   supportedCurrencies: '["ZMW", "USD", "ZAR"]',
-  setupCompletionRewardDays: 5
+  setupCompletionRewardDays: 30
 };
 
 import ConfigurationManagement from './ConfigurationManagement';

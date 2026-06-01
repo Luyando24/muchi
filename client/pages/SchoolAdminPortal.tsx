@@ -91,7 +91,9 @@ export default function SchoolAdminPortal() {
   const [showSetupReminder, setShowSetupReminder] = useState(false);
   const [setupStats, setSetupStats] = useState({ classes: 0, subjects: 0, teachers: 0, students: 0, assignments: 0 });
   const [setupRewardClaimed, setSetupRewardClaimed] = useState(false);
-  const [setupRewardDays, setSetupRewardDays] = useState(5);
+  const [setupRewardDays, setSetupRewardDays] = useState(30);
+  const [setupReminderMandatory, setSetupReminderMandatory] = useState(false);
+  const [subscriptionReminderMandatory, setSubscriptionReminderMandatory] = useState(false);
   const [schoolNameForReminder, setSchoolNameForReminder] = useState("");
   const [schoolIdForReminder, setSchoolIdForReminder] = useState("");
   const [subscriptionVariant, setSubscriptionVariant] = useState<'renew' | 'onboarding'>('renew');
@@ -162,7 +164,7 @@ export default function SchoolAdminPortal() {
                 .select('value')
                 .eq('key', 'setup_completion_reward_days')
                 .maybeSingle();
-              const rewardDays = parseInt(rewardSetting?.value || '5') || 5;
+              const rewardDays = parseInt(rewardSetting?.value || '30') || 30;
               setSetupRewardDays(rewardDays);
 
               const regDate = new Date(school.created_at);
@@ -225,6 +227,12 @@ export default function SchoolAdminPortal() {
                 students: studentsCount || 0,
                 assignments: allocationsCount
               });
+
+              // Calculate if setup is complete
+              const isSetupComplete = classesCount >= 5 && (subjectsCount || 0) >= 5 && allocationsCount >= 10;
+              // Set mandatory flag if registered > 7 days and setup is incomplete
+              setSetupReminderMandatory(daysSinceReg > 7 && !isSetupComplete);
+              setSubscriptionReminderMandatory(daysSinceReg > 7 && !isSetupComplete);
 
               // C. Determine reminder to show (prioritize license if expired/needs renewal)
               let showingLicenseReminder = false;
@@ -743,6 +751,7 @@ export default function SchoolAdminPortal() {
         rewardDays={setupRewardDays}
         rewardClaimed={setupRewardClaimed}
         onClaimReward={handleClaimReward}
+        isMandatory={subscriptionReminderMandatory}
       />
 
       <SetupReminder
@@ -759,6 +768,7 @@ export default function SchoolAdminPortal() {
         rewardClaimed={setupRewardClaimed}
         onClaimReward={handleClaimReward}
         onRefreshStats={() => setRefreshTrigger(prev => prev + 1)}
+        isMandatory={setupReminderMandatory}
       />
 
       {/* Mobile Bottom Navigation */}

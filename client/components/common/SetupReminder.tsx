@@ -29,6 +29,7 @@ interface SetupReminderProps {
   rewardClaimed: boolean;
   onClaimReward: () => Promise<void>;
   onRefreshStats?: () => void;
+  isMandatory?: boolean;
 }
 
 export default function SetupReminder({
@@ -42,6 +43,7 @@ export default function SetupReminder({
   rewardClaimed,
   onClaimReward,
   onRefreshStats,
+  isMandatory = false,
 }: SetupReminderProps) {
   const [claiming, setClaiming] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
@@ -273,7 +275,7 @@ export default function SetupReminder({
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Dialog open={isOpen} onOpenChange={(open) => { if (!open && !isMandatory) onClose(); }}>
       <DialogContent className="sm:max-w-[600px] p-0 overflow-hidden bg-white border-slate-200 text-slate-900 rounded-2xl shadow-2xl">
         <div className="p-6 sm:p-8 space-y-6 max-h-[90vh] overflow-y-auto">
           
@@ -1042,15 +1044,6 @@ export default function SetupReminder({
               </Button>
             )}
           </div>
-
-          <Button
-            variant="ghost"
-            className="w-full sm:w-auto hover:bg-slate-200 text-slate-600 hover:text-slate-900 font-bold h-11 text-xs uppercase tracking-wider rounded-xl"
-            onClick={onSnooze}
-          >
-            <Clock className="h-4 w-4 mr-2" />
-            Remind me in 1 day
-          </Button>
         </div>
       </DialogContent>
     </Dialog>
