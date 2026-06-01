@@ -350,8 +350,7 @@ export default function SchoolAdminPortal() {
     initializePortal();
   }, [refreshTrigger]);
 
-  const isIctMissing = userRole === 'school_admin' && (
-    !schoolSettings ||
+  const isIctMissing = userRole === 'school_admin' && schoolSettings && (
     !schoolSettings.ict_name?.trim() ||
     !schoolSettings.ict_email?.trim() ||
     !schoolSettings.ict_phone?.trim()
