@@ -230,9 +230,9 @@ export default function SchoolAdminPortal() {
 
               // Calculate if setup is complete
               const isSetupComplete = classesCount >= 5 && (subjectsCount || 0) >= 5 && allocationsCount >= 10;
-              // Set mandatory flag if registered > 7 days and setup is incomplete
-              setSetupReminderMandatory(daysSinceReg > 7 && !isSetupComplete);
-              setSubscriptionReminderMandatory(daysSinceReg > 7 && !isSetupComplete);
+              // Set mandatory flag if registered > 5 days and setup is incomplete
+              setSetupReminderMandatory(daysSinceReg > 5 && !isSetupComplete);
+              setSubscriptionReminderMandatory(daysSinceReg > 5 && !isSetupComplete);
 
               // C. Determine reminder to show (prioritize license if expired/needs renewal)
               let showingLicenseReminder = false;

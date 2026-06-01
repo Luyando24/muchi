@@ -1044,6 +1044,17 @@ export default function SetupReminder({
               </Button>
             )}
           </div>
+
+          {!isMandatory && (
+            <Button
+              variant="ghost"
+              className="w-full sm:w-auto hover:bg-slate-200 text-slate-600 hover:text-slate-900 font-bold h-11 text-xs uppercase tracking-wider rounded-xl"
+              onClick={onSnooze}
+            >
+              <Clock className="h-4 w-4 mr-2" />
+              Remind me in 1 day
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

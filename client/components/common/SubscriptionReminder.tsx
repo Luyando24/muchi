@@ -214,6 +214,16 @@ export default function SubscriptionReminder({
                 {isOnboarding ? 'Contact Support for Setup Help' : 'Contact Support to Renew'}
               </Button>
             )}
+            {!isMandatory && (
+              <Button
+                variant="ghost"
+                className="w-full sm:w-auto hover:bg-slate-100 text-slate-500 hover:text-slate-800 font-medium py-6 text-sm rounded-xl"
+                onClick={onSnooze}
+              >
+                <Clock className="h-4 w-4 mr-2" />
+                Remind me in 3 days
+              </Button>
+            )}
           </div>
         </div>
       </DialogContent>
