@@ -520,7 +520,7 @@ export default function GradebookView() {
           entry.comments = '';
         } else {
           // Dynamic validation based on grade group (maxAllowed defined in scope)
-          let pct = parseFloat(value);
+          let pct = Math.round(parseFloat(value));
           
           if (isNaN(pct)) pct = 0;
           if (pct < 0) pct = 0;
