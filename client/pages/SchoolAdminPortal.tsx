@@ -14,10 +14,16 @@ import {
   Globe,
   Utensils,
   ShieldAlert,
-  Receipt
+  Receipt,
+  Mail,
+  Phone,
+  Save,
+  Loader2
 } from 'lucide-react';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import SchoolDashboard from '@/components/school-admin/SchoolDashboard';
 import StudentManagement from '@/components/school-admin/StudentManagement';
 import TeacherManagement from '@/components/school-admin/TeacherManagement';
@@ -39,6 +45,7 @@ import { useToast } from "@/components/ui/use-toast";
 import OnboardingTutorial from '@/components/school-admin/OnboardingTutorial';
 import { cn } from '@/lib/utils';
 import { isOnSubdomain } from '@/lib/subdomain';
+import { markSettingsCompletionPopupEligibleInOneMinute } from '@/lib/settingsCompletionPrompt';
 import SubscriptionReminder from '@/components/common/SubscriptionReminder';
 import {
   Dialog,
@@ -83,6 +90,9 @@ export default function SchoolAdminPortal() {
   const [schoolIdForReminder, setSchoolIdForReminder] = useState("");
   const [subscriptionVariant, setSubscriptionVariant] = useState<'renew' | 'onboarding'>('renew');
   const [schoolSettings, setSchoolSettings] = useState<any>(null);
+  const [ictForm, setIctForm] = useState({ ict_name: '', ict_email: '', ict_phone: '' });
+  const [isSavingIct, setIsSavingIct] = useState(false);
+  const { toast } = useToast();
 
 
   // Listen for hash changes to support direct linking to tabs
@@ -258,12 +268,73 @@ export default function SchoolAdminPortal() {
     !schoolSettings.ict_phone?.trim()
   );
 
-  // Redirect back to settings if ICT details are missing and user is school_admin
   useEffect(() => {
-    if (isIctMissing && activeTab !== 'settings') {
-      navigate(`${portalBase}/settings`);
+    if (schoolSettings) {
+      setIctForm({
+        ict_name: schoolSettings.ict_name || '',
+        ict_email: schoolSettings.ict_email || '',
+        ict_phone: schoolSettings.ict_phone || '',
+      });
     }
-  }, [isIctMissing, activeTab, navigate, portalBase]);
+  }, [schoolSettings]);
+
+  const handleIctInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setIctForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSaveIct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ictForm.ict_name.trim() || !ictForm.ict_email.trim() || !ictForm.ict_phone.trim()) {
+      toast({
+        title: "Required fields missing",
+        description: "Please enter the full name, email, and phone number for your ICT support contact.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingIct(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch('/api/school/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          ...schoolSettings,
+          ...ictForm,
+          exam_types: ['Mid Term', 'End of Term'],
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to save ICT contact details');
+      }
+
+      const updatedSchool = await response.json();
+      setSchoolSettings(updatedSchool);
+      markSettingsCompletionPopupEligibleInOneMinute();
+      toast({
+        title: "Contact saved",
+        description: "ICT support details saved. You can now use all platform features.",
+      });
+    } catch (error: any) {
+      console.error('Error saving ICT details:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save ICT contact details.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingIct(false);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -371,22 +442,18 @@ export default function SchoolAdminPortal() {
                   <div className="space-y-1">
                     {group.items.map((item) => {
                       const Icon = item.icon;
-                      const isDisabled = isIctMissing && item.id !== 'settings';
                       return (
                         <Button
                           key={item.id}
                           id={`sidebar-${item.id}`}
                           variant={activeTab === item.id ? "default" : "ghost"}
-                          disabled={isDisabled}
                           className={cn(
                             "w-full justify-start h-9 px-4 transition-all duration-200",
                             activeTab === item.id 
                               ? "bg-blue-600 text-white shadow-md hover:bg-blue-700" 
-                              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50",
-                            isDisabled && "opacity-50 cursor-not-allowed hover:bg-transparent dark:hover:bg-transparent text-slate-400"
+                              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50"
                           )}
                           onClick={() => {
-                            if (isDisabled) return;
                             navigate(`${portalBase}/${item.id}`);
                             setIsSidebarOpen(false);
                           }}
@@ -550,20 +617,15 @@ export default function SchoolAdminPortal() {
           ].map((item) => {
             if (!item) return null;
             const Icon = item.icon;
-            const isDisabled = isIctMissing && item.id !== 'settings';
             return (
               <button
                 key={item.id}
-                disabled={isDisabled}
-                onClick={() => {
-                  if (isDisabled) return;
-                  navigate(`${portalBase}/${item.id}`);
-                }}
+                onClick={() => navigate(`${portalBase}/${item.id}`)}
                 className={`flex flex-col items-center justify-center p-2 rounded-lg transition-all duration-200 min-w-[64px] ${
                   activeTab === item.id 
                     ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20" 
                     : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
-                } ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                }`}
               >
                 <Icon className={`h-5 w-5 mb-1 ${activeTab === item.id ? "scale-110" : "scale-100"} transition-transform`} />
                 <span className="text-[10px] font-medium truncate max-w-full">{item.label}</span>
@@ -574,7 +636,11 @@ export default function SchoolAdminPortal() {
       </div>
       {isIctMissing && (
         <Dialog open={isIctMissing}>
-          <DialogContent className="sm:max-w-[500px] border border-blue-100 dark:border-blue-900/50 shadow-2xl bg-white dark:bg-slate-900" onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
+          <DialogContent
+            className="sm:max-w-[500px] border border-blue-100 dark:border-blue-900/50 shadow-2xl bg-white dark:bg-slate-900 [&>button.absolute]:hidden"
+            onInteractOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={(e) => e.preventDefault()}
+          >
             <DialogHeader className="space-y-3">
               <div className="mx-auto w-12 h-12 bg-amber-50 dark:bg-amber-950/30 rounded-full flex items-center justify-center border border-amber-200 dark:border-amber-900 animate-pulse">
                 <ShieldAlert className="h-6 w-6 text-amber-600 dark:text-amber-400" />
@@ -583,17 +649,70 @@ export default function SchoolAdminPortal() {
                 Data / ICT Support Required
               </DialogTitle>
               <DialogDescription className="text-center text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-                To continue using MUCHI, you must configure the contact details for your school's designated Data or ICT Support Personnel. 
+                To continue using MUCHI, you must configure the contact details for your school's designated Data or ICT Support Personnel.
                 <span className="block mt-2 font-semibold text-blue-600 dark:text-blue-400">
                   This contact information is mandatory and will be displayed to teachers so they can request profile updates or support.
                 </span>
               </DialogDescription>
             </DialogHeader>
-            <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-100 dark:border-slate-800 text-center">
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Please complete the <strong>Data / ICT Support Personnel</strong> section under the settings page to unlock all platform features.
-              </p>
-            </div>
+            <form onSubmit={handleSaveIct} className="mt-4 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="modal_ict_name" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Full Names <span className="text-rose-500">*</span>
+                </Label>
+                <Input
+                  id="modal_ict_name"
+                  name="ict_name"
+                  value={ictForm.ict_name}
+                  onChange={handleIctInputChange}
+                  placeholder="e.g. Jane Mulenga"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="modal_ict_email" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Email Address <span className="text-rose-500">*</span>
+                </Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <Input
+                    id="modal_ict_email"
+                    name="ict_email"
+                    type="email"
+                    value={ictForm.ict_email}
+                    onChange={handleIctInputChange}
+                    className="pl-9"
+                    placeholder="ict@school.edu"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="modal_ict_phone" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Phone Number (WhatsApp) <span className="text-rose-500">*</span>
+                </Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <Input
+                    id="modal_ict_phone"
+                    name="ict_phone"
+                    value={ictForm.ict_phone}
+                    onChange={handleIctInputChange}
+                    className="pl-9"
+                    placeholder="+260..."
+                    required
+                  />
+                </div>
+              </div>
+              <Button type="submit" className="w-full" disabled={isSavingIct || !schoolSettings}>
+                {isSavingIct ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 h-4 w-4" />
+                )}
+                Save & Continue
+              </Button>
+            </form>
           </DialogContent>
         </Dialog>
       )}

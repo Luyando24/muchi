@@ -34,6 +34,7 @@ import { School, SchoolCategory, Country } from '@shared/api';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { markSettingsCompletionPopupEligibleInOneMinute } from '@/lib/settingsCompletionPrompt';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AdminManagement from './AdminManagement';
@@ -103,7 +104,7 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
     { key: "signature_url", label: "Headteacher Signature" },
     { key: "ict_name", label: "ICT Support Name" },
     { key: "ict_email", label: "ICT Support Email" },
-    { key: "ict_phone", label: "ICT Support Phone" }
+    { key: "ict_phone", label: "ICT Support Phone (WhatsApp)" }
   ];
 
   const missingFieldsOnClient = mandatoryFields.filter(
@@ -298,6 +299,15 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
       setSchool(updatedSchool);
       if (onSettingsSaved) {
         onSettingsSaved(updatedSchool);
+      }
+      const wasIctIncomplete =
+        !formData.ict_name.trim() || !formData.ict_email.trim() || !formData.ict_phone.trim();
+      const isIctNowComplete =
+        Boolean(updatedSchool.ict_name?.trim()) &&
+        Boolean(updatedSchool.ict_email?.trim()) &&
+        Boolean(updatedSchool.ict_phone?.trim());
+      if (wasIctIncomplete && isIctNowComplete) {
+        markSettingsCompletionPopupEligibleInOneMinute();
       }
       toast({
         title: "Success",
@@ -1030,7 +1040,7 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="ict_phone" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Phone Number <span className="text-rose-500">*</span></Label>
+                      <Label htmlFor="ict_phone" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Phone Number (WhatsApp) <span className="text-rose-500">*</span></Label>
                       <div className="relative">
                         <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                         <Input

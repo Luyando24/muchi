@@ -36,6 +36,12 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { syncFetch } from '@/lib/syncService';
 import { useNavigate } from 'react-router-dom';
 import { isOnSubdomain } from '@/lib/subdomain';
+import {
+  isIctSupportComplete,
+  markSettingsCompletionPopupEligibleInOneMinute,
+  msUntilSettingsCompletionPopupEligible,
+  SETTINGS_COMPLETION_POPUP_ELIGIBLE_KEY,
+} from '@/lib/settingsCompletionPrompt';
 
 import {
   LineChart,
@@ -69,6 +75,7 @@ export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardP
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const [isCompletionWarningOpen, setIsCompletionWarningOpen] = useState(false);
+  const [canShowSettingsCompletionUI, setCanShowSettingsCompletionUI] = useState(false);
   const [isTeacherCompletionWarningOpen, setIsTeacherCompletionWarningOpen] = useState(false);
 
   // Announcement Form State
@@ -116,14 +123,44 @@ export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardP
   }, []);
 
   useEffect(() => {
-    if (data && data.settingsCompletion && !data.settingsCompletion.isComplete) {
-      const dismissed = sessionStorage.getItem('settings_completion_warning_dismissed');
-      if (!dismissed) {
-        setIsCompletionWarningOpen(true);
-      }
-    } else {
+    if (!data?.settingsCompletion || data.settingsCompletion.isComplete) {
+      setCanShowSettingsCompletionUI(false);
+      setIsCompletionWarningOpen(false);
       checkTeacherProfilesCompleteness();
+      return;
     }
+
+    const missingFields = data.settingsCompletion.missingFields;
+    if (!isIctSupportComplete(missingFields)) {
+      setCanShowSettingsCompletionUI(false);
+      setIsCompletionWarningOpen(false);
+      return;
+    }
+
+    const dismissed = sessionStorage.getItem('settings_completion_warning_dismissed');
+    if (dismissed) {
+      setCanShowSettingsCompletionUI(false);
+      checkTeacherProfilesCompleteness();
+      return;
+    }
+
+    if (!localStorage.getItem(SETTINGS_COMPLETION_POPUP_ELIGIBLE_KEY)) {
+      markSettingsCompletionPopupEligibleInOneMinute();
+    }
+
+    const showPrompt = () => {
+      setCanShowSettingsCompletionUI(true);
+      setIsCompletionWarningOpen(true);
+    };
+
+    const remaining = msUntilSettingsCompletionPopupEligible();
+    if (remaining === null || remaining <= 0) {
+      showPrompt();
+      return;
+    }
+
+    const timeoutId = setTimeout(showPrompt, remaining);
+    return () => clearTimeout(timeoutId);
   }, [data]);
 
   const handleCreateAnnouncement = async () => {
@@ -278,7 +315,7 @@ export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardP
 
   return (
     <div className="space-y-6 pb-10">
-      {data.settingsCompletion && !data.settingsCompletion.isComplete && (
+      {canShowSettingsCompletionUI && data.settingsCompletion && !data.settingsCompletion.isComplete && (
         <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-xl p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm">
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold">
@@ -300,7 +337,10 @@ export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardP
         </div>
       )}
 
-      <Dialog open={isCompletionWarningOpen} onOpenChange={setIsCompletionWarningOpen}>
+      <Dialog
+        open={canShowSettingsCompletionUI && isCompletionWarningOpen}
+        onOpenChange={setIsCompletionWarningOpen}
+      >
         <DialogContent className="sm:max-w-[500px] border border-amber-200 dark:border-amber-900 bg-white dark:bg-slate-900">
           <DialogHeader>
             <div className="h-12 w-12 rounded-full bg-amber-100 dark:bg-amber-950/40 flex items-center justify-center mb-4 border border-amber-200 dark:border-amber-900/50">
