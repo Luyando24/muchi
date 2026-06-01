@@ -141,8 +141,9 @@ export default function SetupReminder({
   useEffect(() => {
     if (isOpen) {
       fetchWizardData();
+      if (onRefreshStats) onRefreshStats();
     }
-  }, [isOpen]);
+  }, [isOpen, onRefreshStats]);
 
   const [selectedPopularSubjects, setSelectedPopularSubjects] = useState<string[]>([]);
   const [customSubjectInput, setCustomSubjectInput] = useState("");
@@ -360,7 +361,7 @@ export default function SetupReminder({
 
             {/* STEP 2: Overview */}
             {currentStep === 2 && (
-              <div className="space-y-5">
+              <div className="space-y-5 max-h-[400px] overflow-y-auto pr-2">
                 <div className="text-slate-600 text-sm sm:text-base leading-relaxed font-normal space-y-3">
 
                   
@@ -520,7 +521,7 @@ export default function SetupReminder({
 
             {/* STEP 3: Classes Wizard Form */}
             {currentStep === 3 && (
-              <div className="space-y-4">
+              <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
                 <div className="flex justify-between items-center">
                   <div>
                     <h4 className="text-base font-bold text-slate-950 flex items-center gap-2">
@@ -531,9 +532,9 @@ export default function SetupReminder({
                       Create at least 5 classes (e.g. Form 1A, Grade 8 Blue) to group and manage your student roster.
                     </p>
                   </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => {
                       setBulkImportTab('classes');
                       setShowBulkImport(true);
@@ -572,7 +573,7 @@ export default function SetupReminder({
 
             {/* STEP 4: Subjects Wizard Form */}
             {currentStep === 4 && (
-              <div className="space-y-4">
+              <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
                 <div className="flex justify-between items-center">
                   <div>
                     <h4 className="text-base font-bold text-slate-950 flex items-center gap-2">
@@ -583,9 +584,9 @@ export default function SetupReminder({
                       Add at least 5 subjects to your school curriculum.
                     </p>
                   </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => {
                       setBulkImportTab('subjects');
                       setShowBulkImport(true);
@@ -609,14 +610,14 @@ export default function SetupReminder({
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">💡 Popular Subjects:</span>
-                      <Button 
-                        type="button" 
-                        variant="ghost" 
+                      <Button
+                        type="button"
+                        variant="ghost"
                         size="sm"
                         className="text-[10px] h-6 px-2 text-indigo-600 hover:bg-indigo-50"
                         onClick={() => {
-                          const subs = recommendations.subjects && recommendations.subjects.length > 0 
-                            ? recommendations.subjects 
+                          const subs = recommendations.subjects && recommendations.subjects.length > 0
+                            ? recommendations.subjects
                             : [{name: 'Mathematics'}, {name: 'English Language'}, {name: 'Biology'}, {name: 'Chemistry'}, {name: 'Physics'}, {name: 'Geography'}, {name: 'History'}, {name: 'Computer Studies'}];
                           setSelectedPopularSubjects(subs.map((s: any) => s.name));
                         }}
@@ -641,15 +642,15 @@ export default function SetupReminder({
                             key={sub.name}
                             type="button"
                             onClick={() => {
-                              setSelectedPopularSubjects(prev => 
-                                prev.includes(sub.name) 
+                              setSelectedPopularSubjects(prev =>
+                                prev.includes(sub.name)
                                   ? prev.filter(p => p !== sub.name)
                                   : [...prev, sub.name]
                               );
                             }}
                             className={`text-xs font-semibold transition-colors border px-3 py-1.5 rounded-full flex items-center gap-1.5 ${
-                              isSelected 
-                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm' 
+                              isSelected
+                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
                                 : 'bg-white hover:bg-indigo-50 border-slate-200 text-slate-700'
                             }`}
                           >
@@ -658,7 +659,7 @@ export default function SetupReminder({
                           </button>
                         );
                       })}
-                      
+
                       {/* Add Custom Subject Input */}
                       <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-full px-2 py-1 shadow-sm focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 transition-all">
                         <Input
@@ -701,8 +702,8 @@ export default function SetupReminder({
                       </div>
                     </div>
                     {selectedPopularSubjects.length > 0 && (
-                      <Button 
-                        type="button" 
+                      <Button
+                        type="button"
                         onClick={handleAddBulkSuggestions}
                         className="w-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-bold h-10 mt-2 flex items-center justify-center gap-1.5 border border-indigo-200 shadow-sm"
                         disabled={isSubmittingSubject}

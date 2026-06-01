@@ -192,19 +192,19 @@ export default function SchoolAdminPortal() {
               const classesCount = classesData?.length || 0;
               const classIds = classesData?.map((c: any) => c.id) || [];
 
-              const { count: subjectsCount } = await supabase
+              const { data: subjectsData } = await supabase
                 .from('subjects')
-                .select('id', { count: 'exact', head: true })
+                .select('id')
                 .eq('school_id', schoolId);
+              const subjectsCount = subjectsData?.length || 0;
 
               let allocationsCount = 0;
               if (classIds.length > 0) {
-                const { count: allocations } = await supabase
+                const { data: allocationsData } = await supabase
                   .from('class_subjects')
-                  .select('id', { count: 'exact', head: true })
-                  .in('class_id', classIds)
-                  .not('teacher_id', 'is', null);
-                allocationsCount = allocations || 0;
+                  .select('id')
+                  .in('class_id', classIds);
+                allocationsCount = allocationsData?.length || 0;
               }
 
               const { count: teachersCount } = await supabase
@@ -269,8 +269,8 @@ export default function SchoolAdminPortal() {
                 }
               }
 
-              // Show setup completion reminder if subscription reminder isn't active
-              if (!showingLicenseReminder) {
+              // Show setup completion reminder if subscription reminder isn't active AND no valid license
+              if (!showingLicenseReminder && !hasLicense) {
                 const isSetupIncomplete = classesCount < 5 || (subjectsCount || 0) < 5 || allocationsCount < 10;
                 if (isSetupIncomplete) {
                   const setupDismissedUntil = localStorage.getItem(`school_setup_reminder_dismissed_until_${schoolId}`);
