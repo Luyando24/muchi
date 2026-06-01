@@ -40,6 +40,13 @@ import OnboardingTutorial from '@/components/school-admin/OnboardingTutorial';
 import { cn } from '@/lib/utils';
 import { isOnSubdomain } from '@/lib/subdomain';
 import SubscriptionReminder from '@/components/common/SubscriptionReminder';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 
 // Mock data for School Admin Portal
@@ -75,6 +82,7 @@ export default function SchoolAdminPortal() {
   const [schoolNameForReminder, setSchoolNameForReminder] = useState("");
   const [schoolIdForReminder, setSchoolIdForReminder] = useState("");
   const [subscriptionVariant, setSubscriptionVariant] = useState<'renew' | 'onboarding'>('renew');
+  const [schoolSettings, setSchoolSettings] = useState<any>(null);
 
 
   // Listen for hash changes to support direct linking to tabs
@@ -204,6 +212,7 @@ export default function SchoolAdminPortal() {
           headers, 
           cacheKey: 'school-settings' 
         });
+        setSchoolSettings(settings);
 
         // 3. If settings available, pre-fetch current term finance data
         if (settings) {
@@ -241,6 +250,20 @@ export default function SchoolAdminPortal() {
 
     initializePortal();
   }, []);
+
+  const isIctMissing = userRole === 'school_admin' && (
+    !schoolSettings ||
+    !schoolSettings.ict_name?.trim() ||
+    !schoolSettings.ict_email?.trim() ||
+    !schoolSettings.ict_phone?.trim()
+  );
+
+  // Redirect back to settings if ICT details are missing and user is school_admin
+  useEffect(() => {
+    if (isIctMissing && activeTab !== 'settings') {
+      navigate(`${portalBase}/settings`);
+    }
+  }, [isIctMissing, activeTab, navigate, portalBase]);
 
   const handleLogout = async () => {
     try {
@@ -348,18 +371,22 @@ export default function SchoolAdminPortal() {
                   <div className="space-y-1">
                     {group.items.map((item) => {
                       const Icon = item.icon;
+                      const isDisabled = isIctMissing && item.id !== 'settings';
                       return (
                         <Button
                           key={item.id}
                           id={`sidebar-${item.id}`}
                           variant={activeTab === item.id ? "default" : "ghost"}
+                          disabled={isDisabled}
                           className={cn(
                             "w-full justify-start h-9 px-4 transition-all duration-200",
                             activeTab === item.id 
                               ? "bg-blue-600 text-white shadow-md hover:bg-blue-700" 
-                              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50"
+                              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50",
+                            isDisabled && "opacity-50 cursor-not-allowed hover:bg-transparent dark:hover:bg-transparent text-slate-400"
                           )}
                           onClick={() => {
+                            if (isDisabled) return;
                             navigate(`${portalBase}/${item.id}`);
                             setIsSidebarOpen(false);
                           }}
@@ -482,7 +509,7 @@ export default function SchoolAdminPortal() {
 
             <Route path="settings" element={
               <div className="space-y-6">
-                <SchoolSettings />
+                <SchoolSettings onSettingsSaved={(newSettings) => setSchoolSettings(newSettings)} />
               </div>
             } />
 
@@ -523,15 +550,20 @@ export default function SchoolAdminPortal() {
           ].map((item) => {
             if (!item) return null;
             const Icon = item.icon;
+            const isDisabled = isIctMissing && item.id !== 'settings';
             return (
               <button
                 key={item.id}
-                onClick={() => navigate(`${portalBase}/${item.id}`)}
+                disabled={isDisabled}
+                onClick={() => {
+                  if (isDisabled) return;
+                  navigate(`${portalBase}/${item.id}`);
+                }}
                 className={`flex flex-col items-center justify-center p-2 rounded-lg transition-all duration-200 min-w-[64px] ${
                   activeTab === item.id 
                     ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20" 
                     : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
-                }`}
+                } ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <Icon className={`h-5 w-5 mb-1 ${activeTab === item.id ? "scale-110" : "scale-100"} transition-transform`} />
                 <span className="text-[10px] font-medium truncate max-w-full">{item.label}</span>
@@ -540,6 +572,31 @@ export default function SchoolAdminPortal() {
           })}
         </div>
       </div>
+      {isIctMissing && (
+        <Dialog open={isIctMissing}>
+          <DialogContent className="sm:max-w-[500px] border border-blue-100 dark:border-blue-900/50 shadow-2xl bg-white dark:bg-slate-900" onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
+            <DialogHeader className="space-y-3">
+              <div className="mx-auto w-12 h-12 bg-amber-50 dark:bg-amber-950/30 rounded-full flex items-center justify-center border border-amber-200 dark:border-amber-900 animate-pulse">
+                <ShieldAlert className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+              </div>
+              <DialogTitle className="text-center text-xl font-black text-slate-900 dark:text-white">
+                Data / ICT Support Required
+              </DialogTitle>
+              <DialogDescription className="text-center text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+                To continue using MUCHI, you must configure the contact details for your school's designated Data or ICT Support Personnel. 
+                <span className="block mt-2 font-semibold text-blue-600 dark:text-blue-400">
+                  This contact information is mandatory and will be displayed to teachers so they can request profile updates or support.
+                </span>
+              </DialogDescription>
+            </DialogHeader>
+            <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-100 dark:border-slate-800 text-center">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Please complete the <strong>Data / ICT Support Personnel</strong> section under the settings page to unlock all platform features.
+              </p>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

@@ -40,7 +40,9 @@ import {
   Sparkles,
   ClipboardList,
   FileSpreadsheet,
-  BarChart2
+  BarChart2,
+  Mail,
+  Phone
 } from 'lucide-react';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -211,6 +213,15 @@ export default function TeacherPortal() {
   const [isSelfAssignOpen, setIsSelfAssignOpen] = useState(false);
   const [savingAttendance, setSavingAttendance] = useState(false);
   const [isTeacherWarningOpen, setIsTeacherWarningOpen] = useState(false);
+  const [isIctBannerMinimized, setIsIctBannerMinimized] = useState(() => {
+    return localStorage.getItem('ict_support_banner_minimized') === 'true';
+  });
+
+  const toggleIctBanner = () => {
+    const nextVal = !isIctBannerMinimized;
+    setIsIctBannerMinimized(nextVal);
+    localStorage.setItem('ict_support_banner_minimized', String(nextVal));
+  };
 
   const portalBase = isOnSubdomain() ? '' : '/teacher-portal';
 
@@ -2589,8 +2600,34 @@ export default function TeacherPortal() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 my-4 text-xs font-semibold text-slate-700 dark:text-slate-300 leading-relaxed">
-            Please complete your profile through the school data or ICT personnel.
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 my-4 text-xs font-semibold text-slate-700 dark:text-slate-300 leading-relaxed space-y-3">
+            <div>
+              Please complete your profile. If you need assistance or need to update fields you cannot edit yourself, contact your school data/ICT personnel:
+            </div>
+            {profile?.schools?.ict_name && (
+              <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800 space-y-2 mt-2 font-medium">
+                <div className="font-bold text-slate-900 dark:text-white text-xs">{profile.schools.ict_name}</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-500 dark:text-slate-400 text-[11px]">
+                  {profile.schools.ict_email && (
+                    <div className="flex items-center gap-1.5">
+                      <Mail className="h-3.5 w-3.5 text-blue-500" />
+                      <span className="truncate">{profile.schools.ict_email}</span>
+                    </div>
+                  )}
+                  {profile.schools.ict_phone && (
+                    <div className="flex items-center gap-1.5">
+                      <Phone className="h-3.5 w-3.5 text-blue-500" />
+                      <span>{profile.schools.ict_phone}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {!profile?.schools?.ict_name && (
+              <div className="text-slate-500 dark:text-slate-400 italic">
+                Please contact the school data or ICT personnel.
+              </div>
+            )}
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
@@ -2646,6 +2683,76 @@ export default function TeacherPortal() {
           })}
         </div>
       </div>
+
+      {/* Floating Data & ICT Support Banner */}
+      {profile?.schools?.ict_name && (
+        <div className={cn(
+          "fixed bottom-4 left-4 z-50 transition-all duration-300 ease-in-out hidden sm:block",
+          isIctBannerMinimized 
+            ? "w-12 h-12 rounded-full shadow-lg" 
+            : "w-80 rounded-2xl shadow-2xl border border-blue-100 dark:border-slate-800/80 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md"
+        )}>
+          {isIctBannerMinimized ? (
+            <Button
+              onClick={toggleIctBanner}
+              className="w-12 h-12 rounded-full p-0 bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-lg transition-transform hover:scale-105"
+              title="View ICT Support Contacts"
+            >
+              <HelpCircle className="h-6 w-6" />
+            </Button>
+          ) : (
+            <Card className="border-none bg-transparent overflow-hidden">
+              <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between border-b border-slate-100 dark:border-slate-800/50 bg-blue-50/50 dark:bg-blue-950/20">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <CardTitle className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                    ICT & Data Support
+                  </CardTitle>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={toggleIctBanner}
+                  className="h-6 w-6 p-0 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                  <ChevronDown className="h-4 w-4 rotate-90" />
+                </Button>
+              </CardHeader>
+              <CardContent className="p-4 space-y-3">
+                <div className="space-y-1">
+                  <div className="text-sm font-bold text-slate-900 dark:text-white">
+                    {profile.schools.ict_name}
+                  </div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">
+                    School Support Personnel
+                  </div>
+                </div>
+                
+                <div className="space-y-2 pt-1 border-t border-slate-100 dark:border-slate-800/40">
+                  {profile.schools.ict_email && (
+                    <a 
+                      href={`mailto:${profile.schools.ict_email}`}
+                      className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors font-medium"
+                    >
+                      <Mail className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                      <span className="truncate">{profile.schools.ict_email}</span>
+                    </a>
+                  )}
+                  {profile.schools.ict_phone && (
+                    <a 
+                      href={`tel:${profile.schools.ict_phone}`}
+                      className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors font-medium"
+                    >
+                      <Phone className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                      <span>{profile.schools.ict_phone}</span>
+                    </a>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
     </div>
   );
 }

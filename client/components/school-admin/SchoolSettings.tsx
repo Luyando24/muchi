@@ -39,7 +39,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AdminManagement from './AdminManagement';
 
 
-export default function SchoolSettings() {
+interface SchoolSettingsProps {
+  onSettingsSaved?: (settings: any) => void;
+}
+
+export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps = {}) {
   const [school, setSchool] = useState<School | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -69,7 +73,10 @@ export default function SchoolSettings() {
     country: 'Zambia',
     location_type: 'Urban',
     compulsory_subjects_primary: [] as string[],
-    compulsory_subjects_secondary: [] as string[]
+    compulsory_subjects_secondary: [] as string[],
+    ict_name: '',
+    ict_email: '',
+    ict_phone: ''
   });
 
   const [categories, setCategories] = useState<SchoolCategory[]>([]);
@@ -93,7 +100,10 @@ export default function SchoolSettings() {
     { key: "district", label: "District" },
     { key: "logo_url", label: "School Logo" },
     { key: "headteacher_name", label: "Headteacher Name" },
-    { key: "signature_url", label: "Headteacher Signature" }
+    { key: "signature_url", label: "Headteacher Signature" },
+    { key: "ict_name", label: "ICT Support Name" },
+    { key: "ict_email", label: "ICT Support Email" },
+    { key: "ict_phone", label: "ICT Support Phone" }
   ];
 
   const missingFieldsOnClient = mandatoryFields.filter(
@@ -172,7 +182,10 @@ export default function SchoolSettings() {
         country: data.country || 'Zambia',
         location_type: data.location_type || 'Urban',
         compulsory_subjects_primary: data.compulsory_subjects_primary || ['Special Paper 1', 'Special Paper 2'],
-        compulsory_subjects_secondary: data.compulsory_subjects_secondary || ['English']
+        compulsory_subjects_secondary: data.compulsory_subjects_secondary || ['English'],
+        ict_name: data.ict_name || '',
+        ict_email: data.ict_email || '',
+        ict_phone: data.ict_phone || ''
       });
     } catch (error: any) {
       console.error('Error fetching settings:', error);
@@ -283,6 +296,9 @@ export default function SchoolSettings() {
 
       const updatedSchool = await response.json();
       setSchool(updatedSchool);
+      if (onSettingsSaved) {
+        onSettingsSaved(updatedSchool);
+      }
       toast({
         title: "Success",
         description: "School settings updated successfully.",
@@ -973,6 +989,60 @@ export default function SchoolSettings() {
                         onChange={handleInputChange}
                         placeholder="School physical address"
                       />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* CARD 6: ICT & Data Support Personnel */}
+                <Card className="border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800/50">
+                    <CardTitle className="text-lg font-black text-slate-900 dark:text-white">Data / ICT Support Personnel</CardTitle>
+                    <CardDescription className="text-xs text-slate-500 dark:text-slate-400">Provide contact details for your school's designated Data or ICT Support Personnel. This information is mandatory before school features can be accessed, and will be displayed to teachers who need help with profile completeness.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="ict_name" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Full Names <span className="text-rose-500">*</span></Label>
+                      <Input
+                        id="ict_name"
+                        name="ict_name"
+                        value={formData.ict_name}
+                        onChange={handleInputChange}
+                        placeholder="e.g. Jane Mulenga"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="ict_email" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Email Address <span className="text-rose-500">*</span></Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                        <Input
+                          id="ict_email"
+                          name="ict_email"
+                          type="email"
+                          value={formData.ict_email}
+                          onChange={handleInputChange}
+                          className="pl-9"
+                          placeholder="ict@school.edu"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="ict_phone" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Phone Number <span className="text-rose-500">*</span></Label>
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                        <Input
+                          id="ict_phone"
+                          name="ict_phone"
+                          value={formData.ict_phone}
+                          onChange={handleInputChange}
+                          className="pl-9"
+                          placeholder="+260..."
+                          required
+                        />
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
