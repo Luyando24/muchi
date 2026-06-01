@@ -4070,6 +4070,154 @@ router.post(
 
 // --- ACADEMIC MANAGEMENT ENDPOINTS ---
 
+// GET /api/school/recommendations/academic
+router.get(
+  "/recommendations/academic",
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+
+    try {
+      // 1. Fetch subjects from other schools
+      let subjectsQuery = supabaseAdmin
+        .from("subjects")
+        .select("name, code, department");
+      
+      if (schoolId) {
+        subjectsQuery = subjectsQuery.neq("school_id", schoolId);
+      }
+      
+      const { data: dbSubjects, error: subjectsError } = await subjectsQuery;
+      if (subjectsError) throw subjectsError;
+
+      // 2. Fetch departments from other schools
+      let deptsQuery = supabaseAdmin
+        .from("departments")
+        .select("name");
+      
+      if (schoolId) {
+        deptsQuery = deptsQuery.neq("school_id", schoolId);
+      }
+      
+      const { data: dbDepts, error: deptsError } = await deptsQuery;
+      if (deptsError) throw deptsError;
+
+      // Default fallback data
+      const defaultDepts = ['Languages', 'Mathematics', 'Science', 'Humanities', 'Business Studies', 'ICT', 'Expressive Arts'];
+      const defaultSubjects = [
+        { name: 'Mathematics', code: 'MATH', department: 'Mathematics' },
+        { name: 'English Language', code: 'ENG', department: 'Languages' },
+        { name: 'Biology', code: 'BIO', department: 'Science' },
+        { name: 'Chemistry', code: 'CHEM', department: 'Science' },
+        { name: 'Physics', code: 'PHYS', department: 'Science' },
+        { name: 'Geography', code: 'GEOG', department: 'Humanities' },
+        { name: 'History', code: 'HIST', department: 'Humanities' },
+        { name: 'Computer Studies', code: 'COMP', department: 'ICT' },
+        { name: 'Business Studies', code: 'BUS', department: 'Business Studies' },
+        { name: 'Civic Education', code: 'CIVIC', department: 'Humanities' },
+        { name: 'Religious Education', code: 'RE', department: 'Humanities' },
+        { name: 'Commerce', code: 'COMM', department: 'Business Studies' }
+      ];
+
+      // Aggregate Departments
+      const deptCounts: Record<string, number> = {};
+      dbDepts?.forEach(d => {
+        if (!d.name) return;
+        const std = standardizeDepartmentName(d.name);
+        deptCounts[std] = (deptCounts[std] || 0) + 1;
+      });
+
+      // Sort by popularity
+      const sortedDbDepts = Object.keys(deptCounts).sort((a, b) => deptCounts[b] - deptCounts[a]);
+      
+      // Merge with default depts, keeping uniqueness
+      const finalDepts = [...sortedDbDepts];
+      defaultDepts.forEach(defDept => {
+        const stdDef = standardizeDepartmentName(defDept);
+        if (!finalDepts.some(d => standardizeDepartmentName(d) === stdDef)) {
+          finalDepts.push(defDept);
+        }
+      });
+
+      // Aggregate Subjects
+      // Group by subject name to find most popular code & department
+      const subjectGroups: Record<string, { name: string; codes: Record<string, number>; depts: Record<string, number>; totalCount: number }> = {};
+      dbSubjects?.forEach(s => {
+        if (!s.name) return;
+        const stdName = standardizeSubjectName(s.name);
+        if (!subjectGroups[stdName]) {
+          subjectGroups[stdName] = {
+            name: s.name,
+            codes: {},
+            depts: {},
+            totalCount: 0
+          };
+        }
+        subjectGroups[stdName].totalCount++;
+        if (s.code) {
+          const codeTrim = s.code.trim().toUpperCase();
+          subjectGroups[stdName].codes[codeTrim] = (subjectGroups[stdName].codes[codeTrim] || 0) + 1;
+        }
+        if (s.department) {
+          const deptStd = standardizeDepartmentName(s.department);
+          subjectGroups[stdName].depts[deptStd] = (subjectGroups[stdName].depts[deptStd] || 0) + 1;
+        }
+      });
+
+      // Map to list and sort by totalCount descending
+      const sortedDbSubjects = Object.values(subjectGroups)
+        .sort((a, b) => b.totalCount - a.totalCount)
+        .map(group => {
+          let bestCode = '';
+          let maxCodeCount = 0;
+          Object.entries(group.codes).forEach(([code, count]) => {
+            if (count > maxCodeCount) {
+              bestCode = code;
+              maxCodeCount = count;
+            }
+          });
+
+          let bestDept = '';
+          let maxDeptCount = 0;
+          Object.entries(group.depts).forEach(([dept, count]) => {
+            if (count > maxDeptCount) {
+              bestDept = dept;
+              maxDeptCount = count;
+            }
+          });
+
+          return {
+            name: group.name,
+            code: bestCode || null,
+            department: bestDept || null
+          };
+        });
+
+      // Merge with default subjects
+      const finalSubjects = [...sortedDbSubjects];
+      defaultSubjects.forEach(defSub => {
+        const stdDefName = standardizeSubjectName(defSub.name);
+        if (!finalSubjects.some(s => standardizeSubjectName(s.name) === stdDefName)) {
+          finalSubjects.push({
+            name: defSub.name,
+            code: defSub.code,
+            department: defSub.department
+          });
+        }
+      });
+
+      res.json({
+        departments: finalDepts.slice(0, 15),
+        subjects: finalSubjects.slice(0, 20)
+      });
+    } catch (error: any) {
+      console.error("Get Academic Recommendations Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
 // GET /api/school/departments
 router.get(
   "/departments",
@@ -4304,6 +4452,28 @@ router.post(
 
         const standardizedName = standardizeSubjectName(subj.name);
         const standardizedDept = subj.department ? standardizeDepartmentName(subj.department) : null;
+
+        // Auto-create department if it does not exist
+        if (standardizedDept) {
+          const { data: existingDept, error: deptCheckError } = await supabaseAdmin
+            .from("departments")
+            .select("id")
+            .eq("school_id", schoolId)
+            .ilike("name", standardizedDept)
+            .maybeSingle();
+
+          if (deptCheckError) throw deptCheckError;
+
+          if (!existingDept) {
+            const { error: deptInsertError } = await supabaseAdmin
+              .from("departments")
+              .insert({
+                school_id: schoolId,
+                name: standardizedDept
+              });
+            if (deptInsertError) throw deptInsertError;
+          }
+        }
 
         // Check duplicate by name within school
         const { data: existing } = await supabaseAdmin
@@ -8841,6 +9011,119 @@ router.get(
     } catch (error: any) {
       console.error("Fetch Clean Classes Error:", error);
       res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// POST /api/school/setup/claim-reward
+// Claims the 100% setup completion reward for a school
+router.post(
+  "/setup/claim-reward",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+
+    try {
+      // 1. Fetch school details
+      const { data: school, error: schoolErr } = await supabaseAdmin
+        .from("schools")
+        .select("id, name, setup_reward_claimed")
+        .eq("id", schoolId)
+        .single();
+
+      if (schoolErr || !school) {
+        return res.status(404).json({ message: "School not found" });
+      }
+
+      if (school.setup_reward_claimed) {
+        return res.status(400).json({ message: "Reward has already been claimed for this school." });
+      }
+
+      // 2. Count setup items to verify 100% completion
+      // A. Classes count
+      const { data: classesData } = await supabaseAdmin
+        .from("classes")
+        .select("id")
+        .eq("school_id", schoolId);
+      const classesCount = classesData?.length || 0;
+      const classIds = classesData?.map((c: any) => c.id) || [];
+
+      // B. Subjects count
+      const { count: subjectsCount } = await supabaseAdmin
+        .from("subjects")
+        .select("id", { count: 'exact', head: true })
+        .eq("school_id", schoolId);
+
+      // C. Teacher allocations count
+      let allocationsCount = 0;
+      if (classIds.length > 0) {
+        const { count: allocations } = await supabaseAdmin
+          .from("class_subjects")
+          .select("id", { count: 'exact', head: true })
+          .in("class_id", classIds)
+          .not("teacher_id", 'is', null);
+        allocationsCount = allocations || 0;
+      }
+
+      const isComplete = classesCount >= 5 && (subjectsCount || 0) >= 5 && allocationsCount >= 10;
+      if (!isComplete) {
+        return res.status(400).json({ 
+          message: "Setup is not 100% complete. Please ensure you have at least 5 classes, 5 subjects, and 10 teacher subject allocations." 
+        });
+      }
+
+      // 3. Fetch default reward days from system settings
+      const { data: settingsData } = await supabaseAdmin
+        .from("system_settings")
+        .select("value")
+        .eq("key", "setup_completion_reward_days")
+        .maybeSingle();
+
+      const rewardDays = parseInt(settingsData?.value || "5") || 5;
+
+      // 4. Check if school has an active license
+      const { data: activeLicenses } = await supabaseAdmin
+        .from("school_licenses")
+        .select("*")
+        .eq("school_id", schoolId)
+        .eq("status", 'active')
+        .gt("end_date", new Date().toISOString())
+        .order("end_date", { ascending: false });
+
+      if (activeLicenses && activeLicenses.length > 0) {
+        // Extend active license's end date by rewardDays!
+        const license = activeLicenses[0];
+        const newEndDate = new Date(license.end_date);
+        newEndDate.setDate(newEndDate.getDate() + rewardDays);
+
+        const { error: licenseUpdateErr } = await supabaseAdmin
+          .from("school_licenses")
+          .update({ end_date: newEndDate.toISOString() })
+          .eq("id", license.id);
+
+        if (licenseUpdateErr) throw licenseUpdateErr;
+      }
+
+      // 5. Update school status
+      const { error: schoolUpdateErr } = await supabaseAdmin
+        .from("schools")
+        .update({
+          setup_reward_claimed: true,
+          setup_reward_days_applied: rewardDays
+        })
+        .eq("id", schoolId);
+
+      if (schoolUpdateErr) throw schoolUpdateErr;
+
+      res.json({
+        success: true,
+        message: `Congratulations! ${rewardDays} free days of usage have been successfully added to your school account.`,
+        rewardDays
+      });
+    } catch (error: any) {
+      console.error("Claim Reward Error:", error);
+      res.status(500).json({ message: error.message || "Failed to claim setup reward." });
     }
   }
 );

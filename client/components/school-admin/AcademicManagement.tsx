@@ -122,6 +122,7 @@ export default function AcademicManagement() {
   const [schoolSettings, setSchoolSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isImportOpen, setIsImportOpen] = useState<string | null>(null); // null | 'classes' | 'subjects' | 'departments'
+  const [recommendations, setRecommendations] = useState<{ departments: string[]; subjects: any[] }>({ departments: [], subjects: [] });
   const { toast } = useToast();
 
   // Dialog States
@@ -193,23 +194,26 @@ export default function AcademicManagement() {
       const schoolId = await getProfileSchoolId();
       setCurrentSchoolId(schoolId);
 
-      const [subjectsData, classesData, teachersData, scalesData, weightsData, settingsData, departmentsData] = await Promise.all([
+      const [subjectsData, classesData, teachersData, scalesData, weightsData, settingsData, departmentsData, recsData] = await Promise.all([
         syncFetch('/api/school/subjects', { headers, cacheKey: schoolCacheKey('school-subjects-list', schoolId) }),
         syncFetch('/api/school/classes?limit=500', { headers, cacheKey: schoolCacheKey('school-classes-list-max', schoolId) }),
         syncFetch('/api/school/teachers?limit=500', { headers, cacheKey: schoolCacheKey('school-teachers-list-max', schoolId) }),
         syncFetch('/api/school/grading-scales', { headers, cacheKey: schoolCacheKey('school-grading-scales', schoolId) }),
         syncFetch('/api/school/grading-weights', { headers, cacheKey: schoolCacheKey('school-grading-weights', schoolId) }),
         syncFetch('/api/school/settings', { headers, cacheKey: schoolCacheKey('school-settings', schoolId) }),
-        syncFetch('/api/school/departments', { headers, cacheKey: schoolCacheKey('school-departments', schoolId) })
+        syncFetch('/api/school/departments', { headers, cacheKey: schoolCacheKey('school-departments', schoolId) }),
+        syncFetch('/api/school/recommendations/academic', { headers })
       ]);
 
       setSubjects(subjectsData);
-      // Handle the PaginatedResponse shape for endpoints that were updated
       setClasses(classesData?.data || classesData);
       setTeachers(teachersData?.data || teachersData);
       setGradingScales(filterBySchoolId(scalesData, schoolId));
       setGradingWeights(weightsData);
       setDepartments(departmentsData || []);
+      if (recsData) {
+        setRecommendations(recsData);
+      }
 
       if (settingsData) {
         setSchoolSettings(settingsData);
@@ -1298,6 +1302,19 @@ export default function AcademicManagement() {
                       <div className="space-y-2">
                         <Label>Department Name</Label>
                         <Input required placeholder="e.g. Science" value={deptForm.name} onChange={e => setDeptForm({ ...deptForm, name: e.target.value })} onBlur={e => setDeptForm({ ...deptForm, name: standardizeDepartmentName(e.target.value) })} />
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block w-full">💡 Popular Departments:</span>
+                          {(recommendations.departments && recommendations.departments.length > 0 ? recommendations.departments : ['Science', 'Mathematics', 'Languages', 'Humanities', 'Business', 'ICT']).map(dept => (
+                            <button
+                              key={dept}
+                              type="button"
+                              onClick={() => setDeptForm({ ...deptForm, name: dept })}
+                              className="text-[10px] font-semibold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 transition-colors border border-slate-200 px-2 py-0.5 rounded-full"
+                            >
+                              {dept}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <Label>Head of Department (Optional)</Label>
@@ -1476,6 +1493,43 @@ export default function AcademicManagement() {
                       <div className="space-y-2">
                         <Label>Code</Label>
                         <Input placeholder="e.g. MAT101" value={subjectForm.code} onChange={e => setSubjectForm({ ...subjectForm, code: e.target.value })} />
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">💡 Popular Subjects (click to prefill):</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(recommendations.subjects && recommendations.subjects.length > 0 ? recommendations.subjects : [
+                          { name: 'Mathematics', code: 'MATH', dept: 'Mathematics' },
+                          { name: 'English Language', code: 'ENG', dept: 'Languages' },
+                          { name: 'Biology', code: 'BIO', dept: 'Science' },
+                          { name: 'Chemistry', code: 'CHEM', dept: 'Science' },
+                          { name: 'Physics', code: 'PHYS', dept: 'Science' },
+                          { name: 'Geography', code: 'GEOG', dept: 'Humanities' },
+                          { name: 'History', code: 'HIST', dept: 'Humanities' },
+                          { name: 'Computer Studies', code: 'COMP', dept: 'ICT' },
+                          { name: 'Business Studies', code: 'BUS', dept: 'Business' }
+                        ]).map(sub => (
+                          <button
+                            key={sub.name}
+                            type="button"
+                            onClick={() => {
+                              const targetDept = sub.department || sub.dept || '';
+                              const deptName = departments.find(d => d.name.toLowerCase().includes(targetDept.toLowerCase()))?.name || targetDept;
+                              const deptObj = departments.find(d => d.name === deptName);
+                              setSubjectForm({
+                                ...subjectForm,
+                                name: sub.name,
+                                code: sub.code || '',
+                                department: deptName,
+                                headTeacherId: deptObj?.head_of_department_id || ''
+                              });
+                            }}
+                            className="text-[10px] font-semibold bg-white hover:bg-indigo-50 hover:text-indigo-600 transition-colors border border-slate-200 px-2 py-0.5 rounded-full"
+                          >
+                            {sub.name}
+                          </button>
+                        ))}
                       </div>
                     </div>
                     <div className="space-y-2">

@@ -100,6 +100,101 @@ router.get('/', async (req: Request, res: Response<School[]>) => {
   }
 });
 
+function toSchoolNameProperCase(str: string): string {
+  if (!str) return '';
+  const lowercaseWords = ["and", "or", "but", "a", "an", "the", "in", "on", "of", "for", "with", "to", "at", "by", "from"];
+  const romanNumerals = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"];
+  return str
+    .toLowerCase()
+    .split(" ")
+    .map((word, index) => {
+      if (index > 0 && lowercaseWords.includes(word)) {
+        return word;
+      }
+      if (romanNumerals.includes(word)) {
+        return word.toUpperCase();
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(" ");
+}
+
+// GET /api/schools/top-onboarded
+router.get('/top-onboarded', async (req: Request, res: Response) => {
+  try {
+    const [schoolsRes, countsRes] = await Promise.all([
+      supabaseAdmin
+        .from('schools')
+        .select('id, name, district, province, country, onboarding_status')
+        .eq('status', 'Active'),
+      supabaseAdmin
+        .from('school_profile_counts')
+        .select('*')
+    ]);
+
+    if (schoolsRes.error) throw schoolsRes.error;
+    if (countsRes.error) throw countsRes.error;
+
+    const schoolTeacherCounts: Record<string, number> = {};
+    const schoolStudentCounts: Record<string, number> = {};
+
+    if (countsRes.data) {
+      countsRes.data.forEach((row: any) => {
+        schoolTeacherCounts[row.school_id] = row.teacher_count || 0;
+        schoolStudentCounts[row.school_id] = row.student_count || 0;
+      });
+    }
+
+    const schoolsWithCounts = (schoolsRes.data || []).map((s: any) => ({
+      ...s,
+      teacher_count: schoolTeacherCounts[s.id] || 0,
+      student_count: schoolStudentCounts[s.id] || 0
+    }));
+    
+    // Process and filter onboarded schools
+    const onboarded = schoolsWithCounts.filter((s: any) => {
+      const tc = s.teacher_count;
+      const sc = s.student_count;
+      return s.onboarding_status === 'Active & Onboarded' || (tc > 20 && sc > 500);
+    });
+    
+    // Shuffle
+    const shuffled = onboarded.sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, 2).map((s: any) => {
+      let initials = 'SC';
+      if (s.name) {
+        const parts = s.name.split(' ').filter(Boolean);
+        initials = parts.length > 1 
+          ? (parts[0][0] + parts[1][0]).toUpperCase() 
+          : s.name.substring(0, 2).toUpperCase();
+      }
+      return {
+        name: toSchoolNameProperCase(s.name),
+        location: s.district || s.province || s.country || 'Zambia',
+        initials
+      };
+    });
+    
+    // fallback if not enough
+    if (selected.length < 2) {
+       if (!selected.find(s => s.name === 'St. Augustine Academy')) {
+         selected.push({ name: 'St. Augustine Academy', location: 'Lusaka', initials: 'SA' });
+       }
+       if (selected.length < 2 && !selected.find(s => s.name === "Green Leaf Int'l")) {
+         selected.push({ name: "Green Leaf Int'l", location: 'Ndola', initials: 'GL' });
+       }
+    }
+    
+    res.json(selected.slice(0, 2));
+  } catch (error) {
+    console.error('Error fetching top onboarded schools:', error);
+    res.json([
+      { name: 'St. Augustine Academy', location: 'Lusaka', initials: 'SA' }, 
+      { name: "Green Leaf Int'l", location: 'Ndola', initials: 'GL' }
+    ]);
+  }
+});
+
 // GET /api/schools/:id
 router.get('/:id', async (req: Request, res: Response<School | { message: string }>) => {
   try {

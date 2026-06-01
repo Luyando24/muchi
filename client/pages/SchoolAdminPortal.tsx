@@ -48,6 +48,7 @@ import { isOnSubdomain } from '@/lib/subdomain';
 import { markSettingsCompletionPopupEligibleInOneMinute } from '@/lib/settingsCompletionPrompt';
 import { getProfileSchoolId, schoolCacheKey } from '@/lib/schoolScope';
 import SubscriptionReminder from '@/components/common/SubscriptionReminder';
+import SetupReminder from '@/components/common/SetupReminder';
 import {
   Dialog,
   DialogContent,
@@ -87,6 +88,10 @@ export default function SchoolAdminPortal() {
   const [userId, setUserId] = useState<string>("");
   const [showTutorial, setShowTutorial] = useState(false);
   const [showSubscriptionReminder, setShowSubscriptionReminder] = useState(false);
+  const [showSetupReminder, setShowSetupReminder] = useState(false);
+  const [setupStats, setSetupStats] = useState({ classes: 0, subjects: 0, teachers: 0, students: 0, assignments: 0 });
+  const [setupRewardClaimed, setSetupRewardClaimed] = useState(false);
+  const [setupRewardDays, setSetupRewardDays] = useState(5);
   const [schoolNameForReminder, setSchoolNameForReminder] = useState("");
   const [schoolIdForReminder, setSchoolIdForReminder] = useState("");
   const [subscriptionVariant, setSubscriptionVariant] = useState<'renew' | 'onboarding'>('renew');
@@ -111,6 +116,8 @@ export default function SchoolAdminPortal() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
   // Check license and pre-fetch critical data for offline use
   useEffect(() => {
     const initializePortal = async () => {
@@ -133,64 +140,134 @@ export default function SchoolAdminPortal() {
             setShowTutorial(true);
           }
 
-          // Check for subscription reminder if user is a school admin
+          // Check for subscription reminder and setup completion status if user is a school admin
           const isAdmin = profile.role === 'school_admin' || profile.secondary_role === 'school_admin';
           if (isAdmin && profile.school_id) {
             const schoolId = profile.school_id;
             setSchoolIdForReminder(schoolId);
             
-            // 1. Fetch school details (registration date, name, category)
+            // 1. Fetch school details (registration date, name, category, setup_reward_claimed, setup_reward_days_applied)
             const { data: school } = await supabase
               .from('schools')
-              .select('created_at, name, category')
+              .select('created_at, name, category, setup_reward_claimed, setup_reward_days_applied')
               .eq('id', schoolId)
               .single();
               
             if (school) {
               setSchoolNameForReminder(school.name);
+              setSetupRewardClaimed(!!school.setup_reward_claimed);
+
+              const { data: rewardSetting } = await supabase
+                .from('system_settings')
+                .select('value')
+                .eq('key', 'setup_completion_reward_days')
+                .maybeSingle();
+              const rewardDays = parseInt(rewardSetting?.value || '5') || 5;
+              setSetupRewardDays(rewardDays);
+
               const regDate = new Date(school.created_at);
               const daysSinceReg = (Date.now() - regDate.getTime()) / (1000 * 60 * 60 * 24);
+              const setupDaysApplied = school.setup_reward_days_applied || 0;
+              const trialPeriod = 30 + setupDaysApplied;
               
-              if (daysSinceReg > 30) {
-                // 2. Check if school has a valid active license in the DB
+              // A. Fetch license status if registration is older than trialPeriod
+              let hasLicense = false;
+              if (daysSinceReg > trialPeriod) {
                 const { data: licenses } = await supabase
                   .from('school_licenses')
                   .select('id')
                   .eq('school_id', schoolId)
                   .eq('status', 'active')
                   .gt('end_date', new Date().toISOString());
-                  
-                const hasLicense = licenses && licenses.length > 0;
-                
-                if (!hasLicense) {
-                  const dismissedUntil = localStorage.getItem(`school_license_reminder_dismissed_until_${schoolId}`);
-                  if (!dismissedUntil || Date.now() > parseInt(dismissedUntil)) {
-                    // 3. Determine variant based on school size & category
-                    const isPrivate = school.category?.toLowerCase().includes('private');
-                    let isOnboarded = isPrivate;
+                hasLicense = licenses && licenses.length > 0;
+              }
 
-                    if (!isPrivate) {
-                      // Count teachers and students in parallel
-                      const [teacherRes, studentRes] = await Promise.all([
-                        supabase
-                          .from('profiles')
-                          .select('id', { count: 'exact', head: true })
-                          .eq('school_id', schoolId)
-                          .eq('role', 'teacher')
-                          .or('employment_status.neq.Terminated,employment_status.is.null'),
-                        supabase
-                          .from('profiles')
-                          .select('id', { count: 'exact', head: true })
-                          .eq('school_id', schoolId)
-                          .eq('role', 'student')
-                      ]);
-                      const teacherCount = teacherRes.count || 0;
-                      const studentCount = studentRes.count || 0;
-                      isOnboarded = teacherCount > 20 && studentCount > 500;
-                    }
+              // B. Fetch setup completion counts
+              const { data: classesData } = await supabase
+                .from('classes')
+                .select('id')
+                .eq('school_id', schoolId);
+              const classesCount = classesData?.length || 0;
+              const classIds = classesData?.map((c: any) => c.id) || [];
 
-                    setSubscriptionVariant(isOnboarded ? 'renew' : 'onboarding');
-                    setShowSubscriptionReminder(true);
+              const { count: subjectsCount } = await supabase
+                .from('subjects')
+                .select('id', { count: 'exact', head: true })
+                .eq('school_id', schoolId);
+
+              let allocationsCount = 0;
+              if (classIds.length > 0) {
+                const { count: allocations } = await supabase
+                  .from('class_subjects')
+                  .select('id', { count: 'exact', head: true })
+                  .in('class_id', classIds)
+                  .not('teacher_id', 'is', null);
+                allocationsCount = allocations || 0;
+              }
+
+              const { count: teachersCount } = await supabase
+                .from('profiles')
+                .select('id', { count: 'exact', head: true })
+                .eq('school_id', schoolId)
+                .eq('role', 'teacher')
+                .or('employment_status.neq.Terminated,employment_status.is.null');
+
+              const { count: studentsCount } = await supabase
+                .from('profiles')
+                .select('id', { count: 'exact', head: true })
+                .eq('school_id', schoolId)
+                .eq('role', 'student');
+
+              setSetupStats({
+                classes: classesCount,
+                subjects: subjectsCount || 0,
+                teachers: teachersCount || 0,
+                students: studentsCount || 0,
+                assignments: allocationsCount
+              });
+
+              // C. Determine reminder to show (prioritize license if expired/needs renewal)
+              let showingLicenseReminder = false;
+              if (daysSinceReg > trialPeriod && !hasLicense) {
+                const dismissedUntil = localStorage.getItem(`school_license_reminder_dismissed_until_${schoolId}`);
+                if (!dismissedUntil || Date.now() > parseInt(dismissedUntil)) {
+                  // Determine variant based on school size & category
+                  const isPrivate = school.category?.toLowerCase().includes('private');
+                  let isOnboarded = isPrivate;
+
+                  if (!isPrivate) {
+                    // Count teachers and students in parallel
+                    const [teacherRes, studentRes] = await Promise.all([
+                      supabase
+                        .from('profiles')
+                        .select('id', { count: 'exact', head: true })
+                        .eq('school_id', schoolId)
+                        .eq('role', 'teacher')
+                        .or('employment_status.neq.Terminated,employment_status.is.null'),
+                      supabase
+                        .from('profiles')
+                        .select('id', { count: 'exact', head: true })
+                        .eq('school_id', schoolId)
+                        .eq('role', 'student')
+                    ]);
+                    const teacherCount = teacherRes.count || 0;
+                    const studentCount = studentRes.count || 0;
+                    isOnboarded = teacherCount > 20 && studentCount > 500;
+                  }
+
+                  setSubscriptionVariant(isOnboarded ? 'renew' : 'onboarding');
+                  setShowSubscriptionReminder(true);
+                  showingLicenseReminder = true;
+                }
+              }
+
+              // Show setup completion reminder if subscription reminder isn't active
+              if (!showingLicenseReminder) {
+                const isSetupIncomplete = classesCount < 5 || (subjectsCount || 0) < 5 || allocationsCount < 10;
+                if (isSetupIncomplete) {
+                  const setupDismissedUntil = localStorage.getItem(`school_setup_reminder_dismissed_until_${schoolId}`);
+                  if (!setupDismissedUntil || Date.now() > parseInt(setupDismissedUntil)) {
+                    setShowSetupReminder(true);
                   }
                 }
               }
@@ -263,7 +340,7 @@ export default function SchoolAdminPortal() {
     };
 
     initializePortal();
-  }, []);
+  }, [refreshTrigger]);
 
   const isIctMissing = userRole === 'school_admin' && (
     !schoolSettings ||
@@ -360,6 +437,55 @@ export default function SchoolAdminPortal() {
 
   const handleCloseReminder = () => {
     setShowSubscriptionReminder(false);
+  };
+
+  const handleSnoozeSetupReminder = () => {
+    if (schoolIdForReminder) {
+      const snoozeUntil = Date.now() + 1 * 24 * 60 * 60 * 1000; // 1 day
+      localStorage.setItem(`school_setup_reminder_dismissed_until_${schoolIdForReminder}`, snoozeUntil.toString());
+    }
+    setShowSetupReminder(false);
+  };
+
+  const handleCloseSetupReminder = () => {
+    setShowSetupReminder(false);
+  };
+
+  const handleClaimReward = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch('/api/school/setup/claim-reward', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to claim reward');
+      }
+
+      const result = await response.json();
+      setSetupRewardClaimed(true);
+      setShowSetupReminder(false);
+      toast({
+        title: "Reward Claimed!",
+        description: result.message || `Successfully claimed ${setupRewardDays} free days!`,
+      });
+      
+      setRefreshTrigger(prev => prev + 1);
+    } catch (error: any) {
+      console.error('Error claiming setup reward:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to claim setup reward.",
+        variant: "destructive",
+      });
+    }
   };
 
   const sidebarGroups = [
@@ -607,6 +733,32 @@ export default function SchoolAdminPortal() {
         onSnooze={handleSnoozeReminder}
         schoolName={schoolNameForReminder}
         variant={subscriptionVariant}
+        setupProgress={Math.round(
+          (Math.min((setupStats.classes / 5) * 100, 100) +
+           Math.min((setupStats.subjects / 5) * 100, 100) +
+           Math.min((setupStats.teachers / 5) * 100, 100) +
+           Math.min((setupStats.students / 20) * 100, 100) +
+           Math.min((setupStats.assignments / 10) * 100, 100)) / 5
+        )}
+        rewardDays={setupRewardDays}
+        rewardClaimed={setupRewardClaimed}
+        onClaimReward={handleClaimReward}
+      />
+
+      <SetupReminder
+        isOpen={showSetupReminder}
+        onClose={handleCloseSetupReminder}
+        onSnooze={handleSnoozeSetupReminder}
+        schoolName={schoolNameForReminder}
+        stats={setupStats}
+        onNavigateToSetup={() => {
+          setShowSetupReminder(false);
+          navigate(`${portalBase}/academics`);
+        }}
+        rewardDays={setupRewardDays}
+        rewardClaimed={setupRewardClaimed}
+        onClaimReward={handleClaimReward}
+        onRefreshStats={() => setRefreshTrigger(prev => prev + 1)}
       />
 
       {/* Mobile Bottom Navigation */}

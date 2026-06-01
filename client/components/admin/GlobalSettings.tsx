@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, Save, Loader2, Globe, Mail, Shield, Server, MessageCircle, Settings, RefreshCw } from 'lucide-react';
+import { AlertCircle, Save, Loader2, Globe, Mail, Shield, Server, MessageCircle, Settings, RefreshCw, Gift } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabase';
 
@@ -21,6 +21,7 @@ interface SystemSettings {
   whatsappNumber: string;
   defaultCurrency: string;
   supportedCurrencies: string;
+  setupCompletionRewardDays: number;
 }
 
 const defaultSettings: SystemSettings = {
@@ -32,7 +33,8 @@ const defaultSettings: SystemSettings = {
   sessionTimeout: 60,
   whatsappNumber: "260570260374",
   defaultCurrency: "ZMW",
-  supportedCurrencies: '["ZMW", "USD", "ZAR"]'
+  supportedCurrencies: '["ZMW", "USD", "ZAR"]',
+  setupCompletionRewardDays: 5
 };
 
 import ConfigurationManagement from './ConfigurationManagement';
@@ -75,7 +77,8 @@ export default function GlobalSettings() {
         sessionTimeout: parseInt(data.session_timeout) || defaultSettings.sessionTimeout,
         whatsappNumber: data.whatsapp_number || defaultSettings.whatsappNumber,
         defaultCurrency: data.default_currency || defaultSettings.defaultCurrency,
-        supportedCurrencies: data.supported_currencies || defaultSettings.supportedCurrencies
+        supportedCurrencies: data.supported_currencies || defaultSettings.supportedCurrencies,
+        setupCompletionRewardDays: parseInt(data.setup_completion_reward_days) || defaultSettings.setupCompletionRewardDays
       };
 
       setSettings(mappedSettings);
@@ -106,7 +109,8 @@ export default function GlobalSettings() {
         session_timeout: String(settings.sessionTimeout),
         whatsapp_number: settings.whatsappNumber,
         default_currency: settings.defaultCurrency,
-        supported_currencies: settings.supportedCurrencies
+        supported_currencies: settings.supportedCurrencies,
+        setup_completion_reward_days: String(settings.setupCompletionRewardDays)
       };
 
       const response = await fetch('/api/admin/settings', {
@@ -330,6 +334,29 @@ export default function GlobalSettings() {
                 onChange={(e) => setSettings({...settings, sessionTimeout: parseInt(e.target.value) || 30})}
               />
               <p className="text-xs text-slate-500">Auto-logout inactive users after this period.</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Gift className="h-5 w-5 text-indigo-500" />
+              Setup Completion Rewards
+            </CardTitle>
+            <CardDescription>Configure trial extensions awarded when a school completes their initial setup.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="setupCompletionRewardDays">Free Trial Extension Reward (Days)</Label>
+              <Input 
+                id="setupCompletionRewardDays" 
+                type="number"
+                min="0"
+                value={settings.setupCompletionRewardDays} 
+                onChange={(e) => setSettings({...settings, setupCompletionRewardDays: parseInt(e.target.value) || 0})}
+              />
+              <p className="text-xs text-slate-500">Number of free usage days added to their trial/license on 100% setup completion.</p>
             </div>
           </CardContent>
         </Card>
