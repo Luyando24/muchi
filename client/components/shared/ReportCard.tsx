@@ -314,24 +314,33 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
     const activeTestTypes = school?.test_types_enabled ? (school?.test_types || []) : [];
     
     if (activeTestTypes.length > 0) {
-      // If school has active test types, the average is computed across all active tests.
-      // If student missed any of the active test types, display ABSENT (final percentage = null).
+      // If school has active test types, average across all tests that were
+      // actually published at the class level.  Tests whose type was never
+      // published by the school (no classGradesKeys entry for that type) are
+      // skipped so the report card can still show a grade from partial data.
       const hasActiveTest1 = activeTestTypes.includes('Test 1');
       const hasActiveTest2 = activeTestTypes.includes('Test 2');
       const hasActiveTest3 = activeTestTypes.includes('Test 3');
-      
-      const missingTest1 = hasActiveTest1 && (item.test1 === null || item.test1 === undefined);
-      const missingTest2 = hasActiveTest2 && (item.test2 === null || item.test2 === undefined);
-      const missingTest3 = hasActiveTest3 && (item.test3 === null || item.test3 === undefined);
-      
-      if (missingTest1 || missingTest2 || missingTest3) {
+
+      const classHasAnyTest1 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 1`)) ?? false;
+      const classHasAnyTest2 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 2`)) ?? false;
+      const classHasAnyTest3 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 3`)) ?? false;
+
+      // Only consider a missing test as blocking if the school has published
+      // that test type for this class (otherwise skip it silently).
+      const blockingMissing1 = hasActiveTest1 && classHasAnyTest1 && (item.test1 === null || item.test1 === undefined);
+      const blockingMissing2 = hasActiveTest2 && classHasAnyTest2 && (item.test2 === null || item.test2 === undefined);
+      const blockingMissing3 = hasActiveTest3 && classHasAnyTest3 && (item.test3 === null || item.test3 === undefined);
+
+      if (blockingMissing1 || blockingMissing2 || blockingMissing3) {
         return null;
       }
-      
+
+      // Average over whichever published tests this student has a score for.
       const scores = [
-        hasActiveTest1 ? item.test1 : null,
-        hasActiveTest2 ? item.test2 : null,
-        hasActiveTest3 ? item.test3 : null
+        (hasActiveTest1 && classHasAnyTest1) ? item.test1 : null,
+        (hasActiveTest2 && classHasAnyTest2) ? item.test2 : null,
+        (hasActiveTest3 && classHasAnyTest3) ? item.test3 : null,
       ].filter(t => t !== null) as number[];
       
       if (scores.length > 0) {
@@ -467,11 +476,20 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
       const missingTest3 = hasActiveTest3 && (item.test3 === null || item.test3 === undefined);
       
       if (missingTest1 || missingTest2 || missingTest3) {
-        // Check if any missing active test is WAITING (i.e. no class grades recorded for it)
-        const isTest1Waiting = hasActiveTest1 && missingTest1 && (!classGradesKeys || !classGradesKeys.includes(`${subId}-${examType}-Test 1`));
-        const isTest2Waiting = hasActiveTest2 && missingTest2 && (!classGradesKeys || !classGradesKeys.includes(`${subId}-${examType}-Test 2`));
-        const isTest3Waiting = hasActiveTest3 && missingTest3 && (!classGradesKeys || !classGradesKeys.includes(`${subId}-${examType}-Test 3`));
-        
+        // A test is only truly WAITING if the school HAS published results for that
+        // test type for other subjects in this class (classGradesKeys contains at
+        // least one entry for that test type) but this specific student's score is
+        // missing.  If the school hasn't published ANY results under that test type
+        // at all, we treat the missing score as ABSENT so the report card can still
+        // compute a grade from the tests that were actually recorded.
+        const classHasAnyTest1 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 1`)) ?? false;
+        const classHasAnyTest2 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 2`)) ?? false;
+        const classHasAnyTest3 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 3`)) ?? false;
+
+        const isTest1Waiting = hasActiveTest1 && missingTest1 && classHasAnyTest1;
+        const isTest2Waiting = hasActiveTest2 && missingTest2 && classHasAnyTest2;
+        const isTest3Waiting = hasActiveTest3 && missingTest3 && classHasAnyTest3;
+
         if (isTest1Waiting || isTest2Waiting || isTest3Waiting) {
           return 'WAITING';
         }
@@ -746,9 +764,14 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                           const hasClassTest3 = (physId && classGradesKeys?.includes(`${physId}-${examType}-Test 3`)) ||
                                                 (chemId && classGradesKeys?.includes(`${chemId}-${examType}-Test 3`));
 
-                          const test1Display = sciTest1 !== null ? `${parseFloat(sciTest1.toFixed(1))}%` : (hasClassTest1 ? 'ABSENT' : 'WAITING');
-                          const test2Display = sciTest2 !== null ? `${parseFloat(sciTest2.toFixed(1))}%` : (hasClassTest2 ? 'ABSENT' : 'WAITING');
-                          const test3Display = sciTest3 !== null ? `${parseFloat(sciTest3.toFixed(1))}%` : (hasClassTest3 ? 'ABSENT' : 'WAITING');
+                          // Determine whether each test type was published at the class level at all.
+                          const classPublishedTest1 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 1`)) ?? false;
+                          const classPublishedTest2 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 2`)) ?? false;
+                          const classPublishedTest3 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 3`)) ?? false;
+
+                          const test1Display = sciTest1 !== null ? `${parseFloat(sciTest1.toFixed(1))}%` : (classPublishedTest1 ? 'ABSENT' : '-');
+                          const test2Display = sciTest2 !== null ? `${parseFloat(sciTest2.toFixed(1))}%` : (classPublishedTest2 ? 'ABSENT' : '-');
+                          const test3Display = sciTest3 !== null ? `${parseFloat(sciTest3.toFixed(1))}%` : (classPublishedTest3 ? 'ABSENT' : '-');
 
                           displayRows.push({
                             key: 'science-combined',
@@ -791,9 +814,14 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                         const hasClassTest2 = classGradesKeys?.includes(`${gKey}-${examType}-Test 2`);
                         const hasClassTest3 = classGradesKeys?.includes(`${gKey}-${examType}-Test 3`);
 
-                        const test1Display = item.test1 !== null ? `${item.test1}%` : (hasClassTest1 ? 'ABSENT' : 'WAITING');
-                        const test2Display = item.test2 !== null ? `${item.test2}%` : (hasClassTest2 ? 'ABSENT' : 'WAITING');
-                        const test3Display = item.test3 !== null ? `${item.test3}%` : (hasClassTest3 ? 'ABSENT' : 'WAITING');
+                        // Check whether each test type was published at the class level.
+                        const classPublishedTest1 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 1`)) ?? false;
+                        const classPublishedTest2 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 2`)) ?? false;
+                        const classPublishedTest3 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 3`)) ?? false;
+
+                        const test1Display = item.test1 !== null ? `${item.test1}%` : (classPublishedTest1 ? 'ABSENT' : '-');
+                        const test2Display = item.test2 !== null ? `${item.test2}%` : (classPublishedTest2 ? 'ABSENT' : '-');
+                        const test3Display = item.test3 !== null ? `${item.test3}%` : (classPublishedTest3 ? 'ABSENT' : '-');
 
                         displayRows.push({
                           key: gKey || `row-${displayRows.length}`,
