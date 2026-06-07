@@ -648,6 +648,12 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 print:mb-0">Class</p>
                 <p className="text-sm font-bold text-slate-700">{student.class}</p>
               </div>
+              {school?.show_teacher_on_report_card && student.classTeacherName && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 print:mb-0">Teacher</p>
+                  <p className="text-sm font-bold text-slate-700">{student.classTeacherName}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -788,6 +794,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                             isAbsent: sciAbsent,
                             isCombined: true,
                             combinedNote: [physItem?.subject?.name, chemItem?.subject?.name].filter(Boolean).join(' + '),
+                            teacherName: physItem?.mainGrade?.subjects?.teacherName || chemItem?.mainGrade?.subjects?.teacherName || null,
                           });
                         }
                       }
@@ -836,6 +843,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                           gradeStr,
                           points: pts,
                           isAbsent,
+                          teacherName: item.mainGrade?.subjects?.teacherName || null,
                         });
                       }
 
@@ -849,19 +857,24 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                       return (
                         <>
                           {displayRows.length > 0 ? (
-                            displayRows.map((row) => (
+                            displayRows.map((row: any) => (
                               <TableRow
                                 key={row.key}
                                 className="border-b border-slate-100 last:border-0 hover:bg-transparent h-10 print:h-8"
                               >
                                 <TableCell className="py-1 pl-0 font-bold text-slate-700">
-                                  <div className="flex flex-col">
+                                  <div className="flex flex-row items-baseline gap-1.5 flex-wrap">
                                     <span className="uppercase tracking-tight text-sm print:text-[11px]">
                                       {row.displayName}
                                     </span>
                                     {row.isCombined && row.combinedNote && (
                                       <span className="text-[9px] print:text-[8px] text-slate-400 font-normal italic">
                                         ({row.combinedNote})
+                                      </span>
+                                    )}
+                                    {school?.show_teacher_on_report_card && row.teacherName && (
+                                      <span className="text-sm print:text-[11px] text-slate-500 font-normal italic capitalize">
+                                        - {row.teacherName}
                                       </span>
                                     )}
                                   </div>

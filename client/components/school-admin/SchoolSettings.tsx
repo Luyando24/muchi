@@ -73,8 +73,12 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
     category: '',
     country: 'Zambia',
     location_type: 'Urban',
+    boarding_status: '',
+    gender_composition: '',
     compulsory_subjects_primary: [] as string[],
     compulsory_subjects_secondary: [] as string[],
+    show_teacher_on_report_card: false,
+    enable_tuckshop: true,
     ict_name: '',
     ict_email: '',
     ict_phone: ''
@@ -104,7 +108,9 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
     { key: "signature_url", label: "Headteacher Signature" },
     { key: "ict_name", label: "ICT Support Name" },
     { key: "ict_email", label: "ICT Support Email" },
-    { key: "ict_phone", label: "ICT Support Phone (WhatsApp)" }
+    { key: "ict_phone", label: "ICT Support Phone (WhatsApp)" },
+    { key: "boarding_status", label: "Boarding Status" },
+    { key: "gender_composition", label: "Gender Composition" }
   ];
 
   const missingFieldsOnClient = mandatoryFields.filter(
@@ -182,8 +188,12 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
         category: data.category || '',
         country: data.country || 'Zambia',
         location_type: data.location_type || 'Urban',
+        boarding_status: data.boarding_status || '',
+        gender_composition: data.gender_composition || '',
         compulsory_subjects_primary: data.compulsory_subjects_primary || ['Special Paper 1', 'Special Paper 2'],
         compulsory_subjects_secondary: data.compulsory_subjects_secondary || ['English'],
+        show_teacher_on_report_card: data.show_teacher_on_report_card ?? false,
+        enable_tuckshop: data.enable_tuckshop ?? true,
         ict_name: data.ict_name || '',
         ict_email: data.ict_email || '',
         ict_phone: data.ict_phone || ''
@@ -271,8 +281,8 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
     }));
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e) e.preventDefault();
     setIsSaving(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -333,13 +343,33 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
     );
   }
 
+  const handleHeaderSaveClick = (e: React.MouseEvent) => {
+    const formEl = document.getElementById('school-settings-form') as HTMLFormElement | null;
+    if (formEl) {
+      if (formEl.reportValidity()) {
+        handleSave(e);
+      }
+    } else {
+      handleSave(e);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="sticky top-0 z-50 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur border-b border-slate-200 dark:border-slate-800 -mt-4 sm:-mt-6 -mx-4 sm:-mx-6 px-4 sm:px-6 py-4 flex items-center justify-between transition-all">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">System Settings</h2>
-          <p className="text-slate-600 dark:text-slate-400">Configure school parameters and preferences.</p>
+          <p className="text-sm text-slate-600 dark:text-slate-400">Configure school parameters and preferences.</p>
         </div>
+        <Button 
+          onClick={handleHeaderSaveClick} 
+          disabled={isSaving}
+          className="shadow-sm"
+        >
+          {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Save className="mr-2 h-4 w-4" />
+          Save Changes
+        </Button>
       </div>
 
       {/* Settings Completion Progress Tracker */}
@@ -437,7 +467,7 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
         <TabsContent value="general">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
-              <form onSubmit={handleSave} className="space-y-6">
+              <form id="school-settings-form" onSubmit={handleSave} className="space-y-6">
                 
                 {/* CARD 1: School Identity */}
                 <Card className="border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -541,6 +571,44 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
                       </Select>
                       <p className="text-[9px] text-slate-500 italic">* Used by the government to track teacher deployment and rural shortages.</p>
                     </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="boarding_status" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Boarding Status</Label>
+                      <Select
+                        value={formData.boarding_status}
+                        onValueChange={(value) =>
+                          setFormData(prev => ({ ...prev, boarding_status: value }))
+                        }
+                      >
+                        <SelectTrigger id="boarding_status" className="w-full">
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Day">Day School Only</SelectItem>
+                          <SelectItem value="Both">Day and Boarding</SelectItem>
+                          <SelectItem value="Boarding">Boarding Only</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="gender_composition" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Gender Composition</Label>
+                      <Select
+                        value={formData.gender_composition}
+                        onValueChange={(value) =>
+                          setFormData(prev => ({ ...prev, gender_composition: value }))
+                        }
+                      >
+                        <SelectTrigger id="gender_composition" className="w-full">
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Co-educational">Co-educational</SelectItem>
+                          <SelectItem value="Girls only">Girls Only</SelectItem>
+                          <SelectItem value="Boys only">Boys Only</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -602,6 +670,32 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
                           checked={formData.test_types_enabled}
                           onCheckedChange={(checked) =>
                             setFormData(prev => ({ ...prev, test_types_enabled: checked }))
+                          }
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between border-t pt-4 border-slate-100 dark:border-slate-800/50">
+                        <div className="space-y-0.5">
+                          <Label className="text-base font-bold text-slate-900 dark:text-white">Display Teacher Names on Report Card</Label>
+                          <p className="text-xs text-slate-500">Show the class teacher in the header and each subject teacher under their subject, formatted as first initial and last name (e.g. J. Doe).</p>
+                        </div>
+                        <Switch
+                          checked={formData.show_teacher_on_report_card}
+                          onCheckedChange={(checked) =>
+                            setFormData(prev => ({ ...prev, show_teacher_on_report_card: checked }))
+                          }
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between border-t pt-4 border-slate-100 dark:border-slate-800/50">
+                        <div className="space-y-0.5">
+                          <Label className="text-base font-bold text-slate-900 dark:text-white">Enable Tuckshop Management</Label>
+                          <p className="text-xs text-slate-500">Allow tracking sales, managing inventory, and assigning personnel to run the school tuckshop.</p>
+                        </div>
+                        <Switch
+                          checked={formData.enable_tuckshop}
+                          onCheckedChange={(checked) =>
+                            setFormData(prev => ({ ...prev, enable_tuckshop: checked }))
                           }
                         />
                       </div>
@@ -1057,14 +1151,7 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
                   </CardContent>
                 </Card>
 
-                {/* Submit Action */}
-                <div className="flex justify-end pt-2">
-                  <Button type="submit" disabled={isSaving}>
-                    {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    <Save className="mr-2 h-4 w-4" />
-                    Save Changes
-                  </Button>
-                </div>
+
               </form>
             </div>
 
@@ -1244,13 +1331,7 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
               </Card>
             ))}
 
-            <div className="md:col-span-3 flex justify-end">
-              <Button onClick={handleSave} disabled={isSaving}>
-                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                <Save className="mr-2 h-4 w-4" />
-                Save Official Assets
-              </Button>
-            </div>
+
           </div>
         </TabsContent>
 

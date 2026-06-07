@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { 
   Building2, 
+  Bed,
   LayoutDashboard, 
   TrendingUp, 
   Package, 
@@ -78,6 +79,7 @@ import AcademicPerformance from '@/components/government/AcademicPerformance';
 import TeacherDisabilities from '@/components/government/TeacherDisabilities';
 import StudentVulnerability from '@/components/government/StudentVulnerability';
 import GovernmentSettings from '@/components/government/GovernmentSettings';
+import BoardingAnalytics from '@/components/government/BoardingAnalytics';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#71717a'];
 const getColor = (index: number): string => COLORS[index % COLORS.length];
@@ -1424,6 +1426,7 @@ export default function GovernmentPortal() {
       label: "Infrastructure",
       items: [
         { id: 'infrastructure', label: 'Infrastructure', icon: Building2 },
+        { id: 'boarding-analytics', label: 'Boarding & Accommodation', icon: Bed },
       ]
     },
     {
@@ -1538,6 +1541,9 @@ export default function GovernmentPortal() {
              </TabsContent>
              <TabsContent value="infrastructure">
                <InfrastructureDashboard />
+             </TabsContent>
+             <TabsContent value="boarding-analytics">
+               <BoardingAnalytics />
              </TabsContent>
              <TabsContent value="feeding">
                <FeedingDashboard />

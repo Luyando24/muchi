@@ -72,6 +72,8 @@ const schoolDetailsSchema = z.object({
   category: z.string().min(1, "Please select a category"),
   country: z.string().min(1, "Please select a country"),
   licenseCode: z.string().optional().or(z.literal('')),
+  boarding_status: z.string().min(1, "Please select boarding status"),
+  gender_composition: z.string().min(1, "Please select gender composition"),
 });
 
 const locationSchema = z.object({
@@ -183,6 +185,8 @@ export default function SchoolRegister() {
       category: undefined as any,
       country: 'Zambia',
       licenseCode: '',
+      boarding_status: undefined as any,
+      gender_composition: undefined as any,
     },
   });
 
@@ -596,6 +600,54 @@ export default function SchoolRegister() {
                                       <SelectItem value="Other">Other</SelectItem>
                                     </>
                                   )}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <FormField
+                          control={schoolForm.control}
+                          name="boarding_status"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="font-semibold">Boarding Facility Status</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger className="h-12">
+                                    <SelectValue placeholder="Select" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="Day">Day School Only</SelectItem>
+                                  <SelectItem value="Both">Day and Boarding</SelectItem>
+                                  <SelectItem value="Boarding">Boarding Only</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={schoolForm.control}
+                          name="gender_composition"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="font-semibold">Gender Composition</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger className="h-12">
+                                    <SelectValue placeholder="Select" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="Co-educational">Co-educational</SelectItem>
+                                  <SelectItem value="Girls only">Girls Only</SelectItem>
+                                  <SelectItem value="Boys only">Boys Only</SelectItem>
                                 </SelectContent>
                               </Select>
                               <FormMessage />

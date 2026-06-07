@@ -17,8 +17,10 @@ import {
   Receipt,
   Mail,
   Phone,
-  Save
+  Save,
+  Store
 } from 'lucide-react';
+import TuckshopManagement from '@/components/school-admin/TuckshopManagement';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { SubmitButton } from '@/components/ui/submit-button';
@@ -39,6 +41,7 @@ import FeedingProgramManagement from '@/components/school-admin/FeedingProgramMa
 import ApplicationsView from '@/components/school-admin/ApplicationsView';
 import { GradeAnomalies } from '@/components/school-admin/GradeAnomalies';
 import SchoolAdminNavbar from '@/components/school-admin/SchoolAdminNavbar';
+import AccommodationManagement from '@/components/school-admin/AccommodationManagement';
 import { syncFetch } from '@/lib/syncService';
 import LicenseAccessDenied from '@/components/common/LicenseAccessDenied';
 import { useToast } from "@/components/ui/use-toast";
@@ -526,6 +529,12 @@ export default function SchoolAdminPortal() {
         { id: "finance", label: "Finance (Ledger)", icon: CreditCard, roles: ["school_admin", "bursar", "accounts", "academic_auditor"] },
         { id: "fees", label: "School Fees", icon: Receipt, roles: ["school_admin", "bursar", "accounts"] },
         { id: "feeding_program", label: "Feeding Program", icon: Utensils, roles: ["school_admin", "bursar", "content_manager"] },
+        ...(schoolSettings && schoolSettings.enable_tuckshop !== false ? [
+          { id: "tuckshop", label: "Tuckshop", icon: Store, roles: ["school_admin", "bursar", "accounts"] }
+        ] : []),
+        ...(schoolSettings && schoolSettings.boarding_status !== 'Day' ? [
+          { id: "accommodation", label: "Accommodation", icon: Building2, roles: ["school_admin"] }
+        ] : []),
         { id: "website", label: "Website", icon: Globe, roles: ["school_admin", "content_manager"] },
       ]
     },
@@ -704,6 +713,22 @@ export default function SchoolAdminPortal() {
                 <FeedingProgramManagement />
               </div>
             } />
+
+            {schoolSettings && schoolSettings.enable_tuckshop !== false && (
+              <Route path="tuckshop" element={
+                <div className="space-y-6">
+                  <TuckshopManagement />
+                </div>
+              } />
+            )}
+
+            {schoolSettings && schoolSettings.boarding_status !== 'Day' && (
+              <Route path="accommodation" element={
+                <div className="space-y-6">
+                  <AccommodationManagement />
+                </div>
+              } />
+            )}
 
             <Route path="calendar" element={
               <div className="space-y-6">

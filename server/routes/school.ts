@@ -61,7 +61,7 @@ async function getClassRankings(classId: string, term: string, examType: string,
     .eq('class_id', classId)
     .eq('academic_year', academicYear);
     
-  if (!enrollments || enrollments.length === 0) return { rankings: {}, classAverage: 0, totalStudents: 0 };
+  if (!enrollments || enrollments.length === 0) return { rankings: {} as Record<string, number>, classAverage: 0, totalStudents: 0 };
   
   const studentIds = enrollments.map(e => e.student_id);
   
@@ -537,6 +537,17 @@ const ADMIN_ROLES = [
   "content_manager",
 ];
 
+const isAuthorizedForPromotions = (profile: any) => {
+  if (!profile) return false;
+  if (profile.role === 'system_admin' || profile.secondary_role === 'system_admin') {
+    return true;
+  }
+  const isSchoolAdmin = profile.role === 'school_admin' || profile.secondary_role === 'school_admin';
+  const currentRole = (profile.current_role || '').toLowerCase();
+  const isHeadOrDeputy = currentRole === 'headteacher' || currentRole === 'deputy headteacher';
+  return isSchoolAdmin && isHeadOrDeputy;
+};
+
 export const requireSchoolRole = (allowedRoles: string[]) => {
   return async (req: Request, res: Response, next: any) => {
     const token = req.headers.authorization?.split(" ")[1];
@@ -561,7 +572,7 @@ export const requireSchoolRole = (allowedRoles: string[]) => {
       // Check role in profiles table
       const { data: profiles, error: profileError } = await supabaseAdmin
         .from("profiles")
-        .select("id, role, secondary_role, school_id") 
+        .select("id, role, secondary_role, school_id, current_role") 
         .eq("id", user.id)
         .limit(1);
 
@@ -715,7 +726,9 @@ router.get(
         { key: "signature_url", label: "Headteacher Signature" },
         { key: "ict_name", label: "ICT Support Name" },
         { key: "ict_email", label: "ICT Support Email" },
-        { key: "ict_phone", label: "ICT Support Phone (WhatsApp)" }
+        { key: "ict_phone", label: "ICT Support Phone (WhatsApp)" },
+        { key: "boarding_status", label: "Boarding Status" },
+        { key: "gender_composition", label: "Gender Composition" }
       ];
 
       const missingFields: string[] = [];
@@ -3087,7 +3100,7 @@ router.get(
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
-    const { studentId } = req.params;
+    const studentId = req.params.studentId as string;
     let { term, examType, academicYear } = req.query as {
       term?: string;
       examType?: string;
@@ -3121,7 +3134,7 @@ router.get(
       // 1. Fetch Student Profile & Class
       const { data: student } = await supabaseAdmin
         .from("profiles")
-        .select("*, enrollments(class_id, classes(id, name))")
+        .select("*, enrollments(class_id, classes(id, name, class_teacher_id, teacher:class_teacher_id(full_name)))")
         .eq("id", studentId)
         .eq("school_id", schoolId)
         .single();
@@ -3136,12 +3149,31 @@ router.get(
       if (classId) {
         const { data: subjects } = await supabaseAdmin
           .from("class_subjects")
-          .select("subject_id, subjects(id, name, code, department)")
+          .select("subject_id, subjects(id, name, code, department), profiles(id, full_name)")
           .eq("class_id", classId);
 
         if (subjects) {
           allClassSubjects = subjects
-            .map((s: any) => s.subjects)
+            .map((s: any) => {
+              const rawName = Array.isArray(s.profiles) ? s.profiles[0]?.full_name : s.profiles?.full_name;
+              let formattedTeacher = "";
+              if (rawName) {
+                const parts = rawName.trim().split(/\s+/);
+                if (parts.length > 0) {
+                  if (parts.length === 1) {
+                    formattedTeacher = parts[0];
+                  } else {
+                    const firstName = parts[0];
+                    const lastName = parts[parts.length - 1];
+                    formattedTeacher = `${firstName.charAt(0).toUpperCase()}. ${lastName}`;
+                  }
+                }
+              }
+              return s.subjects ? {
+                ...s.subjects,
+                teacherName: formattedTeacher || null
+              } : null;
+            })
             .filter(Boolean);
         }
       }
@@ -3204,7 +3236,15 @@ router.get(
       allClassSubjects.forEach((subject) => {
         const subjectGrades = gradesBySubject.get(subject.id) || [];
         if (subjectGrades.length > 0) {
-          finalGrades.push(...subjectGrades);
+          subjectGrades.forEach((g) => {
+            finalGrades.push({
+              ...g,
+              subjects: {
+                ...g.subjects,
+                teacherName: subject.teacherName
+              }
+            });
+          });
         } else {
           // Return placeholder for absent/missing grade
           finalGrades.push({
@@ -3242,7 +3282,7 @@ router.get(
       const { data: schoolDetails } = await supabaseAdmin
         .from("schools")
         .select(
-          "name, address, email, phone, website, logo_url, signature_url, seal_url, coat_of_arms_url, school_type, headteacher_name, headteacher_title, compulsory_subjects_primary, compulsory_subjects_secondary, test_types, test_types_enabled",
+          "name, address, email, phone, website, logo_url, signature_url, seal_url, coat_of_arms_url, school_type, headteacher_name, headteacher_title, compulsory_subjects_primary, compulsory_subjects_secondary, test_types, test_types_enabled, show_teacher_on_report_card",
         )
         .eq("id", schoolId)
         .single();
@@ -3284,6 +3324,22 @@ router.get(
         }
       }
 
+      // Format teacher's name as "F. Lastname"
+      const rawTeacherName = student?.enrollments?.[0]?.classes?.teacher?.full_name;
+      let classTeacherName = "";
+      if (rawTeacherName) {
+        const parts = rawTeacherName.trim().split(/\s+/);
+        if (parts.length > 0) {
+          if (parts.length === 1) {
+            classTeacherName = parts[0];
+          } else {
+            const firstName = parts[0];
+            const lastName = parts[parts.length - 1];
+            classTeacherName = `${firstName.charAt(0).toUpperCase()}. ${lastName}`;
+          }
+        }
+      }
+
       res.json({
         school: schoolDetails,
         student: {
@@ -3292,6 +3348,7 @@ router.get(
           studentNumber: student.student_number,
           gender: student.gender,
           class: student.enrollments?.[0]?.classes?.name || "N/A",
+          classTeacherName,
           attendance: 0, // Placeholder
           position,
           totalStudents,
@@ -3334,7 +3391,7 @@ router.get(
       const { data: schoolDetails } = await supabaseAdmin
         .from("schools")
         .select(
-          "name, address, email, phone, website, logo_url, signature_url, seal_url, coat_of_arms_url, school_type, headteacher_name, headteacher_title, compulsory_subjects_primary, compulsory_subjects_secondary, test_types, test_types_enabled",
+          "name, address, email, phone, website, logo_url, signature_url, seal_url, coat_of_arms_url, school_type, headteacher_name, headteacher_title, compulsory_subjects_primary, compulsory_subjects_secondary, test_types, test_types_enabled, show_teacher_on_report_card",
         )
         .eq("id", schoolId)
         .single();
@@ -3349,7 +3406,7 @@ router.get(
       const { data: enrollments, error: enrollmentError } = await supabaseAdmin
         .from("enrollments")
         .select(
-          "student_id, profiles!enrollments_student_id_fkey(full_name, student_number, gender), classes(name)",
+          "student_id, profiles!enrollments_student_id_fkey(full_name, student_number, gender), classes(name, class_teacher_id, teacher:class_teacher_id(full_name))",
         )
         .eq("class_id", classId)
         .eq("academic_year", academicYear);
@@ -3361,14 +3418,32 @@ router.get(
 
       const studentIds = enrollments.map((e) => e.student_id);
 
-      // 2b. Fetch Class Subjects (to ensure we list ALL subjects, even if absent)
       const { data: classSubjects } = await supabaseAdmin
         .from("class_subjects")
-        .select("subject_id, subjects(id, name, code, department)")
+        .select("subject_id, subjects(id, name, code, department), profiles(id, full_name)")
         .eq("class_id", classId);
 
       const allClassSubjects = (classSubjects || [])
-        .map((cs: any) => cs.subjects)
+        .map((cs: any) => {
+          const rawName = Array.isArray(cs.profiles) ? cs.profiles[0]?.full_name : cs.profiles?.full_name;
+          let formattedTeacher = "";
+          if (rawName) {
+            const parts = rawName.trim().split(/\s+/);
+            if (parts.length > 0) {
+              if (parts.length === 1) {
+                formattedTeacher = parts[0];
+              } else {
+                const firstName = parts[0];
+                const lastName = parts[parts.length - 1];
+                formattedTeacher = `${firstName.charAt(0).toUpperCase()}. ${lastName}`;
+              }
+            }
+          }
+          return cs.subjects ? {
+            ...cs.subjects,
+            teacherName: formattedTeacher || null
+          } : null;
+        })
         .filter(Boolean);
 
       // 3. Fetch all grades for these students for this term & year (without database exam_type filter)
@@ -3439,7 +3514,15 @@ router.get(
         allClassSubjects.forEach((subject: any) => {
           const subjectGrades = gradesBySubject.get(subject.id) || [];
           if (subjectGrades.length > 0) {
-            finalGrades.push(...subjectGrades);
+            subjectGrades.forEach((g) => {
+              finalGrades.push({
+                ...g,
+                subjects: {
+                  ...g.subjects,
+                  teacherName: subject.teacherName
+                }
+              });
+            });
           } else {
             // Return an "ABSENT" grade object if no grade exists
             finalGrades.push({
@@ -3463,6 +3546,22 @@ router.get(
           }
         }
 
+        // Format teacher's name as "F. Lastname"
+        const rawTeacherName = (enrollment.classes as any)?.teacher?.full_name;
+        let classTeacherName = "";
+        if (rawTeacherName) {
+          const parts = rawTeacherName.trim().split(/\s+/);
+          if (parts.length > 0) {
+            if (parts.length === 1) {
+              classTeacherName = parts[0];
+            } else {
+              const firstName = parts[0];
+              const lastName = parts[parts.length - 1];
+              classTeacherName = `${firstName.charAt(0).toUpperCase()}. ${lastName}`;
+            }
+          }
+        }
+
         return {
           school: schoolDetails,
           student: {
@@ -3471,6 +3570,7 @@ router.get(
             studentNumber: (enrollment.profiles as any)?.student_number,
             gender: (enrollment.profiles as any)?.gender,
             class: (enrollment.classes as any)?.name || "N/A",
+            classTeacherName,
             attendance: 0,
             position: rankingsData.rankings[studentId] || 0,
             totalStudents: rankingsData.totalStudents,
@@ -3650,18 +3750,31 @@ router.get(
       const totalCount = filtered.length;
       const paginated = filtered.slice((page - 1) * limit, page * limit);
 
-      const formattedTeachers = paginated.map((teacher: any) => ({
-        id: teacher.id,
-        firstName: teacher.full_name?.split(" ")[0] || "",
-        lastName: teacher.full_name?.split(" ").slice(1).join(" ") || "",
-        fullName: teacher.full_name,
-        staffNumber: teacher.staff_number,
-        email: teacher.email || "",
-        department: teacher.department || "General",
-        subjects: teacher.subjects || [],
-        status: teacher.employment_status || "Active",
-        joinDate: teacher.join_date || new Date().toISOString().split("T")[0],
-      }));
+      const formattedTeachers = paginated.map((teacher: any) => {
+        let filled = 0;
+        teacherFieldsToCheck.forEach((field) => {
+          const val = teacher[field];
+          if (val !== undefined && val !== null && String(val).trim() !== "") {
+            filled++;
+          }
+        });
+        const completeness = Math.round((filled / teacherFieldsToCheck.length) * 100);
+
+        return {
+          id: teacher.id,
+          firstName: teacher.full_name?.split(" ")[0] || "",
+          lastName: teacher.full_name?.split(" ").slice(1).join(" ") || "",
+          fullName: teacher.full_name,
+          staffNumber: teacher.staff_number,
+          email: teacher.email || "",
+          department: teacher.department || "General",
+          subjects: teacher.subjects || [],
+          status: teacher.employment_status || "Active",
+          joinDate: teacher.join_date || new Date().toISOString().split("T")[0],
+          gender: teacher.gender || "",
+          completeness,
+        };
+      });
 
       res.json({
         data: formattedTeachers,
@@ -3688,7 +3801,7 @@ router.post(
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
-    const { email, password, name, username, department, subjects, joinDate } = req.body;
+    const { email, password, name, username, department, subjects, joinDate, gender } = req.body;
 
     try {
       const staffNumber = await generateUniqueStaffNumber();
@@ -3726,6 +3839,7 @@ router.post(
             subjects: Array.isArray(subjects) ? subjects : [],
             staff_number: staffNumber,
             join_date: joinDate || new Date().toISOString().split("T")[0],
+            gender: gender || null,
             employment_status: "Active",
             is_temp_password: true,
             temp_password_set_at: new Date().toISOString(),
@@ -3813,6 +3927,28 @@ router.get(
         ...(teachingAssignments?.map((ta: any) => ta.class_id) || [])
       ]);
 
+      // 3.7 Fetch CPD records
+      const { data: cpdRecords, error: cpdError } = await supabaseAdmin
+        .from("teacher_cpd")
+        .select("*")
+        .eq("teacher_id", id)
+        .order("completion_date", { ascending: false });
+
+      if (cpdError) {
+        console.error("Error fetching CPD records:", cpdError);
+      }
+
+      // 3.8 Fetch Career History records
+      const { data: careerHistory, error: careerError } = await supabaseAdmin
+        .from("teacher_career_history")
+        .select("*")
+        .eq("teacher_id", id)
+        .order("change_date", { ascending: false });
+
+      if (careerError) {
+        console.error("Error fetching career history records:", careerError);
+      }
+
       // 4. Structure Response
       const response = {
         profile: {
@@ -3826,6 +3962,8 @@ router.get(
         classes: classes || [],
         headOfSubjects: subjectsHead || [],
         teachingAssignments: teachingAssignments || [],
+        cpdRecords: cpdRecords || [],
+        careerHistory: careerHistory || [],
       };
 
 
@@ -3870,6 +4008,7 @@ router.put(
       field_of_study,
       current_role,
       location_type,
+      gender,
     } = req.body;
 
     try {
@@ -3888,6 +4027,7 @@ router.put(
         updateData.qualifications = qualifications;
       if (work_history !== undefined) updateData.work_history = work_history;
       if (username !== undefined) updateData.username = username || null;
+      if (gender !== undefined) updateData.gender = gender;
 
       // Handle date_of_birth: empty string means null, undefined means no change
       if (date_of_birth !== undefined) {
@@ -3913,7 +4053,13 @@ router.put(
         updateData.completion_year = completion_year ? parseInt(completion_year, 10) : null;
       }
       if (field_of_study !== undefined) updateData.field_of_study = field_of_study;
-      if (current_role !== undefined) updateData.current_role = current_role;
+      if (current_role !== undefined) {
+        if (isAuthorizedForPromotions(profile)) {
+          updateData.current_role = current_role;
+        } else {
+          console.log(`User ${profile.id} is not authorized to update current_role. Skipping.`);
+        }
+      }
       if (location_type !== undefined) updateData.location_type = location_type;
 
       const { error } = await supabaseAdmin
@@ -4028,6 +4174,10 @@ router.post(
     const schoolId = profile.school_id;
     const { id } = req.params;
 
+    if (!isAuthorizedForPromotions(profile)) {
+      return res.status(403).json({ message: "Forbidden: Only Headteachers or Deputy Headteachers can promote teachers." });
+    }
+
     try {
       // 1. Get the current user profile
       const { data: targetProfile, error: fetchError } = await supabaseAdmin
@@ -4066,6 +4216,249 @@ router.post(
       res.status(500).json({ message: error.message });
     }
   },
+);
+
+// POST /api/school/teachers/:id/cpd
+// Add CPD record for a teacher
+router.post(
+  "/teachers/:id/cpd",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { id } = req.params;
+    const { course_name, provider, category, hours, completion_date, certificate_url } = req.body;
+
+    try {
+      // Validate teacher belongs to the school
+      const { data: teacher, error: teacherError } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .eq("id", id)
+        .eq("school_id", schoolId)
+        .eq("role", "teacher")
+        .single();
+
+      if (teacherError || !teacher) {
+        return res.status(404).json({ message: "Teacher not found in this school" });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from("teacher_cpd")
+        .insert({
+          teacher_id: id,
+          school_id: schoolId,
+          course_name,
+          provider,
+          category,
+          hours: parseInt(hours, 10),
+          completion_date,
+          certificate_url: certificate_url || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      res.status(201).json({ message: "CPD record added successfully", data });
+    } catch (error: any) {
+      console.error("Add CPD Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// DELETE /api/school/teachers/:id/cpd/:cpdId
+// Delete a CPD record for a teacher
+router.delete(
+  "/teachers/:id/cpd/:cpdId",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { id, cpdId } = req.params;
+
+    try {
+      const { error } = await supabaseAdmin
+        .from("teacher_cpd")
+        .delete()
+        .eq("id", cpdId)
+        .eq("teacher_id", id)
+        .eq("school_id", schoolId);
+
+      if (error) throw error;
+
+      res.json({ message: "CPD record deleted successfully" });
+    } catch (error: any) {
+      console.error("Delete CPD Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// POST /api/school/teachers/:id/career
+// Add Career Progression record for a teacher
+router.post(
+  "/teachers/:id/career",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { id } = req.params;
+    const { previous_role, new_role, type, change_date, notes } = req.body;
+
+    if (!isAuthorizedForPromotions(profile)) {
+      return res.status(403).json({ message: "Forbidden: Only Headteachers or Deputy Headteachers can log career events." });
+    }
+
+    try {
+      // Validate teacher belongs to the school
+      const { data: teacher, error: teacherError } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .eq("id", id)
+        .eq("school_id", schoolId)
+        .eq("role", "teacher")
+        .single();
+
+      if (teacherError || !teacher) {
+        return res.status(404).json({ message: "Teacher not found in this school" });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from("teacher_career_history")
+        .insert({
+          teacher_id: id,
+          school_id: schoolId,
+          previous_role: previous_role || null,
+          new_role,
+          type,
+          change_date,
+          notes: notes || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Update current_role in profiles
+      if (new_role) {
+        await supabaseAdmin
+          .from("profiles")
+          .update({ current_role: new_role })
+          .eq("id", id);
+      }
+
+      res.status(201).json({ message: "Career progression record added successfully", data });
+    } catch (error: any) {
+      console.error("Add Career History Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// DELETE /api/school/teachers/:id/career/:careerId
+// Delete a Career progression record
+router.delete(
+  "/teachers/:id/career/:careerId",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { id, careerId } = req.params;
+
+    if (!isAuthorizedForPromotions(profile)) {
+      return res.status(403).json({ message: "Forbidden: Only Headteachers or Deputy Headteachers can delete career events." });
+    }
+
+    try {
+      const { error } = await supabaseAdmin
+        .from("teacher_career_history")
+        .delete()
+        .eq("id", careerId)
+        .eq("teacher_id", id)
+        .eq("school_id", schoolId);
+
+      if (error) throw error;
+
+      res.json({ message: "Career progression record deleted successfully" });
+    } catch (error: any) {
+      console.error("Delete Career History Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// POST /api/school/teachers/bulk-complete
+// Bulk edit teacher profiles
+router.post(
+  "/teachers/bulk-complete",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { teacherIds, fields } = req.body;
+
+    if (!Array.isArray(teacherIds) || teacherIds.length === 0) {
+      return res.status(400).json({ message: "Invalid or empty teacherIds array" });
+    }
+
+    try {
+      // Validate all teacherIds belong to this school and are teachers
+      const { data: validTeachers, error: validateError } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .in("id", teacherIds)
+        .eq("school_id", schoolId)
+        .eq("role", "teacher");
+
+      if (validateError) throw validateError;
+      const validIds = (validTeachers || []).map((t: any) => t.id);
+
+      if (validIds.length === 0) {
+        return res.status(400).json({ message: "No valid teachers found in this school with the provided IDs" });
+      }
+
+      // Build update fields object
+      const updateObj: any = {
+        updated_at: new Date()
+      };
+
+      const allowedFields = [
+        "gender", "marital_status", "housing_status", "disability_status",
+        "accommodation_provided", "highest_qualification", "institution_name",
+        "completion_year", "field_of_study", "current_role", "location_type"
+      ];
+
+      allowedFields.forEach((field) => {
+        if (fields[field] !== undefined && fields[field] !== null && String(fields[field]).trim() !== "") {
+          if (field === "current_role") {
+            if (isAuthorizedForPromotions(profile)) {
+              updateObj[field] = fields[field];
+            } else {
+              console.log(`User ${profile.id} is not authorized to update current_role in bulk edit. Skipping.`);
+            }
+          } else if (field === "completion_year") {
+            updateObj[field] = parseInt(fields[field], 10);
+          } else {
+            updateObj[field] = fields[field];
+          }
+        }
+      });
+
+      const { error: updateError } = await supabaseAdmin
+        .from("profiles")
+        .update(updateObj)
+        .in("id", validIds);
+
+      if (updateError) throw updateError;
+
+      res.json({ message: `Successfully updated ${validIds.length} teachers` });
+    } catch (error: any) {
+      console.error("Bulk Complete Teachers Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
 );
 
 // --- ACADEMIC MANAGEMENT ENDPOINTS ---
@@ -7102,9 +7495,13 @@ router.put(
       category,
       country,
       location_type,
+      boarding_status,
+      gender_composition,
       ict_name,
       ict_email,
       ict_phone,
+      show_teacher_on_report_card,
+      enable_tuckshop,
     } = req.body;
 
     try {
@@ -7142,9 +7539,19 @@ router.put(
           category,
           country,
           location_type,
+          boarding_status: (boarding_status && boarding_status.trim() !== '') ? boarding_status : null,
+          gender_composition: (gender_composition && gender_composition.trim() !== '') ? gender_composition : null,
           ict_name,
           ict_email,
           ict_phone,
+          show_teacher_on_report_card:
+            show_teacher_on_report_card === undefined
+              ? undefined
+              : Boolean(show_teacher_on_report_card),
+          enable_tuckshop:
+            enable_tuckshop === undefined
+              ? undefined
+              : Boolean(enable_tuckshop),
           updated_at: new Date(),
         })
         .eq("id", schoolId)
@@ -9124,6 +9531,706 @@ router.post(
     } catch (error: any) {
       console.error("Claim Reward Error:", error);
       res.status(500).json({ message: error.message || "Failed to claim setup reward." });
+    }
+  }
+);
+
+// --- ACCOMMODATION / BOARDING MODULE ROUTES ---
+
+// GET /api/school/accommodation/blocks
+router.get(
+  "/accommodation/blocks",
+  requireSchoolRole([...ADMIN_ROLES, "teacher", "student"]),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("accommodation_blocks")
+        .select("*")
+        .eq("school_id", schoolId)
+        .order("name", { ascending: true });
+
+      if (error) throw error;
+      res.json(data || []);
+    } catch (error: any) {
+      console.error("Get Blocks Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// POST /api/school/accommodation/blocks
+router.post(
+  "/accommodation/blocks",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { name, gender_policy } = req.body;
+
+    if (!name || !gender_policy) {
+      return res.status(400).json({ message: "Name and gender policy are required" });
+    }
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("accommodation_blocks")
+        .insert({
+          school_id: schoolId,
+          name,
+          gender_policy,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.status(201).json(data);
+    } catch (error: any) {
+      console.error("Create Block Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// PUT /api/school/accommodation/blocks/:id
+router.put(
+  "/accommodation/blocks/:id",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { id } = req.params;
+    const { name, gender_policy } = req.body;
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("accommodation_blocks")
+        .update({ name, gender_policy, updated_at: new Date() })
+        .eq("id", id)
+        .eq("school_id", schoolId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.json(data);
+    } catch (error: any) {
+      console.error("Update Block Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// DELETE /api/school/accommodation/blocks/:id
+router.delete(
+  "/accommodation/blocks/:id",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { id } = req.params;
+
+    try {
+      const { error } = await supabaseAdmin
+        .from("accommodation_blocks")
+        .delete()
+        .eq("id", id)
+        .eq("school_id", schoolId);
+
+      if (error) throw error;
+      res.json({ message: "Block deleted successfully" });
+    } catch (error: any) {
+      console.error("Delete Block Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// GET /api/school/accommodation/rooms
+router.get(
+  "/accommodation/rooms",
+  requireSchoolRole([...ADMIN_ROLES, "teacher", "student"]),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+
+    try {
+      // Fetch rooms in blocks that belong to the school
+      const { data: blocks } = await supabaseAdmin
+        .from("accommodation_blocks")
+        .select("id")
+        .eq("school_id", schoolId);
+      
+      const blockIds = blocks?.map(b => b.id) || [];
+
+      if (blockIds.length === 0) {
+        return res.json([]);
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from("accommodation_rooms")
+        .select("*, accommodation_blocks(name, gender_policy)")
+        .in("block_id", blockIds)
+        .order("room_number", { ascending: true });
+
+      if (error) throw error;
+      res.json(data || []);
+    } catch (error: any) {
+      console.error("Get Rooms Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// POST /api/school/accommodation/rooms
+router.post(
+  "/accommodation/rooms",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { block_id, room_number, capacity } = req.body;
+
+    if (!block_id || !room_number || !capacity) {
+      return res.status(400).json({ message: "Block, room number, and capacity are required" });
+    }
+
+    try {
+      // Verify block belongs to the school
+      const { data: block } = await supabaseAdmin
+        .from("accommodation_blocks")
+        .select("school_id")
+        .eq("id", block_id)
+        .eq("school_id", schoolId)
+        .maybeSingle();
+
+      if (!block) {
+        return res.status(403).json({ message: "Unauthorized or block not found" });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from("accommodation_rooms")
+        .insert({
+          block_id,
+          room_number,
+          capacity: parseInt(capacity),
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.status(201).json(data);
+    } catch (error: any) {
+      console.error("Create Room Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// PUT /api/school/accommodation/rooms/:id
+router.put(
+  "/accommodation/rooms/:id",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { id } = req.params;
+    const { room_number, capacity } = req.body;
+
+    try {
+      // Verify room belongs to school block
+      const { data: roomCheck } = await supabaseAdmin
+        .from("accommodation_rooms")
+        .select("*, accommodation_blocks(school_id)")
+        .eq("id", id)
+        .single();
+
+      if (!roomCheck || roomCheck.accommodation_blocks?.school_id !== schoolId) {
+        return res.status(403).json({ message: "Unauthorized or room not found" });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from("accommodation_rooms")
+        .update({
+          room_number,
+          capacity: parseInt(capacity),
+          updated_at: new Date()
+        })
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.json(data);
+    } catch (error: any) {
+      console.error("Update Room Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// DELETE /api/school/accommodation/rooms/:id
+router.delete(
+  "/accommodation/rooms/:id",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { id } = req.params;
+
+    try {
+      // Verify room belongs to school block
+      const { data: roomCheck } = await supabaseAdmin
+        .from("accommodation_rooms")
+        .select("*, accommodation_blocks(school_id)")
+        .eq("id", id)
+        .single();
+
+      if (!roomCheck || roomCheck.accommodation_blocks?.school_id !== schoolId) {
+        return res.status(403).json({ message: "Unauthorized or room not found" });
+      }
+
+      const { error } = await supabaseAdmin
+        .from("accommodation_rooms")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+      res.json({ message: "Room deleted successfully" });
+    } catch (error: any) {
+      console.error("Delete Room Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// GET /api/school/accommodation/allocations
+router.get(
+  "/accommodation/allocations",
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+
+    try {
+      // Fetch rooms in blocks that belong to the school
+      const { data: blocks } = await supabaseAdmin
+        .from("accommodation_blocks")
+        .select("id")
+        .eq("school_id", schoolId);
+      
+      const blockIds = blocks?.map(b => b.id) || [];
+
+      if (blockIds.length === 0) {
+        return res.json([]);
+      }
+
+      const { data: rooms } = await supabaseAdmin
+        .from("accommodation_rooms")
+        .select("id")
+        .in("block_id", blockIds);
+
+      const roomIds = rooms?.map(r => r.id) || [];
+
+      if (roomIds.length === 0) {
+        return res.json([]);
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from("accommodation_allocations")
+        .select("*, student:profiles(id, full_name, gender, grade, boarding_type), room:accommodation_rooms(id, room_number, block:accommodation_blocks(name, gender_policy))")
+        .in("room_id", roomIds)
+        .eq("status", "Active")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      res.json(data || []);
+    } catch (error: any) {
+      console.error("Get Allocations Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// POST /api/school/accommodation/allocations
+router.post(
+  "/accommodation/allocations",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { student_id, room_id, academic_year } = req.body;
+
+    if (!student_id || !room_id || !academic_year) {
+      return res.status(400).json({ message: "Student, room, and academic year are required" });
+    }
+
+    try {
+      // 1. Verify student belongs to this school
+      const { data: student } = await supabaseAdmin
+        .from("profiles")
+        .select("id, school_id, gender")
+        .eq("id", student_id)
+        .single();
+
+      if (!student || student.school_id !== schoolId) {
+        return res.status(403).json({ message: "Student not found or unauthorized" });
+      }
+
+      // 2. Verify room exists and check capacity
+      const { data: room } = await supabaseAdmin
+        .from("accommodation_rooms")
+        .select("*, accommodation_blocks(school_id, gender_policy)")
+        .eq("id", room_id)
+        .single();
+
+      if (!room || room.accommodation_blocks?.school_id !== schoolId) {
+        return res.status(403).json({ message: "Room not found or unauthorized" });
+      }
+
+      // 3. Verify room gender policy aligns with student gender
+      const roomGenderPolicy = room.accommodation_blocks.gender_policy;
+      if (roomGenderPolicy !== 'Mixed' && roomGenderPolicy !== student.gender) {
+        return res.status(400).json({ message: `Cannot allocate ${student.gender} student to a ${roomGenderPolicy} block.` });
+      }
+
+      // 4. Check occupied capacity
+      const { count: currentOccupants } = await supabaseAdmin
+        .from("accommodation_allocations")
+        .select("id", { count: "exact", head: true })
+        .eq("room_id", room_id)
+        .eq("status", "Active");
+
+      if ((currentOccupants || 0) >= room.capacity) {
+        return res.status(400).json({ message: "Room is already at full capacity" });
+      }
+
+      // 5. Ensure student is marked as 'Boarder'
+      await supabaseAdmin
+        .from("profiles")
+        .update({ boarding_type: "Boarder" })
+        .eq("id", student_id);
+
+      // 6. Create the allocation (upserting to deactivate previous active allocation in the same year)
+      // First, vacate any active allocations for this student in this academic year
+      await supabaseAdmin
+        .from("accommodation_allocations")
+        .update({ status: "Vacated", updated_at: new Date() })
+        .eq("student_id", student_id)
+        .eq("academic_year", academic_year)
+        .eq("status", "Active");
+
+      const { data, error } = await supabaseAdmin
+        .from("accommodation_allocations")
+        .insert({
+          student_id,
+          room_id,
+          academic_year,
+          status: "Active",
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.status(201).json(data);
+    } catch (error: any) {
+      console.error("Create Allocation Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// DELETE /api/school/accommodation/allocations/:id (Vacate)
+router.delete(
+  "/accommodation/allocations/:id",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { id } = req.params;
+
+    try {
+      // Verify allocation belongs to school
+      const { data: allocation } = await supabaseAdmin
+        .from("accommodation_allocations")
+        .select("*, accommodation_rooms(block_id, accommodation_blocks(school_id))")
+        .eq("id", id)
+        .single();
+
+      if (!allocation || allocation.accommodation_rooms?.accommodation_blocks?.school_id !== schoolId) {
+        return res.status(403).json({ message: "Unauthorized or allocation not found" });
+      }
+
+      // Deactivate allocation
+      const { data, error } = await supabaseAdmin
+        .from("accommodation_allocations")
+        .update({ status: "Vacated", updated_at: new Date() })
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.json(data);
+    } catch (error: any) {
+      console.error("Vacate Allocation Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// GET /api/school/accommodation/applications
+router.get(
+  "/accommodation/applications",
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("accommodation_applications")
+        .select("*, student:profiles(id, full_name, gender, grade, boarding_type), preferred_block:accommodation_blocks(name)")
+        .eq("school_id", schoolId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      res.json(data || []);
+    } catch (error: any) {
+      console.error("Get Applications Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// PUT /api/school/accommodation/applications/:id
+router.put(
+  "/accommodation/applications/:id",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!status) {
+      return res.status(400).json({ message: "Status is required" });
+    }
+
+    try {
+      const { data: application } = await supabaseAdmin
+        .from("accommodation_applications")
+        .select("school_id, student_id")
+        .eq("id", id)
+        .single();
+
+      if (!application || application.school_id !== schoolId) {
+        return res.status(403).json({ message: "Unauthorized or application not found" });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from("accommodation_applications")
+        .update({ status, updated_at: new Date() })
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // If approved, verify that student's boarding_type is set to 'Boarder'
+      if (status === 'Approved') {
+        await supabaseAdmin
+          .from("profiles")
+          .update({ boarding_type: "Boarder" })
+          .eq("id", application.student_id);
+      }
+
+      res.json(data);
+    } catch (error: any) {
+      console.error("Update Application Status Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// GET /api/school/accommodation/stats
+router.get(
+  "/accommodation/stats",
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+
+    try {
+      // 1. School settings for gender policies
+      const { data: school } = await supabaseAdmin
+        .from("schools")
+        .select("boarding_status, gender_composition, name, province, district")
+        .eq("id", schoolId)
+        .single();
+
+      // 2. Total Boarders from profiles
+      const { data: boarders } = await supabaseAdmin
+        .from("profiles")
+        .select("id, gender")
+        .eq("school_id", schoolId)
+        .eq("role", "student")
+        .eq("boarding_type", "Boarder");
+
+      const totalBoarders = boarders?.length || 0;
+      const maleBoarders = boarders?.filter(b => b.gender === 'Male').length || 0;
+      const femaleBoarders = boarders?.filter(b => b.gender === 'Female').length || 0;
+
+      // 3. Blocks & Rooms capacities
+      const { data: blocks } = await supabaseAdmin
+        .from("accommodation_blocks")
+        .select("id, gender_policy")
+        .eq("school_id", schoolId);
+
+      const blockIds = blocks?.map(b => b.id) || [];
+
+      let totalCapacity = 0;
+      let maleCapacity = 0;
+      let femaleCapacity = 0;
+
+      let occupiedBeds = 0;
+      let maleOccupied = 0;
+      let femaleOccupied = 0;
+
+      if (blockIds.length > 0) {
+        const { data: rooms } = await supabaseAdmin
+          .from("accommodation_rooms")
+          .select("id, capacity, block_id, accommodation_blocks(gender_policy)")
+          .in("block_id", blockIds);
+
+        rooms?.forEach((r: any) => {
+          totalCapacity += r.capacity;
+          const policy = r.accommodation_blocks?.gender_policy;
+          if (policy === 'Male') maleCapacity += r.capacity;
+          else if (policy === 'Female') femaleCapacity += r.capacity;
+          else {
+            // Mixed block - divide equally or assign to policy
+            maleCapacity += Math.ceil(r.capacity / 2);
+            femaleCapacity += Math.floor(r.capacity / 2);
+          }
+        });
+
+        // Occupied beds
+        const roomIds = rooms?.map(r => r.id) || [];
+        if (roomIds.length > 0) {
+          const { data: allocations } = await supabaseAdmin
+            .from("accommodation_allocations")
+            .select("id, student:profiles(gender)")
+            .in("room_id", roomIds)
+            .eq("status", "Active");
+
+          occupiedBeds = allocations?.length || 0;
+          allocations?.forEach((a: any) => {
+            if (a.student?.gender === 'Male') maleOccupied++;
+            else if (a.student?.gender === 'Female') femaleOccupied++;
+          });
+        }
+      }
+
+      const vacantBeds = totalCapacity - occupiedBeds;
+      const shortage = totalBoarders > totalCapacity ? totalBoarders - totalCapacity : 0;
+
+      res.json({
+        schoolName: school?.name || '',
+        boardingStatus: school?.boarding_status || 'Day',
+        genderComposition: school?.gender_composition || 'Co-educational',
+        totalBoarders,
+        maleBoarders,
+        femaleBoarders,
+        totalCapacity,
+        maleCapacity,
+        femaleCapacity,
+        occupiedBeds,
+        maleOccupied,
+        femaleOccupied,
+        vacantBeds,
+        vacantMale: Math.max(0, maleCapacity - maleOccupied),
+        vacantFemale: Math.max(0, femaleCapacity - femaleOccupied),
+        shortage,
+        shortageSeverity: shortage > 10 ? 'Critical' : shortage > 0 ? 'Warning' : 'Stable'
+      });
+    } catch (error: any) {
+      console.error("Get Accommodation Stats Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// POST /api/school/accommodation/notify-shortage
+router.post(
+  "/accommodation/notify-shortage",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { totalBoarders, totalCapacity, shortage } = req.body;
+
+    try {
+      const { data: school } = await supabaseAdmin
+        .from("schools")
+        .select("name, district, province")
+        .eq("id", schoolId)
+        .single();
+
+      if (!school) {
+        return res.status(404).json({ message: "School not found" });
+      }
+
+      // Find all government profiles
+      const { data: govProfiles } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .or("role.eq.government,secondary_role.eq.government");
+
+      if (govProfiles && govProfiles.length > 0) {
+        const notifications = govProfiles.map(gp => ({
+          user_id: gp.id,
+          title: `Critical Accommodation Shortage at ${school.name}`,
+          message: `School ${school.name} (${school.district}, ${school.province}) has reported a critical shortage of student accommodation. Total boarders: ${totalBoarders}, Bed Capacity: ${totalCapacity}. Shortage: ${shortage} beds.`,
+          type: "alert"
+        }));
+
+        const { error } = await supabaseAdmin
+          .from("notifications")
+          .insert(notifications);
+
+        if (error) throw error;
+      }
+
+      res.json({ success: true, message: "Critical shortage notification sent to the government portal." });
+    } catch (error: any) {
+      console.error("Notify Shortage Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// GET /api/school/accommodation/students
+router.get(
+  "/accommodation/students",
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("profiles")
+        .select("id, full_name, gender, grade, boarding_type")
+        .eq("school_id", schoolId)
+        .eq("role", "student")
+        .order("full_name", { ascending: true });
+
+      if (error) throw error;
+      res.json(data || []);
+    } catch (error: any) {
+      console.error("Get Accommodation Students Error:", error);
+      res.status(500).json({ message: error.message });
     }
   }
 );

@@ -2446,4 +2446,343 @@ router.delete('/prospects/:id', requireSystemAdmin, async (req: Request, res: Re
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// EMAIL SYSTEM ROUTES
+// ═══════════════════════════════════════════════════════════════════════════════
+import {
+  getSmtpConfig,
+  testSmtpConnection,
+  sendEmail,
+  sendTemplatedEmail,
+  renderTemplate,
+} from '../services/emailService.js';
+
+// ─── SMTP Config ──────────────────────────────────────────────────────────────
+
+// GET /api/admin/email/smtp — Fetch SMTP config (password masked)
+router.get('/email/smtp', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const config = await getSmtpConfig();
+    if (!config) return res.json({ host: '', port: 587, secure: false, username: '', password: '', from_name: 'MUCHI', from_email: '', is_active: false });
+    // Mask password
+    res.json({ ...config, password: config.password ? '••••••••' : '' });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// PUT /api/admin/email/smtp — Save SMTP config
+router.put('/email/smtp', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { host, port, secure, username, password, from_name, from_email, is_active } = req.body;
+  try {
+    // Build update object — only update password if a real value provided (not masked placeholder)
+    const updateData: any = { host, port: Number(port), secure: Boolean(secure), username, from_name, from_email, is_active: Boolean(is_active), updated_at: new Date().toISOString() };
+    if (password && password !== '••••••••') {
+      updateData.password = password;
+    }
+
+    const { data: existing } = await supabaseAdmin.from('email_smtp_config').select('id').limit(1).single();
+
+    let result;
+    if (existing) {
+      result = await supabaseAdmin.from('email_smtp_config').update(updateData).eq('id', existing.id).select().single();
+    } else {
+      result = await supabaseAdmin.from('email_smtp_config').insert({ ...updateData, password: password || '' }).select().single();
+    }
+
+    if (result.error) throw result.error;
+    res.json({ message: 'SMTP configuration saved successfully', data: { ...result.data, password: '••••••••' } });
+  } catch (error: any) {
+    console.error('Save SMTP Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/admin/email/smtp/test — Send a test email
+router.post('/email/smtp/test', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { target_email } = req.body;
+  if (!target_email) return res.status(400).json({ message: 'target_email is required' });
+  try {
+    const result = await testSmtpConnection(target_email);
+    if (!result.success) return res.status(400).json({ message: result.error });
+    res.json({ message: `Test email sent successfully to ${target_email}`, messageId: result.messageId });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ─── Email Templates ──────────────────────────────────────────────────────────
+
+// GET /api/admin/email/templates — List all templates
+router.get('/email/templates', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const { audience } = req.query;
+    let query = supabaseAdmin.from('email_templates').select('*').order('audience').order('name');
+    if (audience && audience !== 'all') query = query.eq('audience', audience as string);
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/admin/email/templates/:id — Get single template
+router.get('/email/templates/:id', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin.from('email_templates').select('*').eq('id', req.params.id).single();
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/admin/email/templates — Create new template
+router.post('/email/templates', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { key, name, audience, subject, html_body, text_body, variables, is_active } = req.body;
+  if (!key || !name || !audience) return res.status(400).json({ message: 'key, name, and audience are required' });
+  try {
+    const { data, error } = await supabaseAdmin.from('email_templates').insert({ key, name, audience, subject: subject || '', html_body: html_body || '', text_body: text_body || '', variables: variables || [], is_active: is_active !== false }).select().single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// PUT /api/admin/email/templates/:id — Update template
+router.put('/email/templates/:id', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { name, audience, subject, html_body, text_body, variables, is_active } = req.body;
+  try {
+    const { data, error } = await supabaseAdmin.from('email_templates').update({ name, audience, subject, html_body, text_body, variables, is_active, updated_at: new Date().toISOString() }).eq('id', req.params.id).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE /api/admin/email/templates/:id — Delete template
+router.delete('/email/templates/:id', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const { error } = await supabaseAdmin.from('email_templates').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/admin/email/templates/:id/preview — Render template preview with sample data
+router.post('/email/templates/:id/preview', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { variables } = req.body;
+  try {
+    const { data: template, error } = await supabaseAdmin.from('email_templates').select('*').eq('id', req.params.id).single();
+    if (error || !template) return res.status(404).json({ message: 'Template not found' });
+
+    // Build sample variable values from the template's variable definitions
+    const templateVars = template.variables as { name: string; example: string }[];
+    const sampleData: Record<string, string> = {};
+    if (templateVars && Array.isArray(templateVars)) {
+      templateVars.forEach((v: any) => { sampleData[v.name] = v.example || `[${v.name}]`; });
+    }
+    // Merge with any custom variables from body
+    const mergedVars = { ...sampleData, ...(variables || {}) };
+
+    res.json({
+      subject: renderTemplate(template.subject, mergedVars),
+      html: renderTemplate(template.html_body, mergedVars),
+      text: renderTemplate(template.text_body, mergedVars),
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/admin/email/send — Send email manually (with template or raw)
+router.post('/email/send', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { to, template_key, variables, subject, html, text } = req.body;
+  if (!to) return res.status(400).json({ message: 'to is required' });
+  try {
+    let result;
+    if (template_key) {
+      result = await sendTemplatedEmail({ to, templateKey: template_key, variables: variables || {} });
+    } else {
+      if (!subject || !html) return res.status(400).json({ message: 'subject and html are required for raw emails' });
+      result = await sendEmail({ to, subject, html, text });
+    }
+    if (!result.success) return res.status(400).json({ message: result.error });
+    res.json({ message: 'Email sent successfully', messageId: result.messageId });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ─── Automation Rules ─────────────────────────────────────────────────────────
+
+// GET /api/admin/email/rules — List automation rules
+router.get('/email/rules', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('email_automation_rules')
+      .select('*, email_templates(id, key, name, audience)')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/admin/email/rules — Create automation rule
+router.post('/email/rules', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { name, trigger_event, audience, template_id, delay_hours, conditions, is_active, frequency } = req.body;
+  if (!name || !trigger_event || !audience) return res.status(400).json({ message: 'name, trigger_event, and audience are required' });
+  try {
+    const { data, error } = await supabaseAdmin.from('email_automation_rules').insert({ name, trigger_event, audience, template_id: template_id || null, delay_hours: Number(delay_hours) || 0, conditions: conditions || {}, is_active: is_active !== false, frequency: frequency || 'once' }).select().single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// PUT /api/admin/email/rules/:id — Update automation rule
+router.put('/email/rules/:id', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { name, trigger_event, audience, template_id, delay_hours, conditions, is_active, frequency } = req.body;
+  try {
+    const { data, error } = await supabaseAdmin.from('email_automation_rules').update({ name, trigger_event, audience, template_id: template_id || null, delay_hours: Number(delay_hours) || 0, conditions: conditions || {}, is_active, frequency: frequency || 'once', updated_at: new Date().toISOString() }).eq('id', req.params.id).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// PATCH /api/admin/email/rules/:id/toggle — Toggle active status
+router.patch('/email/rules/:id/toggle', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const { data: existing } = await supabaseAdmin.from('email_automation_rules').select('is_active').eq('id', req.params.id).single();
+    const { data, error } = await supabaseAdmin.from('email_automation_rules').update({ is_active: !existing?.is_active, updated_at: new Date().toISOString() }).eq('id', req.params.id).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE /api/admin/email/rules/:id — Delete automation rule
+router.delete('/email/rules/:id', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const { error } = await supabaseAdmin.from('email_automation_rules').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/admin/email/rules/:id/trigger — Trigger automation rule manually using automated logic
+router.post('/email/rules/:id/trigger', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const { data: rule, error } = await supabaseAdmin
+      .from('email_automation_rules')
+      .select('*, email_templates(*)')
+      .eq('id', req.params.id)
+      .single();
+      
+    if (error || !rule) return res.status(404).json({ message: 'Rule not found' });
+    if (!rule.email_templates) return res.status(400).json({ message: 'No template attached' });
+
+    let targets: { email: string, variables: Record<string, string> }[] = [];
+
+    // Simple automated logic evaluator based on event
+    if (rule.trigger_event.includes('school_setup_incomplete')) {
+      const { data: schools } = await supabaseAdmin.from('schools').select('*');
+      const { data: profiles } = await supabaseAdmin.from('profiles').select('*').eq('role', 'school_admin');
+      
+      schools?.forEach(school => {
+        // Simplified setup logic check
+        if (school.status === 'pending_setup' || !school.setup_completed_at) {
+          const admins = profiles?.filter(p => p.school_id === school.id);
+          const daysSince = Math.floor((Date.now() - new Date(school.created_at).getTime()) / (1000 * 60 * 60 * 24));
+          
+          const baseVariables = {
+            school_name: school.name,
+            days_since_registration: String(daysSince),
+            setup_percentage: '45',
+            remaining_steps: 'Add classes, Import students',
+            admin_portal_url: 'https://app.muchiapp.com/admin',
+            support_email: 'info@muchiapp.com'
+          };
+
+          admins?.forEach(admin => {
+            if (admin.email) {
+              targets.push({
+                email: admin.email,
+                variables: { ...baseVariables, admin_name: admin.full_name || 'Admin' }
+              });
+            }
+          });
+
+          // Also include IT support contact if available
+          if (school.ict_email) {
+            targets.push({
+              email: school.ict_email,
+              variables: { ...baseVariables, admin_name: school.ict_name || 'IT Support' }
+            });
+          }
+        }
+      });
+    } else {
+      // For now, if the logic isn't written for the specific event, just pretend we found no targets.
+      // Or we can return an error.
+      return res.status(400).json({ message: `Automated logic for trigger event '${rule.trigger_event}' is not implemented yet.` });
+    }
+
+    if (targets.length === 0) {
+      return res.json({ message: 'No recipients matched the rule criteria.' });
+    }
+
+    let sent = 0;
+    for (const target of targets) {
+      try {
+        await sendTemplatedEmail({
+          to: target.email,
+          templateKey: rule.email_templates.key,
+          variables: target.variables,
+          ruleId: rule.id
+        });
+        sent++;
+      } catch (e) {
+        console.error('Failed to send rule email:', e);
+      }
+    }
+
+    await supabaseAdmin.from('email_automation_rules').update({ last_run_at: new Date().toISOString() }).eq('id', rule.id);
+
+    res.json({ message: `Rule triggered! Sent emails to ${sent} recipient(s).` });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ─── Email Logs ───────────────────────────────────────────────────────────────
+
+// GET /api/admin/email/logs — Fetch email activity logs
+router.get('/email/logs', requireSystemAdmin, async (req: Request, res: Response) => {
+  const limit = parseInt(req.query.limit as string) || 100;
+  const status = req.query.status as string;
+  try {
+    let query = supabaseAdmin.from('email_logs').select('*').order('sent_at', { ascending: false }).limit(limit);
+    if (status && status !== 'all') query = query.eq('status', status);
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 export const adminRouter = router;

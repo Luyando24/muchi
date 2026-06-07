@@ -100,7 +100,10 @@ const getSettings = async () => {
     gov_maize_allocation_per_student: '5',
     system_name: 'MUCHI Central',
     support_email: 'support@muchi.com',
-    whatsapp_number: '260570260374'
+    whatsapp_number: '260570260374',
+    gov_promotion_min_tenure: '3',
+    gov_promotion_min_qualification: "Bachelor's Degree",
+    gov_diploma_upgrade_years_threshold: '5'
   };
 
   try {
@@ -1039,7 +1042,8 @@ router.get('/transfers-housing', requireGovernmentAccess, async (req: Request, r
 router.get('/qualifications', requireGovernmentAccess, async (req: Request, res: Response) => {
   const { province, district } = req.query;
   try {
-    let profileQuery = supabaseAdmin.from('profiles').select('id, full_name, highest_qualification, current_role, institution_name, completion_year, school_id').eq('role', 'teacher');
+    const settings = await getSettings();
+    let profileQuery = supabaseAdmin.from('profiles').select('id, full_name, highest_qualification, current_role, institution_name, completion_year, school_id, join_date, created_at, schools(name, school_type, province, district)').eq('role', 'teacher');
     
     if (province && province !== 'All' || district && district !== 'All') {
       let schoolQuery = supabaseAdmin.from('schools').select('id');
@@ -1047,19 +1051,111 @@ router.get('/qualifications', requireGovernmentAccess, async (req: Request, res:
       if (district && district !== 'All') schoolQuery = schoolQuery.eq('district', district);
       const { data: schools } = await schoolQuery;
       const schoolIds = schools?.map(s => s.id) || [];
-      if (schoolIds.length > 0) profileQuery = profileQuery.in('school_id', schoolIds);
-      else return res.json({ qualifications: [], distribution: {} });
+      if (schoolIds.length > 0) {
+        profileQuery = profileQuery.in('school_id', schoolIds);
+      } else {
+        return res.json({ qualifications: [], distribution: {}, upgradesRate: [], schoolStats: [], alerts: [], settings });
+      }
     }
 
-    const { data: qualifications } = await profileQuery;
+    const { data: profiles } = await profileQuery;
     const distribution: Record<string, number> = {};
     
-    qualifications?.forEach(q => {
-      const qual = q.highest_qualification || 'Unknown';
+    const teacherIds = profiles?.map(t => t.id) || [];
+    let cpdSums: Record<string, number> = {};
+    
+    if (teacherIds.length > 0) {
+      const { data: cpdData } = await supabaseAdmin
+        .from('teacher_cpd')
+        .select('teacher_id, hours')
+        .in('teacher_id', teacherIds);
+      
+      cpdData?.forEach(item => {
+        cpdSums[item.teacher_id] = (cpdSums[item.teacher_id] || 0) + item.hours;
+      });
+    }
+
+    const currentYear = new Date().getFullYear();
+    const qualifications = (profiles || []).map((t: any) => {
+      const qual = t.highest_qualification || 'Unknown';
       distribution[qual] = (distribution[qual] || 0) + 1;
+
+      const joinYear = t.join_date 
+        ? new Date(t.join_date).getFullYear() 
+        : (t.created_at ? new Date(t.created_at).getFullYear() : currentYear - 2);
+      const tenureYears = Math.max(0, currentYear - joinYear);
+
+      return {
+        ...t,
+        tenureYears,
+        cpdHours: cpdSums[t.id] || 0
+      };
     });
 
-    res.json({ qualifications: qualifications || [], distribution });
+    // Compute upgrades rate
+    const upgradesByYear: Record<number, number> = {};
+    profiles?.forEach(t => {
+      if (t.completion_year) {
+        upgradesByYear[t.completion_year] = (upgradesByYear[t.completion_year] || 0) + 1;
+      }
+    });
+    const upgradesRate = Object.entries(upgradesByYear)
+      .map(([year, count]) => ({ year: parseInt(year, 10), count }))
+      .sort((a, b) => a.year - b.year);
+
+    // Compute schoolStats
+    const schoolStatsMap: Record<string, { schoolId: string, name: string, schoolType: string, district: string, province: string, totalTeachers: number, bachelorsAndAbove: number }> = {};
+    
+    qualifications.forEach(t => {
+      const school = t.schools;
+      if (!school || !t.school_id) return;
+      
+      const schoolId = t.school_id;
+      if (!schoolStatsMap[schoolId]) {
+        schoolStatsMap[schoolId] = {
+          schoolId,
+          name: school.name || 'Unknown',
+          schoolType: school.school_type || 'Unknown',
+          district: school.district || 'Unknown',
+          province: school.province || 'Unknown',
+          totalTeachers: 0,
+          bachelorsAndAbove: 0
+        };
+      }
+      
+      schoolStatsMap[schoolId].totalTeachers++;
+      
+      const qual = t.highest_qualification || '';
+      const hasDegree = ["Bachelor's Degree", "Master's Degree", "PhD"].includes(qual);
+      if (hasDegree) {
+        schoolStatsMap[schoolId].bachelorsAndAbove++;
+      }
+    });
+
+    const schoolStats = Object.values(schoolStatsMap).map(s => ({
+      ...s,
+      percentage: s.totalTeachers > 0 ? Math.round((s.bachelorsAndAbove / s.totalTeachers) * 100) : 0
+    })).sort((a, b) => b.percentage - a.percentage);
+
+    // Compute alerts (Diploma holders at Secondary School with tenure >= threshold)
+    const alertLimit = parseInt(settings.gov_diploma_upgrade_years_threshold, 10) || 5;
+    const alerts = qualifications.filter(t => {
+      const isDiploma = (t.highest_qualification || '').toLowerCase() === 'diploma';
+      const isSecondary = (t.schools?.school_type || '').toLowerCase() === 'secondary school';
+      const isExceeded = t.tenureYears >= alertLimit;
+      return isDiploma && isSecondary && isExceeded;
+    }).map(t => ({
+      teacherId: t.id,
+      fullName: t.full_name,
+      schoolName: t.schools?.name || 'Unknown',
+      district: t.schools?.district || 'Unknown',
+      province: t.schools?.province || 'Unknown',
+      qualification: t.highest_qualification,
+      tenureYears: t.tenureYears,
+      limit: alertLimit
+    }));
+
+    res.json({ qualifications, distribution, upgradesRate, schoolStats, alerts, settings });
   } catch (error: any) { res.status(500).json({ message: error.message }); }
 });
 
@@ -1167,6 +1263,176 @@ router.put('/settings', requireGovernmentAccess, async (req: Request, res: Respo
     if (error) throw error;
     res.json({ message: 'Settings updated successfully', data });
   } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/government/boarding-analytics
+router.get('/boarding-analytics', requireGovernmentAccess, async (req: Request, res: Response) => {
+  try {
+    // 1. Fetch schools
+    const { data: schools, error: schoolErr } = await supabaseAdmin
+      .from("schools")
+      .select("id, name, boarding_status, gender_composition, province, district");
+    if (schoolErr) throw schoolErr;
+
+    // 2. Fetch boarders
+    const { data: boarders, error: boarderErr } = await supabaseAdmin
+      .from("profiles")
+      .select("id, school_id, gender")
+      .eq("role", "student")
+      .eq("boarding_type", "Boarder");
+    if (boarderErr) throw boarderErr;
+
+    // 3. Fetch blocks and rooms
+    const { data: blocks, error: blockErr } = await supabaseAdmin
+      .from("accommodation_blocks")
+      .select("id, school_id, gender_policy");
+    if (blockErr) throw blockErr;
+
+    const { data: rooms, error: roomErr } = await supabaseAdmin
+      .from("accommodation_rooms")
+      .select("id, block_id, capacity");
+    if (roomErr) throw roomErr;
+
+    // 4. Fetch allocations with student details
+    const { data: allocations, error: allocErr } = await supabaseAdmin
+      .from("accommodation_allocations")
+      .select("id, room_id, student_id, student:profiles(gender)")
+      .eq("status", "Active");
+    if (allocErr) throw allocErr;
+
+    // 5. Fetch shortage notifications for current government user
+    const { data: alerts, error: alertErr } = await supabaseAdmin
+      .from("notifications")
+      .select("*")
+      .eq("user_id", (req as any).userId)
+      .like("title", "Critical Accommodation Shortage at%")
+      .order("created_at", { ascending: false });
+    if (alertErr) throw alertErr;
+
+    // Process general stats
+    let dayCount = 0;
+    let boardingCount = 0;
+    let bothCount = 0;
+
+    schools?.forEach(s => {
+      if (s.boarding_status === 'Day') dayCount++;
+      else if (s.boarding_status === 'Boarding') boardingCount++;
+      else if (s.boarding_status === 'Both') bothCount++;
+    });
+
+    const totalBoarders = boarders?.length || 0;
+    const maleBoarders = boarders?.filter(b => b.gender === 'Male').length || 0;
+    const femaleBoarders = boarders?.filter(b => b.gender === 'Female').length || 0;
+
+    const blockMap = new Map<string, any>();
+    blocks?.forEach(b => blockMap.set(b.id, b));
+
+    const roomMap = new Map<string, any>();
+    let totalCapacity = 0;
+    let maleCapacity = 0;
+    let femaleCapacity = 0;
+
+    rooms?.forEach(r => {
+      const block = blockMap.get(r.block_id);
+      if (block) {
+        roomMap.set(r.id, block);
+        totalCapacity += r.capacity;
+        if (block.gender_policy === 'Male') maleCapacity += r.capacity;
+        else if (block.gender_policy === 'Female') femaleCapacity += r.capacity;
+        else {
+          maleCapacity += Math.ceil(r.capacity / 2);
+          femaleCapacity += Math.floor(r.capacity / 2);
+        }
+      }
+    });
+
+    let occupiedBeds = 0;
+    let maleOccupied = 0;
+    let femaleOccupied = 0;
+
+    allocations?.forEach((a: any) => {
+      occupiedBeds++;
+      if (a.student?.gender === 'Male') maleOccupied++;
+      else if (a.student?.gender === 'Female') femaleOccupied++;
+    });
+
+    const vacantBeds = Math.max(0, totalCapacity - occupiedBeds);
+    const vacantMale = Math.max(0, maleCapacity - maleOccupied);
+    const vacantFemale = Math.max(0, femaleCapacity - femaleOccupied);
+
+    // School stats mapping
+    const schoolStats = new Map<string, any>();
+    schools?.forEach(s => {
+      schoolStats.set(s.id, {
+        id: s.id,
+        name: s.name,
+        province: s.province || 'Unknown',
+        district: s.district || 'Unknown',
+        boardingStatus: s.boarding_status,
+        genderComposition: s.gender_composition,
+        boarders: 0,
+        maleBoarders: 0,
+        femaleBoarders: 0,
+        capacity: 0,
+        occupied: 0,
+        shortage: 0
+      });
+    });
+
+    boarders?.forEach(b => {
+      const stats = schoolStats.get(b.school_id);
+      if (stats) {
+        stats.boarders++;
+        if (b.gender === 'Male') stats.maleBoarders++;
+        else if (b.gender === 'Female') stats.femaleBoarders++;
+      }
+    });
+
+    rooms?.forEach(r => {
+      const block = blockMap.get(r.block_id);
+      if (block) {
+        const stats = schoolStats.get(block.school_id);
+        if (stats) stats.capacity += r.capacity;
+      }
+    });
+
+    allocations?.forEach((a: any) => {
+      const block = roomMap.get(a.room_id);
+      if (block) {
+        const stats = schoolStats.get(block.school_id);
+        if (stats) stats.occupied++;
+      }
+    });
+
+    const shortagesList: any[] = [];
+    schoolStats.forEach((stats) => {
+      if (stats.boardingStatus !== 'Day' && stats.boarders > stats.capacity) {
+        stats.shortage = stats.boarders - stats.capacity;
+        shortagesList.push(stats);
+      }
+    });
+
+    res.json({
+      schoolDistribution: { day: dayCount, boarding: boardingCount, both: bothCount },
+      demographics: { totalBoarders, maleBoarders, femaleBoarders },
+      capacity: {
+        totalCapacity,
+        maleCapacity,
+        femaleCapacity,
+        occupiedBeds,
+        maleOccupied,
+        femaleOccupied,
+        vacantBeds,
+        vacantMale,
+        vacantFemale
+      },
+      shortages: shortagesList,
+      alerts: alerts || []
+    });
+  } catch (error: any) {
+    console.error("Boarding Analytics Error:", error);
     res.status(500).json({ message: error.message });
   }
 });

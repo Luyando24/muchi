@@ -2,6 +2,10 @@
 import { Router, Request, Response } from 'express';
 import { supabaseAdmin } from '../lib/supabase.js';
 import { requireActiveLicense } from '../middleware/license.js';
+import {
+  buildSubjectTeacherMap,
+  formatTeacherDisplayName,
+} from '../lib/teacher-utils.js';
 
 const router = Router();
 
@@ -222,7 +226,7 @@ router.get('/:id/portal-data', requireStudent, async (req: Request, res: Respons
     // 2. Fetch Student Class & Details
     const { data: enrollment } = await supabaseAdmin
       .from('enrollments')
-      .select('class_id, classes(name)')
+      .select('class_id, classes(name, class_teacher_id, teacher:class_teacher_id(full_name))')
       .eq('student_id', id)
       .eq('status', 'Active')
       .order('created_at', { ascending: false })
@@ -230,20 +234,27 @@ router.get('/:id/portal-data', requireStudent, async (req: Request, res: Respons
       .maybeSingle();
 
     const className = enrollment?.classes?.name || 'Not Assigned';
+    const classTeacherName = formatTeacherDisplayName(
+      (enrollment?.classes as any)?.teacher?.full_name,
+    );
 
     // 2b. Fetch Assigned Subjects (via class_subjects)
     let assignedSubjects: any[] = [];
+    let subjectTeacherMap = new Map<string, string | null>();
     if (enrollment?.class_id) {
       const { data: classSubjects } = await supabaseAdmin
         .from('class_subjects')
-        .select('subject_id, subjects(id, name, code, department)')
+        .select('subject_id, subjects(id, name, code, department), profiles(id, full_name)')
         .eq('class_id', enrollment.class_id);
+
+      subjectTeacherMap = buildSubjectTeacherMap(classSubjects || []);
       
       assignedSubjects = classSubjects?.map(cs => ({
         id: cs.subjects?.id,
         name: cs.subjects?.name,
         code: cs.subjects?.code,
-        department: cs.subjects?.department
+        department: cs.subjects?.department,
+        teacherName: subjectTeacherMap.get(cs.subject_id) || null,
       })).filter(s => s.id) || [];
     }
 
@@ -277,7 +288,13 @@ router.get('/:id/portal-data', requireStudent, async (req: Request, res: Respons
             grades: []
           });
         }
-        resultsMap.get(key).grades.push(grade);
+        const teacherName = subjectTeacherMap.get(grade.subject_id) || null;
+        resultsMap.get(key).grades.push({
+          ...grade,
+          subjects: grade.subjects
+            ? { ...grade.subjects, teacherName }
+            : grade.subjects,
+        });
       });
     }
 
@@ -307,7 +324,8 @@ router.get('/:id/portal-data', requireStudent, async (req: Request, res: Respons
       lastName: profile.last_name || profile.lastName,
       studentNumber: profile.student_number || profile.studentNumber,
       avatarUrl: profile.avatar_url || profile.avatarUrl,
-      class: className
+      class: className,
+      classTeacherName,
     };
 
     res.json({

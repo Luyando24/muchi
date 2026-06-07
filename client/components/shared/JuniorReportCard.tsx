@@ -28,7 +28,8 @@ export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({ data }) => {
         marksScored: '-',
         outOf: '100',
         colour: '-',
-        percentage: 0
+        percentage: 0,
+        teacherName: curr.subjects?.teacherName || null
       };
     }
 
@@ -125,6 +126,12 @@ export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({ data }) => {
           <span className="font-bold mr-2 uppercase w-20">Name:</span>
           <span className="flex-1 font-bold">{student.full_name || student.name}</span>
         </div>
+        {school?.show_teacher_on_report_card && student.classTeacherName && (
+          <div className="flex border-b border-dotted border-black pb-1 mr-4">
+            <span className="font-bold mr-2 uppercase w-32">Teacher:</span>
+            <span className="flex-1 font-bold">{student.classTeacherName}</span>
+          </div>
+        )}
       </div>
 
       {/* Results Table */}
@@ -149,7 +156,16 @@ export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({ data }) => {
               return (
                 <tr key={idx} className="border-b border-black last:border-0 hover:bg-slate-50 transition-colors">
                   <td className="border-r border-black p-2 text-center text-xs font-bold">{idx + 1}</td>
-                  <td className="border-r border-black p-2 text-xs font-bold uppercase">{subject.name}</td>
+                  <td className="border-r border-black p-2 text-xs font-bold uppercase">
+                    <div className="flex flex-row items-baseline gap-1.5 flex-wrap">
+                      <span>{subject.name}</span>
+                      {school?.show_teacher_on_report_card && subject.teacherName && (
+                        <span className="text-xs text-slate-500 font-normal italic capitalize">
+                          - {subject.teacherName}
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="border-r border-black p-2 text-center text-sm">{subject.test1 || '-'}</td>
                   <td className="border-r border-black p-2 text-center text-sm">{subject.test2 || '-'}</td>
                   <td className="border-r border-black p-2 text-center text-sm">{subject.test3 || '-'}</td>

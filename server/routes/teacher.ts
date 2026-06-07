@@ -891,5 +891,101 @@ router.get('/timetable', requireTeacher, async (req: Request, res: Response) => 
     }
 });
 
+// GET /api/teacher/cpd
+// Fetch own CPD records
+router.get('/cpd', requireTeacher, async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const teacherId = profile.id;
+
+  try {
+    const { data: cpdRecords, error } = await supabaseAdmin
+      .from('teacher_cpd')
+      .select('*')
+      .eq('teacher_id', teacherId)
+      .order('completion_date', { ascending: false });
+
+    if (error) throw error;
+    res.json(cpdRecords || []);
+  } catch (error: any) {
+    console.error('Fetch CPD Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/teacher/cpd
+// Self-log CPD record
+router.post('/cpd', requireTeacher, async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const teacherId = profile.id;
+  const schoolId = profile.school_id;
+  const { course_name, provider, category, hours, completion_date, certificate_url } = req.body;
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('teacher_cpd')
+      .insert({
+        teacher_id: teacherId,
+        school_id: schoolId,
+        course_name,
+        provider,
+        category,
+        hours: parseInt(hours, 10),
+        completion_date,
+        certificate_url: certificate_url || null,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(201).json({ message: 'CPD record added successfully', data });
+  } catch (error: any) {
+    console.error('Add CPD Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE /api/teacher/cpd/:cpdId
+// Delete own CPD record
+router.delete('/cpd/:cpdId', requireTeacher, async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const teacherId = profile.id;
+  const { cpdId } = req.params;
+
+  try {
+    const { error } = await supabaseAdmin
+      .from('teacher_cpd')
+      .delete()
+      .eq('id', cpdId)
+      .eq('teacher_id', teacherId);
+
+    if (error) throw error;
+    res.json({ message: 'CPD record deleted successfully' });
+  } catch (error: any) {
+    console.error('Delete CPD Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/teacher/career
+// Fetch own career history timeline
+router.get('/career', requireTeacher, async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const teacherId = profile.id;
+
+  try {
+    const { data: careerHistory, error } = await supabaseAdmin
+      .from('teacher_career_history')
+      .select('*')
+      .eq('teacher_id', teacherId)
+      .order('change_date', { ascending: false });
+
+    if (error) throw error;
+    res.json(careerHistory || []);
+  } catch (error: any) {
+    console.error('Fetch Career History Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 export const teacherRouter = router;
 export default router;

@@ -20,7 +20,10 @@ import {
   Download,
   Lock,
   AlertCircle,
-  Receipt
+  Receipt,
+  Building2,
+  Bed,
+  Users
 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -60,6 +63,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { OfflineIndicator } from '@/components/navigation/OfflineIndicator';
 import { syncFetch, offlineQuery } from '@/lib/syncService';
 import StudentFees from '@/components/student/StudentFees';
+import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 
 export default function StudentPortal() {
   const { id } = useParams();
@@ -92,11 +97,136 @@ export default function StudentPortal() {
   const [printingTerm, setPrintingTerm] = useState<any>(null);
   const reportRef = useRef<HTMLDivElement>(null);
 
+  // Accommodation States
+  const [allocation, setAllocation] = useState<any>(null);
+  const [roommates, setRoommates] = useState<any[]>([]);
+  const [blocks, setBlocks] = useState<any[]>([]);
+  const [pendingApp, setPendingApp] = useState<any>(null);
+  const [preferredBlockId, setPreferredBlockId] = useState<string>('');
+  const [notes, setNotes] = useState<string>('');
+  const [submittingApp, setSubmittingApp] = useState(false);
+  const [loadingAccommodation, setLoadingAccommodation] = useState(false);
+
   useEffect(() => {
     if (studentId) {
       fetchStudentData();
     }
   }, [studentId]);
+
+  const showAccommodation = gradesData?.school?.boarding_status && gradesData.school.boarding_status !== 'Day';
+
+  const fetchAccommodationInfo = async () => {
+    if (!studentId || !showAccommodation) return;
+    setLoadingAccommodation(true);
+    try {
+      const { data: allocData } = await supabase
+        .from('accommodation_allocations')
+        .select(`
+          *,
+          room:accommodation_rooms(
+            id,
+            room_number,
+            capacity,
+            block:accommodation_blocks(id, name, gender_policy)
+          )
+        `)
+        .eq('student_id', studentId)
+        .eq('status', 'Active')
+        .maybeSingle();
+
+      if (allocData) {
+        setAllocation(allocData);
+        const { data: roommatesData } = await supabase
+          .from('accommodation_allocations')
+          .select('*, student:profiles(id, full_name, email, phone)')
+          .eq('room_id', allocData.room_id)
+          .eq('status', 'Active');
+        
+        setRoommates(roommatesData?.filter(r => r.student_id !== studentId) || []);
+      } else {
+        setAllocation(null);
+        setRoommates([]);
+      }
+
+      const schoolId = student?.school_id || gradesData?.school?.id;
+      if (schoolId) {
+        const { data: blocksData } = await supabase
+          .from('accommodation_blocks')
+          .select('*')
+          .eq('school_id', schoolId);
+        
+        const studentGender = student?.gender;
+        const filteredBlocks = blocksData?.filter(b => 
+          b.gender_policy === 'Mixed' || 
+          b.gender_policy === studentGender
+        ) || [];
+        setBlocks(filteredBlocks);
+
+        const { data: appData } = await supabase
+          .from('accommodation_applications')
+          .select('*, preferred_block:accommodation_blocks(name)')
+          .eq('student_id', studentId)
+          .in('status', ['Pending', 'Waitlisted', 'Rejected'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        setPendingApp(appData);
+      }
+    } catch (err) {
+      console.error('Error fetching accommodation:', err);
+    } finally {
+      setLoadingAccommodation(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'accommodation') {
+      fetchAccommodationInfo();
+    }
+  }, [activeTab, studentId, student, gradesData]);
+
+  const handleApplyAccommodation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const schoolId = student?.school_id || gradesData?.school?.id;
+    if (!schoolId || !studentId) return;
+
+    setSubmittingApp(true);
+    try {
+      const academicYear = gradesData?.school?.academic_year || new Date().getFullYear().toString();
+      
+      const { error } = await supabase
+        .from('accommodation_applications')
+        .insert({
+          student_id: studentId,
+          school_id: schoolId,
+          academic_year: academicYear,
+          preferred_block_id: (preferredBlockId && preferredBlockId !== 'none') ? preferredBlockId : null,
+          notes: notes || '',
+          status: 'Pending'
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Application Submitted",
+        description: "Your boarding application has been successfully submitted.",
+      });
+
+      setPreferredBlockId('');
+      setNotes('');
+      fetchAccommodationInfo();
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        title: "Application Failed",
+        description: err.message || "Failed to submit accommodation application.",
+        variant: "destructive"
+      });
+    } finally {
+      setSubmittingApp(false);
+    }
+  };
 
   const fetchStudentData = async () => {
     try {
@@ -324,6 +454,9 @@ export default function StudentPortal() {
     { id: "grades", label: "Results", icon: Award },
     { id: "attendance", label: "Attendance", icon: ClipboardCheck },
     { id: "fees", label: "School Fees", icon: Receipt },
+    ...(showAccommodation ? [
+      { id: "accommodation", label: "Accommodation", icon: Building2 }
+    ] : []),
     // { id: "assignments", label: "Assignments", icon: FileText },
     { id: "profile", label: "Profile", icon: User },
     { id: "settings", label: "Settings", icon: Settings }
@@ -1192,8 +1325,201 @@ export default function StudentPortal() {
                    </CardContent>
                  </Card>
                </div>
-            </TabsContent>
-          </Tabs>
+             </TabsContent>
+
+             <TabsContent value="accommodation" className="space-y-6 m-0">
+               <div>
+                 <h2 className="text-xl font-bold text-slate-900 dark:text-white">Accommodation & Boarding</h2>
+                 <p className="text-sm text-slate-500 dark:text-slate-400">View your room allocation or apply for boarding status</p>
+               </div>
+
+               {loadingAccommodation ? (
+                 <div className="flex justify-center py-12">
+                   <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                 </div>
+               ) : allocation ? (
+                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                   {/* Allocation Details */}
+                   <Card className="lg:col-span-1">
+                     <CardHeader>
+                       <CardTitle className="flex items-center gap-2">
+                         <Building2 className="h-5 w-5 text-blue-600" />
+                         Active Allocation
+                       </CardTitle>
+                       <CardDescription>Your current hostel assignment</CardDescription>
+                     </CardHeader>
+                     <CardContent className="space-y-4">
+                       <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg space-y-3">
+                         <div>
+                           <span className="text-xs text-slate-400 dark:text-slate-500 uppercase font-black block">Hostel Block</span>
+                           <span className="font-bold text-slate-900 dark:text-white">{allocation.room?.block?.name}</span>
+                           <Badge variant="secondary" className="ml-2 text-[10px]">
+                             {allocation.room?.block?.gender_policy}
+                           </Badge>
+                         </div>
+                         <div>
+                           <span className="text-xs text-slate-400 dark:text-slate-500 uppercase font-black block">Room Number</span>
+                           <span className="font-bold text-slate-900 dark:text-white">{allocation.room?.room_number}</span>
+                         </div>
+                         <div>
+                           <span className="text-xs text-slate-400 dark:text-slate-500 uppercase font-black block">Capacity / Occupants</span>
+                           <span className="font-bold text-slate-900 dark:text-white">
+                             {allocation.room?.capacity} Beds (Active)
+                           </span>
+                         </div>
+                         <div>
+                           <span className="text-xs text-slate-400 dark:text-slate-500 uppercase font-black block">Check-in Date</span>
+                           <span className="font-medium text-slate-700 dark:text-slate-300">
+                             {allocation.check_in_date ? new Date(allocation.check_in_date).toLocaleDateString() : 'N/A'}
+                           </span>
+                         </div>
+                       </div>
+                     </CardContent>
+                   </Card>
+
+                   {/* Roommates List */}
+                   <Card className="lg:col-span-2">
+                     <CardHeader>
+                       <CardTitle className="flex items-center gap-2">
+                         <Users className="h-5 w-5 text-blue-600" />
+                         Roommates
+                       </CardTitle>
+                       <CardDescription>Other students sharing your room</CardDescription>
+                     </CardHeader>
+                     <CardContent>
+                       {roommates.length > 0 ? (
+                         <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                           {roommates.map((rm) => (
+                             <div key={rm.id} className="py-3 flex items-center justify-between first:pt-0 last:pb-0">
+                               <div>
+                                 <h4 className="font-bold text-sm text-slate-900 dark:text-white">{rm.student?.full_name}</h4>
+                                 <p className="text-xs text-slate-500">{rm.student?.email || 'No email shared'}</p>
+                               </div>
+                               {rm.student?.phone && (
+                                 <Badge variant="outline" className="text-xs">
+                                   {rm.student.phone}
+                                 </Badge>
+                               )}
+                             </div>
+                           ))}
+                         </div>
+                       ) : (
+                         <div className="text-center py-8 text-slate-400 italic">
+                           You are currently the only registered occupant in this room.
+                         </div>
+                       )}
+                     </CardContent>
+                   </Card>
+                 </div>
+               ) : (
+                 <div className="max-w-2xl mx-auto space-y-6">
+                   {/* Status Banner */}
+                   <Card className="border-blue-100 bg-blue-50/50 dark:bg-blue-950/10 dark:border-blue-900/30">
+                     <CardContent className="p-6 flex items-start gap-4">
+                       <Bed className="h-6 w-6 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                       <div className="space-y-1">
+                         <h4 className="font-bold text-blue-900 dark:text-blue-200">No Active Room Allocation</h4>
+                         <p className="text-sm text-blue-700 dark:text-blue-400">
+                           You are currently not allocated to a hostel room. Day students or students wanting boarding status can request a room below.
+                         </p>
+                       </div>
+                     </CardContent>
+                   </Card>
+
+                   {/* Application Status if any */}
+                   {pendingApp && (
+                     <Card className={cn(
+                       "border",
+                       pendingApp.status === 'Pending' ? 'border-amber-200 bg-amber-50/30 dark:border-amber-900/30' :
+                       pendingApp.status === 'Waitlisted' ? 'border-indigo-200 bg-indigo-50/30 dark:border-indigo-900/30' :
+                       'border-red-200 bg-red-50/30 dark:border-red-900/30'
+                     )}>
+                       <CardHeader className="pb-3">
+                         <div className="flex justify-between items-center">
+                           <CardTitle className="text-base font-bold">Existing Application</CardTitle>
+                           <Badge className={cn(
+                             "uppercase font-black text-[10px]",
+                             pendingApp.status === 'Pending' ? 'bg-amber-100 text-amber-800 hover:bg-amber-200 border-amber-200' :
+                             pendingApp.status === 'Waitlisted' ? 'bg-indigo-100 text-indigo-800 hover:bg-indigo-200 border-indigo-200' :
+                             'bg-red-100 text-red-800 hover:bg-red-200 border-red-200'
+                           )}>
+                             {pendingApp.status}
+                           </Badge>
+                         </div>
+                       </CardHeader>
+                       <CardContent className="text-sm space-y-2">
+                         <div>
+                           <span className="font-semibold text-slate-500 mr-2">Preferred Hostel:</span>
+                           <span className="font-medium text-slate-900 dark:text-white">
+                             {pendingApp.preferred_block?.name || 'Any Block'}
+                           </span>
+                         </div>
+                         {pendingApp.notes && (
+                           <div>
+                             <span className="font-semibold text-slate-500 block mb-1">My Application Notes:</span>
+                             <p className="p-3 bg-white dark:bg-slate-950 rounded border italic text-slate-600 dark:text-slate-400">
+                               "{pendingApp.notes}"
+                             </p>
+                           </div>
+                         )}
+                         <p className="text-xs text-slate-400 mt-2">
+                           Applied on {new Date(pendingApp.created_at).toLocaleDateString()}
+                         </p>
+                       </CardContent>
+                     </Card>
+                   )}
+
+                   {/* Submit new application if not currently pending/waitlisted (or if previous rejected, they can re-apply) */}
+                   {(!pendingApp || pendingApp.status === 'Rejected') && (
+                     <Card>
+                       <CardHeader>
+                         <CardTitle>Apply for Accommodation</CardTitle>
+                         <CardDescription>Submit a boarding application to request hostel allocation</CardDescription>
+                       </CardHeader>
+                       <CardContent>
+                         <form onSubmit={handleApplyAccommodation} className="space-y-4">
+                           <div className="space-y-2">
+                             <Label htmlFor="prefBlock">Preferred Hostel Block</Label>
+                             <Select 
+                               value={preferredBlockId} 
+                               onValueChange={setPreferredBlockId}
+                             >
+                               <SelectTrigger id="prefBlock">
+                                 <SelectValue placeholder="Select preferred hostel (optional)" />
+                               </SelectTrigger>
+                               <SelectContent>
+                                 <SelectItem value="none">No Preference (Any Block)</SelectItem>
+                                 {blocks.map(b => (
+                                   <SelectItem key={b.id} value={b.id}>{b.name} ({b.gender_policy} policy)</SelectItem>
+                                 ))}
+                               </SelectContent>
+                             </Select>
+                           </div>
+
+                           <div className="space-y-2">
+                             <Label htmlFor="appNotes">Application Notes / Supporting Details</Label>
+                             <textarea
+                               id="appNotes"
+                               rows={4}
+                               value={notes}
+                               onChange={e => setNotes(e.target.value)}
+                               className="w-full min-h-[80px] rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                               placeholder="Describe any special reasons or details for your accommodation request (e.g. distance to school, medical requirements, etc.)"
+                             />
+                           </div>
+
+                           <Button type="submit" disabled={submittingApp} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold">
+                             {submittingApp ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                             Submit Accommodation Application
+                           </Button>
+                         </form>
+                       </CardContent>
+                     </Card>
+                   )}
+                 </div>
+               )}
+             </TabsContent>
+           </Tabs>
           </div>
         </main>
       </div>
@@ -1201,24 +1527,26 @@ export default function StudentPortal() {
       {/* Mobile Bottom Navigation */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-40 px-2 py-2 safe-area-bottom shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
         <div className="flex justify-around items-center">
-          {sidebarItems.slice(0, 5).map((item) => {
-             if (!item) return null; // Handle potential hidden items
-             const Icon = item.icon;
-             return (
-               <button
-                 key={item.id}
-                 onClick={() => setActiveTab(item.id)}
-                 className={`flex flex-col items-center justify-center p-2 rounded-lg transition-all duration-200 min-w-[64px] ${
-                   activeTab === item.id 
-                     ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20" 
-                     : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
-                 }`}
-               >
-                 <Icon className={`h-5 w-5 mb-1 ${activeTab === item.id ? "scale-110" : "scale-100"} transition-transform`} />
-                 <span className="text-[10px] font-medium truncate max-w-full">{item.label}</span>
-               </button>
-             );
-          })}
+          {sidebarItems
+            .filter((item) => ['dashboard', 'grades', 'fees', 'accommodation', 'profile'].includes(item.id))
+            .map((item) => {
+              if (!item) return null;
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`flex flex-col items-center justify-center p-2 rounded-lg transition-all duration-200 min-w-[64px] ${
+                    activeTab === item.id 
+                      ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20" 
+                      : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  <Icon className={`h-5 w-5 mb-1 ${activeTab === item.id ? "scale-110" : "scale-100"} transition-transform`} />
+                  <span className="text-[10px] font-medium truncate max-w-full">{item.label}</span>
+                </button>
+              );
+            })}
         </div>
       </div>
 
@@ -1234,6 +1562,7 @@ export default function StudentPortal() {
                   name: `${gradesData.student.firstName || student.firstName || ''} ${gradesData.student.lastName || student.lastName || ''}`.trim() || 'Student',
                   studentNumber: gradesData.student.studentNumber || student?.studentNumber,
                   class: gradesData.student.class || student?.class,
+                  classTeacherName: gradesData.student.classTeacherName,
                 },
                 school: gradesData.school,
                 gradingScale: gradesData.gradingScale,

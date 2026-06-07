@@ -1,5 +1,9 @@
 import { Router, Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase.js";
+import {
+  buildSubjectTeacherMap,
+  formatTeacherDisplayName,
+} from "../lib/teacher-utils.js";
 import { requireSchoolRole } from "./school.js";
 
 const router = Router();
@@ -530,6 +534,28 @@ router.get(
 
       if (gradesError) throw gradesError;
 
+      // 5. Build Class name and subject teacher map (using enrollments)
+      const { data: enrollment } = await supabaseAdmin
+        .from("enrollments")
+        .select("*, classes(id, name, class_teacher_id, teacher:class_teacher_id(full_name))")
+        .eq("student_id", studentId)
+        .eq("status", "Active")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const classId = (enrollment?.classes as any)?.id || null;
+
+      let subjectTeacherMap = new Map<string, string | null>();
+      if (classId) {
+        const { data: classSubjects } = await supabaseAdmin
+          .from("class_subjects")
+          .select("subject_id, profiles(id, full_name)")
+          .eq("class_id", classId);
+
+        subjectTeacherMap = buildSubjectTeacherMap(classSubjects || []);
+      }
+
       // Deduplicate grades as done in student portal
       const gradesMap = new Map<string, any>();
       if (rawGrades && rawGrades.length > 0) {
@@ -547,7 +573,15 @@ router.get(
         }
       }
       
-      const grades = Array.from(gradesMap.values());
+      const grades = Array.from(gradesMap.values()).map((grade: any) => {
+        const teacherName = subjectTeacherMap.get(grade.subject_id) || null;
+        return {
+          ...grade,
+          subjects: grade.subjects
+            ? { ...grade.subjects, teacherName }
+            : grade.subjects,
+        };
+      });
       const termResults = [];
       if (grades.length > 0) {
         const total = grades.reduce((sum: number, g: any) => sum + (g.percentage || 0), 0);
@@ -560,18 +594,6 @@ router.get(
            grades: grades
         });
       }
-
-      // 5. Build Class name (using enrollments)
-      const { data: enrollment } = await supabaseAdmin
-        .from("enrollments")
-        .select("*, classes(id, name)")
-        .eq("student_id", studentId)
-        .eq("status", "Active")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      const classId = (enrollment?.classes as any)?.id || null;
 
       // 6. Compute class rankings (same logic as getClassRankings in school.ts)
       let position = 0;
@@ -645,6 +667,9 @@ router.get(
         name: profile.full_name,
         studentNumber: profile.student_number || 'N/A',
         class: (enrollment?.classes as any)?.name || 'Unassigned',
+        classTeacherName: formatTeacherDisplayName(
+          (enrollment?.classes as any)?.teacher?.full_name,
+        ),
         avatarUrl: profile.avatar_url || profile.avatarUrl,
         position,
         totalStudents,

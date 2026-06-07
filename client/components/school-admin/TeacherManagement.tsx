@@ -67,6 +67,8 @@ interface Teacher {
   subjects: string[];
   status: string;
   joinDate: string;
+  gender?: string;
+  completeness?: number;
 }
 
 export default function TeacherManagement({ initialViewId, onClearViewId }: { initialViewId?: string | null, onClearViewId?: () => void }) {
@@ -95,6 +97,21 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
   const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isFormSubmitting, setIsFormSubmitting] = useState(false);
+  
+  const [isBulkCompleteOpen, setIsBulkCompleteOpen] = useState(false);
+  const [bulkFields, setBulkFields] = useState({
+    gender: '',
+    marital_status: '',
+    housing_status: '',
+    highest_qualification: '',
+    completion_year: '',
+    institution_name: '',
+    field_of_study: '',
+    current_role: '',
+    location_type: ''
+  });
+  const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
+
   const { toast } = useToast();
   const [availableSubjects, setAvailableSubjects] = useState<Option[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
@@ -105,6 +122,74 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
       setViewTeacherId(initialViewId);
     }
   }, [initialViewId]);
+
+  const handleBulkCompleteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsBulkSubmitting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const fieldsToSend: any = {};
+      Object.entries(bulkFields).forEach(([k, v]) => {
+        if (v !== '') {
+          fieldsToSend[k] = v;
+        }
+      });
+
+      if (Object.keys(fieldsToSend).length === 0) {
+        toast({
+          title: "Warning",
+          description: "Please fill in at least one field to update",
+          variant: "destructive"
+        });
+        setIsBulkSubmitting(false);
+        return;
+      }
+
+      const response = await fetch('/api/school/teachers/bulk-complete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          teacherIds: selectedTeachers,
+          fields: fieldsToSend
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to bulk update');
+
+      toast({
+        title: "Success",
+        description: `Successfully updated ${selectedTeachers.length} teachers`,
+      });
+      setIsBulkCompleteOpen(false);
+      setSelectedTeachers([]);
+      setBulkFields({
+        gender: '',
+        marital_status: '',
+        housing_status: '',
+        highest_qualification: '',
+        completion_year: '',
+        institution_name: '',
+        field_of_study: '',
+        current_role: '',
+        location_type: ''
+      });
+      fetchTeachers();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setIsBulkSubmitting(false);
+    }
+  };
 
   const handleBackFromDetails = () => {
     setViewTeacherId(null);
@@ -121,7 +206,8 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
     subjects: [] as string[],
     password: '12345678', // Default temporary password
     status: 'Active',
-    joinDate: new Date().toISOString().split('T')[0]
+    joinDate: new Date().toISOString().split('T')[0],
+    gender: ''
   });
 
   useEffect(() => {
@@ -246,7 +332,8 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
       subjects: [],
       password: '12345678',
       status: 'Active',
-      joinDate: new Date().toISOString().split('T')[0]
+      joinDate: new Date().toISOString().split('T')[0],
+      gender: ''
     });
   };
 
@@ -273,7 +360,8 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
           department: formData.department,
           subjects: subjectsArray,
           status: formData.status,
-          joinDate: formData.joinDate
+          joinDate: formData.joinDate,
+          gender: formData.gender || null
         })
       });
 
@@ -432,14 +520,24 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
         </div>
         <div className="flex gap-2">
           {selectedTeachers.length > 0 && (
-            <Button 
-              variant="destructive" 
-              onClick={() => setIsBulkDeleteConfirmOpen(true)}
-              disabled={isDeleting}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete ({selectedTeachers.length})
-            </Button>
+            <>
+              <Button 
+                variant="outline" 
+                className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-300"
+                onClick={() => setIsBulkCompleteOpen(true)}
+              >
+                <ShieldCheck className="h-4 w-4 mr-2 text-amber-500" />
+                Bulk Complete ({selectedTeachers.length})
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={() => setIsBulkDeleteConfirmOpen(true)}
+                disabled={isDeleting}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete ({selectedTeachers.length})
+              </Button>
+            </>
           )}
           <Button variant="outline">
             <Download className="h-4 w-4 mr-2" />
@@ -554,6 +652,26 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
                   </div>
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="gender">Gender</Label>
+                    <Select onValueChange={(val) => handleSelectChange('gender', val)} defaultValue={formData.gender}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Gender" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Male">Male</SelectItem>
+                        <SelectItem value="Female">Female</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="joinDate">Join Date</Label>
+                    <Input id="joinDate" name="joinDate" type="date" value={formData.joinDate} onChange={handleInputChange} required />
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="subjects">Subjects</Label>
                   <MultiSelect
@@ -644,6 +762,7 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
                   <TableHead>Name</TableHead>
                   <TableHead>Department</TableHead>
                   <TableHead>Subjects</TableHead>
+                  <TableHead>Completeness</TableHead>
                   <TableHead>Join Date</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -652,7 +771,7 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
               <TableBody>
                 {teachers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-slate-500">
+                    <TableCell colSpan={8} className="text-center py-8 text-slate-500">
                       No teachers found
                     </TableCell>
                   </TableRow>
@@ -699,6 +818,23 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
                           {teacher.subjects && teacher.subjects.length > 3 && (
                             <Badge variant="outline" className="text-xs">+{teacher.subjects.length - 3}</Badge>
                           )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-semibold">{teacher.completeness || 0}%</span>
+                          <div className="w-16 bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full ${
+                                (teacher.completeness || 0) === 100 
+                                  ? 'bg-emerald-500' 
+                                  : (teacher.completeness || 0) > 50 
+                                    ? 'bg-blue-500' 
+                                    : 'bg-amber-500'
+                              }`} 
+                              style={{ width: `${teacher.completeness || 0}%` }}
+                            />
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell>{teacher.joinDate ? new Date(teacher.joinDate).toLocaleDateString() : 'N/A'}</TableCell>
@@ -798,6 +934,169 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
         loading={isDeleting}
         onConfirm={handleBulkDeleteTeachers}
       />
+      <Dialog open={isBulkCompleteOpen} onOpenChange={setIsBulkCompleteOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Bulk Complete Profiles ({selectedTeachers.length} selected)</DialogTitle>
+            <DialogDescription>
+              Set values for the selected teachers. Fields left blank will not be updated.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleBulkCompleteSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="bulk-gender">Gender</Label>
+                <Select 
+                  onValueChange={(val) => setBulkFields(prev => ({ ...prev, gender: val }))}
+                  value={bulkFields.gender}
+                >
+                  <SelectTrigger id="bulk-gender">
+                    <SelectValue placeholder="No change" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Male">Male</SelectItem>
+                    <SelectItem value="Female">Female</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="bulk-marital">Marital Status</Label>
+                <Select 
+                  onValueChange={(val) => setBulkFields(prev => ({ ...prev, marital_status: val }))}
+                  value={bulkFields.marital_status}
+                >
+                  <SelectTrigger id="bulk-marital">
+                    <SelectValue placeholder="No change" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Single">Single</SelectItem>
+                    <SelectItem value="Married">Married</SelectItem>
+                    <SelectItem value="Divorced">Divorced</SelectItem>
+                    <SelectItem value="Widowed">Widowed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="bulk-housing">Housing Status</Label>
+                <Select 
+                  onValueChange={(val) => setBulkFields(prev => ({ ...prev, housing_status: val }))}
+                  value={bulkFields.housing_status}
+                >
+                  <SelectTrigger id="bulk-housing">
+                    <SelectValue placeholder="No change" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Own House">Own House</SelectItem>
+                    <SelectItem value="Rented">Rented</SelectItem>
+                    <SelectItem value="School Accommodation">School Accommodation</SelectItem>
+                    <SelectItem value="Shared">Shared</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="bulk-location">Location Type</Label>
+                <Select 
+                  onValueChange={(val) => setBulkFields(prev => ({ ...prev, location_type: val }))}
+                  value={bulkFields.location_type}
+                >
+                  <SelectTrigger id="bulk-location">
+                    <SelectValue placeholder="No change" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Urban">Urban</SelectItem>
+                    <SelectItem value="Rural">Rural</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="bulk-highest-qualification">Highest Qualification</Label>
+                <Select 
+                  onValueChange={(val) => setBulkFields(prev => ({ ...prev, highest_qualification: val }))}
+                  value={bulkFields.highest_qualification}
+                >
+                  <SelectTrigger id="bulk-highest-qualification">
+                    <SelectValue placeholder="No change" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Certificate">Certificate</SelectItem>
+                    <SelectItem value="Diploma">Diploma</SelectItem>
+                    <SelectItem value="Bachelor Degree">Bachelor Degree</SelectItem>
+                    <SelectItem value="Master Degree">Master Degree</SelectItem>
+                    <SelectItem value="PhD">PhD</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="bulk-completion-year">Completion Year</Label>
+                <Input 
+                  id="bulk-completion-year"
+                  type="number" 
+                  placeholder="e.g. 2020"
+                  value={bulkFields.completion_year}
+                  onChange={(e) => setBulkFields(prev => ({ ...prev, completion_year: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="bulk-institution">Institution Name</Label>
+              <Input 
+                id="bulk-institution"
+                placeholder="e.g. University of Zambia"
+                value={bulkFields.institution_name}
+                onChange={(e) => setBulkFields(prev => ({ ...prev, institution_name: e.target.value }))}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="bulk-field-study">Field of Study</Label>
+                <Input 
+                  id="bulk-field-study"
+                  placeholder="e.g. Mathematics Education"
+                  value={bulkFields.field_of_study}
+                  onChange={(e) => setBulkFields(prev => ({ ...prev, field_of_study: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="bulk-role">Current Role</Label>
+                <Input 
+                  id="bulk-role"
+                  placeholder="e.g. Senior Teacher"
+                  value={bulkFields.current_role}
+                  onChange={(e) => setBulkFields(prev => ({ ...prev, current_role: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="pt-4">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsBulkCompleteOpen(false)}
+              >
+                Cancel
+              </Button>
+              <SubmitButton loading={isBulkSubmitting} loadingText="Updating...">
+                Apply Changes
+              </SubmitButton>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

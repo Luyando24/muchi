@@ -35,7 +35,8 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
           'Mid Term': null,
           'End of Term': null
         },
-        allGrades: []
+        allGrades: [],
+        teacherName: g.subjects?.teacherName || null
       });
     }
     const subData = subjectsMap.get(subjectId);
@@ -177,6 +178,12 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
               <span className="text-slate-500 min-w-[120px]">Term commences:</span>
               <span className="flex-1 border-b border-dashed border-slate-400">.............................</span>
             </div>
+            {school?.show_teacher_on_report_card && student.classTeacherName && (
+              <div className="flex gap-3">
+                <span className="text-slate-500 min-w-[120px]">Class Teacher:</span>
+                <span className="flex-1 border-b border-dashed border-slate-400 font-bold">{student.classTeacherName}</span>
+              </div>
+            )}
           </div>
           <div className="space-y-4">
             <div className="flex gap-3">
@@ -233,7 +240,14 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
                 return (
                   <TableRow key={i} className="h-10 text-xs sm:text-sm">
                     <TableCell className="border border-slate-300 font-bold text-slate-800 py-1 pl-4 uppercase">
-                      {sub.name}
+                      <div className="flex flex-row items-baseline gap-1.5 flex-wrap">
+                        <span>{sub.name}</span>
+                        {school?.show_teacher_on_report_card && sub.teacherName && (
+                          <span className="text-xs text-slate-500 font-normal italic capitalize">
+                            - {sub.teacherName}
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="border border-slate-300 text-center py-1">{sub.tests['Test 1'] ?? '-'}</TableCell>
                     <TableCell className="border border-slate-300 text-center py-1">{sub.tests['Test 2'] ?? '-'}</TableCell>

@@ -42,7 +42,8 @@ import {
   FileSpreadsheet,
   BarChart2,
   Mail,
-  Phone
+  Phone,
+  Briefcase
 } from 'lucide-react';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -309,6 +310,62 @@ export default function TeacherPortal() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isResettingPassword, setIsResettingPassword] = useState(false);
+
+  // CPD and Career History State
+  const [cpdRecords, setCpdRecords] = useState<any[]>([]);
+  const [careerHistory, setCareerHistory] = useState<any[]>([]);
+  const [isAddCpdOpen, setIsAddCpdOpen] = useState(false);
+  const [cpdForm, setCpdForm] = useState({
+    course_name: '',
+    provider: '',
+    category: 'Pedagogy',
+    hours: '',
+    completion_date: new Date().toISOString().split('T')[0],
+    certificate_url: ''
+  });
+  const [isCpdSubmitting, setIsCpdSubmitting] = useState(false);
+
+  const handleSelfAddCpd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsCpdSubmitting(true);
+    try {
+      await fetchWithAuth('/api/teacher/cpd', {
+        method: 'POST',
+        body: JSON.stringify(cpdForm)
+      });
+      toast({ title: "Success", description: "CPD record logged successfully" });
+      setIsAddCpdOpen(false);
+      setCpdForm({
+        course_name: '',
+        provider: '',
+        category: 'Pedagogy',
+        hours: '',
+        completion_date: new Date().toISOString().split('T')[0],
+        certificate_url: ''
+      });
+      // Re-fetch CPD
+      const cpdData = await fetchWithAuth('/api/teacher/cpd');
+      setCpdRecords(cpdData);
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsCpdSubmitting(false);
+    }
+  };
+
+  const handleSelfDeleteCpd = async (cpdId: string) => {
+    try {
+      await fetchWithAuth(`/api/teacher/cpd/${cpdId}`, {
+        method: 'DELETE'
+      });
+      toast({ title: "Success", description: "CPD record deleted successfully" });
+      // Re-fetch CPD
+      const cpdData = await fetchWithAuth('/api/teacher/cpd');
+      setCpdRecords(cpdData);
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
 
   useEffect(() => {
     checkUser();
@@ -577,6 +634,21 @@ export default function TeacherPortal() {
         setNotifications(notificationsData || []);
       } catch (e) {
         console.error('Failed to fetch notifications', e);
+      }
+
+      // Fetch CPD and Career History
+      try {
+        const cpdData = await fetchWithAuth('/api/teacher/cpd');
+        setCpdRecords(cpdData || []);
+      } catch (e) {
+        console.error('Failed to fetch CPD records', e);
+      }
+
+      try {
+        const careerData = await fetchWithAuth('/api/teacher/career');
+        setCareerHistory(careerData || []);
+      } catch (e) {
+        console.error('Failed to fetch career history', e);
       }
 
       // PRE-FETCH: Students and current attendance for all classes to ensure offline attendance works
@@ -2162,260 +2234,498 @@ export default function TeacherPortal() {
                       <div>
                         <h3 className="text-xl font-bold text-slate-900 dark:text-white">{profile?.first_name} {profile?.last_name}</h3>
                         <p className="text-slate-500 dark:text-slate-400">{profile?.department || 'Teacher'}</p>
+                        {profile?.staff_number && (
+                          <Badge variant="secondary" className="mt-2 font-mono font-bold tracking-wider">
+                            {profile.staff_number}
+                          </Badge>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
                 </div>
 
                 <div className="md:col-span-2 space-y-6">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Personal Information</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label>First Name</Label>
-                            <Input value={profile?.first_name || ''} disabled />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Last Name</Label>
-                            <Input value={profile?.last_name || ''} disabled />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Email Address</Label>
-                            <Input
-                              type="email"
-                              placeholder="email@example.com"
-                              value={profile?.email || ''}
-                              onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                            />
-                          </div>
-                        </div>
+                  <Tabs defaultValue="info" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2 mb-6">
+                      <TabsTrigger value="info">Profile Info</TabsTrigger>
+                      <TabsTrigger value="history">Professional History</TabsTrigger>
+                    </TabsList>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label>Phone Number</Label>
-                            <Input
-                              placeholder="+1 (555) 000-0000"
-                              value={profile?.phone_number || ''}
-                              onChange={(e) => setProfile({ ...profile, phone_number: e.target.value })}
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Address</Label>
-                            <Input
-                              placeholder="123 Main St"
-                              value={profile?.address || ''}
-                              disabled
-                            />
-                          </div>
-                        </div>
-
-                        <div className="border-t border-slate-200 dark:border-slate-700 my-6 pt-6 animate-in fade-in duration-300">
-                          <h4 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider mb-4">Demographics & Disability</h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                              <Label>Marital Status</Label>
-                              <Select 
-                                value={profile?.marital_status || ''} 
-                                disabled
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select marital status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Single">Single</SelectItem>
-                                  <SelectItem value="Married">Married</SelectItem>
-                                  <SelectItem value="Divorced">Divorced</SelectItem>
-                                  <SelectItem value="Widowed">Widowed</SelectItem>
-                                </SelectContent>
-                              </Select>
+                    <TabsContent value="info" className="space-y-6">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Personal Information</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label>First Name</Label>
+                                <Input value={profile?.first_name || ''} disabled />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Last Name</Label>
+                                <Input value={profile?.last_name || ''} disabled />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Email Address</Label>
+                                <Input
+                                  type="email"
+                                  placeholder="email@example.com"
+                                  value={profile?.email || ''}
+                                  onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                                />
+                              </div>
                             </div>
-                            {profile?.marital_status === 'Married' && (
-                              <div className="flex items-center justify-between border border-slate-200 dark:border-slate-700 rounded-lg p-3 h-10 mt-8 opacity-60">
-                                <Label className="cursor-not-allowed">Living with Spouse</Label>
-                                <Switch 
-                                  checked={profile?.living_with_spouse || false}
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label>Phone Number</Label>
+                                <Input
+                                  placeholder="+1 (555) 000-0000"
+                                  value={profile?.phone_number || ''}
+                                  onChange={(e) => setProfile({ ...profile, phone_number: e.target.value })}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Address</Label>
+                                <Input
+                                  placeholder="123 Main St"
+                                  value={profile?.address || ''}
                                   disabled
                                 />
                               </div>
-                            )}
-                            <div className="space-y-2">
-                              <Label>Disability Status</Label>
-                              <Select 
-                                value={profile?.disability_status || ''} 
-                                disabled
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select disability status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="None">None</SelectItem>
-                                  <SelectItem value="Visual">Visual</SelectItem>
-                                  <SelectItem value="Hearing">Hearing</SelectItem>
-                                  <SelectItem value="Physical">Physical</SelectItem>
-                                  <SelectItem value="Cognitive">Cognitive</SelectItem>
-                                  <SelectItem value="Other">Other</SelectItem>
-                                </SelectContent>
-                              </Select>
                             </div>
-                            <div className="space-y-2">
-                               <Label>School Location Type</Label>
-                               <div className="h-10 px-3 py-2 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-sm text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                   (profile?.schools?.location_type || 'Urban') === 'Rural'
-                                     ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-                                     : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                                 }`}>
-                                   {profile?.schools?.location_type || 'Urban'}
-                                 </span>
-                                 <span className="text-xs text-slate-400">Set by your school admin</span>
+
+                            <div className="border-t border-slate-200 dark:border-slate-700 my-6 pt-6 animate-in fade-in duration-300">
+                              <h4 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider mb-4">Demographics & Disability</h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <Label>Gender</Label>
+                                  <Select 
+                                    value={profile?.gender || ''} 
+                                    disabled
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select gender" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="Male">Male</SelectItem>
+                                      <SelectItem value="Female">Female</SelectItem>
+                                      <SelectItem value="Other">Other</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>Marital Status</Label>
+                                  <Select 
+                                    value={profile?.marital_status || ''} 
+                                    disabled
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select marital status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="Single">Single</SelectItem>
+                                      <SelectItem value="Married">Married</SelectItem>
+                                      <SelectItem value="Divorced">Divorced</SelectItem>
+                                      <SelectItem value="Widowed">Widowed</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                {profile?.marital_status === 'Married' && (
+                                  <div className="flex items-center justify-between border border-slate-200 dark:border-slate-700 rounded-lg p-3 h-10 mt-8 opacity-60">
+                                    <Label className="cursor-not-allowed">Living with Spouse</Label>
+                                    <Switch 
+                                      checked={profile?.living_with_spouse || false}
+                                      disabled
+                                    />
+                                  </div>
+                                )}
+                                <div className="space-y-2">
+                                  <Label>Disability Status</Label>
+                                  <Select 
+                                    value={profile?.disability_status || ''} 
+                                    disabled
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select disability status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="None">None</SelectItem>
+                                      <SelectItem value="Visual">Visual</SelectItem>
+                                      <SelectItem value="Hearing">Hearing</SelectItem>
+                                      <SelectItem value="Physical">Physical</SelectItem>
+                                      <SelectItem value="Cognitive">Cognitive</SelectItem>
+                                      <SelectItem value="Other">Other</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-2">
+                                   <Label>School Location Type</Label>
+                                   <div className="h-10 px-3 py-2 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-sm text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                       (profile?.schools?.location_type || 'Urban') === 'Rural'
+                                         ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+                                         : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                     }`}>
+                                       {profile?.schools?.location_type || 'Urban'}
+                                     </span>
+                                     <span className="text-xs text-slate-400">Set by your school admin</span>
+                                    </div>
+                                  </div>
+                              </div>
+                            </div>
+
+                            <div className="border-t border-slate-200 dark:border-slate-700 my-6 pt-6 animate-in fade-in duration-300">
+                              <h4 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider mb-4">Housing & Accommodation</h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <Label>Housing Status</Label>
+                                  <Select 
+                                    value={profile?.housing_status || ''} 
+                                    disabled
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select housing status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="Government House">Government House</SelectItem>
+                                      <SelectItem value="Private Rental">Private Rental</SelectItem>
+                                      <SelectItem value="Own Home">Own Home</SelectItem>
+                                      <SelectItem value="Unknown">Unknown</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>Accommodation Provided by School</Label>
+                                  <Select 
+                                    value={profile?.accommodation_provided || ''} 
+                                    disabled
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select option" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="Yes">Yes</SelectItem>
+                                      <SelectItem value="No">No</SelectItem>
+                                      <SelectItem value="Partially">Partially</SelectItem>
+                                    </SelectContent>
+                                  </Select>
                                 </div>
                               </div>
-                          </div>
-                        </div>
-
-                        <div className="border-t border-slate-200 dark:border-slate-700 my-6 pt-6 animate-in fade-in duration-300">
-                          <h4 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider mb-4">Housing & Accommodation</h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                              <Label>Housing Status</Label>
-                              <Select 
-                                value={profile?.housing_status || ''} 
-                                disabled
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select housing status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Government House">Government House</SelectItem>
-                                  <SelectItem value="Private Rental">Private Rental</SelectItem>
-                                  <SelectItem value="Own Home">Own Home</SelectItem>
-                                  <SelectItem value="Unknown">Unknown</SelectItem>
-                                </SelectContent>
-                              </Select>
                             </div>
-                            <div className="space-y-2">
-                              <Label>Accommodation Provided by School</Label>
-                              <Select 
-                                value={profile?.accommodation_provided || ''} 
-                                disabled
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select option" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Yes">Yes</SelectItem>
-                                  <SelectItem value="No">No</SelectItem>
-                                  <SelectItem value="Partially">Partially</SelectItem>
-                                </SelectContent>
-                              </Select>
+
+                            <div className="border-t border-slate-200 dark:border-slate-700 my-6 pt-6 animate-in fade-in duration-300">
+                              <h4 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider mb-4">Professional & Qualifications</h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <Label>Highest Qualification</Label>
+                                  <Select 
+                                    value={profile?.highest_qualification || ''} 
+                                    disabled
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select qualification" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="Certificate">Certificate</SelectItem>
+                                      <SelectItem value="Diploma">Diploma</SelectItem>
+                                      <SelectItem value="Bachelor's Degree">Bachelor's Degree</SelectItem>
+                                      <SelectItem value="Master's Degree">Master's Degree</SelectItem>
+                                      <SelectItem value="PhD">PhD</SelectItem>
+                                      <SelectItem value="Other">Other</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>Field of Study</Label>
+                                  <Input 
+                                    placeholder="e.g. Mathematics, Education"
+                                    value={profile?.field_of_study || ''}
+                                    disabled
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>Institution Name</Label>
+                                  <Input 
+                                    placeholder="e.g. University of Zambia"
+                                    value={profile?.institution_name || ''}
+                                    disabled
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>Completion Year</Label>
+                                  <Input 
+                                    type="number"
+                                    placeholder="e.g. 2018"
+                                    value={profile?.completion_year || ''}
+                                    disabled
+                                  />
+                                </div>
+                                <div className="space-y-2 sm:col-span-2">
+                                  <Label>Current Role</Label>
+                                  <Input 
+                                    placeholder="e.g. Senior Teacher, Head of Science Department"
+                                    value={profile?.current_role || ''}
+                                    disabled
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex justify-end pt-4">
+                              <Button onClick={async () => {
+                                try {
+                                  setLoading(true);
+                                  await fetchWithAuth('/api/teacher/profile', {
+                                    method: 'PUT',
+                                    body: JSON.stringify({
+                                      phone_number: profile.phone_number,
+                                      email: profile.email
+                                    })
+                                  });
+                                  toast({
+                                    title: "Profile Updated",
+                                    description: "Your profile information has been saved successfully."
+                                  });
+                                } catch (error) {
+                                  console.error('Error updating profile:', error);
+                                  toast({
+                                    title: "Update Failed",
+                                    description: "Failed to update profile information.",
+                                    variant: "destructive"
+                                  });
+                                } finally {
+                                  setLoading(false);
+                                }
+                              }} disabled={loading}>
+                                {loading ? (
+                                  <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Saving...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Save className="mr-2 h-4 w-4" />
+                                    Save Changes
+                                  </>
+                                )}
+                              </Button>
                             </div>
                           </div>
-                        </div>
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
 
-                        <div className="border-t border-slate-200 dark:border-slate-700 my-6 pt-6 animate-in fade-in duration-300">
-                          <h4 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider mb-4">Professional & Qualifications</h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <TabsContent value="history" className="space-y-6">
+                      {/* CPD Records Card */}
+                      <Card>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                          <div>
+                            <CardTitle className="flex items-center gap-2">
+                              <GraduationCap className="h-5 w-5 text-blue-600" />
+                              Continuous Professional Development (CPD)
+                            </CardTitle>
+                            <CardDescription>Self-report your training courses, workshops and certifications</CardDescription>
+                          </div>
+                          <Button size="sm" onClick={() => setIsAddCpdOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white">
+                            <Plus className="h-4 w-4 mr-2" />
+                            Log Training
+                          </Button>
+                        </CardHeader>
+                        <CardContent>
+                          {cpdRecords && cpdRecords.length > 0 ? (
+                            <div className="overflow-x-auto">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Course Name</TableHead>
+                                    <TableHead>Provider</TableHead>
+                                    <TableHead>Category</TableHead>
+                                    <TableHead>Hours</TableHead>
+                                    <TableHead>Completion Date</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {cpdRecords.map((cpd) => (
+                                    <TableRow key={cpd.id}>
+                                      <TableCell className="font-semibold text-slate-800 dark:text-slate-200">{cpd.course_name}</TableCell>
+                                      <TableCell className="text-slate-600 dark:text-slate-400">{cpd.provider}</TableCell>
+                                      <TableCell>
+                                        <Badge variant="outline">{cpd.category}</Badge>
+                                      </TableCell>
+                                      <TableCell className="font-medium text-slate-800 dark:text-slate-200">{cpd.hours} hrs</TableCell>
+                                      <TableCell className="text-slate-600 dark:text-slate-400">{new Date(cpd.completion_date).toLocaleDateString()}</TableCell>
+                                      <TableCell className="text-right">
+                                        <Button 
+                                          type="button"
+                                          variant="ghost" 
+                                          size="icon" 
+                                          className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                          onClick={() => handleSelfDeleteCpd(cpd.id)}
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          ) : (
+                            <div className="text-center py-8 text-slate-500 dark:text-slate-400 border-2 border-dashed rounded-lg bg-slate-50 dark:bg-slate-900/50">
+                              No CPD records found. Log your first training activity above.
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      {/* Career History Timeline */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <Briefcase className="h-5 w-5 text-blue-600" />
+                            Career History & Progression
+                          </CardTitle>
+                          <CardDescription>Timeline of official roles, promotions, transfers and demotions inside the school</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          {careerHistory && careerHistory.length > 0 ? (
+                            <div className="space-y-6">
+                              {careerHistory.map((career, i) => (
+                                <div key={i} className="relative pl-8 border-l-2 border-slate-200 dark:border-slate-700 pb-6 last:pb-0">
+                                  <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full bg-white dark:bg-slate-900 border-2 border-blue-600" />
+                                  <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-2">
+                                    <div>
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <h4 className="font-bold text-slate-900 dark:text-white">{career.new_role}</h4>
+                                        <Badge className={
+                                          career.type === 'Promotion' ? 'bg-emerald-500 hover:bg-emerald-600 text-white border-0' :
+                                          career.type === 'Transfer' ? 'bg-blue-500 hover:bg-blue-600 text-white border-0' : 'bg-slate-500 hover:bg-slate-600 text-white border-0'
+                                        }>
+                                          {career.type}
+                                        </Badge>
+                                      </div>
+                                      {career.previous_role && (
+                                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Previous Role: {career.previous_role}</p>
+                                      )}
+                                      {career.notes && (
+                                        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400 leading-relaxed italic">"{career.notes}"</p>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center text-xs text-slate-500 dark:text-slate-400 font-medium bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full w-fit">
+                                      <Clock className="h-3 w-3 mr-1" />
+                                      {new Date(career.change_date).toLocaleDateString()}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center py-8 text-slate-500 dark:text-slate-400 border-2 border-dashed rounded-lg bg-slate-50 dark:bg-slate-900/50">
+                              No career progression records found.
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
+                  </Tabs>
+
+                  {/* Add CPD Record Dialog */}
+                  <Dialog open={isAddCpdOpen} onOpenChange={setIsAddCpdOpen}>
+                    <DialogContent className="sm:max-w-[425px]">
+                      <DialogHeader>
+                        <DialogTitle>Log CPD Training Activity</DialogTitle>
+                        <DialogDescription>
+                          Record a professional development activity or certification you have completed.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <form onSubmit={handleSelfAddCpd}>
+                        <div className="space-y-4 py-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="course_name">Course / Workshop Title</Label>
+                            <Input
+                              id="course_name"
+                              required
+                              value={cpdForm.course_name}
+                              onChange={(e) => setCpdForm({ ...cpdForm, course_name: e.target.value })}
+                              placeholder="e.g. Modern Teaching Methods for Physics"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="provider">Training Provider</Label>
+                            <Input
+                              id="provider"
+                              required
+                              value={cpdForm.provider}
+                              onChange={(e) => setCpdForm({ ...cpdForm, provider: e.target.value })}
+                              placeholder="e.g. Ministry of Education / UNICEF"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                              <Label>Highest Qualification</Label>
-                              <Select 
-                                value={profile?.highest_qualification || ''} 
-                                disabled
+                              <Label htmlFor="category">Category</Label>
+                              <Select
+                                value={cpdForm.category}
+                                onValueChange={(val) => setCpdForm({ ...cpdForm, category: val })}
                               >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select qualification" />
+                                <SelectTrigger id="category">
+                                  <SelectValue placeholder="Select Category" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="Certificate">Certificate</SelectItem>
-                                  <SelectItem value="Diploma">Diploma</SelectItem>
-                                  <SelectItem value="Bachelor's Degree">Bachelor's Degree</SelectItem>
-                                  <SelectItem value="Master's Degree">Master's Degree</SelectItem>
-                                  <SelectItem value="PhD">PhD</SelectItem>
+                                  <SelectItem value="Pedagogy">Pedagogy</SelectItem>
+                                  <SelectItem value="Subject Matter">Subject Matter</SelectItem>
+                                  <SelectItem value="Leadership">Leadership</SelectItem>
+                                  <SelectItem value="ICT">ICT</SelectItem>
+                                  <SelectItem value="Special Needs">Special Needs</SelectItem>
                                   <SelectItem value="Other">Other</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
                             <div className="space-y-2">
-                              <Label>Field of Study</Label>
-                              <Input 
-                                placeholder="e.g. Mathematics, Education"
-                                value={profile?.field_of_study || ''}
-                                disabled
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Institution Name</Label>
-                              <Input 
-                                placeholder="e.g. University of Zambia"
-                                value={profile?.institution_name || ''}
-                                disabled
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Completion Year</Label>
-                              <Input 
+                              <Label htmlFor="hours">Training Hours</Label>
+                              <Input
+                                id="hours"
                                 type="number"
-                                placeholder="e.g. 2018"
-                                value={profile?.completion_year || ''}
-                                disabled
-                              />
-                            </div>
-                            <div className="space-y-2 sm:col-span-2">
-                              <Label>Current Role</Label>
-                              <Input 
-                                placeholder="e.g. Senior Teacher, Head of Science Department"
-                                value={profile?.current_role || ''}
-                                disabled
+                                required
+                                min="1"
+                                value={cpdForm.hours}
+                                onChange={(e) => setCpdForm({ ...cpdForm, hours: e.target.value })}
+                                placeholder="e.g. 15"
                               />
                             </div>
                           </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="completion_date">Date of Completion</Label>
+                            <Input
+                              id="completion_date"
+                              type="date"
+                              required
+                              value={cpdForm.completion_date}
+                              onChange={(e) => setCpdForm({ ...cpdForm, completion_date: e.target.value })}
+                            />
+                          </div>
                         </div>
-
-                        <div className="flex justify-end pt-4">
-                          <Button onClick={async () => {
-                            try {
-                              setLoading(true);
-                              await fetchWithAuth('/api/teacher/profile', {
-                                method: 'PUT',
-                                body: JSON.stringify({
-                                  phone_number: profile.phone_number,
-                                  email: profile.email
-                                })
-                              });
-                              toast({
-                                title: "Profile Updated",
-                                description: "Your profile information has been saved successfully."
-                              });
-                            } catch (error) {
-                              console.error('Error updating profile:', error);
-                              toast({
-                                title: "Update Failed",
-                                description: "Failed to update profile information.",
-                                variant: "destructive"
-                              });
-                            } finally {
-                              setLoading(false);
-                            }
-                          }} disabled={loading}>
-                            {loading ? (
+                        <DialogFooter>
+                          <Button type="button" variant="outline" onClick={() => setIsAddCpdOpen(false)}>
+                            Cancel
+                          </Button>
+                          <Button type="submit" disabled={isCpdSubmitting} className="bg-blue-600 hover:bg-blue-700 text-white">
+                            {isCpdSubmitting ? (
                               <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Saving...
+                                Logging...
                               </>
                             ) : (
-                              <>
-                                <Save className="mr-2 h-4 w-4" />
-                                Save Changes
-                              </>
+                              'Save Training Record'
                             )}
                           </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                        </DialogFooter>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
                 </div>
               </div>
               </div>

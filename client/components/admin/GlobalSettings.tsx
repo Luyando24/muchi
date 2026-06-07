@@ -38,7 +38,9 @@ const defaultSettings: SystemSettings = {
 };
 
 import ConfigurationManagement from './ConfigurationManagement';
+import EmailSettings from './EmailSettings';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
 
 export default function GlobalSettings() {
   const [settings, setSettings] = useState<SystemSettings>(defaultSettings);
@@ -163,6 +165,10 @@ export default function GlobalSettings() {
             <TabsTrigger value="metadata" className="font-bold text-sm py-2.5 px-4 shrink-0 flex items-center gap-2">
               <RefreshCw className="h-4 w-4" />
               Metadata Management
+            </TabsTrigger>
+            <TabsTrigger value="email" className="font-bold text-sm py-2.5 px-4 shrink-0 flex items-center gap-2">
+              <Mail className="h-4 w-4" />
+              Email Settings
             </TabsTrigger>
           </TabsList>
 
@@ -365,6 +371,10 @@ export default function GlobalSettings() {
 
     <TabsContent value="metadata">
       <ConfigurationManagement />
+    </TabsContent>
+
+    <TabsContent value="email" className="space-y-6">
+      <EmailSettings />
     </TabsContent>
   </Tabs>
 </div>

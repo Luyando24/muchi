@@ -16,13 +16,19 @@ interface SettingsForm {
   gov_ptr_warning_threshold: number;
   gov_pass_rate_threshold: number;
   gov_attendance_threshold: number;
+  gov_promotion_min_tenure: number;
+  gov_promotion_min_qualification: string;
+  gov_diploma_upgrade_years_threshold: number;
 }
 
 const defaultForm: SettingsForm = {
   gov_ptr_critical_threshold: 45,
   gov_ptr_warning_threshold: 35,
   gov_pass_rate_threshold: 40,
-  gov_attendance_threshold: 75
+  gov_attendance_threshold: 75,
+  gov_promotion_min_tenure: 3,
+  gov_promotion_min_qualification: "Bachelor's Degree",
+  gov_diploma_upgrade_years_threshold: 5
 };
 
 export default function GovernmentSettings() {
@@ -57,7 +63,10 @@ export default function GovernmentSettings() {
         gov_ptr_critical_threshold: parseInt(data.gov_ptr_critical_threshold) || defaultForm.gov_ptr_critical_threshold,
         gov_ptr_warning_threshold: parseInt(data.gov_ptr_warning_threshold) || defaultForm.gov_ptr_warning_threshold,
         gov_pass_rate_threshold: parseInt(data.gov_pass_rate_threshold) || defaultForm.gov_pass_rate_threshold,
-        gov_attendance_threshold: parseInt(data.gov_attendance_threshold) || defaultForm.gov_attendance_threshold
+        gov_attendance_threshold: parseInt(data.gov_attendance_threshold) || defaultForm.gov_attendance_threshold,
+        gov_promotion_min_tenure: parseInt(data.gov_promotion_min_tenure) || defaultForm.gov_promotion_min_tenure,
+        gov_promotion_min_qualification: data.gov_promotion_min_qualification || defaultForm.gov_promotion_min_qualification,
+        gov_diploma_upgrade_years_threshold: parseInt(data.gov_diploma_upgrade_years_threshold) || defaultForm.gov_diploma_upgrade_years_threshold
       });
     } catch (err: any) {
       console.error(err);
@@ -282,7 +291,69 @@ export default function GovernmentSettings() {
             </CardContent>
           </Card>
 
+          {/* Card 3: Promotion & Qualifications Criteria */}
+          <Card className="border-none shadow-md bg-white dark:bg-slate-800 rounded-2xl overflow-hidden">
+            <CardHeader className="border-b border-slate-50 dark:border-slate-700/50 p-6 bg-gradient-to-r from-emerald-50/50 to-transparent dark:from-emerald-900/10">
+              <CardTitle className="flex items-center gap-2 text-base font-black uppercase tracking-tight text-emerald-600 dark:text-emerald-400">
+                <Settings className="h-5 w-5" />
+                Promotion & Qualifications Criteria
+              </CardTitle>
+              <CardDescription className="text-xs">Configure career advancement benchmarks and qualification alerts thresholds.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-6 space-y-6">
+              
+              {/* Min Tenure Select/Input */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="gov_promotion_min_tenure" className="text-sm font-bold text-slate-700 dark:text-slate-300">Min Years of Service for Promotion</Label>
+                  <Input
+                    id="gov_promotion_min_tenure"
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={form.gov_promotion_min_tenure}
+                    onChange={(e) => setForm({ ...form, gov_promotion_min_tenure: parseInt(e.target.value) || 3 })}
+                    className="rounded-xl border-slate-200 dark:border-slate-700"
+                  />
+                  <p className="text-[10px] text-slate-400">Minimum consecutive years of service required to be considered eligible for role promotion.</p>
+                </div>
 
+                {/* Min Qualification Dropdown */}
+                <div className="space-y-2">
+                  <Label htmlFor="gov_promotion_min_qualification" className="text-sm font-bold text-slate-700 dark:text-slate-300">Min Qualification for Promotion</Label>
+                  <select
+                    id="gov_promotion_min_qualification"
+                    value={form.gov_promotion_min_qualification}
+                    onChange={(e) => setForm({ ...form, gov_promotion_min_qualification: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  >
+                    <option value="Certificate">Certificate</option>
+                    <option value="Diploma">Diploma</option>
+                    <option value="Bachelor's Degree">Bachelor's Degree</option>
+                    <option value="Master's Degree">Master's Degree</option>
+                    <option value="PhD">PhD</option>
+                  </select>
+                  <p className="text-[10px] text-slate-400">Minimum academic degree required for eligibility in standard promotions.</p>
+                </div>
+              </div>
+
+              {/* Diploma Upgrade Years Threshold */}
+              <div className="space-y-2">
+                <Label htmlFor="gov_diploma_upgrade_years_threshold" className="text-sm font-bold text-slate-700 dark:text-slate-300">Secondary Diploma Holder Upgrade Threshold (Years)</Label>
+                <Input
+                  id="gov_diploma_upgrade_years_threshold"
+                  type="number"
+                  min="1"
+                  max="15"
+                  value={form.gov_diploma_upgrade_years_threshold}
+                  onChange={(e) => setForm({ ...form, gov_diploma_upgrade_years_threshold: parseInt(e.target.value) || 5 })}
+                  className="rounded-xl border-slate-200 dark:border-slate-700"
+                />
+                <p className="text-[10px] text-slate-400">Trigger warnings for secondary school teachers holding a Diploma who have served for this number of years or more without upgrading to a Bachelor's Degree.</p>
+              </div>
+
+            </CardContent>
+          </Card>
 
           {/* Action Button */}
           <div className="flex justify-end">

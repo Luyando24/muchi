@@ -17,7 +17,8 @@ import {
   Clock,
   Heart,
   Home,
-  Shield
+  Shield,
+  AlertTriangle
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -79,6 +80,7 @@ interface TeacherDetails {
     joinDate: string;
     status: string;
     avatar_url: string;
+    staff_number?: string;
     totalClassesCount?: number;
     marital_status?: string;
     housing_status?: string;
@@ -109,6 +111,29 @@ interface TeacherDetails {
     classes: { name: string };
     subjects: { name: string, code: string, department: string };
   }>;
+  cpdRecords?: Array<{
+    id: string;
+    teacher_id: string;
+    school_id: string;
+    course_name: string;
+    provider: string;
+    category: string;
+    hours: number;
+    completion_date: string;
+    certificate_url?: string;
+    created_at: string;
+  }>;
+  careerHistory?: Array<{
+    id: string;
+    teacher_id: string;
+    school_id: string;
+    previous_role?: string;
+    new_role: string;
+    type: string;
+    change_date: string;
+    notes?: string;
+    created_at: string;
+  }>;
 }
 
 export default function TeacherDetailsView({ teacherId, onBack, initialMode }: TeacherDetailsViewProps) {
@@ -126,6 +151,204 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
   const [isFormSaving, setIsFormSaving] = useState(false);
   const [availableSubjects, setAvailableSubjects] = useState<Option[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
+
+  // CPD state & handlers
+  const [isAddCpdOpen, setIsAddCpdOpen] = useState(false);
+  const [cpdForm, setCpdForm] = useState({
+    course_name: '',
+    provider: '',
+    category: 'Pedagogy',
+    hours: '',
+    completion_date: new Date().toISOString().split('T')[0],
+    certificate_url: ''
+  });
+  const [isCpdSubmitting, setIsCpdSubmitting] = useState(false);
+  const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchCurrentUserProfile = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) return;
+        
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, role, secondary_role, current_role')
+          .eq('id', session.user.id)
+          .single();
+          
+        if (data) {
+          setCurrentUserProfile(data);
+        }
+      } catch (err) {
+        console.error("Error fetching current user profile:", err);
+      }
+    };
+    fetchCurrentUserProfile();
+  }, []);
+
+  const hasPromotionAuth = () => {
+    if (!currentUserProfile) return false;
+    if (currentUserProfile.role === 'system_admin' || currentUserProfile.secondary_role === 'system_admin') {
+      return true;
+    }
+    const isSchoolAdmin = currentUserProfile.role === 'school_admin' || currentUserProfile.secondary_role === 'school_admin';
+    const currentRole = (currentUserProfile.current_role || '').toLowerCase();
+    const isHeadOrDeputy = currentRole === 'headteacher' || currentRole === 'deputy headteacher';
+    return isSchoolAdmin && isHeadOrDeputy;
+  };
+
+  const handleAddCpd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsCpdSubmitting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch(`/api/school/teachers/${teacherId}/cpd`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify(cpdForm)
+      });
+
+      if (!res.ok) throw new Error('Failed to add CPD record');
+
+      toast({ title: "Success", description: "CPD record added successfully" });
+      setIsAddCpdOpen(false);
+      setCpdForm({
+        course_name: '',
+        provider: '',
+        category: 'Pedagogy',
+        hours: '',
+        completion_date: new Date().toISOString().split('T')[0],
+        certificate_url: ''
+      });
+      
+      // Refresh teacher data
+      const updatedRes = await fetch(`/api/school/teachers/${teacherId}`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (updatedRes.ok) {
+        const data = await updatedRes.json();
+        setTeacher(data);
+      }
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setIsCpdSubmitting(false);
+    }
+  };
+
+  const handleDeleteCpd = async (cpdId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch(`/api/school/teachers/${teacherId}/cpd/${cpdId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+
+      if (!res.ok) throw new Error('Failed to delete CPD record');
+
+      toast({ title: "Success", description: "CPD record deleted successfully" });
+      
+      // Refresh teacher data
+      const updatedRes = await fetch(`/api/school/teachers/${teacherId}`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (updatedRes.ok) {
+        const data = await updatedRes.json();
+        setTeacher(data);
+      }
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  };
+
+  // Career History state & handlers
+  const [isAddCareerOpen, setIsAddCareerOpen] = useState(false);
+  const [careerForm, setCareerForm] = useState({
+    previous_role: '',
+    new_role: '',
+    type: 'Promotion',
+    change_date: new Date().toISOString().split('T')[0],
+    notes: ''
+  });
+  const [isCareerSubmitting, setIsCareerSubmitting] = useState(false);
+
+  const handleAddCareer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsCareerSubmitting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch(`/api/school/teachers/${teacherId}/career`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify(careerForm)
+      });
+
+      if (!res.ok) throw new Error('Failed to add career record');
+
+      toast({ title: "Success", description: "Career history record added successfully" });
+      setIsAddCareerOpen(false);
+      setCareerForm({
+        previous_role: '',
+        new_role: '',
+        type: 'Promotion',
+        change_date: new Date().toISOString().split('T')[0],
+        notes: ''
+      });
+      
+      // Refresh teacher data
+      const updatedRes = await fetch(`/api/school/teachers/${teacherId}`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (updatedRes.ok) {
+        const data = await updatedRes.json();
+        setTeacher(data);
+      }
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setIsCareerSubmitting(false);
+    }
+  };
+
+  const handleDeleteCareer = async (careerId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch(`/api/school/teachers/${teacherId}/career/${careerId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+
+      if (!res.ok) throw new Error('Failed to delete career history record');
+
+      toast({ title: "Success", description: "Career history record deleted successfully" });
+      
+      // Refresh teacher data
+      const updatedRes = await fetch(`/api/school/teachers/${teacherId}`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (updatedRes.ok) {
+        const data = await updatedRes.json();
+        setTeacher(data);
+      }
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  };
 
   useEffect(() => {
     const fetchSubjects = async () => {
@@ -195,6 +418,7 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
           field_of_study: data.profile.field_of_study || '',
           current_role: data.profile.current_role || '',
           location_type: data.profile.location_type || '',
+          gender: data.profile.gender || '',
         });
 
       } catch (error: any) {
@@ -310,6 +534,8 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
             <div className="flex items-center space-x-2 text-muted-foreground text-sm">
               <Badge variant="outline">{profile.department || 'No Department'}</Badge>
               <span>•</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-300">Staff #: {profile.staff_number || 'N/A'}</span>
+              <span>•</span>
               <span>Joined {new Date(profile.joinDate).toLocaleDateString()}</span>
               <span>•</span>
               <Badge className={
@@ -380,6 +606,10 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
               <div className="border-t pt-4 space-y-4 animate-in fade-in duration-300">
                 <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Demographics & Housing</h4>
                 <div className="space-y-3">
+                  <div className="flex items-center space-x-3 text-sm">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span>Gender: <strong className="font-semibold text-slate-800">{profile.gender || 'Not set'}</strong></span>
+                  </div>
                   <div className="flex items-center space-x-3 text-sm">
                     <Heart className="h-4 w-4 text-muted-foreground" />
                     <span>Marital Status: <strong className="font-semibold text-slate-800">{profile.marital_status || 'Not set'}</strong></span>
@@ -698,6 +928,138 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
                   )}
                 </CardContent>
               </Card>
+
+              {/* Continuous Professional Development (CPD) */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <GraduationCap className="h-5 w-5 text-indigo-500" />
+                      Continuous Professional Development (CPD)
+                    </CardTitle>
+                    <CardDescription>Training courses, workshops and certifications logged for this teacher</CardDescription>
+                  </div>
+                  <Button size="sm" onClick={() => setIsAddCpdOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Log Training
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  {teacher.cpdRecords && teacher.cpdRecords.length > 0 ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Course Name</TableHead>
+                          <TableHead>Provider</TableHead>
+                          <TableHead>Category</TableHead>
+                          <TableHead>Hours</TableHead>
+                          <TableHead>Completion Date</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {teacher.cpdRecords.map((cpd) => (
+                          <TableRow key={cpd.id}>
+                            <TableCell className="font-semibold text-slate-800">{cpd.course_name}</TableCell>
+                            <TableCell>{cpd.provider}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{cpd.category}</Badge>
+                            </TableCell>
+                            <TableCell className="font-medium">{cpd.hours} hrs</TableCell>
+                            <TableCell>{new Date(cpd.completion_date).toLocaleDateString()}</TableCell>
+                            <TableCell className="text-right">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                onClick={() => handleDeleteCpd(cpd.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg bg-slate-50">
+                      No CPD records found for this teacher.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Career progression & Internal Roles */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Briefcase className="h-5 w-5 text-indigo-500" />
+                      Career Progression & Internal Roles
+                    </CardTitle>
+                    <CardDescription>Timeline of official roles, promotions, transfers and demotions</CardDescription>
+                  </div>
+                  <Button 
+                    size="sm" 
+                    onClick={() => setIsAddCareerOpen(true)}
+                    disabled={!hasPromotionAuth()}
+                    title={!hasPromotionAuth() ? "Only Headteacher/Deputy Headteacher can log career events" : ""}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Log Career Event
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  {teacher.careerHistory && teacher.careerHistory.length > 0 ? (
+                    <div className="space-y-6">
+                      {teacher.careerHistory.map((career, i) => (
+                        <div key={i} className="relative pl-8 border-l-2 border-slate-200 pb-6 last:pb-0">
+                          <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full bg-white border-2 border-indigo-500" />
+                          <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-2">
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className="font-bold text-slate-900">{career.new_role}</h4>
+                                <Badge className={
+                                  career.type === 'Promotion' ? 'bg-emerald-500' :
+                                  career.type === 'Transfer' ? 'bg-blue-500' : 'bg-slate-500'
+                                }>
+                                  {career.type}
+                                </Badge>
+                              </div>
+                              {career.previous_role && (
+                                <p className="text-sm text-slate-500 mt-0.5">Previous Role: {career.previous_role}</p>
+                              )}
+                              {career.notes && (
+                                <p className="mt-2 text-sm text-slate-600 leading-relaxed italic">"{career.notes}"</p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center text-xs text-slate-500 font-medium bg-slate-100 px-2 py-1 rounded-full w-fit">
+                                <Clock className="h-3 w-3 mr-1" />
+                                {new Date(career.change_date).toLocaleDateString()}
+                              </div>
+                              {hasPromotionAuth() && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8 w-8"
+                                  onClick={() => handleDeleteCareer(career.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg bg-slate-50">
+                      No career progression records found.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
           </Tabs>
         </div>
@@ -738,6 +1100,23 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
                 <div className="space-y-2">
                   <Label htmlFor="phone_number">Phone Number</Label>
                   <Input id="phone_number" name="phone_number" value={profileForm.phone_number} onChange={handleInputChange} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="gender">Gender</Label>
+                  <Select 
+                    name="gender" 
+                    value={profileForm.gender || ''} 
+                    onValueChange={(val) => handleSelectChange('gender', val)}
+                  >
+                    <SelectTrigger id="gender">
+                      <SelectValue placeholder="Select gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Male">Male</SelectItem>
+                      <SelectItem value="Female">Female</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -912,13 +1291,21 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
                     />
                   </div>
                   <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="current_role">Current Role</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="current_role">Current Role</Label>
+                      {!hasPromotionAuth() && (
+                        <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-450 flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" /> Headteacher/Deputy only
+                        </span>
+                      )}
+                    </div>
                     <Input 
                       id="current_role"
                       name="current_role" 
                       placeholder="e.g. Senior Teacher, Head of Science Department"
                       value={profileForm.current_role || ''}
                       onChange={handleInputChange}
+                      disabled={!hasPromotionAuth()}
                     />
                   </div>
                 </div>
@@ -1157,6 +1544,178 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
           </CardContent>
         </Card>
       )}
+      {/* Log CPD Dialog */}
+      <Dialog open={isAddCpdOpen} onOpenChange={setIsAddCpdOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Log CPD Training Record</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleAddCpd} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="course_name">Course / Workshop Name</Label>
+              <Input 
+                id="course_name" 
+                value={cpdForm.course_name} 
+                onChange={(e) => setCpdForm(prev => ({ ...prev, course_name: e.target.value }))}
+                placeholder="e.g. Modern Pedagogical Strategies"
+                required 
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="provider">Provider / Facilitator</Label>
+              <Input 
+                id="provider" 
+                value={cpdForm.provider} 
+                onChange={(e) => setCpdForm(prev => ({ ...prev, provider: e.target.value }))}
+                placeholder="e.g. Ministry of Education"
+                required 
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="category">Category</Label>
+                <Select 
+                  value={cpdForm.category} 
+                  onValueChange={(val) => setCpdForm(prev => ({ ...prev, category: val }))}
+                >
+                  <SelectTrigger id="category">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Pedagogy">Pedagogy</SelectItem>
+                    <SelectItem value="Subject Matter">Subject Matter</SelectItem>
+                    <SelectItem value="Leadership">Leadership</SelectItem>
+                    <SelectItem value="ICT">ICT</SelectItem>
+                    <SelectItem value="Special Needs">Special Needs</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="hours">Training Hours</Label>
+                <Input 
+                  id="hours" 
+                  type="number"
+                  value={cpdForm.hours} 
+                  onChange={(e) => setCpdForm(prev => ({ ...prev, hours: e.target.value }))}
+                  placeholder="e.g. 10"
+                  required 
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="completion_date">Completion Date</Label>
+              <Input 
+                id="completion_date" 
+                type="date"
+                value={cpdForm.completion_date} 
+                onChange={(e) => setCpdForm(prev => ({ ...prev, completion_date: e.target.value }))}
+                required 
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="certificate_url">Certificate Link (Optional)</Label>
+              <Input 
+                id="certificate_url" 
+                value={cpdForm.certificate_url} 
+                onChange={(e) => setCpdForm(prev => ({ ...prev, certificate_url: e.target.value }))}
+                placeholder="e.g. https://example.com/certificate.pdf"
+              />
+            </div>
+
+            <DialogFooter className="pt-4">
+              <Button type="button" variant="outline" onClick={() => setIsAddCpdOpen(false)}>Cancel</Button>
+              <SubmitButton loading={isCpdSubmitting} loadingText="Saving...">Log Training</SubmitButton>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Log Career progression Dialog */}
+      <Dialog open={isAddCareerOpen} onOpenChange={setIsAddCareerOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Log Career Progression Event</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleAddCareer} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="previous_role">Previous Role / Position</Label>
+                <Input 
+                  id="previous_role" 
+                  value={careerForm.previous_role} 
+                  onChange={(e) => setCareerForm(prev => ({ ...prev, previous_role: e.target.value }))}
+                  placeholder="e.g. Junior Teacher"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="new_role">New Role / Position</Label>
+                <Input 
+                  id="new_role" 
+                  value={careerForm.new_role} 
+                  onChange={(e) => setCareerForm(prev => ({ ...prev, new_role: e.target.value }))}
+                  placeholder="e.g. Senior Teacher"
+                  required 
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="type">Event Type</Label>
+                <Select 
+                  value={careerForm.type} 
+                  onValueChange={(val) => setCareerForm(prev => ({ ...prev, type: val }))}
+                >
+                  <SelectTrigger id="type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Promotion">Promotion</SelectItem>
+                    <SelectItem value="Demotion">Demotion</SelectItem>
+                    <SelectItem value="Transfer">Transfer</SelectItem>
+                    <SelectItem value="Role Change">Role Change</SelectItem>
+                    <SelectItem value="Onboarding">Onboarding</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="change_date">Effective Date</Label>
+                <Input 
+                  id="change_date" 
+                  type="date"
+                  value={careerForm.change_date} 
+                  onChange={(e) => setCareerForm(prev => ({ ...prev, change_date: e.target.value }))}
+                  required 
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes / Observations</Label>
+              <Textarea 
+                id="notes" 
+                value={careerForm.notes} 
+                onChange={(e) => setCareerForm(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Enter details about this career transition..."
+                className="min-h-[80px]"
+              />
+            </div>
+
+            <DialogFooter className="pt-4">
+              <Button type="button" variant="outline" onClick={() => setIsAddCareerOpen(false)}>Cancel</Button>
+              <SubmitButton loading={isCareerSubmitting} loadingText="Saving...">Log Career Event</SubmitButton>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

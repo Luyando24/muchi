@@ -122,10 +122,10 @@ export default function SystemAdminPortal() {
     { id: "finances", label: "Business Finances", icon: DollarSign },
     { id: "users", label: "User Directory", icon: Users },
     { id: "infrastructure", label: "Infrastructure", icon: Server },
+    { id: "settings", label: "Global Settings", icon: Settings },
     { id: "security", label: "Security & Access", icon: Shield },
     { id: "database", label: "Database", icon: Database },
-    { id: "logs", label: "System Logs", icon: Activity },
-    { id: "settings", label: "Global Settings", icon: Settings }
+    { id: "logs", label: "System Logs", icon: Activity }
   ];
 
   return (

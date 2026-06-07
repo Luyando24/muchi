@@ -232,7 +232,9 @@ router.post('/register', async (req: Request, res: Response) => {
     adminEmail, 
     adminPassword,
     location_type, // 'Urban' | 'Rural'
-    licenseCode // Optional pre-paid activation code
+    licenseCode, // Optional pre-paid activation code
+    boarding_status,
+    gender_composition
   } = req.body;
 
   if (!schoolName || !schoolSlug || !adminEmail || !adminPassword || !adminName) {
@@ -288,6 +290,8 @@ router.post('/register', async (req: Request, res: Response) => {
         category: req.body.category,
         country: req.body.country || 'Zambia',
         location_type: location_type || 'Urban',
+        boarding_status: boarding_status || 'Day',
+        gender_composition: gender_composition || 'Co-educational',
         status: 'Pending' // Requires System Admin Approval
       })
       .select()
