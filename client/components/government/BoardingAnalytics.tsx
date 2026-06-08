@@ -76,7 +76,8 @@ export default function BoardingAnalytics() {
   const schoolPieData = [
     { name: 'Day School only', value: schoolDistribution.day, color: '#94a3b8' },
     { name: 'Boarding only', value: schoolDistribution.boarding, color: '#3b82f6' },
-    { name: 'Day & Boarding (Both)', value: schoolDistribution.both, color: '#10b981' }
+    { name: 'Day & Boarding (Both)', value: schoolDistribution.both, color: '#10b981' },
+    { name: 'Not Configured', value: schoolDistribution.unconfigured || 0, color: '#f59e0b' }
   ].filter(item => item.value > 0);
 
   const capacityBarData = [

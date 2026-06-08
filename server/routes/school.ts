@@ -3134,7 +3134,7 @@ router.get(
       // 1. Fetch Student Profile & Class
       const { data: student } = await supabaseAdmin
         .from("profiles")
-        .select("*, enrollments(class_id, classes(id, name, class_teacher_id, teacher:class_teacher_id(full_name)))")
+        .select("*, enrollments(class_id, classes(id, name, class_teacher_id, class_teacher_name, teacher:class_teacher_id(full_name)))")
         .eq("id", studentId)
         .eq("school_id", schoolId)
         .single();
@@ -3149,13 +3149,13 @@ router.get(
       if (classId) {
         const { data: subjects } = await supabaseAdmin
           .from("class_subjects")
-          .select("subject_id, subjects(id, name, code, department), profiles(id, full_name)")
+          .select("subject_id, teacher_name, subjects(id, name, code, department), profiles(id, full_name)")
           .eq("class_id", classId);
 
         if (subjects) {
           allClassSubjects = subjects
             .map((s: any) => {
-              const rawName = Array.isArray(s.profiles) ? s.profiles[0]?.full_name : s.profiles?.full_name;
+              const rawName = s.teacher_name || (Array.isArray(s.profiles) ? s.profiles[0]?.full_name : s.profiles?.full_name);
               let formattedTeacher = "";
               if (rawName) {
                 const parts = rawName.trim().split(/\s+/);
@@ -3177,6 +3177,7 @@ router.get(
             .filter(Boolean);
         }
       }
+
 
       // 3. Fetch Grades
       // Fetch all grades for this student for the term to allow processing tests in memory
@@ -3325,7 +3326,8 @@ router.get(
       }
 
       // Format teacher's name as "F. Lastname"
-      const rawTeacherName = student?.enrollments?.[0]?.classes?.teacher?.full_name;
+      const rawTeacherName = student?.enrollments?.[0]?.classes?.class_teacher_name || student?.enrollments?.[0]?.classes?.teacher?.full_name;
+
       let classTeacherName = "";
       if (rawTeacherName) {
         const parts = rawTeacherName.trim().split(/\s+/);
@@ -3406,7 +3408,7 @@ router.get(
       const { data: enrollments, error: enrollmentError } = await supabaseAdmin
         .from("enrollments")
         .select(
-          "student_id, profiles!enrollments_student_id_fkey(full_name, student_number, gender), classes(name, class_teacher_id, teacher:class_teacher_id(full_name))",
+          "student_id, profiles!enrollments_student_id_fkey(full_name, student_number, gender), classes(name, class_teacher_id, class_teacher_name, teacher:class_teacher_id(full_name))",
         )
         .eq("class_id", classId)
         .eq("academic_year", academicYear);
@@ -3420,12 +3422,12 @@ router.get(
 
       const { data: classSubjects } = await supabaseAdmin
         .from("class_subjects")
-        .select("subject_id, subjects(id, name, code, department), profiles(id, full_name)")
+        .select("subject_id, teacher_name, subjects(id, name, code, department), profiles(id, full_name)")
         .eq("class_id", classId);
 
       const allClassSubjects = (classSubjects || [])
         .map((cs: any) => {
-          const rawName = Array.isArray(cs.profiles) ? cs.profiles[0]?.full_name : cs.profiles?.full_name;
+          const rawName = cs.teacher_name || (Array.isArray(cs.profiles) ? cs.profiles[0]?.full_name : cs.profiles?.full_name);
           let formattedTeacher = "";
           if (rawName) {
             const parts = rawName.trim().split(/\s+/);
@@ -3445,6 +3447,7 @@ router.get(
           } : null;
         })
         .filter(Boolean);
+
 
       // 3. Fetch all grades for these students for this term & year (without database exam_type filter)
       const { data: allGrades, error: gradesError } = await supabaseAdmin
@@ -3547,7 +3550,8 @@ router.get(
         }
 
         // Format teacher's name as "F. Lastname"
-        const rawTeacherName = (enrollment.classes as any)?.teacher?.full_name;
+        const rawTeacherName = (enrollment.classes as any)?.class_teacher_name || (enrollment.classes as any)?.teacher?.full_name;
+
         let classTeacherName = "";
         if (rawTeacherName) {
           const parts = rawTeacherName.trim().split(/\s+/);
@@ -4130,7 +4134,7 @@ router.put(
 );
 
 // DELETE /api/school/teachers/:id
-// Soft delete teacher
+// Hard delete teacher
 router.delete(
   "/teachers/:id",
   requireSchoolRole(ADMIN_ROLES),
@@ -4140,21 +4144,32 @@ router.delete(
     const { id } = req.params;
 
     try {
-      // Soft delete by setting status to 'Terminated' or 'Left'
-      // Also clear auth access? For now just status.
-      const { error } = await supabaseAdmin
+      // 1. Verify target is a teacher in the same school
+      const { data: target, error: targetError } = await supabaseAdmin
         .from("profiles")
-        .update({
-          employment_status: "Terminated",
-          updated_at: new Date(),
-        })
+        .select("id, role")
         .eq("id", id)
-        .eq("school_id", schoolId);
+        .eq("school_id", schoolId)
+        .single();
 
-      if (error) throw error;
+      if (targetError || !target) {
+        return res.status(404).json({ message: "Teacher not found" });
+      }
 
-      // Optional: Disable auth user
-      // await supabaseAdmin.auth.admin.updateUserById(id, { ban_duration: '876000h' }); // Ban for 100 years
+      if (target.role !== "teacher") {
+        return res
+          .status(400)
+          .json({ message: "Target user is not a teacher" });
+      }
+
+      // 2. Delete from Auth
+      const { error: deleteError } =
+        await supabaseAdmin.auth.admin.deleteUser(id);
+
+      if (deleteError) throw deleteError;
+
+      // Ensure profile is deleted
+      await supabaseAdmin.from("profiles").delete().eq("id", id);
 
       res.json({ message: "Teacher deleted successfully" });
     } catch (error: any) {
@@ -4163,6 +4178,7 @@ router.delete(
     }
   },
 );
+
 
 // POST /api/school/teachers/:id/promote
 // Promote a teacher to school admin role
@@ -10137,8 +10153,8 @@ router.get(
 
       res.json({
         schoolName: school?.name || '',
-        boardingStatus: school?.boarding_status || 'Day',
-        genderComposition: school?.gender_composition || 'Co-educational',
+        boardingStatus: school?.boarding_status ?? null,
+        genderComposition: school?.gender_composition ?? null,
         totalBoarders,
         maleBoarders,
         femaleBoarders,

@@ -761,6 +761,56 @@ router.get('/subjects', requireTeacher, async (req: Request, res: Response) => {
     }
 });
 
+// PUT /api/teacher/profile/setup
+// Full profile setup — saves all government-required fields in one submission
+router.put('/profile/setup', requireTeacher, async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const {
+    phone_number, gender, date_of_birth, marital_status, address,
+    disability_status,
+    employment_date, department, current_role, location_type,
+    housing_status, accommodation_provided,
+    highest_qualification, institution_name, field_of_study, completion_year,
+    full_name,
+  } = req.body;
+
+  try {
+    const updateData: any = {
+      phone_number: phone_number || null,
+      full_name: full_name || profile.full_name,
+      gender: gender || null,
+      date_of_birth: date_of_birth || null,
+      marital_status: marital_status || null,
+      address: address || null,
+      disability_status: disability_status || null,
+      employment_date: employment_date || null,
+      department: department || null,
+      current_role: current_role || null,
+      location_type: location_type || null,
+      housing_status: housing_status || null,
+      accommodation_provided: accommodation_provided || null,
+      highest_qualification: highest_qualification || null,
+      institution_name: institution_name || null,
+      field_of_study: field_of_study || null,
+      completion_year: completion_year ? parseInt(completion_year) : null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .update(updateData)
+      .eq('id', profile.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    console.error('Teacher Profile Setup Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // PUT /api/teacher/profile
 // Update teacher profile details (only email and phone_number allowed)
 router.put('/profile', requireTeacher, async (req: Request, res: Response) => {

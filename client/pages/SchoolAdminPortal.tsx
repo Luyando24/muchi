@@ -59,6 +59,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 
 // Mock data for School Admin Portal
@@ -103,6 +110,8 @@ export default function SchoolAdminPortal() {
   const [schoolSettings, setSchoolSettings] = useState<any>(null);
   const [ictForm, setIctForm] = useState({ ict_name: '', ict_email: '', ict_phone: '' });
   const [isSavingIct, setIsSavingIct] = useState(false);
+  const [boardingForm, setBoardingForm] = useState({ boarding_status: '', gender_composition: '' });
+  const [isSavingBoarding, setIsSavingBoarding] = useState(false);
   const { toast } = useToast();
 
 
@@ -359,12 +368,21 @@ export default function SchoolAdminPortal() {
     !schoolSettings.ict_phone?.trim()
   );
 
+  const isBoardingMissing = userRole === 'school_admin' && schoolSettings && (
+    !schoolSettings.boarding_status ||
+    !schoolSettings.gender_composition
+  );
+
   useEffect(() => {
     if (schoolSettings) {
       setIctForm({
         ict_name: schoolSettings.ict_name || '',
         ict_email: schoolSettings.ict_email || '',
         ict_phone: schoolSettings.ict_phone || '',
+      });
+      setBoardingForm({
+        boarding_status: schoolSettings.boarding_status || '',
+        gender_composition: schoolSettings.gender_composition || '',
       });
     }
   }, [schoolSettings]);
@@ -424,6 +442,62 @@ export default function SchoolAdminPortal() {
       });
     } finally {
       setIsSavingIct(false);
+    }
+  };
+
+  const handleSaveBoarding = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!boardingForm.boarding_status || !boardingForm.gender_composition) {
+      toast({
+        title: "Required fields missing",
+        description: "Please select both Boarding Status and Gender Composition.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingBoarding(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch('/api/school/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          ...schoolSettings,
+          ...boardingForm,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to save boarding details');
+      }
+
+      const updatedSchool = await response.json();
+      setSchoolSettings(updatedSchool);
+      toast({
+        title: "Configuration saved",
+        description: "Boarding configuration saved. Refreshing the portal...",
+      });
+      
+      // Auto-refresh the page after a short delay so the user sees the toast
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+    } catch (error: any) {
+      console.error('Error saving boarding details:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save boarding details.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingBoarding(false);
     }
   };
 
@@ -532,7 +606,7 @@ export default function SchoolAdminPortal() {
         ...(schoolSettings && schoolSettings.enable_tuckshop !== false ? [
           { id: "tuckshop", label: "Tuckshop", icon: Store, roles: ["school_admin", "bursar", "accounts"] }
         ] : []),
-        ...(schoolSettings && schoolSettings.boarding_status !== 'Day' ? [
+        ...(schoolSettings && (schoolSettings.boarding_status === 'Boarding' || schoolSettings.boarding_status === 'Both') ? [
           { id: "accommodation", label: "Accommodation", icon: Building2, roles: ["school_admin"] }
         ] : []),
         { id: "website", label: "Website", icon: Globe, roles: ["school_admin", "content_manager"] },
@@ -722,7 +796,7 @@ export default function SchoolAdminPortal() {
               } />
             )}
 
-            {schoolSettings && schoolSettings.boarding_status !== 'Day' && (
+            {schoolSettings && (schoolSettings.boarding_status === 'Boarding' || schoolSettings.boarding_status === 'Both') && (
               <Route path="accommodation" element={
                 <div className="space-y-6">
                   <AccommodationManagement />
@@ -898,6 +972,81 @@ export default function SchoolAdminPortal() {
                 type="submit"
                 className="w-full"
                 loading={isSavingIct}
+              >
+                Save Contact Details
+              </SubmitButton>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Boarding missing modal - only shows if ICT is already set to prevent double modals */}
+      {!isIctMissing && isBoardingMissing && (
+        <Dialog open={isBoardingMissing}>
+          <DialogContent
+            className="sm:max-w-[500px] border border-indigo-100 dark:border-indigo-900/50 shadow-2xl bg-white dark:bg-slate-900 [&>button.absolute]:hidden"
+            onInteractOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={(e) => e.preventDefault()}
+          >
+            <DialogHeader className="space-y-3">
+              <div className="mx-auto w-12 h-12 bg-indigo-50 dark:bg-indigo-950/30 rounded-full flex items-center justify-center border border-indigo-200 dark:border-indigo-900 animate-pulse">
+                <Building2 className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <DialogTitle className="text-center text-xl font-black text-slate-900 dark:text-white">
+                Boarding Configuration Required
+              </DialogTitle>
+              <DialogDescription className="text-center text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+                To continue using MUCHI, you must configure the boarding status and gender composition of your school.
+                <span className="block mt-2 font-semibold text-indigo-600 dark:text-indigo-400">
+                  This helps properly set up Analytics and Hostels.
+                </span>
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSaveBoarding} className="mt-4 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="modal_boarding_status" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Boarding Status <span className="text-rose-500">*</span>
+                </Label>
+                <Select
+                  value={boardingForm.boarding_status}
+                  onValueChange={(val) => setBoardingForm(prev => ({ ...prev, boarding_status: val }))}
+                  required
+                >
+                  <SelectTrigger id="modal_boarding_status" className="w-full">
+                    <SelectValue placeholder="Select Boarding Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Day">Day School Only</SelectItem>
+                    <SelectItem value="Both">Day and Boarding</SelectItem>
+                    <SelectItem value="Boarding">Boarding Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="modal_gender_composition" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Gender Composition <span className="text-rose-500">*</span>
+                </Label>
+                <Select
+                  value={boardingForm.gender_composition}
+                  onValueChange={(val) => setBoardingForm(prev => ({ ...prev, gender_composition: val }))}
+                  required
+                >
+                  <SelectTrigger id="modal_gender_composition" className="w-full">
+                    <SelectValue placeholder="Select Gender Composition" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Co-educational">Co-educational (Boys and Girls)</SelectItem>
+                    <SelectItem value="Boys only">Boys only</SelectItem>
+                    <SelectItem value="Girls only">Girls only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <SubmitButton
+                type="submit"
+                className="w-full"
+                loading={isSavingBoarding}
                 loadingText="Saving..."
                 disabled={!schoolSettings}
               >

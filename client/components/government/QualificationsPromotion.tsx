@@ -344,7 +344,7 @@ export default function QualificationsPromotion() {
                       <th className="px-6 py-4">School</th>
                       <th className="px-6 py-4">Current Role</th>
                       <th className="px-6 py-4">Highest Qual.</th>
-                      <th className="px-6 py-4">First Employed</th>
+                      <th className="px-6 py-4">First Deployment</th>
                       <th className="px-6 py-4">Years in Service</th>
                       <th className="px-6 py-4">Status & Next Action</th>
                     </tr>
@@ -368,8 +368,10 @@ export default function QualificationsPromotion() {
                           </td>
                           <td className="px-6 py-4"><Badge variant="outline" className="rounded-md font-bold px-2 py-0.5">{t.current_role || 'Subject Teacher'}</Badge></td>
                           <td className="px-6 py-4 text-slate-800 dark:text-slate-200 font-medium">{t.highest_qualification || 'Unknown'}</td>
-                          <td className="px-6 py-4 text-slate-500 font-medium">
-                            {t.join_date ? new Date(t.join_date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
+                          <td className="px-6 py-4 text-slate-550 font-bold">
+                            {t.employment_date 
+                              ? String(t.employment_date).split('-')[0] 
+                              : (t.join_date ? String(t.join_date).split('-')[0] : 'N/A')}
                           </td>
                           <td className="px-6 py-4 text-slate-900 dark:text-white font-bold">{tenure} yrs</td>
                           <td className="px-6 py-4">

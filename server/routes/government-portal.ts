@@ -134,7 +134,7 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
     // 1. Basic Counts (Filtered by region if provided)
     let schoolQuery = supabaseAdmin.from('schools').select('*', { count: 'exact', head: true });
     let studentQuery = supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student');
-    let teacherQuery = supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'teacher');
+    let teacherQuery = supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }).or('role.eq.teacher,secondary_role.eq.teacher');
 
     if (province) {
       schoolQuery = schoolQuery.eq('province', province as string);
@@ -313,15 +313,15 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
     // Student/Teacher counts per school for individual ratios
     const { data: profilesBySchool } = await supabaseAdmin
       .from('profiles')
-      .select('school_id, role')
+      .select('school_id, role, secondary_role')
       .in('school_id', filteredSchoolDetails.map(s => s.id))
-      .in('role', ['student', 'teacher']);
+      .or('role.eq.student,role.eq.teacher,secondary_role.eq.teacher');
     
     const schoolProfiles = new Map<string, { students: number, teachers: number }>();
     profilesBySchool?.forEach(p => {
       const current = schoolProfiles.get(p.school_id) || { students: 0, teachers: 0 };
       if (p.role === 'student') current.students++;
-      else if (p.role === 'teacher') current.teachers++;
+      else if (p.role === 'teacher' || p.secondary_role === 'teacher') current.teachers++;
       schoolProfiles.set(p.school_id, current);
     });
 
@@ -865,7 +865,7 @@ router.get('/staffing-overview', requireGovernmentAccess, async (req: Request, r
     // Teachers — join school to get location_type from school, not profile
     const { data: teachers } = await supabaseAdmin.from('profiles')
       .select('gender, school_id')
-      .eq('role', 'teacher')
+      .or('role.eq.teacher,secondary_role.eq.teacher')
       .in('school_id', schoolIds);
 
     // Build school location map
@@ -992,7 +992,7 @@ router.get('/transfers-housing', requireGovernmentAccess, async (req: Request, r
   const { province, district } = req.query;
   try {
     // Housing Status Breakdown
-    let profileQuery = supabaseAdmin.from('profiles').select('housing_status, living_with_spouse, marital_status, school_id').eq('role', 'teacher');
+    let profileQuery = supabaseAdmin.from('profiles').select('housing_status, living_with_spouse, marital_status, school_id').or('role.eq.teacher,secondary_role.eq.teacher');
     
     if (province && province !== 'All' || district && district !== 'All') {
       let schoolQuery = supabaseAdmin.from('schools').select('id');
@@ -1043,7 +1043,7 @@ router.get('/qualifications', requireGovernmentAccess, async (req: Request, res:
   const { province, district } = req.query;
   try {
     const settings = await getSettings();
-    let profileQuery = supabaseAdmin.from('profiles').select('id, full_name, highest_qualification, current_role, institution_name, completion_year, school_id, join_date, created_at, schools(name, school_type, province, district)').eq('role', 'teacher');
+    let profileQuery = supabaseAdmin.from('profiles').select('id, full_name, highest_qualification, current_role, institution_name, completion_year, school_id, join_date, created_at, employment_date, schools(name, school_type, province, district)').or('role.eq.teacher,secondary_role.eq.teacher');
     
     if (province && province !== 'All' || district && district !== 'All') {
       let schoolQuery = supabaseAdmin.from('schools').select('id');
@@ -1080,9 +1080,12 @@ router.get('/qualifications', requireGovernmentAccess, async (req: Request, res:
       const qual = t.highest_qualification || 'Unknown';
       distribution[qual] = (distribution[qual] || 0) + 1;
 
-      const joinYear = t.join_date 
-        ? new Date(t.join_date).getFullYear() 
-        : (t.created_at ? new Date(t.created_at).getFullYear() : currentYear - 2);
+      const joinYearStr = t.employment_date
+        ? String(t.employment_date).split('-')[0]
+        : (t.join_date 
+            ? String(t.join_date).split('-')[0] 
+            : (t.created_at ? String(t.created_at).split('-')[0] : null));
+      const joinYear = joinYearStr ? parseInt(joinYearStr, 10) : (currentYear - 2);
       const tenureYears = Math.max(0, currentYear - joinYear);
 
       return {
@@ -1163,7 +1166,7 @@ router.get('/qualifications', requireGovernmentAccess, async (req: Request, res:
 router.get('/teacher-disabilities', requireGovernmentAccess, async (req: Request, res: Response) => {
   const { province, district } = req.query;
   try {
-    let profileQuery = supabaseAdmin.from('profiles').select('id, full_name, disability_status, accommodation_provided, school_id').eq('role', 'teacher');
+    let profileQuery = supabaseAdmin.from('profiles').select('id, full_name, disability_status, accommodation_provided, school_id').or('role.eq.teacher,secondary_role.eq.teacher');
     
     if (province && province !== 'All' || district && district !== 'All') {
       let schoolQuery = supabaseAdmin.from('schools').select('id');
@@ -1315,11 +1318,13 @@ router.get('/boarding-analytics', requireGovernmentAccess, async (req: Request, 
     let dayCount = 0;
     let boardingCount = 0;
     let bothCount = 0;
+    let unconfiguredCount = 0;
 
     schools?.forEach(s => {
       if (s.boarding_status === 'Day') dayCount++;
       else if (s.boarding_status === 'Boarding') boardingCount++;
       else if (s.boarding_status === 'Both') bothCount++;
+      else unconfiguredCount++; // null or unknown
     });
 
     const totalBoarders = boarders?.length || 0;
@@ -1415,7 +1420,7 @@ router.get('/boarding-analytics', requireGovernmentAccess, async (req: Request, 
     });
 
     res.json({
-      schoolDistribution: { day: dayCount, boarding: boardingCount, both: bothCount },
+      schoolDistribution: { day: dayCount, boarding: boardingCount, both: bothCount, unconfigured: unconfiguredCount },
       demographics: { totalBoarders, maleBoarders, femaleBoarders },
       capacity: {
         totalCapacity,

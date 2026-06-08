@@ -537,7 +537,7 @@ router.get(
       // 5. Build Class name and subject teacher map (using enrollments)
       const { data: enrollment } = await supabaseAdmin
         .from("enrollments")
-        .select("*, classes(id, name, class_teacher_id, teacher:class_teacher_id(full_name))")
+        .select("*, classes(id, name, class_teacher_id, class_teacher_name, teacher:class_teacher_id(full_name))")
         .eq("student_id", studentId)
         .eq("status", "Active")
         .order("created_at", { ascending: false })
@@ -550,8 +550,9 @@ router.get(
       if (classId) {
         const { data: classSubjects } = await supabaseAdmin
           .from("class_subjects")
-          .select("subject_id, profiles(id, full_name)")
+          .select("subject_id, teacher_name, profiles(id, full_name)")
           .eq("class_id", classId);
+
 
         subjectTeacherMap = buildSubjectTeacherMap(classSubjects || []);
       }
@@ -668,8 +669,9 @@ router.get(
         studentNumber: profile.student_number || 'N/A',
         class: (enrollment?.classes as any)?.name || 'Unassigned',
         classTeacherName: formatTeacherDisplayName(
-          (enrollment?.classes as any)?.teacher?.full_name,
+          (enrollment?.classes as any)?.class_teacher_name || (enrollment?.classes as any)?.teacher?.full_name,
         ),
+
         avatarUrl: profile.avatar_url || profile.avatarUrl,
         position,
         totalStudents,

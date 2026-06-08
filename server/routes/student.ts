@@ -226,7 +226,7 @@ router.get('/:id/portal-data', requireStudent, async (req: Request, res: Respons
     // 2. Fetch Student Class & Details
     const { data: enrollment } = await supabaseAdmin
       .from('enrollments')
-      .select('class_id, classes(name, class_teacher_id, teacher:class_teacher_id(full_name))')
+      .select('class_id, classes(name, class_teacher_id, class_teacher_name, teacher:class_teacher_id(full_name))')
       .eq('student_id', id)
       .eq('status', 'Active')
       .order('created_at', { ascending: false })
@@ -235,7 +235,7 @@ router.get('/:id/portal-data', requireStudent, async (req: Request, res: Respons
 
     const className = enrollment?.classes?.name || 'Not Assigned';
     const classTeacherName = formatTeacherDisplayName(
-      (enrollment?.classes as any)?.teacher?.full_name,
+      (enrollment?.classes as any)?.class_teacher_name || (enrollment?.classes as any)?.teacher?.full_name,
     );
 
     // 2b. Fetch Assigned Subjects (via class_subjects)
@@ -244,7 +244,7 @@ router.get('/:id/portal-data', requireStudent, async (req: Request, res: Respons
     if (enrollment?.class_id) {
       const { data: classSubjects } = await supabaseAdmin
         .from('class_subjects')
-        .select('subject_id, subjects(id, name, code, department), profiles(id, full_name)')
+        .select('subject_id, teacher_name, subjects(id, name, code, department), profiles(id, full_name)')
         .eq('class_id', enrollment.class_id);
 
       subjectTeacherMap = buildSubjectTeacherMap(classSubjects || []);
@@ -257,6 +257,7 @@ router.get('/:id/portal-data', requireStudent, async (req: Request, res: Respons
         teacherName: subjectTeacherMap.get(cs.subject_id) || null,
       })).filter(s => s.id) || [];
     }
+
 
     // 3. Fetch Grading Scale
     const { data: gradingScale } = await supabaseAdmin

@@ -306,9 +306,12 @@ export default function AccommodationManagement() {
   }
 
   // Get gender specific options based on school gender composition
-  const allowedGenders = stats?.genderComposition === 'Co-educational' 
-    ? ['Male', 'Female', 'Mixed'] 
-    : [stats?.genderComposition === 'Boys only' ? 'Male' : 'Female'];
+  const isConfigured = !!stats?.boardingStatus && !!stats?.genderComposition;
+  const allowedGenders: string[] = !stats?.genderComposition
+    ? ['Male', 'Female', 'Mixed']
+    : stats.genderComposition === 'Co-educational'
+    ? ['Male', 'Female', 'Mixed']
+    : [stats.genderComposition === 'Boys only' ? 'Male' : 'Female'];
 
   return (
     <div className="space-y-6">
@@ -318,14 +321,39 @@ export default function AccommodationManagement() {
           <p className="text-slate-500 dark:text-slate-400">Manage blocks, rooms, student boarding allocations, and applications.</p>
         </div>
         <div className="flex gap-2">
-          <Badge variant="outline" className="font-bold text-xs uppercase px-3 py-1">
-            Boarding status: {stats?.boardingStatus}
+          <Badge 
+            variant="outline" 
+            className={`font-bold text-xs uppercase px-3 py-1 ${
+              !stats?.boardingStatus ? 'border-orange-300 text-orange-600 dark:text-orange-400 bg-orange-50' : ''
+            }`}
+          >
+            Boarding status: {stats?.boardingStatus || 'Not Configured'}
           </Badge>
-          <Badge variant="outline" className="font-bold text-xs uppercase px-3 py-1">
-            Gender type: {stats?.genderComposition}
+          <Badge 
+            variant="outline" 
+            className={`font-bold text-xs uppercase px-3 py-1 ${
+              !stats?.genderComposition ? 'border-orange-300 text-orange-600 dark:text-orange-400 bg-orange-50' : ''
+            }`}
+          >
+            Gender type: {stats?.genderComposition || 'Not Configured'}
           </Badge>
         </div>
       </div>
+
+      {/* Not Configured Warning */}
+      {!isConfigured && (
+        <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950/10 dark:border-orange-900/30">
+          <CardContent className="p-4 flex items-center gap-3 text-orange-800 dark:text-orange-400">
+            <HelpCircle className="h-6 w-6 shrink-0" />
+            <div>
+              <h4 className="font-black text-sm uppercase tracking-wide">Boarding Settings Not Configured</h4>
+              <p className="text-xs font-medium mt-0.5">
+                Please go to <strong>Settings</strong> and configure the school's <strong>Boarding Status</strong> and <strong>Gender Composition</strong> to ensure accurate reporting and analytics.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Critical Alert Banner for Shortages */}
       {stats?.shortage > 0 && (

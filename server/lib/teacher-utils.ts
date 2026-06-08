@@ -11,10 +11,11 @@ export function formatTeacherDisplayName(fullName?: string | null): string | nul
 export function buildSubjectTeacherMap(classSubjects: any[]): Map<string, string | null> {
   const map = new Map<string, string | null>();
   for (const cs of classSubjects) {
-    const rawName = Array.isArray(cs.profiles)
+    const rawName = cs.teacher_name || (Array.isArray(cs.profiles)
       ? cs.profiles[0]?.full_name
-      : cs.profiles?.full_name;
+      : cs.profiles?.full_name);
     map.set(cs.subject_id, formatTeacherDisplayName(rawName));
   }
   return map;
 }
+

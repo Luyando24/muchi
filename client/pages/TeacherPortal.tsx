@@ -29,6 +29,7 @@ import {
   Lock,
   Moon,
   HelpCircle,
+  MessageCircle,
   Loader2,
   Trash2,
   Save,
@@ -78,12 +79,14 @@ import { Combobox } from '@/components/ui/combobox';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { OfflineIndicator } from '@/components/navigation/OfflineIndicator';
 import { syncFetch, offlineQuery } from '@/lib/syncService';
+import { db } from '@/lib/offline';
 import { cn } from '@/lib/utils';
 import { isOnSubdomain } from '@/lib/subdomain';
 import EnterResults from './results/EnterResults';
 import ResultsAnalysis from './results/ResultsAnalysis';
 import MasterSheet from './results/MasterSheet';
 import ResultsHub from './results/ResultsHub';
+import TeacherProfileSetupModal from '@/components/teacher/TeacherProfileSetupModal';
 
 // Interfaces
 interface Stats {
@@ -217,6 +220,18 @@ export default function TeacherPortal() {
   const [isIctBannerMinimized, setIsIctBannerMinimized] = useState(() => {
     return localStorage.getItem('ict_support_banner_minimized') === 'true';
   });
+  const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
+
+  const getWhatsAppLink = (phone: string) => {
+    if (!phone) return '#';
+    let cleaned = phone.replace(/\D/g, '');
+    if (cleaned.startsWith('0') && cleaned.length === 10) {
+      cleaned = '260' + cleaned.substring(1);
+    } else if (cleaned.length === 9 && !cleaned.startsWith('260')) {
+      cleaned = '260' + cleaned;
+    }
+    return `https://wa.me/${cleaned}`;
+  };
 
   const toggleIctBanner = () => {
     const nextVal = !isIctBannerMinimized;
@@ -262,6 +277,10 @@ export default function TeacherPortal() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
+
+  // Derived name fields from full_name
+  const [firstName, ...lastNameParts] = (profile?.full_name || '').trim().split(/\s+/);
+  const lastName = lastNameParts.join(' ');
 
   // Self-Assign State
   const [selfAssignForm, setSelfAssignForm] = useState({
@@ -376,6 +395,24 @@ export default function TeacherPortal() {
       fetchStudentsAndAttendance();
     }
   }, [selectedClassId, selectedDate]);
+
+  // Determine if teacher profile is incomplete (mandatory fields for government reporting)
+  const isProfileIncomplete = profile && (
+    !profile.phone_number?.trim() ||
+    !profile.gender?.trim() ||
+    !profile.date_of_birth ||
+    !profile.marital_status?.trim() ||
+    !profile.address?.trim() ||
+    !profile.disability_status?.trim() ||
+    !profile.employment_date ||
+    !profile.department?.trim() ||
+    !profile.current_role?.trim() ||
+    !profile.housing_status?.trim() ||
+    !profile.highest_qualification?.trim() ||
+    !profile.institution_name?.trim() ||
+    !profile.field_of_study?.trim() ||
+    !profile.completion_year
+  );
 
   useEffect(() => {
     if (profile) {
@@ -1307,13 +1344,11 @@ export default function TeacherPortal() {
                   <Button variant="ghost" className="flex items-center gap-2 px-2 hover:bg-slate-100 dark:hover:bg-slate-800">
                     <Avatar className="h-8 w-8">
                       <AvatarImage src={profile?.avatar_url} />
-                      <AvatarFallback>{profile?.first_name?.[0]}{profile?.last_name?.[0]}</AvatarFallback>
+                      <AvatarFallback>{firstName?.[0] || 'T'}{lastName?.[0] || ''}</AvatarFallback>
                     </Avatar>
                     <div className="hidden sm:block text-left">
                       <p className="text-sm font-medium text-slate-900 dark:text-white leading-none">
-                        {(profile?.first_name || profile?.last_name)
-                          ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim()
-                          : (profile?.full_name || user?.email || 'Teacher')}
+                        {profile?.full_name || user?.email || 'Teacher'}
                       </p>
                       <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
                         {profile?.department || 'Teacher'}
@@ -1401,7 +1436,14 @@ export default function TeacherPortal() {
               <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
                 <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">Need Help?</p>
                 <p className="text-xs text-blue-600 dark:text-blue-300 mb-3">Contact IT Support for system issues.</p>
-                <Button size="sm" variant="outline" className="w-full text-xs">Contact Support</Button>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="w-full text-xs hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                  onClick={() => setIsSupportModalOpen(true)}
+                >
+                  Contact Support
+                </Button>
               </div>
             </div>
           </div>
@@ -1425,7 +1467,7 @@ export default function TeacherPortal() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">
-                    {getGreeting()}, {(profile?.first_name || profile?.last_name) ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : (profile?.full_name || user?.email || 'Teacher')}!
+                    {getGreeting()}, {profile?.full_name || user?.email || 'Teacher'}!
                   </h2>
                   <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 mt-1">
                     Here's what's happening in your classes today.
@@ -2229,10 +2271,10 @@ export default function TeacherPortal() {
                     <CardContent className="pt-6 flex flex-col items-center text-center space-y-4">
                       <Avatar className="h-32 w-32 border-4 border-white dark:border-slate-800 shadow-lg">
                         <AvatarImage src={profile?.avatar_url} />
-                        <AvatarFallback className="text-4xl">{profile?.first_name?.[0]}{profile?.last_name?.[0]}</AvatarFallback>
+                        <AvatarFallback className="text-4xl">{firstName?.[0] || 'T'}{lastName?.[0] || ''}</AvatarFallback>
                       </Avatar>
                       <div>
-                        <h3 className="text-xl font-bold text-slate-900 dark:text-white">{profile?.first_name} {profile?.last_name}</h3>
+                        <h3 className="text-xl font-bold text-slate-900 dark:text-white">{firstName} {lastName}</h3>
                         <p className="text-slate-500 dark:text-slate-400">{profile?.department || 'Teacher'}</p>
                         {profile?.staff_number && (
                           <Badge variant="secondary" className="mt-2 font-mono font-bold tracking-wider">
@@ -2261,11 +2303,11 @@ export default function TeacherPortal() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                               <div className="space-y-2">
                                 <Label>First Name</Label>
-                                <Input value={profile?.first_name || ''} disabled />
+                                <Input value={firstName} disabled />
                               </div>
                               <div className="space-y-2">
                                 <Label>Last Name</Label>
-                                <Input value={profile?.last_name || ''} disabled />
+                                <Input value={lastName} disabled />
                               </div>
                               <div className="space-y-2">
                                 <Label>Email Address</Label>
@@ -2390,10 +2432,11 @@ export default function TeacherPortal() {
                                       <SelectValue placeholder="Select housing status" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="Government House">Government House</SelectItem>
-                                      <SelectItem value="Private Rental">Private Rental</SelectItem>
-                                      <SelectItem value="Own Home">Own Home</SelectItem>
-                                      <SelectItem value="Unknown">Unknown</SelectItem>
+                                      <SelectItem value="Renting">Renting</SelectItem>
+                                      <SelectItem value="Personal House">Personal House</SelectItem>
+                                      <SelectItem value="Government Housing">Government Housing</SelectItem>
+                                      <SelectItem value="School Housing">School Housing</SelectItem>
+                                      <SelectItem value="Other">Other</SelectItem>
                                     </SelectContent>
                                   </Select>
                                 </div>
@@ -2432,8 +2475,9 @@ export default function TeacherPortal() {
                                       <SelectItem value="Certificate">Certificate</SelectItem>
                                       <SelectItem value="Diploma">Diploma</SelectItem>
                                       <SelectItem value="Bachelor's Degree">Bachelor's Degree</SelectItem>
+                                      <SelectItem value="Postgraduate Diploma">Postgraduate Diploma</SelectItem>
                                       <SelectItem value="Master's Degree">Master's Degree</SelectItem>
-                                      <SelectItem value="PhD">PhD</SelectItem>
+                                      <SelectItem value="Doctorate (PhD)">Doctorate (PhD)</SelectItem>
                                       <SelectItem value="Other">Other</SelectItem>
                                     </SelectContent>
                                   </Select>
@@ -2478,13 +2522,20 @@ export default function TeacherPortal() {
                               <Button onClick={async () => {
                                 try {
                                   setLoading(true);
-                                  await fetchWithAuth('/api/teacher/profile', {
+                                  const updatedProfile = await fetchWithAuth('/api/teacher/profile', {
                                     method: 'PUT',
                                     body: JSON.stringify({
                                       phone_number: profile.phone_number,
                                       email: profile.email
                                     })
                                   });
+                                  
+                                  // Invalidate cache and update state
+                                  await db.cache.delete(`supabase:profile:${profile.id}`);
+                                  if (updatedProfile) {
+                                    setProfile(updatedProfile);
+                                  }
+
                                   toast({
                                     title: "Profile Updated",
                                     description: "Your profile information has been saved successfully."
@@ -2896,74 +2947,15 @@ export default function TeacherPortal() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isTeacherWarningOpen} onOpenChange={setIsTeacherWarningOpen}>
-        <DialogContent className="sm:max-w-[500px] border border-amber-200 dark:border-amber-900 bg-white dark:bg-slate-900">
-          <DialogHeader>
-            <div className="h-12 w-12 rounded-full bg-amber-100 dark:bg-amber-950/40 flex items-center justify-center mb-4 border border-amber-200 dark:border-amber-900/50">
-              <Users className="h-6 w-6 text-amber-600 dark:text-amber-400" />
-            </div>
-            <DialogTitle className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-              Complete Your Profile
-            </DialogTitle>
-            <DialogDescription className="text-slate-600 dark:text-slate-400 text-sm mt-2">
-              Your teacher profile is currently incomplete. Having a complete profile is required for government compliance, official reporting, and proper access permissions.
-            </DialogDescription>
-          </DialogHeader>
 
-          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 my-4 text-xs font-semibold text-slate-700 dark:text-slate-300 leading-relaxed space-y-3">
-            <div>
-              Please complete your profile. If you need assistance or need to update fields you cannot edit yourself, contact your school data/ICT personnel:
-            </div>
-            {profile?.schools?.ict_name && (
-              <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800 space-y-2 mt-2 font-medium">
-                <div className="font-bold text-slate-900 dark:text-white text-xs">{profile.schools.ict_name}</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-500 dark:text-slate-400 text-[11px]">
-                  {profile.schools.ict_email && (
-                    <div className="flex items-center gap-1.5">
-                      <Mail className="h-3.5 w-3.5 text-blue-500" />
-                      <span className="truncate">{profile.schools.ict_email}</span>
-                    </div>
-                  )}
-                  {profile.schools.ict_phone && (
-                    <div className="flex items-center gap-1.5">
-                      <Phone className="h-3.5 w-3.5 text-blue-500" />
-                      <span>{profile.schools.ict_phone}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-            {!profile?.schools?.ict_name && (
-              <div className="text-slate-500 dark:text-slate-400 italic">
-                Please contact the school data or ICT personnel.
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="ghost"
-              onClick={() => {
-                sessionStorage.setItem('teacher_portal_completion_warning_dismissed', 'true');
-                setIsTeacherWarningOpen(false);
-              }}
-              className="font-bold uppercase tracking-wider text-xs"
-            >
-              Remind Me Later
-            </Button>
-            <Button
-              onClick={() => {
-                sessionStorage.setItem('teacher_portal_completion_warning_dismissed', 'true');
-                setIsTeacherWarningOpen(false);
-                handleTabChange("profile");
-              }}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-wider text-xs shadow-md"
-            >
-              View Profile
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Mandatory Teacher Profile Setup Modal - blocks portal until complete */}
+      {isProfileIncomplete && profile && (
+        <TeacherProfileSetupModal
+          isOpen={isProfileIncomplete}
+          profile={profile}
+          onComplete={() => window.location.reload()}
+        />
+      )}
 
       {/* Mobile Bottom Navigation */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-40 px-2 py-2 safe-area-bottom shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
@@ -2994,75 +2986,124 @@ export default function TeacherPortal() {
         </div>
       </div>
 
-      {/* Floating Data & ICT Support Banner */}
+      {/* Floating Data & ICT Support Button (Mobile Only) */}
       {profile?.schools?.ict_name && (
-        <div className={cn(
-          "fixed bottom-4 left-4 z-50 transition-all duration-300 ease-in-out hidden sm:block",
-          isIctBannerMinimized 
-            ? "w-12 h-12 rounded-full shadow-lg" 
-            : "w-80 rounded-2xl shadow-2xl border border-blue-100 dark:border-slate-800/80 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md"
-        )}>
-          {isIctBannerMinimized ? (
-            <Button
-              onClick={toggleIctBanner}
-              className="w-12 h-12 rounded-full p-0 bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-lg transition-transform hover:scale-105"
-              title="View ICT Support Contacts"
-            >
-              <HelpCircle className="h-6 w-6" />
-            </Button>
-          ) : (
-            <Card className="border-none bg-transparent overflow-hidden">
-              <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between border-b border-slate-100 dark:border-slate-800/50 bg-blue-50/50 dark:bg-blue-950/20">
-                <div className="flex items-center gap-2">
-                  <ShieldAlert className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  <CardTitle className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                    ICT & Data Support
-                  </CardTitle>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={toggleIctBanner}
-                  className="h-6 w-6 p-0 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                >
-                  <ChevronDown className="h-4 w-4 rotate-90" />
-                </Button>
-              </CardHeader>
-              <CardContent className="p-4 space-y-3">
-                <div className="space-y-1">
-                  <div className="text-sm font-bold text-slate-900 dark:text-white">
-                    {profile.schools.ict_name}
-                  </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">
-                    School Support Personnel
-                  </div>
-                </div>
-                
-                <div className="space-y-2 pt-1 border-t border-slate-100 dark:border-slate-800/40">
-                  {profile.schools.ict_email && (
-                    <a 
-                      href={`mailto:${profile.schools.ict_email}`}
-                      className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors font-medium"
-                    >
-                      <Mail className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                      <span className="truncate">{profile.schools.ict_email}</span>
-                    </a>
-                  )}
-                  {profile.schools.ict_phone && (
-                    <a 
-                      href={`tel:${profile.schools.ict_phone}`}
-                      className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors font-medium"
-                    >
-                      <Phone className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                      <span>{profile.schools.ict_phone}</span>
-                    </a>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+        <div className="fixed bottom-4 left-4 z-50 sm:hidden">
+          <Button
+            onClick={() => setIsSupportModalOpen(true)}
+            className="w-12 h-12 rounded-full p-0 bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-lg transition-transform hover:scale-105"
+            title="View ICT Support Contacts"
+          >
+            <HelpCircle className="h-6 w-6" />
+          </Button>
         </div>
       )}
+
+      {/* ICT Support Contact Modal */}
+      <Dialog open={isSupportModalOpen} onOpenChange={setIsSupportModalOpen}>
+        <DialogContent className="sm:max-w-[450px] p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl">
+          <DialogHeader className="space-y-2 pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-blue-600 text-white rounded-xl">
+                <HelpCircle className="h-6 w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg font-bold text-slate-900 dark:text-white">
+                  ICT & Data Support
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
+                  Get in touch with your school's support contact.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="py-4 space-y-5">
+            {profile?.schools?.ict_name ? (
+              <>
+                <div className="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-100 dark:border-slate-800/60">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
+                    Support Personnel
+                  </p>
+                  <p className="text-base font-black text-slate-900 dark:text-white">
+                    {profile.schools.ict_name}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    School Support Representative
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  {/* Phone */}
+                  {profile.schools.ict_phone && (
+                    <div className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors border border-transparent hover:border-slate-100 dark:hover:border-slate-800">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded-lg">
+                          <Phone className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Phone</p>
+                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{profile.schools.ict_phone}</p>
+                        </div>
+                      </div>
+                      <a 
+                        href={`tel:${profile.schools.ict_phone}`}
+                        className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20"
+                      >
+                        Call
+                      </a>
+                    </div>
+                  )}
+
+                  {/* Email */}
+                  {profile.schools.ict_email && (
+                    <div className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors border border-transparent hover:border-slate-100 dark:hover:border-slate-800">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded-lg">
+                          <Mail className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Email</p>
+                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[180px]">{profile.schools.ict_email}</p>
+                        </div>
+                      </div>
+                      <a 
+                        href={`mailto:${profile.schools.ict_email}`}
+                        className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20"
+                      >
+                        Email
+                      </a>
+                    </div>
+                  )}
+
+                  {/* WhatsApp Direct Message */}
+                  {profile.schools.ict_phone && (
+                    <div className="pt-2">
+                      <a
+                        href={getWhatsAppLink(profile.schools.ict_phone)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full h-11 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-colors shadow-md text-sm"
+                      >
+                        <MessageCircle className="h-5 w-5" />
+                        <span>Chat on WhatsApp</span>
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-6 space-y-3">
+                <AlertCircle className="h-10 w-10 text-amber-500 mx-auto" />
+                <p className="text-sm font-bold text-slate-900 dark:text-white">No support contact configured</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-[280px] mx-auto">
+                  Please ask your School Administrator to set up the Data/ICT Support details in school settings.
+                </p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
