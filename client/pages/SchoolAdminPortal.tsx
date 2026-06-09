@@ -20,7 +20,9 @@ import {
   Save,
   Store,
   CalendarDays,
-  Loader2
+  Loader2,
+  Share2,
+  CheckCircle
 } from 'lucide-react';
 import TuckshopManagement from '@/components/school-admin/TuckshopManagement';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -1075,6 +1077,7 @@ export default function SchoolAdminPortal() {
 const AdminMinistryCalendar = () => {
   const [calendar, setCalendar] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const fetchCalendar = async () => {
@@ -1107,6 +1110,17 @@ const AdminMinistryCalendar = () => {
   const terms = calendar.filter(item => item.type === 'Term');
   const holidays = calendar.filter(item => item.type === 'Holiday');
 
+  const handleCopyLink = async () => {
+    const url = window.location.href;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy link:', err);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -1114,6 +1128,14 @@ const AdminMinistryCalendar = () => {
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Ministry School Calendar</h2>
           <p className="text-slate-600 dark:text-slate-400">Official term dates, mid-term breaks, and holidays issued by the Ministry of Education.</p>
         </div>
+        <Button
+          onClick={handleCopyLink}
+          disabled={calendar.length === 0}
+          className="bg-blue-600 hover:bg-blue-700 text-white gap-2 rounded-xl shadow-lg shadow-blue-600/10 h-10 px-4 text-sm font-semibold transition-all active:scale-95"
+        >
+          {copied ? <CheckCircle className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+          {copied ? 'Link Copied!' : 'Share Calendar'}
+        </Button>
       </div>
 
       <div className="space-y-8">
