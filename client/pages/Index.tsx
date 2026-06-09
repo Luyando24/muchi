@@ -1,13 +1,55 @@
-import { ArrowRight, GraduationCap, Users, FileText, Search, BookOpen, Globe, QrCode, UserCheck, Menu, School, Calendar, BarChart3, DollarSign } from 'lucide-react';
+import { ArrowRight, GraduationCap, Users, FileText, Search, BookOpen, Globe, QrCode, UserCheck, Menu, School, Calendar, BarChart3, DollarSign, Loader2 } from 'lucide-react';
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import ThemeToggle from "@/components/navigation/ThemeToggle";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 
 import Chatbot from '@/components/Landing/Chatbot';
 
 export default function Index() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [calendar, setCalendar] = useState<any[]>([]);
+  const [activeTerm, setActiveTerm] = useState<any>(null);
+
+  useEffect(() => {
+    async function loadCalendar() {
+      try {
+        const { data, error } = await supabase
+          .from('ministry_calendar')
+          .select('*')
+          .order('start_date', { ascending: true });
+        if (error) throw error;
+        if (data) {
+          setCalendar(data);
+          
+          const nowStr = new Date().toLocaleString('sv-SE', { timeZone: 'Africa/Lusaka' }).split(' ')[0];
+          const now = new Date(nowStr).getTime();
+          
+          const current = data.find(item => {
+            if (item.type !== 'Term') return false;
+            const start = new Date(item.start_date).getTime();
+            const end = new Date(item.end_date).getTime();
+            return start <= now && now <= end;
+          });
+          
+          if (current) {
+            setActiveTerm(current);
+          } else {
+            const upcoming = data
+              .filter(item => item.type === 'Term')
+              .find(item => new Date(item.start_date).getTime() > now);
+            if (upcoming) {
+              setActiveTerm({ ...upcoming, isUpcoming: true });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load public calendar:', err);
+      }
+    }
+    loadCalendar();
+  }, []);
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Chatbot />
@@ -80,7 +122,22 @@ export default function Index() {
               <Button asChild size="lg" variant="outline" className="text-lg px-8 py-6 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-white border-emerald-500/30 shadow-lg hover:shadow-xl transition-all">
                 <Link to="/check-results" className="flex items-center gap-2">Check Results <FileText className="ml-2 h-5 w-5" /></Link>
               </Button>
+              <Button asChild size="lg" variant="outline" className="text-lg px-8 py-6 rounded-full bg-blue-500/20 hover:bg-blue-500/30 text-white border-blue-500/30 shadow-lg hover:shadow-xl transition-all cursor-pointer">
+                <Link to="/school-calendar" className="flex items-center gap-2">School Calendar <Calendar className="ml-2 h-5 w-5" /></Link>
+              </Button>
             </div>
+
+            {activeTerm && (
+              <div className="mt-8 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs sm:text-sm font-semibold animate-fade-in shadow-inner text-white/90">
+                <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse"></span>
+                {activeTerm.isUpcoming ? 'Upcoming Term: ' : 'Active Term: '}
+                <span className="font-extrabold text-blue-200">{activeTerm.name} ({activeTerm.year})</span>
+                {activeTerm.isUpcoming ? ' opens ' : ' runs until '}
+                <span className="font-bold">
+                  {new Date(activeTerm.isUpcoming ? activeTerm.start_date : activeTerm.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                </span>
+              </div>
+            )}
 
           </div>
         </div>

@@ -1,6 +1,8 @@
 
 import { Router, Request, Response } from 'express';
 import { supabaseAdmin } from '../lib/supabase.js';
+import XLSX from 'xlsx';
+import path from 'path';
 
 const router = Router();
 
@@ -1439,6 +1441,221 @@ router.get('/boarding-analytics', requireGovernmentAccess, async (req: Request, 
   } catch (error: any) {
     console.error("Boarding Analytics Error:", error);
     res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/government/calendar
+router.get("/calendar", requireGovernmentAccess, async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("ministry_calendar")
+      .select("*")
+      .order("start_date", { ascending: true });
+    if (error) throw error;
+    res.json(data || []);
+  } catch (err: any) {
+    console.error("Gov Get Calendar Error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/government/calendar
+router.post("/calendar", requireGovernmentAccess, async (req: Request, res: Response) => {
+  try {
+    const { year, type, name, start_date, end_date, midterm_begin, midterm_end } = req.body;
+    const { data, error } = await supabaseAdmin
+      .from("ministry_calendar")
+      .insert({
+        year,
+        type,
+        name,
+        start_date,
+        end_date,
+        midterm_begin: midterm_begin || null,
+        midterm_end: midterm_end || null
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err: any) {
+    console.error("Gov Post Calendar Error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PUT /api/government/calendar/:id
+router.put("/calendar/:id", requireGovernmentAccess, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { year, type, name, start_date, end_date, midterm_begin, midterm_end } = req.body;
+    const { data, error } = await supabaseAdmin
+      .from("ministry_calendar")
+      .update({
+        year,
+        type,
+        name,
+        start_date,
+        end_date,
+        midterm_begin: midterm_begin || null,
+        midterm_end: midterm_end || null,
+        updated_at: new Date()
+      })
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json(data);
+  } catch (err: any) {
+    console.error("Gov Put Calendar Error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/government/calendar/:id
+router.delete("/calendar/:id", requireGovernmentAccess, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { error } = await supabaseAdmin
+      .from("ministry_calendar")
+      .delete()
+      .eq("id", id);
+    if (error) throw error;
+    res.json({ message: "Calendar entry deleted successfully" });
+  } catch (err: any) {
+    console.error("Gov Delete Calendar Error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/government/calendar/reset
+router.post("/calendar/reset", requireGovernmentAccess, async (req: Request, res: Response) => {
+  try {
+    const excelPath = path.join(process.cwd(), 'zambia_school_calendar_2026_2030.xlsx');
+    const workbook = XLSX.readFile(excelPath);
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rawData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+    function parseDateString(str: any, year: string) {
+      if (!str) return null;
+      let clean = String(str).replace(/^[A-Za-z]+,\s*/, '').trim();
+      const match = clean.match(/^(\d+)(st|nd|rd|th)?\s+([A-Za-z]+)$/i);
+      if (!match) return null;
+      const day = parseInt(match[1], 10);
+      const monthName = match[3].toLowerCase();
+      const months: Record<string, string> = {
+        january: '01', february: '02', march: '03', april: '04', may: '05', june: '06',
+        july: '07', august: '08', september: '09', october: '10', november: '11', december: '12'
+      };
+      const month = months[monthName];
+      if (!month) return null;
+      const dayStr = String(day).padStart(2, '0');
+      return `${year}-${month}-${dayStr}`;
+    }
+
+    const years = ['2026', '2027', '2028', '2029', '2030'];
+    const termData: Record<string, Record<string, any>> = {};
+    const holidayEntries: any[] = [];
+    const termEntries: any[] = [];
+
+    let currentTerm: string | null = null;
+
+    rawData.forEach((row) => {
+      if (row.length === 0 || !row[0]) return;
+      const label = String(row[0]).trim();
+      
+      if (label.includes('FIRST TERM')) {
+        currentTerm = 'Term 1';
+        return;
+      } else if (label.includes('SECOND TERM')) {
+        currentTerm = 'Term 2';
+        return;
+      } else if (label.includes('THIRD TERM')) {
+        currentTerm = 'Term 3';
+        return;
+      }
+      
+      if (currentTerm) {
+        if (label === 'Open' || label === 'Close' || label === 'ECE-MidTerm Break-Begin' || label === 'ECE-MidTerm Break-End') {
+          years.forEach((year, colIdx) => {
+            const val = row[colIdx + 1];
+            const parsed = parseDateString(val, year);
+            if (parsed) {
+              if (!termData[year]) termData[year] = {};
+              if (!termData[year][currentTerm!]) termData[year][currentTerm!] = {};
+              
+              if (label === 'Open') termData[year][currentTerm!].open = parsed;
+              if (label === 'Close') termData[year][currentTerm!].close = parsed;
+              if (label === 'ECE-MidTerm Break-Begin') termData[year][currentTerm!].midterm_begin = parsed;
+              if (label === 'ECE-MidTerm Break-End') termData[year][currentTerm!].midterm_end = parsed;
+            }
+          });
+        }
+      }
+    });
+
+    Object.entries(termData).forEach(([year, terms]) => {
+      Object.entries(terms).forEach(([termName, data]: [string, any]) => {
+        termEntries.push({
+          year,
+          type: 'Term',
+          name: termName,
+          start_date: data.open,
+          end_date: data.close,
+          midterm_begin: data.midterm_begin || null,
+          midterm_end: data.midterm_end || null
+        });
+      });
+    });
+
+    const holidayLabels = [
+      "New Year's Day", "Women's Day", "Youth Day", "Good Friday", "Holy Saturday", 
+      "Easter Monday", "Kenneth Kaunda Day", "Labour Day", "Africa Freedom Day", 
+      "Heroes Day", "Unity Day", "Farmers' Day", "Teacher's Day", "National Prayers Day", 
+      "Independence Day", "Christmas Day"
+    ];
+
+    rawData.forEach((row) => {
+      if (row.length === 0 || !row[0]) return;
+      const label = String(row[0]).trim();
+      if (holidayLabels.includes(label)) {
+        years.forEach((year, colIdx) => {
+          const val = row[colIdx + 1];
+          const parsed = parseDateString(val, year);
+          if (parsed) {
+            holidayEntries.push({
+              year,
+              type: 'Holiday',
+              name: label,
+              start_date: parsed,
+              end_date: parsed
+            });
+          }
+        });
+      }
+    });
+
+    // 1. Delete all current rows in ministry_calendar
+    const { error: deleteError } = await supabaseAdmin
+      .from("ministry_calendar")
+      .delete()
+      .neq("id", "00000000-0000-0000-0000-000000000000");
+
+    if (deleteError) throw deleteError;
+
+    // 2. Insert terms and holidays
+    const allInserts = [...termEntries, ...holidayEntries];
+    const { error: insertError } = await supabaseAdmin
+      .from("ministry_calendar")
+      .insert(allInserts);
+
+    if (insertError) throw insertError;
+
+    res.json({ success: true, count: allInserts.length });
+  } catch (err: any) {
+    console.error("Gov Reset Calendar Error:", err);
+    res.status(500).json({ message: err.message });
   }
 });
 

@@ -10,6 +10,8 @@ import {
   Palette,
   Loader2,
   X,
+  Calendar,
+  AlertCircle,
   School as SchoolIcon // imported School for the type
 } from 'lucide-react';
 import { ZAMBIAN_REGIONS } from '@/lib/regions';
@@ -49,6 +51,7 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
+  const [ministryCalendar, setMinistryCalendar] = useState<any[]>([]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -108,7 +111,7 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
     { key: "signature_url", label: "Headteacher Signature" },
     { key: "ict_name", label: "ICT Support Name" },
     { key: "ict_email", label: "ICT Support Email" },
-    { key: "ict_phone", label: "ICT Support Phone (WhatsApp)" },
+    { key: "ict_phone", label: "ICT Support Phone" },
     { key: "boarding_status", label: "Boarding Status" },
     { key: "gender_composition", label: "Gender Composition" }
   ];
@@ -126,20 +129,11 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
   const fetchMetadata = async () => {
     setIsLoadingMeta(true);
     try {
-      const [catRes, countRes] = await Promise.all([
-        fetch('/api/schools/metadata/categories'),
-        fetch('/api/schools/metadata/countries')
-      ]);
-
-      if (catRes.ok) {
-        const catData = await catRes.json();
-        setCategories(catData);
-      }
+      const catRes = await fetch('/api/admin/school-categories');
+      const countRes = await fetch('/api/admin/countries');
       
-      if (countRes.ok) {
-        const countData = await countRes.json();
-        setCountries(countData);
-      }
+      if (catRes.ok) setCategories(await catRes.json());
+      if (countRes.ok) setCountries(await countRes.json());
     } catch (error) {
       console.error('Error fetching metadata:', error);
     } finally {
@@ -200,16 +194,7 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
       });
     } catch (error: any) {
       console.error('Error fetching settings:', error);
-      
-      const isOfflineError = error.message?.includes('No connection and no cached data available');
-      
-      if (isOfflineError) {
-        toast({
-          title: "Offline Mode",
-          description: "No cached school settings available. Please connect to sync.",
-          variant: "destructive",
-        });
-      } else {
+      if (toast) {
         toast({
           title: "Error",
           description: "Failed to load school settings.",
@@ -237,9 +222,26 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
     }
   };
 
+  const fetchMinistryCalendar = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch('/api/school/ministry-calendar', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMinistryCalendar(data || []);
+      }
+    } catch (err) {
+      console.error('Error fetching ministry calendar:', err);
+    }
+  };
+
   useEffect(() => {
     fetchSettings();
     fetchAvailableSubjects();
+    fetchMinistryCalendar();
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -462,6 +464,7 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
           <TabsTrigger value="general">General Settings</TabsTrigger>
           <TabsTrigger value="certification">Official Certification</TabsTrigger>
           <TabsTrigger value="admins">Admin Access</TabsTrigger>
+          <TabsTrigger value="calendar">Ministry Calendar</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general">
@@ -626,8 +629,9 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
                           id="academic_year"
                           name="academic_year"
                           value={formData.academic_year}
-                          onChange={handleInputChange}
-                          placeholder="e.g. 2024"
+                          disabled
+                          placeholder="e.g. 2026"
+                          className="bg-slate-50 dark:bg-slate-800 text-slate-500 cursor-not-allowed font-medium"
                         />
                       </div>
 
@@ -637,9 +641,17 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
                           id="current_term"
                           name="current_term"
                           value={formData.current_term}
-                          onChange={handleInputChange}
+                          disabled
                           placeholder="e.g. Term 1"
+                          className="bg-slate-50 dark:bg-slate-800 text-slate-500 cursor-not-allowed font-medium"
                         />
+                      </div>
+
+                      <div className="md:col-span-2 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-950 p-3 rounded-lg flex items-start gap-2.5">
+                        <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5" />
+                        <p className="text-xs text-blue-800 dark:text-blue-300 font-medium">
+                          Active Term and Academic Year are managed automatically by the Ministry of Education School Calendar. School administrators cannot modify these values directly.
+                        </p>
                       </div>
                     </div>
 
@@ -1337,6 +1349,111 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
 
         <TabsContent value="admins">
           <AdminManagement />
+        </TabsContent>
+
+        <TabsContent value="calendar">
+          <Card className="border border-slate-200 dark:border-slate-800 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-indigo-600" />
+                Ministry School Calendar (2026 - 2030)
+              </CardTitle>
+              <CardDescription>
+                Official calendar issued by the Ministry of Education. Use this timeline to track term openings, closures, and holidays.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              {/* Terms Timeline */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider">Official Term Timelines</h3>
+                {ministryCalendar.filter(item => item.type === 'Term').length === 0 ? (
+                  <div className="text-center py-6 text-sm text-slate-500 italic">No calendar terms seeded yet.</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {ministryCalendar
+                      .filter(item => item.type === 'Term')
+                      .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
+                      .map((term, idx) => {
+                        const isCurrent = 
+                          new Date(term.start_date).getTime() <= new Date().getTime() &&
+                          new Date(term.end_date).getTime() >= new Date().getTime();
+
+                        return (
+                          <div 
+                            key={term.id || idx} 
+                            className={`p-5 rounded-xl border transition-all ${
+                              isCurrent 
+                                ? 'bg-indigo-50/40 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-800/60 shadow-sm' 
+                                : 'bg-slate-50/50 dark:bg-slate-900/30 border-slate-100 dark:border-slate-800/40'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="text-sm font-bold text-slate-800 dark:text-slate-200">{term.name} ({term.year})</span>
+                              {isCurrent && (
+                                <Badge variant="default" className="bg-indigo-600 text-white font-bold text-[9px] uppercase tracking-wider py-0.5 px-2">Active</Badge>
+                              )}
+                            </div>
+                            <div className="space-y-2.5 text-xs">
+                              <div className="flex justify-between">
+                                <span className="text-slate-400">Opens</span>
+                                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                  {new Date(term.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-slate-400">Closes</span>
+                                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                  {new Date(term.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                </span>
+                              </div>
+                              {term.midterm_begin && (
+                                <div className="border-t border-slate-200/50 dark:border-slate-800/50 pt-2.5 mt-2.5">
+                                  <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">Mid-Term Break</span>
+                                  <div className="flex justify-between mt-1 text-[11px]">
+                                    <span className="text-slate-400">Starts</span>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                      {new Date(term.midterm_begin).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between text-[11px] mt-0.5">
+                                    <span className="text-slate-400">Ends</span>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                      {new Date(term.midterm_end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+
+              {/* Public Holidays */}
+              <div className="space-y-4 border-t border-slate-100 dark:border-slate-800/60 pt-6">
+                <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider">National Public Holidays</h3>
+                {ministryCalendar.filter(item => item.type === 'Holiday').length === 0 ? (
+                  <div className="text-center py-6 text-sm text-slate-500 italic">No public holidays seeded yet.</div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                    {ministryCalendar
+                      .filter(item => item.type === 'Holiday')
+                      .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
+                      .map((holiday, idx) => (
+                        <div key={holiday.id || idx} className="p-3.5 bg-slate-50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800/40 rounded-xl text-center">
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{holiday.name}</p>
+                          <p className="text-[10px] text-slate-500 mt-1 font-semibold">
+                            {new Date(holiday.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </p>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

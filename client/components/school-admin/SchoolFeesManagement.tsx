@@ -21,6 +21,7 @@ export default function SchoolFeesManagement() {
   const [classes, setClasses] = useState<any[]>([]);
   const [feeType, setFeeType] = useState('tuition');
   const [applicableTo, setApplicableTo] = useState('grade');
+  const [academicYear, setAcademicYear] = useState<string>(new Date().getFullYear().toString());
   const [isFormSubmitting, setIsFormSubmitting] = useState(false);
   const { toast } = useToast();
 
@@ -79,6 +80,17 @@ export default function SchoolFeesManagement() {
         headers: { 'Authorization': `Bearer ${session?.access_token}` }
       });
       if (invRes.ok) setInvoices(await invRes.json());
+
+      // Fetch school settings for academic year default
+      const settingsSchoolRes = await fetch('/api/school/settings', {
+        headers: { 'Authorization': `Bearer ${session?.access_token}` }
+      });
+      if (settingsSchoolRes.ok) {
+        const settingsSchool = await settingsSchoolRes.json();
+        if (settingsSchool.academic_year) {
+          setAcademicYear(settingsSchool.academic_year.toString());
+        }
+      }
 
     } catch (error) {
       console.error('Error fetching finance data:', error);
@@ -277,7 +289,7 @@ export default function SchoolFeesManagement() {
                       <div className="grid grid-cols-3 gap-4">
                         <div className="space-y-2">
                           <Label>Year</Label>
-                          <Input name="academic_year" type="number" defaultValue={new Date().getFullYear()} required />
+                          <Input name="academic_year" type="number" value={academicYear} onChange={(e) => setAcademicYear(e.target.value)} required />
                         </div>
                         <div className="space-y-2">
                           <Label>Currency</Label>

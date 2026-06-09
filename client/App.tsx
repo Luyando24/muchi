@@ -27,6 +27,7 @@ import SystemAdminPortal from "./pages/SystemAdminPortal";
 import VerifyReport from "./pages/VerifyReport";
 import DataAuditPage from "./pages/DataAuditPage";
 import CheckResults from "./pages/CheckResults";
+import SchoolCalendar from "./pages/SchoolCalendar";
 import EnterResults from "./pages/results/EnterResults";
 import ResultsAnalysis from "./pages/results/ResultsAnalysis";
 import MasterSheet from "./pages/results/MasterSheet";
@@ -51,6 +52,7 @@ const CommonRoutes = () => (
     <Route path="/reset-password" element={<ResetPassword />} />
     <Route path="/force-password-reset" element={<ForcePasswordReset />} />
     <Route path="/verify/:hash" element={<VerifyReport />} />
+    <Route path="/school-calendar" element={<SchoolCalendar />} />
   </>
 );
 
@@ -242,6 +244,7 @@ const RootApp = () => (
       />
       <Route path="/verify/:hash" element={<VerifyReport />} />
       <Route path="/check-results" element={<CheckResults />} />
+      <Route path="/school-calendar" element={<SchoolCalendar />} />
       <Route path="/:slug/*" element={<SchoolWebsite />} />
       <Route path="*" element={<NotFound />} />
     </Routes>

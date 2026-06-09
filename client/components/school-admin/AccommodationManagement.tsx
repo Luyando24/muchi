@@ -43,6 +43,8 @@ export default function AccommodationManagement() {
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
+  const [currentAcademicYear, setCurrentAcademicYear] = useState(new Date().getFullYear().toString());
+  
   // Dialog & Form States
   const [expandedBlockId, setExpandedBlockId] = useState<string | null>(null);
   const [newBlock, setNewBlock] = useState({ name: '', gender_policy: 'Mixed' });
@@ -99,10 +101,30 @@ export default function AccommodationManagement() {
     }
   };
 
+  const fetchSettings = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/school/settings', {
+        headers: { 'Authorization': `Bearer ${session?.access_token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.academic_year) {
+          const yearStr = data.academic_year.toString();
+          setCurrentAcademicYear(yearStr);
+          setNewAllocation(prev => ({ ...prev, academic_year: yearStr }));
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     fetchStats();
     fetchBlocksAndRooms();
     fetchAllocationsAndApps();
+    fetchSettings();
   }, []);
 
   const handleCreateBlock = async (e: React.FormEvent) => {
@@ -217,7 +239,7 @@ export default function AccommodationManagement() {
       });
       if (res.ok) {
         toast({ title: 'Success', description: 'Student allocated to room successfully.' });
-        setNewAllocation({ student_id: '', room_id: '', academic_year: new Date().getFullYear().toString() });
+        setNewAllocation({ student_id: '', room_id: '', academic_year: currentAcademicYear });
         fetchAllocationsAndApps();
         fetchStats();
       } else {

@@ -7532,8 +7532,7 @@ router.put(
         .from("schools")
         .update({
           name,
-          academic_year,
-          current_term,
+          // Academic year and current term are automatically synchronized with the ministry calendar
           exam_types: ["Mid Term", "End of Term"],
           test_types,
           test_types_enabled,
@@ -7586,6 +7585,26 @@ router.put(
       res.json(data);
     } catch (error: any) {
       console.error("Update School Settings Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  },
+);
+
+// GET /api/school/ministry-calendar
+router.get(
+  "/ministry-calendar",
+  requireSchoolRole([...ADMIN_ROLES, "teacher", "student"]),
+  async (req: Request, res: Response) => {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("ministry_calendar")
+        .select("*")
+        .order("start_date", { ascending: true });
+
+      if (error) throw error;
+      res.json(data || []);
+    } catch (error: any) {
+      console.error("Get Ministry Calendar Error:", error);
       res.status(500).json({ message: error.message });
     }
   },

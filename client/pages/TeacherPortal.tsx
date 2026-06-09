@@ -6,6 +6,7 @@ import StudentDetailsView from '@/components/school-admin/StudentDetailsView';
 import {
   BookOpen,
   Calendar,
+  CalendarDays,
   ClipboardCheck,
   User,
   Bell,
@@ -205,6 +206,7 @@ export default function TeacherPortal() {
     if (path.includes('/classes')) return 'classes';
     if (path.includes('/attendance')) return 'attendance';
     if (path.includes('/timetable')) return 'timetable';
+    if (path.includes('/ministry-calendar')) return 'ministry-calendar';
     if (path.includes('/profile')) return 'profile';
     if (path.includes('/settings')) return 'settings';
     
@@ -1055,6 +1057,7 @@ export default function TeacherPortal() {
       items: [
         { id: "dashboard", label: "Dashboard", icon: Home, external: false, path: "" },
         { id: "timetable", label: "Timetable", icon: Calendar, external: false, path: "" },
+        { id: "ministry-calendar", label: "Ministry Calendar", icon: CalendarDays, external: false, path: "" },
       ]
     },
     {
@@ -2782,6 +2785,10 @@ export default function TeacherPortal() {
               </div>
             } />
 
+            <Route path="ministry-calendar" element={
+              <TeacherMinistryCalendar />
+            } />
+
             <Route path="settings" element={
               <div className="space-y-6">
               <div className="flex items-center justify-between">
@@ -3176,6 +3183,202 @@ const TimetableTab = ({ timetable }: { timetable: TimetableEntry[] }) => {
             </CardContent>
           </Card>
         ))}
+      </div>
+    </div>
+  );
+};
+
+const TeacherMinistryCalendar = () => {
+  const [calendar, setCalendar] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
+  const [typeFilter, setTypeFilter] = useState('All');
+
+  useEffect(() => {
+    const fetchCalendar = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        const res = await fetch('/api/school/ministry-calendar', {
+          headers: { 'Authorization': `Bearer ${session.access_token}` }
+        });
+        if (res.ok) {
+          setCalendar(await res.json());
+        }
+      } catch (err) {
+        console.error('Failed to load ministry calendar', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCalendar();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  const filteredCalendar = calendar.filter(item => {
+    const matchYear = yearFilter === 'All' || item.year === yearFilter;
+    const matchType = typeFilter === 'All' || item.type === typeFilter;
+    return matchYear && matchType;
+  });
+
+  const terms = filteredCalendar
+    .filter(item => item.type === 'Term')
+    .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+
+  const holidays = filteredCalendar
+    .filter(item => item.type === 'Holiday')
+    .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+
+  const uniqueYears = Array.from(new Set(calendar.map(entry => entry.year))).sort();
+
+  const showTerms = typeFilter === 'All' || typeFilter === 'Term';
+  const showHolidays = typeFilter === 'All' || typeFilter === 'Holiday';
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Ministry School Calendar</h2>
+          <p className="text-slate-600 dark:text-slate-400">Official term dates, mid-term breaks, and holidays issued by the Ministry of Education.</p>
+        </div>
+      </div>
+
+      {/* Filter Card - Sticky on scroll */}
+      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 mb-6 shadow-sm flex flex-col sm:flex-row gap-4 items-center justify-between sticky top-[64px] sm:top-[72px] z-30 backdrop-blur-md bg-white/95 dark:bg-slate-800/95">
+        <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 w-full sm:w-64">
+          <Filter className="h-4 w-4 text-slate-400" />
+          <span className="text-sm text-slate-600 dark:text-slate-400 font-semibold">Filters</span>
+        </div>
+
+        <div className="flex flex-wrap gap-4 items-center w-full sm:w-auto justify-end">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Year:</span>
+            <select
+              value={yearFilter}
+              onChange={(e) => setYearFilter(e.target.value)}
+              className="h-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus:border-blue-500 font-bold cursor-pointer"
+            >
+              <option value="All">All Years</option>
+              {uniqueYears.map(year => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Type:</span>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="h-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus:border-blue-500 font-bold cursor-pointer"
+            >
+              <option value="All">All Types</option>
+              <option value="Term">Term</option>
+              <option value="Holiday">Holiday</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-8">
+        {/* Terms Timeline */}
+        {showTerms && (
+          <div className="space-y-4">
+            <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider">Official Term Timelines</h3>
+            {terms.length === 0 ? (
+              <div className="text-center py-8 text-sm text-slate-400 italic bg-white dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-2xl">No terms matched the active filters.</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {terms.map((term, idx) => {
+                  const isCurrent = 
+                    new Date(term.start_date).getTime() <= new Date().getTime() &&
+                    new Date(term.end_date).getTime() >= new Date().getTime();
+
+                  return (
+                    <Card 
+                      key={term.id || idx} 
+                      className={`border shadow-sm transition-all ${
+                        isCurrent 
+                          ? 'bg-blue-50/30 dark:bg-blue-950/10 border-blue-200 dark:border-blue-800' 
+                          : 'bg-white dark:bg-slate-800/40 border-slate-200 dark:border-slate-800'
+                      }`}
+                    >
+                      <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
+                        <CardTitle className="text-base font-bold text-slate-900 dark:text-white">
+                          {term.name} ({term.year})
+                        </CardTitle>
+                        {isCurrent && (
+                          <Badge className="bg-blue-600 text-white font-bold text-[9px] uppercase tracking-wider py-0.5 px-2">Active</Badge>
+                        )}
+                      </CardHeader>
+                      <CardContent className="space-y-3 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Opens</span>
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">
+                            {new Date(term.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Closes</span>
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">
+                            {new Date(term.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        </div>
+                        {term.midterm_begin && (
+                          <div className="border-t border-slate-100 dark:border-slate-700/50 pt-3 mt-3">
+                            <span className="text-[10px] font-bold uppercase tracking-wide text-blue-600 dark:text-blue-400">Mid-Term Break</span>
+                            <div className="flex justify-between mt-1 text-[11px]">
+                              <span className="text-slate-400">Starts</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                {new Date(term.midterm_begin).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-[11px] mt-0.5">
+                              <span className="text-slate-400">Ends</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                {new Date(term.midterm_end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Public Holidays */}
+        {showHolidays && (
+          <div className="space-y-4 border-t border-slate-200 dark:border-slate-800/80 pt-6">
+            <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider">National Public Holidays</h3>
+            {holidays.length === 0 ? (
+              <div className="text-center py-8 text-sm text-slate-400 italic bg-white dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-2xl">No public holidays matched the active filters.</div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                {holidays.map((holiday, idx) => (
+                  <Card key={holiday.id || idx} className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/20 text-center">
+                    <CardContent className="p-3.5">
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{holiday.name}</p>
+                      <p className="text-[10px] text-slate-500 mt-1 font-semibold">
+                        {new Date(holiday.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -48,7 +48,7 @@ import {
   Pie
 } from 'recharts';
 
-import { Award, ArrowRightLeft, Heart, Activity } from 'lucide-react';
+import { Award, ArrowRightLeft, Heart, Activity, Calendar, CalendarCheck } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -80,6 +80,7 @@ import TeacherDisabilities from '@/components/government/TeacherDisabilities';
 import StudentVulnerability from '@/components/government/StudentVulnerability';
 import GovernmentSettings from '@/components/government/GovernmentSettings';
 import BoardingAnalytics from '@/components/government/BoardingAnalytics';
+import GovernmentSchoolCalendar from '@/components/government/GovernmentSchoolCalendar';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#71717a'];
 const getColor = (index: number): string => COLORS[index % COLORS.length];
@@ -1433,6 +1434,7 @@ export default function GovernmentPortal() {
       label: "Operations",
       items: [
         { id: 'feeding', label: 'Feeding Program', icon: Package },
+        { id: 'school-calendar', label: 'School Calendar', icon: Calendar },
       ]
     },
     {
@@ -1566,9 +1568,12 @@ export default function GovernmentPortal() {
              <TabsContent value="student-vulnerability">
                <StudentVulnerability />
              </TabsContent>
+             <TabsContent value="school-calendar">
+               <GovernmentSchoolCalendar />
+             </TabsContent>
              <TabsContent value="settings">
-                <GovernmentSettings />
-              </TabsContent>
+               <GovernmentSettings />
+             </TabsContent>
             </Tabs>
          </main>
       </div>

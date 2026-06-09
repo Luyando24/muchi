@@ -117,21 +117,21 @@ export default function CheckResults() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-slate-100 text-slate-900 font-inter">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-lg border-b border-white/10 shadow-lg">
+      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-lg border-b border-slate-200/80 shadow-sm">
         <div className="container mx-auto flex items-center justify-between py-4 px-4">
           <Link to="/" className="flex items-center gap-2 group">
-            <School className="h-8 w-8 text-blue-400 group-hover:text-blue-300 transition-colors" />
+            <School className="h-8 w-8 text-blue-600 group-hover:text-blue-500 transition-colors" />
             <div>
-              <span className="text-xl font-bold text-white">MUCHI</span>
-              <p className="text-xs text-slate-400">School Management System</p>
+              <span className="text-xl font-bold text-slate-900">MUCHI</span>
+              <p className="text-xs text-slate-500 font-medium">School Management System</p>
             </div>
           </Link>
           <Button
             variant="ghost"
             onClick={() => navigate(-1)}
-            className="text-slate-300 hover:text-white hover:bg-white/10 gap-2"
+            className="text-slate-600 hover:text-slate-900 hover:bg-slate-100 gap-2 rounded-xl"
           >
             <ArrowLeft className="h-4 w-4" />
             Back
@@ -139,24 +139,24 @@ export default function CheckResults() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-12">
+      <main className="container mx-auto px-4 py-12 max-w-5xl">
         {!resultData ? (
           /* Search Form */
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-10">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-500/20 border border-blue-500/30 mb-4">
-                <FileText className="h-8 w-8 text-blue-400" />
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-50 border border-blue-100 mb-4">
+                <FileText className="h-8 w-8 text-blue-600" />
               </div>
-              <h1 className="text-3xl sm:text-4xl font-bold text-white mb-3">Check Student Results</h1>
-              <p className="text-slate-400 text-lg">
+              <h1 className="text-3xl sm:text-4xl font-black text-slate-900 mb-3">Check Student Results</h1>
+              <p className="text-slate-600 text-lg">
                 Enter your student details below to view and download your report card.
               </p>
             </div>
 
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-8 backdrop-blur-sm shadow-2xl">
+            <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-md">
               <form onSubmit={handleSearch} className="space-y-6">
                 <div className="space-y-2">
-                  <Label htmlFor="studentNumber" className="text-slate-200 font-medium">
+                  <Label htmlFor="studentNumber" className="text-slate-700 font-semibold">
                     Student Number
                   </Label>
                   <Input
@@ -165,18 +165,18 @@ export default function CheckResults() {
                     value={studentNumber}
                     onChange={(e) => setStudentNumber(e.target.value)}
                     required
-                    className="bg-white/10 border-white/20 text-white placeholder:text-slate-500 focus:border-blue-400 focus:ring-blue-400/20 h-12 text-base"
+                    className="bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-blue-500/20 h-12 text-base rounded-xl"
                   />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="term" className="text-slate-200 font-medium">Term</Label>
+                    <Label htmlFor="term" className="text-slate-700 font-semibold">Term</Label>
                     <Select value={term} onValueChange={setTerm}>
-                      <SelectTrigger id="term" className="bg-white/10 border-white/20 text-white h-12">
+                      <SelectTrigger id="term" className="bg-white border-slate-200 text-slate-900 h-12 rounded-xl">
                         <SelectValue placeholder="Select Term" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-white text-slate-900">
                         <SelectItem value="Term 1">Term 1</SelectItem>
                         <SelectItem value="Term 2">Term 2</SelectItem>
                         <SelectItem value="Term 3">Term 3</SelectItem>
@@ -185,12 +185,12 @@ export default function CheckResults() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="academicYear" className="text-slate-200 font-medium">Academic Year</Label>
+                    <Label htmlFor="academicYear" className="text-slate-700 font-semibold">Academic Year</Label>
                     <Select value={academicYear} onValueChange={setAcademicYear}>
-                      <SelectTrigger id="academicYear" className="bg-white/10 border-white/20 text-white h-12">
+                      <SelectTrigger id="academicYear" className="bg-white border-slate-200 text-slate-900 h-12 rounded-xl">
                         <SelectValue placeholder="Select Year" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-white text-slate-900">
                         {availableYears.map(year => (
                           <SelectItem key={year} value={year}>{year}</SelectItem>
                         ))}
@@ -199,12 +199,12 @@ export default function CheckResults() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="examType" className="text-slate-200 font-medium">Assessment Type</Label>
+                    <Label htmlFor="examType" className="text-slate-700 font-semibold">Assessment Type</Label>
                     <Select value={examType} onValueChange={setExamType}>
-                      <SelectTrigger id="examType" className="bg-white/10 border-white/20 text-white h-12">
+                      <SelectTrigger id="examType" className="bg-white border-slate-200 text-slate-900 h-12 rounded-xl">
                         <SelectValue placeholder="Select Type" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-white text-slate-900">
                         <SelectItem value="Mid Term">Mid Term</SelectItem>
                         <SelectItem value="End of Term">End of Term</SelectItem>
                       </SelectContent>
@@ -213,7 +213,7 @@ export default function CheckResults() {
                 </div>
 
                 {error && (
-                  <div className="p-4 bg-red-500/10 border border-red-500/30 text-red-300 rounded-xl text-sm flex items-center gap-3">
+                  <div className="p-4 bg-red-50 border border-red-150 text-red-700 rounded-xl text-sm flex items-center gap-3 font-medium">
                     <AlertCircle className="h-4 w-4 shrink-0" />
                     {error}
                   </div>
@@ -221,7 +221,7 @@ export default function CheckResults() {
 
                 <Button
                   type="submit"
-                  className="w-full h-12 text-base font-semibold bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-600/20 rounded-xl transition-all"
+                  className="w-full h-12 text-base font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/10 rounded-xl transition-all active:scale-95"
                   disabled={loading}
                 >
                   {loading ? (
@@ -237,25 +237,25 @@ export default function CheckResults() {
           /* Results View */
           <div className="max-w-5xl mx-auto space-y-6">
             {/* Result Header */}
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-white/5 border border-white/10 rounded-2xl p-6 sm:p-8 backdrop-blur-sm">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm">
               <div className="text-center md:text-left">
-                <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">{resultData.student.name}</h2>
-                <p className="text-slate-400 mt-1 text-lg">Student No: {resultData.student.studentNumber} · {resultData.student.class}</p>
-                <p className="text-slate-500 mt-1">
+                <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">{resultData.student.name}</h2>
+                <p className="text-slate-600 mt-1 text-lg font-medium">Student No: {resultData.student.studentNumber} · {resultData.student.class}</p>
+                <p className="text-slate-500 mt-1 font-semibold">
                   {resultData.termResults[0].term} · {examType} · Academic Year {resultData.termResults[0].academicYear}
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row w-full md:w-auto gap-3">
                 <Button
                   onClick={handleDownloadPDF}
-                  className="bg-emerald-600 hover:bg-emerald-500 gap-2 rounded-xl shadow-lg shadow-emerald-600/20 h-12 px-6 flex-1 sm:flex-none"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 rounded-xl shadow-lg shadow-emerald-600/10 h-12 px-6 flex-1 sm:flex-none font-bold"
                 >
                   <Download className="h-4 w-4" />
                   Download PDF
                 </Button>
                 <Button
                   onClick={handlePrint}
-                  className="bg-blue-600 hover:bg-blue-500 gap-2 rounded-xl shadow-lg shadow-blue-600/20 h-12 px-6 flex-1 sm:flex-none"
+                  className="bg-blue-600 hover:bg-blue-700 text-white gap-2 rounded-xl shadow-lg shadow-blue-600/10 h-12 px-6 flex-1 sm:flex-none font-bold"
                 >
                   <Printer className="h-4 w-4" />
                   Print Report
@@ -263,7 +263,7 @@ export default function CheckResults() {
                 <Button
                   variant="outline"
                   onClick={() => setResultData(null)}
-                  className="border-white/20 text-slate-200 hover:bg-white/10 rounded-xl h-12 px-6 flex-1 sm:flex-none"
+                  className="border-slate-200 text-slate-700 hover:bg-slate-100 rounded-xl h-12 px-6 flex-1 sm:flex-none font-semibold"
                 >
                   <Search className="h-4 w-4 mr-2" />
                   New Search
@@ -272,7 +272,7 @@ export default function CheckResults() {
             </div>
 
             {/* Report Card Preview */}
-            <div className="bg-white rounded-2xl shadow-2xl overflow-x-auto overflow-y-hidden lg:overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-md overflow-x-auto overflow-y-hidden lg:overflow-hidden">
               <div ref={reportRef} className="w-full min-w-[350px] sm:min-w-0 bg-white text-black">
                 <ReportCardContent
                   data={{

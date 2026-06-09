@@ -14,16 +14,56 @@ export async function ensureSchoolSettings(schoolId: string) {
   let updated = false;
   const updates: any = {};
 
-  if (!school.academic_year) {
-    updates.academic_year = new Date().getFullYear().toString();
+  let expectedYear = school.academic_year;
+  let expectedTerm = school.current_term;
+
+  try {
+    const today = new Date().toLocaleString('sv-SE', { timeZone: 'Africa/Lusaka' }).split(' ')[0];
+    let { data: termData, error: termError } = await supabaseAdmin
+      .from('ministry_calendar')
+      .select('*')
+      .eq('type', 'Term')
+      .lte('start_date', today)
+      .order('start_date', { ascending: false })
+      .limit(1);
+
+    if (termError) throw termError;
+
+    if (!termData || termData.length === 0) {
+      const { data: fallbackTerm, error: fallbackError } = await supabaseAdmin
+        .from('ministry_calendar')
+        .select('*')
+        .eq('type', 'Term')
+        .order('start_date', { ascending: true })
+        .limit(1);
+      
+      if (!fallbackError && fallbackTerm && fallbackTerm.length > 0) {
+        termData = fallbackTerm;
+      }
+    }
+
+    if (termData && termData.length > 0) {
+      expectedYear = termData[0].year;
+      expectedTerm = termData[0].name;
+    }
+  } catch (err) {
+    console.error('Failed to sync school settings with ministry calendar:', err);
+  }
+
+  if (!expectedYear) {
+    expectedYear = new Date().getFullYear().toString();
+  }
+  if (!expectedTerm) {
+    expectedTerm = 'Term 1';
+  }
+
+  if (school.academic_year !== expectedYear) {
+    updates.academic_year = expectedYear;
     updated = true;
   }
 
-  if (!school.current_term) {
-    const month = new Date().getMonth(); // 0-11
-    if (month <= 3) updates.current_term = 'Term 1';
-    else if (month <= 7) updates.current_term = 'Term 2';
-    else updates.current_term = 'Term 3';
+  if (school.current_term !== expectedTerm) {
+    updates.current_term = expectedTerm;
     updated = true;
   }
 

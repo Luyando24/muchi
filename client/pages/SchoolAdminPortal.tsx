@@ -18,9 +18,13 @@ import {
   Mail,
   Phone,
   Save,
-  Store
+  Store,
+  CalendarDays,
+  Loader2
 } from 'lucide-react';
 import TuckshopManagement from '@/components/school-admin/TuckshopManagement';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { SubmitButton } from '@/components/ui/submit-button';
@@ -578,6 +582,7 @@ export default function SchoolAdminPortal() {
       items: [
         { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["school_admin", "bursar", "registrar", "exam_officer", "academic_auditor", "accounts", "content_manager"] },
         { id: "calendar", label: "Calendar", icon: Calendar, roles: ["school_admin", "registrar"] },
+        { id: "ministry-calendar", label: "Ministry Calendar", icon: CalendarDays, roles: ["school_admin", "bursar", "registrar", "exam_officer", "academic_auditor", "accounts", "content_manager"] },
       ]
     },
     {
@@ -807,6 +812,12 @@ export default function SchoolAdminPortal() {
             <Route path="calendar" element={
               <div className="space-y-6">
                 <CalendarManagement />
+              </div>
+            } />
+
+            <Route path="ministry-calendar" element={
+              <div className="space-y-6">
+                <AdminMinistryCalendar />
               </div>
             } />
 
@@ -1060,3 +1071,144 @@ export default function SchoolAdminPortal() {
     </div>
   );
 }
+
+const AdminMinistryCalendar = () => {
+  const [calendar, setCalendar] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchCalendar = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        const res = await fetch('/api/school/ministry-calendar', {
+          headers: { 'Authorization': `Bearer ${session.access_token}` }
+        });
+        if (res.ok) {
+          setCalendar(await res.json());
+        }
+      } catch (err) {
+        console.error('Failed to load ministry calendar', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCalendar();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  const terms = calendar.filter(item => item.type === 'Term');
+  const holidays = calendar.filter(item => item.type === 'Holiday');
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Ministry School Calendar</h2>
+          <p className="text-slate-600 dark:text-slate-400">Official term dates, mid-term breaks, and holidays issued by the Ministry of Education.</p>
+        </div>
+      </div>
+
+      <div className="space-y-8">
+        {/* Terms Timeline */}
+        <div className="space-y-4">
+          <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider">Official Term Timelines (2026 - 2030)</h3>
+          {terms.length === 0 ? (
+            <div className="text-center py-6 text-sm text-slate-500 italic">No calendar terms seeded yet.</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {terms
+                .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
+                .map((term, idx) => {
+                  const isCurrent = 
+                    new Date(term.start_date).getTime() <= new Date().getTime() &&
+                    new Date(term.end_date).getTime() >= new Date().getTime();
+
+                  return (
+                    <Card 
+                      key={term.id || idx} 
+                      className={`border shadow-sm transition-all ${
+                        isCurrent 
+                          ? 'bg-blue-50/30 dark:bg-blue-950/10 border-blue-200 dark:border-blue-800' 
+                          : 'bg-white dark:bg-slate-800/40 border-slate-200 dark:border-slate-800'
+                      }`}
+                    >
+                      <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
+                        <CardTitle className="text-base font-bold text-slate-900 dark:text-white">
+                          {term.name} ({term.year})
+                        </CardTitle>
+                        {isCurrent && (
+                          <Badge className="bg-blue-600 text-white font-bold text-[9px] uppercase tracking-wider py-0.5 px-2">Active</Badge>
+                        )}
+                      </CardHeader>
+                      <CardContent className="space-y-3 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Opens</span>
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">
+                            {new Date(term.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Closes</span>
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">
+                            {new Date(term.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        </div>
+                        {term.midterm_begin && (
+                          <div className="border-t border-slate-100 dark:border-slate-700/50 pt-3 mt-3">
+                            <span className="text-[10px] font-bold uppercase tracking-wide text-blue-600 dark:text-blue-400">Mid-Term Break</span>
+                            <div className="flex justify-between mt-1 text-[11px]">
+                              <span className="text-slate-400">Starts</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                {new Date(term.midterm_begin).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-[11px] mt-0.5">
+                              <span className="text-slate-400">Ends</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                {new Date(term.midterm_end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+
+        {/* Public Holidays */}
+        <div className="space-y-4 border-t border-slate-200 dark:border-slate-800/80 pt-6">
+          <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider">National Public Holidays</h3>
+          {holidays.length === 0 ? (
+            <div className="text-center py-6 text-sm text-slate-500 italic">No public holidays seeded yet.</div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+              {holidays
+                .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
+                .map((holiday, idx) => (
+                  <Card key={holiday.id || idx} className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/20 text-center">
+                    <CardContent className="p-3.5">
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{holiday.name}</p>
+                      <p className="text-[10px] text-slate-500 mt-1 font-semibold">
+                        {new Date(holiday.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

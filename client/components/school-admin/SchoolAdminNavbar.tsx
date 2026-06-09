@@ -210,6 +210,7 @@ export default function SchoolAdminNavbar({
       case 'finance': return 'Financial Overview';
       case 'reports': return 'Academic performance';
       case 'calendar': return 'School Calendar';
+      case 'ministry-calendar': return 'Ministry Calendar';
       case 'settings': return 'System Settings';
       default: return 'Dashboard';
     }
