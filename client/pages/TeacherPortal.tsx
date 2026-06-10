@@ -3017,7 +3017,7 @@ export default function TeacherPortal() {
 
       {/* Floating Data & ICT Support Button (Mobile Only) */}
       {profile?.schools?.ict_name && (
-        <div className="fixed bottom-4 left-4 z-50 sm:hidden">
+        <div className="fixed bottom-20 left-4 z-50 sm:hidden">
           <Button
             onClick={() => setIsSupportModalOpen(true)}
             className="w-12 h-12 rounded-full p-0 bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-lg transition-transform hover:scale-105"
