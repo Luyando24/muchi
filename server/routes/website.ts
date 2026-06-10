@@ -5,6 +5,7 @@ import {
   formatTeacherDisplayName,
 } from "../lib/teacher-utils.js";
 import { requireSchoolRole } from "./school.js";
+import { rateLimiter } from "../middleware/rateLimiter.js";
 
 const router = Router();
 
@@ -13,6 +14,7 @@ const router = Router();
 // GET /api/school/public-website-content
 router.get(
   "/public-website-content",
+  rateLimiter({ windowMs: 15 * 60 * 1000, max: 20 }),
   async (req: Request, res: Response) => {
     const { schoolSlug } = req.query;
 
@@ -50,6 +52,7 @@ router.get(
 // GET /api/school/public-blog-posts
 router.get(
   "/public-blog-posts",
+  rateLimiter({ windowMs: 15 * 60 * 1000, max: 20 }),
   async (req: Request, res: Response) => {
     const { schoolSlug } = req.query;
 
@@ -313,6 +316,7 @@ router.delete(
 // GET /api/school/public-tenders
 router.get(
   "/public-tenders",
+  rateLimiter({ windowMs: 15 * 60 * 1000, max: 20 }),
   async (req: Request, res: Response) => {
     const { schoolSlug } = req.query;
 
@@ -475,6 +479,7 @@ router.delete(
 // GET /api/school/public-verify-results
 router.get(
   "/public-verify-results",
+  rateLimiter({ windowMs: 15 * 60 * 1000, max: 20 }),
   async (req: Request, res: Response) => {
     const { studentNumber, term, academicYear, examType } = req.query;
 

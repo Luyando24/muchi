@@ -9,8 +9,6 @@ import Chatbot from '@/components/Landing/Chatbot';
 
 export default function Index() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [calendar, setCalendar] = useState<any[]>([]);
-  const [activeTerm, setActiveTerm] = useState<any>(null);
 
   const [contactDetails, setContactDetails] = useState({
     phone: '+260 97 1234567',
@@ -90,44 +88,7 @@ export default function Index() {
     }
   };
 
-  useEffect(() => {
-    async function loadCalendar() {
-      try {
-        const { data, error } = await supabase
-          .from('ministry_calendar')
-          .select('*')
-          .order('start_date', { ascending: true });
-        if (error) throw error;
-        if (data) {
-          setCalendar(data);
-          
-          const nowStr = new Date().toLocaleString('sv-SE', { timeZone: 'Africa/Lusaka' }).split(' ')[0];
-          const now = new Date(nowStr).getTime();
-          
-          const current = data.find(item => {
-            if (item.type !== 'Term') return false;
-            const start = new Date(item.start_date).getTime();
-            const end = new Date(item.end_date).getTime();
-            return start <= now && now <= end;
-          });
-          
-          if (current) {
-            setActiveTerm(current);
-          } else {
-            const upcoming = data
-              .filter(item => item.type === 'Term')
-              .find(item => new Date(item.start_date).getTime() > now);
-            if (upcoming) {
-              setActiveTerm({ ...upcoming, isUpcoming: true });
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Failed to load public calendar:', err);
-      }
-    }
-    loadCalendar();
-  }, []);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Chatbot />
@@ -205,17 +166,6 @@ export default function Index() {
               </Button>
             </div>
 
-            {activeTerm && (
-              <div className="mt-8 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs sm:text-sm font-semibold animate-fade-in shadow-inner text-white/90">
-                <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse"></span>
-                {activeTerm.isUpcoming ? 'Upcoming Term: ' : 'Active Term: '}
-                <span className="font-extrabold text-blue-200">{activeTerm.name} ({activeTerm.year})</span>
-                {activeTerm.isUpcoming ? ' opens ' : ' runs until '}
-                <span className="font-bold">
-                  {new Date(activeTerm.isUpcoming ? activeTerm.start_date : activeTerm.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                </span>
-              </div>
-            )}
 
           </div>
         </div>

@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { WhatsAppService } from "../services/whatsappService.js";
 import { requireActiveLicense } from "../middleware/license.js";
+import { rateLimiter } from "../middleware/rateLimiter.js";
 import { ensureSchoolSettings } from "../lib/school-settings.js";
 import { findBestClassMatch, normalizeClassName } from "../lib/class-matching.js";
 import { standardizeSubjectName, standardizeClassName, standardizeDepartmentName } from "../../shared/name-standardization.js";
@@ -227,7 +228,7 @@ const router = Router();
 
 // GET /api/public/verify-report
 // Verifies a report card based on the QR code hash
-router.get("/verify-report", async (req: Request, res: Response) => {
+router.get("/verify-report", rateLimiter({ windowMs: 15 * 60 * 1000, max: 20 }), async (req: Request, res: Response) => {
   const { studentNumber, term, examType, academicYear, average } = req.query;
 
   if (!studentNumber || !term || !examType || !academicYear || !average) {
@@ -357,7 +358,7 @@ router.post("/teacher/reset-password", async (req: Request, res: Response) => {
 });
 
 // POST /api/school/public-register
-router.post("/public-register", async (req: Request, res: Response) => {
+router.post("/public-register", rateLimiter({ windowMs: 15 * 60 * 1000, max: 5 }), async (req: Request, res: Response) => {
   const { name, email, password, grade, schoolSlug } = req.body;
 
   if (!name || !email || !password || !schoolSlug) {
@@ -425,7 +426,7 @@ router.post("/public-register", async (req: Request, res: Response) => {
 });
 
 // POST /api/school/public-apply
-router.post("/public-apply", async (req: Request, res: Response) => {
+router.post("/public-apply", rateLimiter({ windowMs: 15 * 60 * 1000, max: 5 }), async (req: Request, res: Response) => {
   const {
     name,
     email,
@@ -489,7 +490,7 @@ router.post("/public-apply", async (req: Request, res: Response) => {
 });
 
 // GET /api/school/public-events
-router.get("/public-events", async (req: Request, res: Response) => {
+router.get("/public-events", rateLimiter({ windowMs: 15 * 60 * 1000, max: 20 }), async (req: Request, res: Response) => {
   const { schoolSlug } = req.query;
 
   if (!schoolSlug) {

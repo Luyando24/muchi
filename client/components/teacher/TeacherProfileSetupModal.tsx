@@ -22,6 +22,9 @@ import {
   ChevronRight,
   ChevronLeft,
   Building2,
+  Phone,
+  MapPin,
+  UserCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -32,9 +35,11 @@ interface TeacherProfileSetupModalProps {
 }
 
 const STEPS = [
-  { id: 1, label: 'Personal Details', icon: User },
-  { id: 2, label: 'Work Experience', icon: Briefcase },
-  { id: 3, label: 'Qualifications', icon: GraduationCap },
+  { id: 1, label: 'Basic Info', icon: User },
+  { id: 2, label: 'Personal Details', icon: UserCircle },
+  { id: 3, label: 'Address & Status', icon: MapPin },
+  { id: 4, label: 'Work Experience', icon: Briefcase },
+  { id: 5, label: 'Qualifications', icon: GraduationCap },
 ];
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -82,16 +87,26 @@ export default function TeacherProfileSetupModal({
   });
 
   // Step validation
-  const isStep1Valid = personal.first_name && personal.last_name && personal.phone_number && personal.gender && personal.date_of_birth && personal.marital_status && personal.address && personal.disability_status;
-  const isStep2Valid = work.employment_date && work.department && work.current_role && work.housing_status;
-  const isStep3Valid = qualifications.highest_qualification && qualifications.institution_name && qualifications.field_of_study && qualifications.completion_year;
+  const isStep1Valid = personal.first_name && personal.last_name && personal.phone_number;
+  const isStep2Valid = personal.gender && personal.date_of_birth && personal.marital_status;
+  const isStep3Valid = personal.address && personal.disability_status;
+  const isStep4Valid = work.employment_date && work.department && work.current_role && work.housing_status;
+  const isStep5Valid = qualifications.highest_qualification && qualifications.institution_name && qualifications.field_of_study && qualifications.completion_year;
 
   const handleNext = () => {
     if (step === 1 && !isStep1Valid) {
-      toast({ title: 'Required fields missing', description: 'Please fill in all required personal details.', variant: 'destructive' });
+      toast({ title: 'Required fields missing', description: 'Please fill in all required basic info.', variant: 'destructive' });
       return;
     }
     if (step === 2 && !isStep2Valid) {
+      toast({ title: 'Required fields missing', description: 'Please fill in all required personal details.', variant: 'destructive' });
+      return;
+    }
+    if (step === 3 && !isStep3Valid) {
+      toast({ title: 'Required fields missing', description: 'Please fill in all required address and status details.', variant: 'destructive' });
+      return;
+    }
+    if (step === 4 && !isStep4Valid) {
       toast({ title: 'Required fields missing', description: 'Please fill in all required work experience details.', variant: 'destructive' });
       return;
     }
@@ -100,7 +115,7 @@ export default function TeacherProfileSetupModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isStep3Valid) {
+    if (!isStep5Valid) {
       toast({ title: 'Required fields missing', description: 'Please fill in all required qualification details.', variant: 'destructive' });
       return;
     }
@@ -203,15 +218,15 @@ export default function TeacherProfileSetupModal({
 
         {/* Form Body */}
         <div className="p-4 sm:p-5 max-h-[50vh] overflow-y-auto">
-          {/* STEP 1: Personal Details */}
+          {/* STEP 1: Basic Info */}
           {step === 1 && (
             <div className="space-y-4">
               <DialogHeader className="mb-2">
                 <DialogTitle className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                  <User className="h-4 w-4 text-indigo-600" /> Personal Details
+                  <User className="h-4 w-4 text-indigo-600" /> Basic Info
                 </DialogTitle>
                 <DialogDescription className="text-xs">
-                  Basic personal information required for government identification and reporting.
+                  Your name and contact information.
                 </DialogDescription>
               </DialogHeader>
 
@@ -240,17 +255,6 @@ export default function TeacherProfileSetupModal({
 
                 <div className="space-y-1.5 col-span-2">
                   <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Residential Address <span className="text-rose-500">*</span>
-                  </Label>
-                  <Input
-                    value={personal.address}
-                    onChange={e => setPersonal(p => ({ ...p, address: e.target.value }))}
-                    placeholder="e.g. Lusaka, Zambia"
-                  />
-                </div>
-
-                <div className="space-y-1.5 col-span-2 sm:col-span-1">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
                     Phone Number <span className="text-rose-500">*</span>
                   </Label>
                   <Input
@@ -259,7 +263,23 @@ export default function TeacherProfileSetupModal({
                     placeholder="+260..."
                   />
                 </div>
+              </div>
+            </div>
+          )}
 
+          {/* STEP 2: Personal Details */}
+          {step === 2 && (
+            <div className="space-y-4">
+              <DialogHeader className="mb-2">
+                <DialogTitle className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                  <UserCircle className="h-4 w-4 text-indigo-600" /> Personal Details
+                </DialogTitle>
+                <DialogDescription className="text-xs">
+                  Gender, date of birth, and marital status.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5 col-span-2 sm:col-span-1">
                   <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
                     Gender <span className="text-rose-500">*</span>
@@ -273,7 +293,7 @@ export default function TeacherProfileSetupModal({
                   </Select>
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 col-span-2 sm:col-span-1">
                   <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
                     Date of Birth <span className="text-rose-500">*</span>
                   </Label>
@@ -284,7 +304,7 @@ export default function TeacherProfileSetupModal({
                   />
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 col-span-2">
                   <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
                     Marital Status <span className="text-rose-500">*</span>
                   </Label>
@@ -297,6 +317,33 @@ export default function TeacherProfileSetupModal({
                       <SelectItem value="Widowed">Widowed</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3: Address & Status */}
+          {step === 3 && (
+            <div className="space-y-4">
+              <DialogHeader className="mb-2">
+                <DialogTitle className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-indigo-600" /> Address & Status
+                </DialogTitle>
+                <DialogDescription className="text-xs">
+                  Residential address and disability status.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5 col-span-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Residential Address <span className="text-rose-500">*</span>
+                  </Label>
+                  <Input
+                    value={personal.address}
+                    onChange={e => setPersonal(p => ({ ...p, address: e.target.value }))}
+                    placeholder="e.g. Lusaka, Zambia"
+                  />
                 </div>
 
                 <div className="space-y-1.5 col-span-2">
@@ -318,8 +365,8 @@ export default function TeacherProfileSetupModal({
             </div>
           )}
 
-          {/* STEP 2: Work Experience */}
-          {step === 2 && (
+          {/* STEP 4: Work Experience */}
+          {step === 4 && (
             <div className="space-y-4">
               <DialogHeader className="mb-2">
                 <DialogTitle className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
@@ -404,9 +451,9 @@ export default function TeacherProfileSetupModal({
             </div>
           )}
 
-          {/* STEP 3: Qualifications */}
-          {step === 3 && (
-            <form id="step3-form" onSubmit={handleSubmit} className="space-y-4">
+          {/* STEP 5: Qualifications */}
+          {step === 5 && (
+            <form id="step5-form" onSubmit={handleSubmit} className="space-y-4">
               <DialogHeader className="mb-2">
                 <DialogTitle className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
                   <GraduationCap className="h-4 w-4 text-indigo-600" /> Qualifications
@@ -490,7 +537,7 @@ export default function TeacherProfileSetupModal({
             <div /> // Spacer
           )}
 
-          {step < 3 ? (
+          {step < 5 ? (
             <Button
               type="button"
               onClick={handleNext}
@@ -501,7 +548,7 @@ export default function TeacherProfileSetupModal({
           ) : (
             <SubmitButton
               type="submit"
-              form="step3-form"
+              form="step5-form"
               className="bg-indigo-600 hover:bg-indigo-700 text-white ml-auto"
               loading={isSaving}
               loadingText="Saving..."
