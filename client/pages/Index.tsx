@@ -618,7 +618,7 @@ export default function Index() {
             </div>
           </div>
           <div className="border-t border-border/50 mt-12 pt-8 text-center text-muted-foreground">
-            <p>&copy; 2024 MUCHI - School Management Information System. All rights reserved.</p>
+            <p>&copy; {new Date().getFullYear()} MUCHI - School Management Information System. All rights reserved.</p>
           </div>
         </div>
       </footer>
