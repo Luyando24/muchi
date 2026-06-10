@@ -60,9 +60,14 @@ export default function TeacherProfileSetupModal({
   const [personal, setPersonal] = useState(() => {
     const [firstName, ...lastNameParts] = (profile?.full_name || '').trim().split(/\s+/);
     const lastName = lastNameParts.join(' ');
+    
+    // Defensive check: if first and last name are the same, clear last name
+    // This handles cases where users were created with duplicated names (e.g., "John John")
+    const safeLastName = (lastName && lastName !== firstName) ? lastName : '';
+    
     return {
       first_name: firstName || '',
-      last_name: lastName || '',
+      last_name: safeLastName,
       phone_number: profile?.phone_number || '',
       email: profile?.email || '',
       gender: profile?.gender || '',
@@ -132,6 +137,12 @@ export default function TeacherProfileSetupModal({
     e.preventDefault();
     if (!isStep5Valid) {
       toast({ title: 'Required fields missing', description: 'Please fill in all required qualification details.', variant: 'destructive' });
+      return;
+    }
+
+    // Prevent saving if first and last names are the same (unless last name is empty)
+    if (personal.first_name && personal.last_name && personal.first_name === personal.last_name) {
+      toast({ title: 'Invalid Name', description: 'First name and last name cannot be the same. Please enter a different last name.', variant: 'destructive' });
       return;
     }
 
