@@ -34,7 +34,6 @@ export default function SchoolCalendar() {
   const [loading, setLoading] = useState(true);
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
   const [typeFilter, setTypeFilter] = useState('All');
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     async function loadCalendar() {
@@ -77,15 +76,10 @@ export default function SchoolCalendar() {
     loadCalendar();
   }, []);
 
-  const handleCopyLink = async () => {
+  const handleShareWhatsApp = () => {
     const url = window.location.href;
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy link:', err);
-    }
+    const text = encodeURIComponent(`Check out the Ministry School Calendar: ${url}`);
+    window.open(`https://wa.me/?text=${text}`, '_blank');
   };
 
   const filteredCalendar = calendar.filter(item => {
@@ -141,14 +135,6 @@ export default function SchoolCalendar() {
             </p>
           </div>
           
-          <Button
-            onClick={handleCopyLink}
-            disabled={calendar.length === 0}
-            className="bg-blue-600 hover:bg-blue-700 text-white gap-2 rounded-xl shadow-lg shadow-blue-600/10 h-12 px-6 w-full md:w-auto text-base font-semibold transition-all active:scale-95 animate-fade-in"
-          >
-            {copied ? <Check className="h-5 w-5" /> : <Share2 className="h-5 w-5" />}
-            {copied ? 'Link Copied!' : 'Share Calendar'}
-          </Button>
         </div>
 
         {/* Status Indicator */}
@@ -184,13 +170,13 @@ export default function SchoolCalendar() {
             <span className="text-sm text-slate-600 font-semibold">Filters</span>
           </div>
 
-          <div className="flex flex-wrap gap-6 items-center w-full md:w-auto justify-end">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Academic Year:</span>
+          <div className="grid grid-cols-2 gap-4 w-full md:flex md:w-auto md:justify-end">
+            <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2">
+              <span className="text-[10px] md:text-xs text-slate-500 font-semibold uppercase tracking-wider">Academic Year:</span>
               <select
                 value={yearFilter}
                 onChange={(e) => setYearFilter(e.target.value)}
-                className="h-10 rounded-xl border border-slate-200 bg-white text-slate-900 px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-bold cursor-pointer"
+                className="h-10 w-full md:w-auto rounded-xl border border-slate-200 bg-white text-slate-900 px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-bold cursor-pointer"
               >
                 <option value="All">All Years</option>
                 {uniqueYears.map(year => (
@@ -199,12 +185,12 @@ export default function SchoolCalendar() {
               </select>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Type:</span>
+            <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2">
+              <span className="text-[10px] md:text-xs text-slate-500 font-semibold uppercase tracking-wider">Type:</span>
               <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
-                className="h-10 rounded-xl border border-slate-200 bg-white text-slate-900 px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-bold cursor-pointer"
+                className="h-10 w-full md:w-auto rounded-xl border border-slate-200 bg-white text-slate-900 px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-bold cursor-pointer"
               >
                 <option value="All">All Types</option>
                 <option value="Term">Term</option>
@@ -335,6 +321,14 @@ export default function SchoolCalendar() {
         </div>
       </main>
 
+      {/* Floating WhatsApp Share Button */}
+      <button
+        onClick={handleShareWhatsApp}
+        className="fixed bottom-6 right-6 z-50 bg-[#25D366] hover:bg-[#128C7E] text-white h-14 w-14 rounded-full shadow-lg shadow-[#25D366]/30 transition-all hover:scale-105 active:scale-95 flex items-center justify-center animate-fade-in"
+        aria-label="Share on WhatsApp"
+      >
+        <Share2 className="h-6 w-6" />
+      </button>
     </div>
   );
 }

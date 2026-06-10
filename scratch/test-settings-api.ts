@@ -72,7 +72,7 @@ async function testApi() {
       contact_office: '45 Independence Avenue\nLusaka\nZambia'
     };
 
-    const response = await fetch('http://localhost:3001/api/admin/settings', {
+    const response = await fetch('http://localhost:3000/api/admin/settings', {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
