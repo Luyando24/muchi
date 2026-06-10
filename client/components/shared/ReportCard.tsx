@@ -707,6 +707,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                         isAbsent: boolean;
                         isCombined?: boolean;
                         combinedNote?: string;
+                        teacherName?: string | null;
                       };
 
                       const displayRows: DisplayRow[] = [];
