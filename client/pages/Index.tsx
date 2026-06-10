@@ -12,6 +12,84 @@ export default function Index() {
   const [calendar, setCalendar] = useState<any[]>([]);
   const [activeTerm, setActiveTerm] = useState<any>(null);
 
+  const [contactDetails, setContactDetails] = useState({
+    phone: '+260 97 1234567',
+    email: 'info@muchi.edu.zm',
+    office: '45 Independence Avenue\nLusaka\nZambia'
+  });
+
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    subject: '',
+    message: ''
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  useEffect(() => {
+    async function loadContactDetails() {
+      try {
+        const { data, error } = await supabase
+          .from('system_settings')
+          .select('key, value')
+          .in('key', ['contact_phone', 'contact_email', 'contact_office']);
+        if (error) throw error;
+        if (data) {
+          const details = {
+            phone: '+260 97 1234567',
+            email: 'info@muchi.edu.zm',
+            office: '45 Independence Avenue\nLusaka\nZambia'
+          };
+          data.forEach(item => {
+            if (item.key === 'contact_phone' && item.value) details.phone = item.value;
+            if (item.key === 'contact_email' && item.value) details.email = item.value;
+            if (item.key === 'contact_office' && item.value) details.office = item.value;
+          });
+          setContactDetails(details);
+        }
+      } catch (err) {
+        console.error('Failed to load public contact details:', err);
+      }
+    }
+    loadContactDetails();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name || !formData.email || !formData.subject || !formData.message) {
+      setSubmitStatus({ type: 'error', message: 'All fields are required.' });
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitStatus(null);
+
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to send message.');
+      }
+
+      setSubmitStatus({ type: 'success', message: 'Thank you! Your message has been sent successfully.' });
+      setFormData({ name: '', email: '', subject: '', message: '' });
+    } catch (err: any) {
+      console.error('Contact submit error:', err);
+      setSubmitStatus({ type: 'error', message: err.message || 'An error occurred. Please try again.' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   useEffect(() => {
     async function loadCalendar() {
       try {
@@ -505,21 +583,25 @@ export default function Index() {
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-3 h-5 w-5 text-primary"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
                   <div>
                     <p className="font-medium">Phone</p>
-                    <p className="text-sm text-muted-foreground">+260 97 1234567</p>
+                    <p className="text-sm text-muted-foreground">{contactDetails.phone}</p>
                   </div>
                 </div>
                 <div className="flex items-start">
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-3 h-5 w-5 text-primary"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
                   <div>
                     <p className="font-medium">Email</p>
-                    <p className="text-sm text-muted-foreground">info@muchi.edu.zm</p>
+                    <p className="text-sm text-muted-foreground">
+                      <a href={`mailto:${contactDetails.email}`} className="hover:text-primary transition-colors">
+                        {contactDetails.email}
+                      </a>
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-start">
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-3 h-5 w-5 text-primary"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
                   <div>
                     <p className="font-medium">Office</p>
-                    <p className="text-sm text-muted-foreground">45 Independence Avenue<br />Lusaka<br />Zambia</p>
+                    <p className="text-sm text-muted-foreground whitespace-pre-line">{contactDetails.office}</p>
                   </div>
                 </div>
               </div>
@@ -543,24 +625,74 @@ export default function Index() {
             </div>
             <div className="bg-card p-6 rounded-2xl border shadow-sm">
               <h3 className="text-xl font-semibold mb-4">Send Us a Message</h3>
-              <form className="space-y-4">
+              {submitStatus && (
+                <div className={`p-4 mb-4 rounded-lg text-sm ${
+                  submitStatus.type === 'success'
+                    ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-medium'
+                    : 'bg-destructive/10 border border-destructive/20 text-destructive font-medium'
+                }`}>
+                  {submitStatus.message}
+                </div>
+              )}
+              <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label htmlFor="name" className="block text-sm font-medium mb-1">Name</label>
-                  <input type="text" id="name" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2" placeholder="Your name" />
+                  <input
+                    type="text"
+                    id="name"
+                    required
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                    placeholder="Your name"
+                  />
                 </div>
                 <div>
                   <label htmlFor="email" className="block text-sm font-medium mb-1">Email</label>
-                  <input type="email" id="email" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2" placeholder="Your email" />
+                  <input
+                    type="email"
+                    id="email"
+                    required
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                    placeholder="Your email"
+                  />
                 </div>
                 <div>
                   <label htmlFor="subject" className="block text-sm font-medium mb-1">Subject</label>
-                  <input type="text" id="subject" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2" placeholder="Subject" />
+                  <input
+                    type="text"
+                    id="subject"
+                    required
+                    value={formData.subject}
+                    onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                    placeholder="Subject"
+                  />
                 </div>
                 <div>
                   <label htmlFor="message" className="block text-sm font-medium mb-1">Message</label>
-                  <textarea id="message" rows={4} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2" placeholder="Your message"></textarea>
+                  <textarea
+                    id="message"
+                    rows={4}
+                    required
+                    value={formData.message}
+                    onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                    placeholder="Your message"
+                  ></textarea>
                 </div>
-                <Button className="w-full">Send Message</Button>
+                <Button className="w-full" type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    'Send Message'
+                  )}
+                </Button>
               </form>
             </div>
           </div>

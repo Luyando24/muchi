@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, Save, Loader2, Globe, Mail, Shield, Server, MessageCircle, Settings, RefreshCw, Gift } from 'lucide-react';
+import { AlertCircle, Save, Loader2, Globe, Mail, Shield, Server, MessageCircle, Settings, RefreshCw, Gift, Phone, MapPin } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabase';
 
@@ -22,6 +22,9 @@ interface SystemSettings {
   defaultCurrency: string;
   supportedCurrencies: string;
   setupCompletionRewardDays: number;
+  contactPhone: string;
+  contactEmail: string;
+  contactOffice: string;
 }
 
 const defaultSettings: SystemSettings = {
@@ -34,7 +37,10 @@ const defaultSettings: SystemSettings = {
   whatsappNumber: "260570260374",
   defaultCurrency: "ZMW",
   supportedCurrencies: '["ZMW", "USD", "ZAR"]',
-  setupCompletionRewardDays: 30
+  setupCompletionRewardDays: 30,
+  contactPhone: "+260 97 1234567",
+  contactEmail: "info@muchi.edu.zm",
+  contactOffice: "45 Independence Avenue\nLusaka\nZambia"
 };
 
 import ConfigurationManagement from './ConfigurationManagement';
@@ -80,7 +86,10 @@ export default function GlobalSettings() {
         whatsappNumber: data.whatsapp_number || defaultSettings.whatsappNumber,
         defaultCurrency: data.default_currency || defaultSettings.defaultCurrency,
         supportedCurrencies: data.supported_currencies || defaultSettings.supportedCurrencies,
-        setupCompletionRewardDays: parseInt(data.setup_completion_reward_days) || defaultSettings.setupCompletionRewardDays
+        setupCompletionRewardDays: parseInt(data.setup_completion_reward_days) || defaultSettings.setupCompletionRewardDays,
+        contactPhone: data.contact_phone || defaultSettings.contactPhone,
+        contactEmail: data.contact_email || defaultSettings.contactEmail,
+        contactOffice: data.contact_office || defaultSettings.contactOffice
       };
 
       setSettings(mappedSettings);
@@ -112,7 +121,10 @@ export default function GlobalSettings() {
         whatsapp_number: settings.whatsappNumber,
         default_currency: settings.defaultCurrency,
         supported_currencies: settings.supportedCurrencies,
-        setup_completion_reward_days: String(settings.setupCompletionRewardDays)
+        setup_completion_reward_days: String(settings.setupCompletionRewardDays),
+        contact_phone: settings.contactPhone,
+        contact_email: settings.contactEmail,
+        contact_office: settings.contactOffice
       };
 
       const response = await fetch('/api/admin/settings', {
@@ -270,6 +282,51 @@ export default function GlobalSettings() {
                 />
               </div>
               <p className="text-xs text-slate-500">Number for WhatsApp integration (include country code without +)</p>
+            </div>
+
+            <Separator className="my-4" />
+            <h3 className="font-semibold text-sm text-slate-900 dark:text-white mb-2">Public Contact Information</h3>
+
+            <div className="space-y-2">
+              <Label htmlFor="contactPhone">Contact Phone Number</Label>
+              <div className="relative">
+                <Phone className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                <Input 
+                  id="contactPhone" 
+                  className="pl-9"
+                  value={settings.contactPhone} 
+                  onChange={(e) => setSettings({...settings, contactPhone: e.target.value})}
+                  placeholder="e.g. +260 97 1234567"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="contactEmail">Contact Email Address</Label>
+              <div className="relative">
+                <Mail className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                <Input 
+                  id="contactEmail" 
+                  className="pl-9"
+                  value={settings.contactEmail} 
+                  onChange={(e) => setSettings({...settings, contactEmail: e.target.value})}
+                  placeholder="e.g. info@muchi.edu.zm"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="contactOffice">Office Address</Label>
+              <div className="relative">
+                <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                <textarea 
+                  id="contactOffice" 
+                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 pl-9 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={settings.contactOffice} 
+                  onChange={(e) => setSettings({...settings, contactOffice: e.target.value})}
+                  placeholder="e.g. 45 Independence Avenue..."
+                />
+              </div>
             </div>
           </CardContent>
         </Card>
