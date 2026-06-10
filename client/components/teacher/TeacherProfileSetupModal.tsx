@@ -32,6 +32,7 @@ interface TeacherProfileSetupModalProps {
   isOpen: boolean;
   profile: any;
   onComplete: () => void;
+  isEmailOnly?: boolean;
 }
 
 const STEPS = [
@@ -49,6 +50,7 @@ export default function TeacherProfileSetupModal({
   isOpen,
   profile,
   onComplete,
+  isEmailOnly = false,
 }: TeacherProfileSetupModalProps) {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
@@ -62,6 +64,7 @@ export default function TeacherProfileSetupModal({
       first_name: firstName || '',
       last_name: lastName || '',
       phone_number: profile?.phone_number || '',
+      email: profile?.email || '',
       gender: profile?.gender || '',
       date_of_birth: profile?.date_of_birth ? profile.date_of_birth.split('T')[0] : '',
       marital_status: profile?.marital_status || '',
@@ -69,6 +72,8 @@ export default function TeacherProfileSetupModal({
       disability_status: profile?.disability_status || 'None',
     };
   });
+
+  const [emailDismissed, setEmailDismissed] = useState(false);
 
   // Step 2: Work Experience
   const [work, setWork] = useState({
@@ -85,6 +90,16 @@ export default function TeacherProfileSetupModal({
     field_of_study: profile?.field_of_study || '',
     completion_year: profile?.completion_year ? String(profile.completion_year) : '',
   });
+
+  // Email validation - check if email ends with @yahoo.com or @gmail.com
+  const isValidEmail = (email: string) => {
+    if (!email) return false;
+    const lowerEmail = email.toLowerCase().trim();
+    return lowerEmail.endsWith('@yahoo.com') || lowerEmail.endsWith('@gmail.com');
+  };
+
+  const isEmailValid = isValidEmail(personal.email);
+  const needsEmailUpdate = !personal.email || !isEmailValid;
 
   // Step validation
   const isStep1Valid = personal.first_name && personal.last_name && personal.phone_number;
@@ -130,6 +145,7 @@ export default function TeacherProfileSetupModal({
       const payload = {
         full_name: `${personal.first_name} ${personal.last_name}`.trim(),
         phone_number: personal.phone_number,
+        email: personal.email || null,
         gender: personal.gender,
         date_of_birth: personal.date_of_birth,
         marital_status: personal.marital_status,
@@ -174,8 +190,16 @@ export default function TeacherProfileSetupModal({
     <Dialog open={isOpen}>
       <DialogContent
         className="sm:max-w-[560px] p-0 overflow-hidden bg-white dark:bg-slate-900 border border-indigo-100 dark:border-indigo-900/40 shadow-2xl [&>button.absolute]:hidden"
-        onInteractOutside={(e) => e.preventDefault()}
-        onEscapeKeyDown={(e) => e.preventDefault()}
+        onInteractOutside={(e) => {
+          if (!isEmailOnly || !emailDismissed) {
+            e.preventDefault();
+          }
+        }}
+        onEscapeKeyDown={(e) => {
+          if (!isEmailOnly || !emailDismissed) {
+            e.preventDefault();
+          }
+        }}
       >
         {/* Solid header */}
         <div className="bg-indigo-600 p-4 sm:p-5 text-white">
@@ -262,6 +286,26 @@ export default function TeacherProfileSetupModal({
                     onChange={e => setPersonal(p => ({ ...p, phone_number: e.target.value }))}
                     placeholder="+260..."
                   />
+                </div>
+
+                <div className="space-y-1.5 col-span-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Email Address <span className="text-slate-400">(Optional)</span>
+                  </Label>
+                  <Input
+                    type="email"
+                    value={personal.email}
+                    onChange={e => setPersonal(p => ({ ...p, email: e.target.value }))}
+                    placeholder="yourname@yahoo.com or yourname@gmail.com"
+                    className={cn(
+                      personal.email && !isEmailValid && 'border-amber-500 focus:border-amber-500'
+                    )}
+                  />
+                  {personal.email && !isEmailValid && (
+                    <p className="text-[10px] text-amber-600 mt-1">
+                      Please use a Yahoo or Gmail address for better communication.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -538,13 +582,26 @@ export default function TeacherProfileSetupModal({
           )}
 
           {step < 5 ? (
-            <Button
-              type="button"
-              onClick={handleNext}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 ml-auto"
-            >
-              Next <ChevronRight className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-2 ml-auto">
+              {step === 1 && needsEmailUpdate && !emailDismissed && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEmailDismissed(true)}
+                  className="text-slate-500 hover:text-slate-700"
+                >
+                  Skip Email
+                </Button>
+              )}
+              <Button
+                type="button"
+                onClick={handleNext}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5"
+              >
+                Next <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           ) : (
             <SubmitButton
               type="submit"

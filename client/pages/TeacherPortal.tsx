@@ -224,6 +224,9 @@ export default function TeacherPortal() {
     return localStorage.getItem('ict_support_banner_minimized') === 'true';
   });
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
+  const [emailWarningDismissed, setEmailWarningDismissed] = useState(() => {
+    return sessionStorage.getItem('teacher_email_warning_dismissed') === 'true';
+  });
 
   const getWhatsAppLink = (phone: string) => {
     if (!phone) return '#';
@@ -398,6 +401,17 @@ export default function TeacherPortal() {
       fetchStudentsAndAttendance();
     }
   }, [selectedClassId, selectedDate]);
+
+  // Email validation - check if email ends with @yahoo.com or @gmail.com
+  const isValidEmail = (email: string) => {
+    if (!email) return false;
+    const lowerEmail = email.toLowerCase().trim();
+    return lowerEmail.endsWith('@yahoo.com') || lowerEmail.endsWith('@gmail.com');
+  };
+
+  const isEmailInvalid = profile?.email && !isValidEmail(profile.email);
+  const hasNoEmail = !profile?.email?.trim();
+  const needsEmailUpdate = hasNoEmail || isEmailInvalid;
 
   // Determine if teacher profile is incomplete (mandatory fields for government reporting)
   const isProfileIncomplete = profile && (
@@ -2957,11 +2971,18 @@ export default function TeacherPortal() {
 
 
       {/* Mandatory Teacher Profile Setup Modal - blocks portal until complete */}
-      {isProfileIncomplete && profile && (
+      {(isProfileIncomplete || (needsEmailUpdate && !emailWarningDismissed)) && profile && (
         <TeacherProfileSetupModal
-          isOpen={isProfileIncomplete}
+          isOpen={isProfileIncomplete || (needsEmailUpdate && !emailWarningDismissed)}
           profile={profile}
-          onComplete={() => window.location.reload()}
+          isEmailOnly={!isProfileIncomplete && needsEmailUpdate && !emailWarningDismissed}
+          onComplete={() => {
+            if (needsEmailUpdate && !emailWarningDismissed) {
+              setEmailWarningDismissed(true);
+              sessionStorage.setItem('teacher_email_warning_dismissed', 'true');
+            }
+            window.location.reload();
+          }}
         />
       )}
 
