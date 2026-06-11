@@ -45,35 +45,43 @@ const subdomainCookieStorage = {
   getItem: (key: string): string | null => {
     if (typeof window === 'undefined') return null;
     
-    // 1. Try local storage first (highest priority)
-    const localVal = window.localStorage.getItem(key);
-    if (localVal) return localVal;
-
-    // 2. Try shared domain chunked cookies fallback
+    // 1. Try shared domain chunked cookies first (primary source of truth)
     const chunkCountStr = getCookieByName(key + "_chunks");
+    let cookieVal: string | null = null;
+
     if (chunkCountStr) {
       const count = parseInt(chunkCountStr, 10);
       let fullValue = '';
+      let isValid = true;
       for (let i = 0; i < count; i++) {
         const chunk = getCookieByName(`${key}_${i}`);
         if (chunk === null) {
-          // If any chunk is missing, we have an incomplete session
-          return null;
+          isValid = false;
+          break;
         }
         fullValue += chunk;
       }
-      // Sync it to local storage for fast client access
-      window.localStorage.setItem(key, fullValue);
-      return fullValue;
+      if (isValid) {
+        cookieVal = fullValue;
+      }
     }
 
-    // 3. Fallback to legacy non-chunked cookie
-    const legacyVal = getCookieByName(key);
-    if (legacyVal) {
-      window.localStorage.setItem(key, legacyVal);
-      return legacyVal;
+    // 2. Try legacy non-chunked cookie fallback
+    if (!cookieVal) {
+      cookieVal = getCookieByName(key);
     }
 
+    if (cookieVal) {
+      // Sync to local storage for fast client access
+      const localVal = window.localStorage.getItem(key);
+      if (localVal !== cookieVal) {
+        window.localStorage.setItem(key, cookieVal);
+      }
+      return cookieVal;
+    }
+
+    // 3. If no shared cookie exists, the session was cleared/logged out. Clear local storage.
+    window.localStorage.removeItem(key);
     return null;
   },
   setItem: (key: string, value: string): void => {
