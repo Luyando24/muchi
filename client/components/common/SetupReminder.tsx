@@ -109,7 +109,7 @@ export default function SetupReminder({
         fetch('/api/school/classes', { headers }),
         fetch('/api/school/subjects', { headers }),
         fetch('/api/school/teachers', { headers }),
-        fetch('/api/school/students', { headers }),
+        fetch('/api/school/students?all=true', { headers }),
         fetch('/api/school/recommendations/academic', { headers }),
         fetch('/api/schools/top-onboarded', { headers })
       ]);
@@ -131,18 +131,19 @@ export default function SetupReminder({
         setStudentsList(res.data || res || []);
       }
       
-      // Fetch allocations from class_subjects table directly
+      // Fetch allocations count from class_subjects table directly (no pagination limit)
       const classIds = (data: any) => (data.data || data || []).map((c: any) => c.id);
       const classesData = await classesRes.json();
       const ids = classIds(classesData);
       
       if (ids.length > 0) {
-        const { data: allocationsData } = await supabase
+        const { count: allocationsCount } = await supabase
           .from('class_subjects')
-          .select('id')
+          .select('id', { count: 'exact', head: true })
           .in('class_id', ids)
           .not('teacher_id', 'is', null);
-        setAllocationsList(allocationsData || []);
+        // Create array with count for length calculation
+        setAllocationsList(Array.from({ length: allocationsCount || 0 }, (_, i) => ({ id: i })));
       } else {
         setAllocationsList([]);
       }
