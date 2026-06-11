@@ -114,8 +114,10 @@ export default function SetupReminder({
         fetch('/api/schools/top-onboarded', { headers })
       ]);
 
+      let classesData: any = null;
       if (classesRes.ok) {
         const data = await classesRes.json();
+        classesData = data;
         setClassesList(data.data || data || []);
       }
       if (subjectsRes.ok) {
@@ -133,18 +135,20 @@ export default function SetupReminder({
       
       // Fetch allocations count from class_subjects table directly (no pagination limit)
       const classIds = (data: any) => (data.data || data || []).map((c: any) => c.id);
-      const classesData = await classesRes.json();
       const ids = classIds(classesData);
       
+      console.log('Allocations debug - class IDs:', ids);
+      
       if (ids.length > 0) {
-        const { count: allocationsCount } = await supabase
+        const { data: allocationsData, error: allocationsError } = await supabase
           .from('class_subjects')
-          .select('id', { count: 'exact', head: true })
-          .in('class_id', ids)
-          .not('teacher_id', 'is', null);
-        // Create array with count for length calculation
-        setAllocationsList(Array.from({ length: allocationsCount || 0 }, (_, i) => ({ id: i })));
+          .select('id')
+          .in('class_id', ids);
+        
+        console.log('Allocations debug - result:', allocationsData, 'error:', allocationsError);
+        setAllocationsList(allocationsData || []);
       } else {
+        console.log('Allocations debug - no class IDs found');
         setAllocationsList([]);
       }
       
@@ -166,9 +170,8 @@ export default function SetupReminder({
   useEffect(() => {
     if (isOpen) {
       fetchWizardData();
-      if (onRefreshStats) onRefreshStats();
     }
-  }, [isOpen, onRefreshStats]);
+  }, [isOpen]);
 
   const [selectedPopularSubjects, setSelectedPopularSubjects] = useState<string[]>([]);
   const [customSubjectInput, setCustomSubjectInput] = useState("");

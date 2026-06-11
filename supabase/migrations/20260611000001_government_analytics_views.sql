@@ -34,11 +34,11 @@ SELECT
     COALESCE(gender, 'Other') as gender,
     COALESCE(grade, 'Unassigned') as grade,
     disability_status,
-    dob,
+    date_of_birth as dob,
     COUNT(*) as student_count
 FROM public.profiles
 WHERE role = 'student'
-GROUP BY school_id, gender, grade, disability_status, dob;
+GROUP BY school_id, gender, grade, disability_status, date_of_birth;
 
 -- 4. Subject averages by school
 CREATE OR REPLACE VIEW public.subject_averages_by_school
