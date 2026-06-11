@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useNavigate, Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { getSubdomain, getRoleSubdomainUrl } from "@/lib/subdomain";
 import {
   Form,
   FormControl,
@@ -28,6 +29,57 @@ export default function SystemAdminLogin() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const handleRoleNavigation = (role: string, userId: string) => {
+    const subdomainUrl = getRoleSubdomainUrl(role, userId);
+    const currentSub = getSubdomain();
+    const targetSubMap: Record<string, string> = {
+      school_admin: "admin", bursar: "admin", registrar: "admin",
+      exam_officer: "admin", academic_auditor: "admin", accounts: "admin",
+      content_manager: "admin",
+      teacher: "teacher",
+      student: "student",
+      government: "gov",
+      system_admin: "system",
+    };
+    const targetSub = targetSubMap[role];
+
+    if (currentSub && currentSub === targetSub) {
+      navigate("/");
+    } else if (subdomainUrl && subdomainUrl.startsWith("http")) {
+      window.location.href = subdomainUrl;
+    } else {
+      if (["school_admin", "bursar", "registrar", "exam_officer", "academic_auditor", "accounts", "content_manager"].includes(role)) {
+        navigate("/school-admin");
+      } else {
+        switch (role) {
+          case "system_admin": navigate("/system-admin"); break;
+          case "government":   navigate("/gov"); break;
+          case "teacher":      navigate("/teacher-portal"); break;
+          case "student":      navigate(`/student-portal/${userId}`); break;
+          default:             navigate("/");
+        }
+      }
+    }
+  };
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", session.user.id)
+          .single();
+
+        if (profile) {
+          handleRoleNavigation(profile.role, session.user.id);
+        }
+      }
+    };
+    checkSession();
+  }, []);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -74,24 +126,12 @@ export default function SystemAdminLogin() {
           return;
         }
 
-        // Strictly check for system_admin role
-        if (profile.role !== "system_admin") {
-          // If not system admin, sign out immediately and show error
-          await supabase.auth.signOut();
-          toast({
-            variant: "destructive",
-            title: "Access Denied",
-            description: "You do not have permission to access the System Admin portal.",
-          });
-          return;
-        }
-
         toast({
-          title: "Welcome back, Admin!",
-          description: "Successfully logged in to the System Admin portal.",
+          title: "Welcome back!",
+          description: "Successfully logged in to your account.",
         });
 
-        navigate("/system-admin");
+        handleRoleNavigation(profile.role, data.session.user.id);
       }
     } catch (error: any) {
       toast({
