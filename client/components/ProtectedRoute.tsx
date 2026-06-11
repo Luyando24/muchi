@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { Loader2, ShieldAlert, LogOut, ArrowRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -100,22 +100,9 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
   const [sessionUser, setSessionUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<string>('');
   const location = useLocation();
-  const navigate = useNavigate();
   const { toast } = useToast();
 
   const allowedRolesKey = allowedRoles?.join(',') || '';
-
-  // Auto-redirect effect
-  useEffect(() => {
-    if (!loading && !authorized && sessionUser && userRole) {
-      const myPortalUrl = getRoleSubdomainUrl(userRole, sessionUser.id);
-      if (myPortalUrl.startsWith('http')) {
-        window.location.href = myPortalUrl;
-      } else {
-        navigate(myPortalUrl, { replace: true });
-      }
-    }
-  }, [loading, authorized, sessionUser, userRole, navigate]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -203,16 +190,15 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
   }
 
   if (!authorized) {
-    // If not authorized but we have a session (meaning role mismatch), render the loading redirect screen
+    // If not authorized but we have a session (meaning role mismatch), render the Access Denied screen.
     // If no session, redirect to login.
     if (sessionUser) {
       return (
-        <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
-            Redirecting to your dashboard...
-          </p>
-        </div>
+        <AccessDeniedScreen 
+          userRole={userRole} 
+          userId={sessionUser.id} 
+          allowedRoles={allowedRoles} 
+        />
       );
     }
     return <Navigate to="/login" state={{ from: location }} replace />;
