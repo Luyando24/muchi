@@ -102,6 +102,8 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
   const location = useLocation();
   const { toast } = useToast();
 
+  const allowedRolesKey = allowedRoles?.join(',') || '';
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
@@ -118,6 +120,7 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
 
         if (!session) {
           setSessionUser(null);
+          setAuthorized(false);
           setLoading(false);
           return;
         }
@@ -157,11 +160,6 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
             setAuthorized(true);
           } else {
             console.warn(`[ProtectedRoute] Access Denied. DB Role: ${profile?.role}, Secondary: ${profile?.secondary_role}. Meta Role: ${metaRole}, Meta Secondary: ${metaSecondaryRole}. Allowed: ${allowedRoles.join(', ')}`);
-            toast({
-              variant: "destructive",
-              title: "Access Denied",
-              description: `You do not have permission to access this page.`,
-            });
             setAuthorized(false);
           }
         } else {
@@ -170,6 +168,7 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
         }
       } catch (error) {
         console.error('Auth check failed:', error);
+        setAuthorized(false);
       } finally {
         setLoading(false);
       }
@@ -180,7 +179,7 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
     return () => {
       subscription.unsubscribe();
     };
-  }, [allowedRoles, toast]);
+  }, [allowedRolesKey, toast]);
 
   if (loading) {
     return (
