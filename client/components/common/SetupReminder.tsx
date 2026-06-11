@@ -80,17 +80,17 @@ export default function SetupReminder({
   
   const [recommendations, setRecommendations] = useState<{ departments: string[]; subjects: any[] }>({ departments: [], subjects: [] });
 
-  const classesProgress = Math.min((stats.classes / 5) * 100, 100);
-  const subjectsProgress = Math.min((stats.subjects / 5) * 100, 100);
-  const teachersProgress = Math.min((stats.teachers / 5) * 100, 100);
+  const classesProgress = Math.min((classesList.length / 5) * 100, 100);
+  const subjectsProgress = Math.min((subjectsList.length / 5) * 100, 100);
+  const teachersProgress = Math.min((teachersList.length / 5) * 100, 100);
   const studentsProgress = Math.min((stats.students / 20) * 100, 100);
   const allocationsProgress = Math.min((stats.assignments / 10) * 100, 100);
   
   const overallProgress = Math.round((classesProgress + subjectsProgress + teachersProgress + studentsProgress + allocationsProgress) / 5);
   
-  const classesDone = stats.classes >= 5;
-  const subjectsDone = stats.subjects >= 5;
-  const teachersDone = stats.teachers >= 5;
+  const classesDone = classesList.length >= 5;
+  const subjectsDone = subjectsList.length >= 5;
+  const teachersDone = teachersList.length >= 5;
   const studentsDone = stats.students >= 20;
   const assignmentsDone = stats.assignments >= 10;
   const isComplete = classesDone && subjectsDone && teachersDone && studentsDone && assignmentsDone;
@@ -416,7 +416,7 @@ export default function SetupReminder({
                             <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
                           ) : (
                             <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                              {stats.classes} / 5
+                              {classesList.length} / 5
                             </span>
                           )}
                         </div>
@@ -439,7 +439,7 @@ export default function SetupReminder({
                             <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
                           ) : (
                             <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                              {stats.subjects} / 5
+                              {subjectsList.length} / 5
                             </span>
                           )}
                         </div>
@@ -462,7 +462,7 @@ export default function SetupReminder({
                             <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
                           ) : (
                             <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                              {stats.teachers} / 5
+                              {teachersList.length} / 5
                             </span>
                           )}
                         </div>
@@ -526,7 +526,7 @@ export default function SetupReminder({
                   <div>
                     <h4 className="text-base font-bold text-slate-950 flex items-center gap-2">
                       <Layers className="h-5 w-5 text-indigo-600" />
-                      Step 2: Configure Classes ({stats.classes} / 5)
+                      Step 2: Configure Classes ({classesList.length} / 5)
                     </h4>
                     <p className="text-xs text-slate-500 mt-1">
                       Create at least 5 classes (e.g. Form 1A, Grade 8 Blue) to group and manage your student roster.
@@ -578,7 +578,7 @@ export default function SetupReminder({
                   <div>
                     <h4 className="text-base font-bold text-slate-950 flex items-center gap-2">
                       <BookOpen className="h-5 w-5 text-indigo-600" />
-                      Step 3: Configure Subjects ({stats.subjects} / 5)
+                      Step 3: Configure Subjects ({subjectsList.length} / 5)
                     </h4>
                     <p className="text-xs text-slate-500 mt-1">
                       Add at least 5 subjects to your school curriculum.
@@ -740,7 +740,7 @@ export default function SetupReminder({
                   <div>
                     <h4 className="text-base font-bold text-slate-950 flex items-center gap-2">
                       <Users className="h-5 w-5 text-indigo-600" />
-                      Step 4: Add Teachers ({stats.teachers} / 5)
+                      Step 4: Add Teachers ({teachersList.length} / 5)
                     </h4>
                     <p className="text-xs text-slate-500 mt-1">
                       Add at least 5 teachers to your school to assign them classes and subjects.
@@ -970,7 +970,7 @@ export default function SetupReminder({
                       <div className="flex justify-between items-center bg-slate-50 border border-slate-100 p-3 rounded-lg text-xs font-bold">
                         <span className="text-slate-600 uppercase tracking-wider">Classes (min 5)</span>
                         <span className={classesDone ? "text-emerald-600" : "text-amber-600"}>
-                          {stats.classes} / 5
+                          {classesList.length} / 5
                         </span>
                       </div>
 
@@ -978,7 +978,7 @@ export default function SetupReminder({
                       <div className="flex justify-between items-center bg-slate-50 border border-slate-100 p-3 rounded-lg text-xs font-bold">
                         <span className="text-slate-600 uppercase tracking-wider">Subjects (min 5)</span>
                         <span className={subjectsDone ? "text-emerald-600" : "text-amber-600"}>
-                          {stats.subjects} / 5
+                          {subjectsList.length} / 5
                         </span>
                       </div>
 
@@ -986,7 +986,7 @@ export default function SetupReminder({
                       <div className="flex justify-between items-center bg-slate-50 border border-slate-100 p-3 rounded-lg text-xs font-bold">
                         <span className="text-slate-600 uppercase tracking-wider">Teachers (min 5)</span>
                         <span className={teachersDone ? "text-emerald-600" : "text-amber-600"}>
-                          {stats.teachers} / 5
+                          {teachersList.length} / 5
                         </span>
                       </div>
 
