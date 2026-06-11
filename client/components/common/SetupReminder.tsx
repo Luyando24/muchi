@@ -53,6 +53,8 @@ export default function SetupReminder({
   const [classesList, setClassesList] = useState<any[]>([]);
   const [subjectsList, setSubjectsList] = useState<any[]>([]);
   const [teachersList, setTeachersList] = useState<any[]>([]);
+  const [studentsList, setStudentsList] = useState<any[]>([]);
+  const [allocationsList, setAllocationsList] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(false);
   const [topSchools, setTopSchools] = useState<any[]>([
     { name: 'St. Augustine Academy', location: 'Lusaka', initials: 'SA' },
@@ -83,16 +85,16 @@ export default function SetupReminder({
   const classesProgress = Math.min((classesList.length / 5) * 100, 100);
   const subjectsProgress = Math.min((subjectsList.length / 5) * 100, 100);
   const teachersProgress = Math.min((teachersList.length / 5) * 100, 100);
-  const studentsProgress = Math.min((stats.students / 20) * 100, 100);
-  const allocationsProgress = Math.min((stats.assignments / 10) * 100, 100);
+  const studentsProgress = Math.min((studentsList.length / 20) * 100, 100);
+  const allocationsProgress = Math.min((allocationsList.length / 10) * 100, 100);
   
   const overallProgress = Math.round((classesProgress + subjectsProgress + teachersProgress + studentsProgress + allocationsProgress) / 5);
   
   const classesDone = classesList.length >= 5;
   const subjectsDone = subjectsList.length >= 5;
   const teachersDone = teachersList.length >= 5;
-  const studentsDone = stats.students >= 20;
-  const assignmentsDone = stats.assignments >= 10;
+  const studentsDone = studentsList.length >= 20;
+  const assignmentsDone = allocationsList.length >= 10;
   const isComplete = classesDone && subjectsDone && teachersDone && studentsDone && assignmentsDone;
 
   const fetchWizardData = async () => {
@@ -103,10 +105,11 @@ export default function SetupReminder({
 
       const headers = { 'Authorization': `Bearer ${session.access_token}` };
       
-      const [classesRes, subjectsRes, teachersRes, recsRes, topSchoolsRes] = await Promise.all([
+      const [classesRes, subjectsRes, teachersRes, studentsRes, recsRes, topSchoolsRes] = await Promise.all([
         fetch('/api/school/classes', { headers }),
         fetch('/api/school/subjects', { headers }),
         fetch('/api/school/teachers', { headers }),
+        fetch('/api/school/students', { headers }),
         fetch('/api/school/recommendations/academic', { headers }),
         fetch('/api/schools/top-onboarded', { headers })
       ]);
@@ -123,6 +126,27 @@ export default function SetupReminder({
         const res = await teachersRes.json();
         setTeachersList(res.data || res || []);
       }
+      if (studentsRes.ok) {
+        const res = await studentsRes.json();
+        setStudentsList(res.data || res || []);
+      }
+      
+      // Fetch allocations from class_subjects table directly
+      const classIds = (data: any) => (data.data || data || []).map((c: any) => c.id);
+      const classesData = await classesRes.json();
+      const ids = classIds(classesData);
+      
+      if (ids.length > 0) {
+        const { data: allocationsData } = await supabase
+          .from('class_subjects')
+          .select('id')
+          .in('class_id', ids)
+          .not('teacher_id', 'is', null);
+        setAllocationsList(allocationsData || []);
+      } else {
+        setAllocationsList([]);
+      }
+      
       if (recsRes.ok) {
         const data = await recsRes.json();
         setRecommendations(data || { departments: [], subjects: [] });
@@ -485,7 +509,7 @@ export default function SetupReminder({
                             <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
                           ) : (
                             <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                              {stats.students} / 20
+                              {studentsList.length} / 20
                             </span>
                           )}
                         </div>
@@ -508,7 +532,7 @@ export default function SetupReminder({
                             <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
                           ) : (
                             <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                              {stats.assignments} / 10
+                              {allocationsList.length} / 10
                             </span>
                           )}
                         </div>
@@ -792,7 +816,7 @@ export default function SetupReminder({
                   <div>
                     <h4 className="text-base font-bold text-slate-950 flex items-center gap-2">
                       <Users className="h-5 w-5 text-indigo-600" />
-                      Step 5: Add Students ({stats.students} / 20)
+                      Step 5: Add Students ({studentsList.length} / 20)
                     </h4>
                     <p className="text-xs text-slate-500 mt-1">
                       Add at least 20 students to your school.
@@ -828,7 +852,7 @@ export default function SetupReminder({
                 <div>
                   <h4 className="text-base font-bold text-slate-950 flex items-center gap-2">
                     <GraduationCap className="h-5 w-5 text-indigo-600" />
-                    Step 6: Teacher Allocations ({stats.assignments} / 10)
+                    Step 6: Teacher Allocations ({allocationsList.length} / 10)
                   </h4>
                   <p className="text-xs text-slate-500 mt-1">
                     Assign subjects and classes to teachers. Requires a minimum of 10 allocations.
@@ -994,7 +1018,7 @@ export default function SetupReminder({
                       <div className="flex justify-between items-center bg-slate-50 border border-slate-100 p-3 rounded-lg text-xs font-bold">
                         <span className="text-slate-600 uppercase tracking-wider">Students (min 20)</span>
                         <span className={studentsDone ? "text-emerald-600" : "text-amber-600"}>
-                          {stats.students} / 20
+                          {studentsList.length} / 20
                         </span>
                       </div>
 
@@ -1002,7 +1026,7 @@ export default function SetupReminder({
                       <div className="flex justify-between items-center bg-slate-50 border border-slate-100 p-3 rounded-lg text-xs font-bold">
                         <span className="text-slate-600 uppercase tracking-wider">Teacher Allocations (min 10)</span>
                         <span className={assignmentsDone ? "text-emerald-600" : "text-amber-600"}>
-                          {stats.assignments} / 10
+                          {allocationsList.length} / 10
                         </span>
                       </div>
                     </div>
