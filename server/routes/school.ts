@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { WhatsAppService } from "../services/whatsappService.js";
+import { SmsService } from "../services/smsService.js";
 import { requireActiveLicense } from "../middleware/license.js";
 import { rateLimiter } from "../middleware/rateLimiter.js";
 import { ensureSchoolSettings } from "../lib/school-settings.js";
@@ -2858,22 +2859,30 @@ router.post(
 
           if (studentsToNotify && studentsToNotify.length > 0) {
             console.log(
-              `[Notification] Triggering WhatsApp messages for ${studentsToNotify.length} students`,
+              `[Notification] Triggering WhatsApp and SMS messages for ${studentsToNotify.length} students`,
             );
 
             // Send notifications sequentially to avoid overwhelming the provider or rate limits
             for (const student of studentsToNotify) {
               if (student.guardian_contact) {
+                // Send WhatsApp notification
                 await WhatsAppService.sendResultPublishedNotification(
                   student.guardian_contact,
                   student.full_name || "your child",
                   subjectName || "the term",
                 );
+
+                // Send SMS notification
+                const smsMessage = `Results for ${student.full_name || "your child"} in ${subjectName || "the term"} have been published. Please log in to the student portal to view.`;
+                await SmsService.sendSms(
+                  student.guardian_contact,
+                  smsMessage
+                );
               }
             }
           }
         } catch (notifError) {
-          console.error("Failed to send WhatsApp notifications:", notifError);
+          console.error("Failed to send result notifications:", notifError);
           // We don't fail the whole request if notifications fail
         }
       }

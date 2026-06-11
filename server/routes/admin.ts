@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { supabaseAdmin } from '../lib/supabase.js';
 import * as os from 'os';
 import * as crypto from 'crypto';
+import { SmsService } from '../services/smsService.js';
+import { WhatsAppService } from '../services/whatsappService.js';
 
 const router = Router();
 
@@ -683,66 +685,7 @@ router.get('/dashboard', requireSystemAdmin, async (req: Request, res: Response)
       });
     }
 
-    // 3. Online Users Calculation (query actual active sessions in the last 15 minutes)
-    let onlineUsers = 1; // Default to at least the current system admin
-    try {
-      const { data: usersData, error: usersDataError } = await supabaseAdmin.auth.admin.listUsers();
-      if (!usersDataError && usersData?.users) {
-        const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
-        const activeRecent = usersData.users.filter(u => {
-          if (!u.last_sign_in_at) return false;
-          return new Date(u.last_sign_in_at) >= fifteenMinutesAgo;
-        });
-        // We set the online count to the maximum of 1 or the count of recent logins
-        onlineUsers = Math.max(1, activeRecent.length);
-      }
-    } catch (err) {
-      console.error('Error fetching online users from auth admin:', err);
-      // Fallback to a realistic count if listUsers fails (e.g. key permissions)
-      onlineUsers = Math.max(1, Math.min(usersCount || 0, Math.floor((usersCount || 0) * 0.12)));
-    }
-
-    // 4. Fetch all profiles to count students/teachers per school in memory
-    const { data: allProfiles, error: allProfilesError } = await supabaseAdmin
-      .from('profiles')
-      .select('school_id, role')
-      .in('role', ['student', 'teacher']);
-
-    const schoolStudentCount: Record<string, number> = {};
-    const schoolTeacherCount: Record<string, number> = {};
-
-    if (allProfiles) {
-      allProfiles.forEach((p: any) => {
-        if (!p.school_id) return;
-        if (p.role === 'student') {
-          schoolStudentCount[p.school_id] = (schoolStudentCount[p.school_id] || 0) + 1;
-        } else if (p.role === 'teacher') {
-          schoolTeacherCount[p.school_id] = (schoolTeacherCount[p.school_id] || 0) + 1;
-        }
-      });
-    }
-
-    // 5. Fetch 5 most recent schools (with licenses)
-    const { data: recentSchools, error: recentSchoolsError } = await supabaseAdmin
-      .from('schools')
-      .select('id, name, slug, created_at, school_licenses(status, plan)')
-      .order('created_at', { ascending: false })
-      .limit(5);
-
-    if (recentSchoolsError) {
-      console.error('Error fetching recent schools:', recentSchoolsError);
-    }
-
-    let recentSchoolsWithCounts: any[] = [];
-    if (recentSchools) {
-      recentSchoolsWithCounts = recentSchools.map((school: any) => ({
-        ...school,
-        student_count: schoolStudentCount[school.id] || 0,
-        teacher_count: schoolTeacherCount[school.id] || 0
-      }));
-    }
-
-    // 6. Fetch auth users in pages to calculate usage stats
+    // 3. Fetch auth users in pages to calculate usage stats and online users
     let allUsers: any[] = [];
     let page = 1;
     let hasMore = true;
@@ -769,6 +712,68 @@ router.get('/dashboard', requireSystemAdmin, async (req: Request, res: Response)
           page++;
         }
       }
+    }
+
+    // 4. Online Users Calculation (query actual active sessions in the last 15 minutes)
+    let onlineUsers = 1; // Default to at least the current system admin
+    try {
+      // Use the real-time web traffic active users count
+      const { getActiveUsersCount } = await import('../lib/activeUsers.js');
+      const realtimeCount = getActiveUsersCount(15 * 60 * 1000);
+      
+      // Fallback to recent logins if our memory tracker hasn't caught enough yet (e.g. server restart)
+      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+      const activeRecent = allUsers.filter(u => {
+        if (!u.last_sign_in_at) return false;
+        return new Date(u.last_sign_in_at) >= fifteenMinutesAgo;
+      });
+      
+      // Use the maximum of realtime web traffic, recent logins, or 1
+      onlineUsers = Math.max(1, realtimeCount, activeRecent.length);
+    } catch (err) {
+      console.error('Error calculating online users:', err);
+      // Fallback to a realistic count if calculation fails
+      onlineUsers = Math.max(1, Math.min(usersCount || 0, Math.floor((usersCount || 0) * 0.12)));
+    }
+
+    // 5. Fetch all profiles to count students/teachers per school in memory
+    const { data: allProfiles, error: allProfilesError } = await supabaseAdmin
+      .from('profiles')
+      .select('school_id, role')
+      .in('role', ['student', 'teacher']);
+
+    const schoolStudentCount: Record<string, number> = {};
+    const schoolTeacherCount: Record<string, number> = {};
+
+    if (allProfiles) {
+      allProfiles.forEach((p: any) => {
+        if (!p.school_id) return;
+        if (p.role === 'student') {
+          schoolStudentCount[p.school_id] = (schoolStudentCount[p.school_id] || 0) + 1;
+        } else if (p.role === 'teacher') {
+          schoolTeacherCount[p.school_id] = (schoolTeacherCount[p.school_id] || 0) + 1;
+        }
+      });
+    }
+
+    // 6. Fetch 5 most recent schools (with licenses)
+    const { data: recentSchools, error: recentSchoolsError } = await supabaseAdmin
+      .from('schools')
+      .select('id, name, slug, created_at, school_licenses(status, plan)')
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (recentSchoolsError) {
+      console.error('Error fetching recent schools:', recentSchoolsError);
+    }
+
+    let recentSchoolsWithCounts: any[] = [];
+    if (recentSchools) {
+      recentSchoolsWithCounts = recentSchools.map((school: any) => ({
+        ...school,
+        student_count: schoolStudentCount[school.id] || 0,
+        teacher_count: schoolTeacherCount[school.id] || 0
+      }));
     }
 
     const now = Date.now();
@@ -1330,6 +1335,44 @@ router.put('/settings', requireSystemAdmin, async (req: Request, res: Response) 
     res.json({ message: 'Settings updated successfully', data });
   } catch (error: any) {
     console.error('Update System Settings Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/admin/communication/test-sms
+router.post('/communication/test-sms', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { to, message } = req.body;
+  if (!to || !message) {
+    return res.status(400).json({ message: 'Missing "to" or "message" parameter' });
+  }
+
+  try {
+    const result = await SmsService.sendSms(to, message);
+    if (!result.success) {
+      return res.status(400).json({ message: 'Failed to send test SMS', error: result.error });
+    }
+    res.json({ message: 'Test SMS sent successfully', data: result.data });
+  } catch (error: any) {
+    console.error('Test SMS Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/admin/communication/test-whatsapp
+router.post('/communication/test-whatsapp', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { to, message } = req.body;
+  if (!to || !message) {
+    return res.status(400).json({ message: 'Missing "to" or "message" parameter' });
+  }
+
+  try {
+    const result = await WhatsAppService.sendWhatsApp(to, message);
+    if (!result.success) {
+      return res.status(400).json({ message: 'Failed to send test WhatsApp', error: result.error });
+    }
+    res.json({ message: 'Test WhatsApp message sent successfully', data: result.data });
+  } catch (error: any) {
+    console.error('Test WhatsApp Error:', error);
     res.status(500).json({ message: error.message });
   }
 });

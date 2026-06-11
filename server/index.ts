@@ -18,13 +18,36 @@ import { tuckshopRouter } from './routes/tuckshop.js';
 import { contactRouter } from './routes/contact.js';
 import { Logger } from './lib/logger.js';
 import { requestLogger, errorLogger } from './middleware/logging.js';
+import { CONFIG } from '../shared/config.js';
+import { trackActiveUser } from './lib/activeUsers.js';
+
 const app = express();
-const port = process.env.PORT || 3000;
+const port = CONFIG.server.port;
 
 app.use(cors());
 app.use(requestLogger);
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Track active web traffic sessions
+app.use((req, res, next) => {
+  // Use authorization header token snippet or IP as identifier
+  const authHeader = req.headers.authorization;
+  const ip = req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
+  
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    // We use the token signature/last part as a unique session identifier
+    const tokenParts = authHeader.split('.');
+    if (tokenParts.length === 3) {
+      trackActiveUser(`user_session_${tokenParts[2]}`);
+    } else {
+      trackActiveUser(`ip_${ip}`);
+    }
+  } else {
+    trackActiveUser(`ip_${ip}`);
+  }
+  next();
+});
 
 // API Routes
 app.use('/api/auth', authRouter);

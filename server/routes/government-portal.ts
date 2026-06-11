@@ -175,41 +175,7 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
       schoolCategoryBreakdown[cat] = (schoolCategoryBreakdown[cat] || 0) + 1;
     });
 
-    // 3. Gender Breakdown (Students)
-    let genderQuery = supabaseAdmin.from('profiles').select('gender').eq('role', 'student');
-    if (province || district) {
-      const { data: schoolIds } = await supabaseAdmin.from('schools').select('id')
-        .match({ ...(province && { province }), ...(district && { district }) });
-      genderQuery = genderQuery.in('school_id', schoolIds?.map(s => s.id) || []);
-    }
-    const { data: genderData } = await genderQuery;
-    const genderBreakdown: Record<string, number> = { Male: 0, Female: 0, Other: 0 };
-    genderData?.forEach(p => {
-      const g = p.gender || 'Other';
-      genderBreakdown[g] = (genderBreakdown[g] || 0) + 1;
-    });
-
-    // 4. Aggregate average attendance (%)
-    let attendanceQuery = supabaseAdmin.from('attendance').select('status, school_id');
-    const pFilter = province === 'All' ? null : province;
-    const dFilter = district === 'All' ? null : district;
-
-    if (pFilter || dFilter) {
-       const { data: schoolIds } = await supabaseAdmin.from('schools').select('id')
-         .match({ ...(pFilter && { province: pFilter }), ...(dFilter && { district: dFilter }) });
-       attendanceQuery = attendanceQuery.in('school_id', schoolIds?.map(s => s.id) || []);
-    }
-    const { data: attendanceData } = await attendanceQuery;
-    const totalAttendanceDays = attendanceData?.length || 0;
-    const presentDays = attendanceData?.filter(a => a.status === 'present').length || 0;
-    const avgAttendanceValue = totalAttendanceDays > 0 ? (presentDays / totalAttendanceDays) * 100 : 0;
-
-    // 5. Aggregate national pass rate (%) and Gender-wise Grade Distribution
-    // NOTE: Using a simpler query and manual joining below to ensure stability against schema cache issues
-    let passRateQuery = supabaseAdmin.from('student_grades').select('school_id, percentage, student_id, subject_id, grade');
-
-    let scalesQuery = supabaseAdmin.from('grading_scales').select('grade, min_percentage, max_percentage, description, school_id');
-    
+    // 3. Gender Breakdown (Students) - Optimized using student_demographics_by_school view
     let filteredSchoolDetails: any[] = [];
     const provinceFilter = province === 'All' ? null : province;
     const districtFilter = district === 'All' ? null : district;
@@ -224,110 +190,103 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
     }
     
     const schoolMap = new Map<string, any>(filteredSchoolDetails.map(s => [s.id, s]));
-    
     const schoolIds = filteredSchoolDetails.map(s => s.id);
-    passRateQuery = passRateQuery.in('school_id', schoolIds);
-    scalesQuery = scalesQuery.in('school_id', schoolIds);
-    
-    const [
-      { data: gradeData },
-      { data: scalesData }
-    ] = await Promise.all([passRateQuery, scalesQuery]);
 
-    // Manual merge for profiles and subjects to ensure data visibility
-    const studentIds = [...new Set(gradeData?.map(g => g.student_id) || [])];
-    const subjectIds = [...new Set(gradeData?.map(g => g.subject_id) || [])];
+    let demographicsQuery = supabaseAdmin.from('student_demographics_by_school').select('school_id, gender, student_count');
+    if (schoolIds.length > 0) {
+      demographicsQuery = demographicsQuery.in('school_id', schoolIds);
+    }
+    const { data: demographicsData } = await demographicsQuery;
+    const genderBreakdown: Record<string, number> = { Male: 0, Female: 0, Other: 0 };
+    demographicsData?.forEach(p => {
+      const g = p.gender || 'Other';
+      genderBreakdown[g] = (genderBreakdown[g] || 0) + Number(p.student_count || 0);
+    });
 
-    const [{ data: profilesData }, { data: subjectsData }] = await Promise.all([
-      supabaseAdmin.from('profiles').select('id, gender').in('id', studentIds),
-      supabaseAdmin.from('subjects').select('id, name').in('id', subjectIds)
-    ]);
+    // 4. Aggregate average attendance (%) - Optimized using attendance_analytics_by_school view
+    let attendanceQuery = supabaseAdmin.from('attendance_analytics_by_school').select('school_id, total_days, present_days');
+    if (schoolIds.length > 0) {
+      attendanceQuery = attendanceQuery.in('school_id', schoolIds);
+    }
+    const { data: attendanceData } = await attendanceQuery;
+    let totalAttendanceDays = 0;
+    let presentDays = 0;
+    const schoolAttendance = new Map<string, { present: number, total: number }>();
+    attendanceData?.forEach(a => {
+      const present = Number(a.present_days || 0);
+      const total = Number(a.total_days || 0);
+      totalAttendanceDays += total;
+      presentDays += present;
+      schoolAttendance.set(a.school_id, { present, total });
+    });
+    const avgAttendanceValue = totalAttendanceDays > 0 ? (presentDays / totalAttendanceDays) * 100 : 0;
 
-    const profileMap = new Map(profilesData?.map(p => [p.id, p]));
-    const subjectMap = new Map(subjectsData?.map(s => [s.id, s]));
+    // 5. Aggregate national pass rate (%) and Gender-wise Grade Distribution - Optimized using views
+    let gradeQuery = supabaseAdmin.from('grade_analytics_by_school').select('school_id, avg_percentage, total_grades');
+    let gradeDistributionQuery = supabaseAdmin.from('gender_grade_distribution_by_school').select('gender, grade_label, grade_count');
+    let subjectQuery = supabaseAdmin.from('subject_averages_by_school').select('subject_name, avg_percentage, total_grades');
+    let teacherCountQuery = supabaseAdmin.from('teachers').select('school_id');
 
-    if (gradeData) {
-      gradeData.forEach(g => {
-        g.profiles = profileMap.get(g.student_id);
-        g.subjects = subjectMap.get(g.subject_id);
-      });
+    if (schoolIds.length > 0) {
+      gradeQuery = gradeQuery.in('school_id', schoolIds);
+      gradeDistributionQuery = gradeDistributionQuery.in('school_id', schoolIds);
+      subjectQuery = subjectQuery.in('school_id', schoolIds);
+      teacherCountQuery = teacherCountQuery.in('school_id', schoolIds);
     }
 
-    const validGrades = gradeData?.filter(g => g.grade !== 'ABSENT') || [];
-    const totalGrades = validGrades.length;
-    const avgPassRate = totalGrades > 0 
-      ? validGrades.reduce((acc, curr) => acc + curr.percentage, 0) / totalGrades 
-    : 0;
+    const [
+      { data: gradeAnalytics },
+      { data: distData },
+      { data: subjData },
+      { data: teacherCounts }
+    ] = await Promise.all([gradeQuery, gradeDistributionQuery, subjectQuery, teacherCountQuery]);
 
-    // 6. Gender-wise Grade Distribution Aggregation & Subject Analytics
+    // Calculate overall pass rate and per-school grades maps
+    let totalGradesCount = 0;
+    let gradesWeightedSum = 0;
+    const schoolGrades = new Map<string, { total: number, count: number }>();
+
+    gradeAnalytics?.forEach(g => {
+      const total = Number(g.total_grades || 0);
+      const avg = Number(g.avg_percentage || 0);
+      gradesWeightedSum += avg * total;
+      totalGradesCount += total;
+
+      const current = schoolGrades.get(g.school_id) || { total: 0, count: 0 };
+      schoolGrades.set(g.school_id, { total: current.total + (avg * total), count: current.count + total });
+    });
+
+    const avgPassRate = totalGradesCount > 0 ? gradesWeightedSum / totalGradesCount : 0;
+
+    // 6. Gender-wise Grade Distribution
     const genderGradeDistribution: Record<string, Record<string, number>> = {
       male: {},
       female: {},
       other: {}
     };
-    const subjectData: Record<string, { total: number, count: number }> = {};
 
-    const getGradeLabel = (pct: number, schoolId: string) => {
-      const schoolScales = scalesData?.filter(s => s.school_id === schoolId) || [];
-      const scale = schoolScales.find(s => pct >= s.min_percentage && pct <= s.max_percentage);
-      if (scale) return scale.description || scale.grade;
-      
-      // Fallback to standard Zambia categories if no school-specific scale found
-      if (pct >= 75) return 'Distinction';
-      if (pct >= 60) return 'Merit';
-      if (pct >= 50) return 'Credit';
-      if (pct >= 40) return 'Pass';
-      return 'Fail';
-    };
-
-    gradeData?.forEach(g => {
-      if (g.percentage == null || g.grade === 'ABSENT') return;
-      const gender = (g.profiles?.gender || 'Other').toLowerCase();
+    distData?.forEach(g => {
+      const gender = (g.gender || 'Other').toLowerCase();
       const targetGender = gender === 'male' || gender === 'female' ? gender : 'other';
-      const label = getGradeLabel(g.percentage, g.school_id);
-      
-      genderGradeDistribution[targetGender][label] = (genderGradeDistribution[targetGender][label] || 0) + 1;
-
-      // Subject analytics
-      const subjectName = g.subjects?.name || 'Unknown';
-      if (!subjectData[subjectName]) subjectData[subjectName] = { total: 0, count: 0 };
-      subjectData[subjectName].total += g.percentage;
-      subjectData[subjectName].count += 1;
+      const label = g.grade_label || 'Fail';
+      const count = Number(g.grade_count || 0);
+      genderGradeDistribution[targetGender][label] = (genderGradeDistribution[targetGender][label] || 0) + count;
     });
 
-    // 7. Detailed Metrics per School (Ratio, Pass Rate, Attendance)
-    const schoolGrades = new Map<string, { total: number, count: number }>();
-    gradeData?.forEach(g => {
-      if (!g.school_id || g.percentage == null || g.grade === 'ABSENT') return;
-      const current = schoolGrades.get(g.school_id) || { total: 0, count: 0 };
-      schoolGrades.set(g.school_id, { total: current.total + g.percentage, count: current.count + 1 });
+    // Subject analytics
+    const subjectDataMap: Record<string, { total: number, count: number }> = {};
+    subjData?.forEach(g => {
+      const name = g.subject_name || 'Unknown';
+      const avg = Number(g.avg_percentage || 0);
+      const total = Number(g.total_grades || 0);
+      if (!subjectDataMap[name]) {
+        subjectDataMap[name] = { total: 0, count: 0 };
+      }
+      subjectDataMap[name].total += avg * total;
+      subjectDataMap[name].count += total;
     });
 
-    const schoolAttendance = new Map<string, { present: number, total: number }>();
-    attendanceData?.forEach(a => {
-      const current = schoolAttendance.get(a.school_id) || { present: 0, total: 0 };
-      schoolAttendance.set(a.school_id, { 
-        present: current.present + (a.status === 'present' ? 1 : 0), 
-        total: current.total + 1 
-      });
-    });
-
-    // Student/Teacher counts per school for individual ratios
-    const { data: profilesBySchool } = await supabaseAdmin
-      .from('profiles')
-      .select('school_id, role, secondary_role')
-      .in('school_id', filteredSchoolDetails.map(s => s.id))
-      .or('role.eq.student,role.eq.teacher,secondary_role.eq.teacher');
-    
-    const schoolProfiles = new Map<string, { students: number, teachers: number }>();
-    profilesBySchool?.forEach(p => {
-      const current = schoolProfiles.get(p.school_id) || { students: 0, teachers: 0 };
-      if (p.role === 'student') current.students++;
-      else if (p.role === 'teacher' || p.secondary_role === 'teacher') current.teachers++;
-      schoolProfiles.set(p.school_id, current);
-    });
-
-    const topSubjects: any[] = Object.entries(subjectData)
+    const topSubjects: any[] = Object.entries(subjectDataMap)
       .map(([name, data]: any) => ({
         name,
         average: Number((data.total / data.count).toFixed(1)),
@@ -336,10 +295,24 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
       .sort((a, b) => b.average - a.average)
       .slice(0, 10);
 
+    // Map school student/teacher counts
+    const schoolStudentCounts = new Map<string, number>();
+    demographicsData?.forEach(p => {
+      schoolStudentCounts.set(p.school_id, (schoolStudentCounts.get(p.school_id) || 0) + Number(p.student_count || 0));
+    });
+
+    const schoolTeacherCounts = new Map<string, number>();
+    teacherCounts?.forEach(t => {
+      if (t.school_id) {
+        schoolTeacherCounts.set(t.school_id, (schoolTeacherCounts.get(t.school_id) || 0) + 1);
+      }
+    });
+
     const schoolPerformanceMetrics = filteredSchoolDetails.map(school => {
       const grades = schoolGrades.get(school.id);
       const att = schoolAttendance.get(school.id);
-      const counts = schoolProfiles.get(school.id) || { students: 0, teachers: 0 };
+      const studentCount = schoolStudentCounts.get(school.id) || 0;
+      const teacherCount = schoolTeacherCounts.get(school.id) || 0;
       return {
         id: school.id,
         name: school.name,
@@ -349,9 +322,9 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
         type: school.school_type,
         passRate: grades ? Number((grades.total / grades.count).toFixed(1)) : 0,
         attendanceRate: att ? Number((att.present / att.total * 100).toFixed(1)) : 0,
-        studentTeacherRatio: counts.teachers > 0 ? Number((counts.students / counts.teachers).toFixed(1)) : counts.students,
-        studentCount: counts.students,
-        teacherCount: counts.teachers
+        studentTeacherRatio: teacherCount > 0 ? Number((studentCount / teacherCount).toFixed(1)) : studentCount,
+        studentCount,
+        teacherCount
       };
     });
 
@@ -359,14 +332,15 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
       .sort((a, b) => b.passRate - a.passRate)
       .slice(0, 3);
 
-    // 7. Category Ranking
+    // 7. Category Performance
     const categoryGrades = new Map<string, { total: number, count: number }>();
-    gradeData?.forEach(g => {
-      if (g.grade === 'ABSENT') return;
+    gradeAnalytics?.forEach(g => {
       const school = schoolMap.get(g.school_id);
       if (!school || !school.category) return;
+      const total = Number(g.total_grades || 0);
+      const avg = Number(g.avg_percentage || 0);
       const current = categoryGrades.get(school.category) || { total: 0, count: 0 };
-      categoryGrades.set(school.category, { total: current.total + g.percentage, count: current.count + 1 });
+      categoryGrades.set(school.category, { total: current.total + (avg * total), count: current.count + total });
     });
 
     const categoryPerformance = Array.from(categoryGrades.entries())
@@ -380,17 +354,32 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
     const currentYear = new Date().getFullYear();
     const prevYear = currentYear - 1;
     
-    let yoyQuery = supabaseAdmin.from('student_grades').select('percentage, academic_year');
-    if (province || district) {
+    let yoyQuery = supabaseAdmin.from('grade_analytics_by_school').select('avg_percentage, total_grades, academic_year');
+    if (schoolIds.length > 0) {
        yoyQuery = yoyQuery.in('school_id', schoolIds);
     }
     const { data: yoyData } = await yoyQuery.in('academic_year', [currentYear, prevYear]);
     
-    const currentYearGrades = yoyData?.filter(g => g.academic_year === currentYear) || [];
-    const prevYearGrades = yoyData?.filter(g => g.academic_year === prevYear) || [];
+    let currentSum = 0;
+    let currentCount = 0;
+    let prevSum = 0;
+    let prevCount = 0;
+
+    yoyData?.forEach(g => {
+      const total = Number(g.total_grades || 0);
+      const avg = Number(g.avg_percentage || 0);
+      const year = Number(g.academic_year);
+      if (year === currentYear) {
+        currentSum += avg * total;
+        currentCount += total;
+      } else if (year === prevYear) {
+        prevSum += avg * total;
+        prevCount += total;
+      }
+    });
     
-    const currentAvg = currentYearGrades.length > 0 ? currentYearGrades.reduce((a, b) => a + b.percentage, 0) / currentYearGrades.length : 0;
-    const prevAvg = prevYearGrades.length > 0 ? prevYearGrades.reduce((a, b) => a + b.percentage, 0) / prevYearGrades.length : 0;
+    const currentAvg = currentCount > 0 ? currentSum / currentCount : 0;
+    const prevAvg = prevCount > 0 ? prevSum / prevCount : 0;
 
     // Load threshold settings dynamically
     const settings = await getSettings();
@@ -452,7 +441,7 @@ router.get('/overview', requireGovernmentAccess, async (req: Request, res: Respo
 router.get('/enrollment-analytics', requireGovernmentAccess, async (req: Request, res: Response) => {
   const { province, district } = req.query;
   try {
-    let profileQuery = supabaseAdmin.from('profiles').select('gender, grade, dob, disability_status').eq('role', 'student');
+    let demographicsQuery = supabaseAdmin.from('student_demographics_by_school').select('gender, grade, dob, disability_status, student_count');
     
     const pFilter = province === 'All' ? null : province;
     const dFilter = district === 'All' ? null : district;
@@ -460,10 +449,10 @@ router.get('/enrollment-analytics', requireGovernmentAccess, async (req: Request
     if (pFilter || dFilter) {
       const { data: schoolIds } = await supabaseAdmin.from('schools').select('id')
         .match({ ...(pFilter && { province: pFilter }), ...(dFilter && { district: dFilter }) });
-      profileQuery = profileQuery.in('school_id', schoolIds?.map(s => s.id) || []);
+      demographicsQuery = demographicsQuery.in('school_id', schoolIds?.map(s => s.id) || []);
     }
     
-    const { data: students, error } = await profileQuery;
+    const { data: demographics, error } = await demographicsQuery;
     if (error) throw error;
 
     const currentYear = new Date().getFullYear();
@@ -471,28 +460,32 @@ router.get('/enrollment-analytics', requireGovernmentAccess, async (req: Request
     const gradeBreakdown: Record<string, number> = {};
     const disabilityBreakdown: Record<string, number> = {};
     const genderBreakdown: Record<string, number> = { Male: 0, Female: 0, Other: 0 };
+    let totalEnrolled = 0;
 
-    students?.forEach(s => {
+    demographics?.forEach(s => {
+      const count = Number(s.student_count || 0);
+      totalEnrolled += count;
+
       // Age calculation
       if (s.dob) {
         const age = currentYear - new Date(s.dob).getFullYear();
-        if (age < 7) ageBands['Under 7']++;
-        else if (age <= 13) ageBands['7-13']++;
-        else if (age <= 18) ageBands['14-18']++;
-        else ageBands['Over 18']++;
+        if (age < 7) ageBands['Under 7'] += count;
+        else if (age <= 13) ageBands['7-13'] += count;
+        else if (age <= 18) ageBands['14-18'] += count;
+        else ageBands['Over 18'] += count;
       }
 
       // Grade breakdown
       const grade = s.grade || 'Unknown';
-      gradeBreakdown[grade] = (gradeBreakdown[grade] || 0) + 1;
+      gradeBreakdown[grade] = (gradeBreakdown[grade] || 0) + count;
 
       // Disability breakdown
       const disability = s.disability_status || 'none';
-      disabilityBreakdown[disability] = (disabilityBreakdown[disability] || 0) + 1;
+      disabilityBreakdown[disability] = (disabilityBreakdown[disability] || 0) + count;
 
       // Gender
       const g = s.gender || 'Other';
-      genderBreakdown[g] = (genderBreakdown[g] || 0) + 1;
+      genderBreakdown[g] = (genderBreakdown[g] || 0) + count;
     });
 
     // NER/GER Calculation (Estimates)
@@ -514,7 +507,7 @@ router.get('/enrollment-analytics', requireGovernmentAccess, async (req: Request
       disabilityBreakdown,
       genderBreakdown,
       ger,
-      totalEnrolled: students?.length || 0
+      totalEnrolled
     });
   } catch (error: any) {
     res.status(500).json({ message: error.message });

@@ -1,26 +1,12 @@
 import { SystemSettingsRepository } from '../repositories/systemSettingsRepository.js';
 
-/**
- * Service to handle WhatsApp notifications via Africa's Talking WhatsApp API
- */
-export class WhatsAppService {
+export class SmsService {
   /**
-   * Send a result publication notification to a parent/guardian
-   * @param to Phone number
-   * @param studentName Name of the student
-   * @param subjectName Name of the subject
-   */
-  static async sendResultPublishedNotification(to: string, studentName: string, subjectName: string) {
-    const message = `Results for ${studentName} in ${subjectName} are published. Please log in to the student portal to view the details.`;
-    return this.sendWhatsApp(to, message);
-  }
-
-  /**
-   * Send a general text message via Africa's Talking WhatsApp API
-   * @param to Destination phone number (e.g. +260XXXXXXXXX)
+   * Send SMS via Africa's Talking
+   * @param to Phone number (e.g. +260XXXXXXXXX or 09XXXXXXXX)
    * @param message Text message content
    */
-  static async sendWhatsApp(to: string, message: string) {
+  static async sendSms(to: string, message: string) {
     try {
       const settings = await SystemSettingsRepository.getSystemSettings();
       const mapped = settings.reduce((acc: any, curr: any) => {
@@ -30,39 +16,37 @@ export class WhatsAppService {
 
       const username = mapped.africastalking_username?.trim();
       const apiKey = mapped.africastalking_apikey?.trim();
-      const waNumber = mapped.africastalking_whatsapp_number?.trim();
-      const isEnabled = mapped.africastalking_whatsapp_enabled === 'true';
+      const senderId = mapped.africastalking_sms_sender_id?.trim();
+      const isEnabled = mapped.africastalking_sms_enabled === 'true';
 
-      if (!isEnabled || !username || !apiKey || !waNumber) {
-        console.warn('[WhatsAppService] WhatsApp not enabled or missing credentials. Logging message:');
-        console.log(`To: ${to}, Message: ${message}`);
-        return { success: false, error: 'WhatsApp service not enabled or configured' };
+      if (!isEnabled || !username || !apiKey) {
+        console.warn('[SmsService] SMS not enabled or missing credentials.');
+        return { success: false, error: 'SMS service not enabled or configured' };
       }
 
       const formattedTo = this.formatPhoneNumber(to);
-      const formattedWa = this.formatPhoneNumber(waNumber);
       const isSandbox = username.toLowerCase() === 'sandbox';
       const baseUrl = isSandbox
-        ? 'https://chat.sandbox.africastalking.com/whatsapp/message/send'
-        : 'https://chat.africastalking.com/whatsapp/message/send';
+        ? 'https://api.sandbox.africastalking.com/version1/messaging'
+        : 'https://api.africastalking.com/version1/messaging';
 
-      const payload = {
-        username: username,
-        waNumber: formattedWa,
-        phoneNumber: formattedTo,
-        body: {
-          message: message
-        }
-      };
+      const bodyParams = new URLSearchParams();
+      bodyParams.append('username', username);
+      bodyParams.append('to', formattedTo);
+      bodyParams.append('message', message);
+      
+      if (senderId && senderId.trim() !== '') {
+        bodyParams.append('from', senderId);
+      }
 
       const response = await fetch(baseUrl, {
         method: 'POST',
         headers: {
           'apiKey': apiKey,
           'Accept': 'application/json',
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/x-www-form-urlencoded'
         },
-        body: JSON.stringify(payload)
+        body: bodyParams.toString()
       });
 
       let data: any;
@@ -73,22 +57,23 @@ export class WhatsAppService {
         const text = await response.text();
         data = { message: text || `HTTP Error ${response.status}` };
       }
-
+      
       if (!response.ok) {
-        console.error('[WhatsAppService] Error sending WhatsApp:', data);
+        console.error('[SmsService] Error sending SMS:', data);
         return { success: false, error: data };
       }
 
-      console.log('[WhatsAppService] WhatsApp message sent successfully:', data);
+      console.log('[SmsService] SMS sent successfully:', data);
       return { success: true, data };
     } catch (error: any) {
-      console.error('[WhatsAppService] Fetch error:', error);
+      console.error('[SmsService] Fetch error:', error);
       return { success: false, error: error?.message || String(error) };
     }
   }
 
   /**
    * Helper to ensure phone number is correctly formatted for Africa's Talking
+   * Africa's Talking expects numbers in international format with leading + (e.g. +260971234567)
    */
   private static formatPhoneNumber(phone: string): string {
     // Remove any non-digit characters except '+'

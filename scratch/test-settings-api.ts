@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../server/lib/supabase.js';
+import { CONFIG } from '../shared/config.js';
 
 async function testApi() {
   try {
@@ -8,7 +9,7 @@ async function testApi() {
       type: 'magiclink',
       email: 'admin@muchi.com',
       options: {
-        redirectTo: 'http://localhost:3000'
+        redirectTo: CONFIG.server.baseUrl
       }
     });
 
@@ -72,7 +73,7 @@ async function testApi() {
       contact_office: '45 Independence Avenue\nLusaka\nZambia'
     };
 
-    const response = await fetch('http://localhost:3000/api/admin/settings', {
+    const response = await fetch(`${CONFIG.server.baseUrl}/api/admin/settings`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
