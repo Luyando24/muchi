@@ -91,11 +91,13 @@ const getColor = (index: number): string => COLORS[index % COLORS.length];
 function OverviewDashboard({
   filters,
   setFilters,
-  regions
+  regions,
+  onLoadingChange
 }: {
   filters: { province: string; district: string };
   setFilters: React.Dispatch<React.SetStateAction<{ province: string; district: string }>>;
   regions: { province: string; districts: string[] }[];
+  onLoadingChange?: (loading: boolean) => void;
 }) {
   const [stats, setStats] = useState({ 
     totalSchools: 0, 
@@ -121,6 +123,7 @@ function OverviewDashboard({
   useEffect(() => {
     async function load() {
       setLoading(true);
+      if (onLoadingChange) onLoadingChange(true);
       try {
         const { data: { session } } = await supabase.auth.getSession();
         
@@ -136,6 +139,7 @@ function OverviewDashboard({
         console.error(err);
       } finally {
         setLoading(false);
+        if (onLoadingChange) onLoadingChange(false);
       }
     }
     load();
@@ -506,11 +510,13 @@ function OverviewDashboard({
 function PerformanceDashboard({
   filters,
   setFilters,
-  regions
+  regions,
+  onLoadingChange
 }: {
   filters: { province: string; district: string };
   setFilters: React.Dispatch<React.SetStateAction<{ province: string; district: string }>>;
   regions: { province: string; districts: string[] }[];
+  onLoadingChange?: (loading: boolean) => void;
 }) {
   const [stats, setStats] = useState({ 
     nationalPassRate: 0, 
@@ -524,6 +530,7 @@ function PerformanceDashboard({
   useEffect(() => {
     async function load() {
       setLoading(true);
+      if (onLoadingChange) onLoadingChange(true);
       try {
         const { data: { session } } = await supabase.auth.getSession();
         
@@ -539,6 +546,7 @@ function PerformanceDashboard({
         console.error(err);
       } finally {
         setLoading(false);
+        if (onLoadingChange) onLoadingChange(false);
       }
     }
     load();
@@ -804,11 +812,13 @@ function PerformanceDashboard({
 function FeedingDashboard({
   filters,
   setFilters,
-  regions
+  regions,
+  onLoadingChange
 }: {
   filters: { province: string; district: string };
   setFilters: React.Dispatch<React.SetStateAction<{ province: string; district: string }>>;
   regions: { province: string; districts: string[] }[];
+  onLoadingChange?: (loading: boolean) => void;
 }) {
   const [stats, setStats] = useState<any>(null);
   const [schools, setSchools] = useState<any[]>([]);
@@ -818,6 +828,7 @@ function FeedingDashboard({
   useEffect(() => {
     async function load() {
       setIsLoading(true);
+      if (onLoadingChange) onLoadingChange(true);
       try {
         const { data: { session } } = await supabase.auth.getSession();
         
@@ -834,6 +845,7 @@ function FeedingDashboard({
         console.error(err);
       } finally {
         setIsLoading(false);
+        if (onLoadingChange) onLoadingChange(false);
       }
     }
     load();
@@ -1093,11 +1105,13 @@ function FeedingDashboard({
 function EnrollmentDashboard({
   filters,
   setFilters,
-  regions
+  regions,
+  onLoadingChange
 }: {
   filters: { province: string; district: string };
   setFilters: React.Dispatch<React.SetStateAction<{ province: string; district: string }>>;
   regions: { province: string; districts: string[] }[];
+  onLoadingChange?: (loading: boolean) => void;
 }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -1105,16 +1119,18 @@ function EnrollmentDashboard({
   useEffect(() => {
     async function load() {
       setLoading(true);
+      if (onLoadingChange) onLoadingChange(true);
       const { data: { session } } = await supabase.auth.getSession();
       let url = `/api/government/enrollment-analytics?province=${filters.province !== 'All' ? filters.province : ''}&district=${filters.district !== 'All' ? filters.district : ''}`;
       const res = await fetch(url, { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
       if (res.ok) setData(await res.json());
       setLoading(false);
+      if (onLoadingChange) onLoadingChange(false);
     }
     load();
   }, [filters]);
 
-  if (loading) return <div className="flex justify-center p-12"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (loading && !data) return <div className="flex justify-center p-12"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!data) return <div className="flex justify-center p-12 text-slate-500 italic">No enrollment data available.</div>;
 
 
@@ -1193,10 +1209,12 @@ function EnrollmentDashboard({
 
 function TeacherDashboard({
   filters,
-  setFilters
+  setFilters,
+  onLoadingChange
 }: {
   filters: { province: string; district: string };
   setFilters: React.Dispatch<React.SetStateAction<{ province: string; district: string }>>;
+  onLoadingChange?: (loading: boolean) => void;
 }) {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -1204,16 +1222,18 @@ function TeacherDashboard({
     useEffect(() => {
       async function load() {
         setLoading(true);
+        if (onLoadingChange) onLoadingChange(true);
         const { data: { session } } = await supabase.auth.getSession();
         let url = `/api/government/teacher-analytics?province=${filters.province !== 'All' ? filters.province : ''}&district=${filters.district !== 'All' ? filters.district : ''}`;
         const res = await fetch(url, { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
         if (res.ok) setData(await res.json());
         setLoading(false);
+        if (onLoadingChange) onLoadingChange(false);
       }
       load();
     }, [filters]);
   
-    if (loading) return <div className="flex justify-center p-12"><Loader2 className="animate-spin text-blue-600" /></div>;
+    if (loading && !data) return <div className="flex justify-center p-12"><Loader2 className="animate-spin text-blue-600" /></div>;
     if (!data) return <div className="flex justify-center p-12 text-slate-500 italic">No teacher workforce data available.</div>;
 
   
@@ -1347,6 +1367,7 @@ export default function GovernmentPortal() {
 
   const [filters, setFilters] = useState({ province: 'All', district: 'All' });
   const [regions, setRegions] = useState<{ province: string, districts: string[] }[]>([]);
+  const [isFilterLoading, setIsFilterLoading] = useState(false);
 
   // Search states
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -1574,19 +1595,27 @@ export default function GovernmentPortal() {
         )}
 
         {/* Main Content */}
-        <main className="flex-1 p-4 sm:p-10 max-w-[1600px] mx-auto overflow-y-auto">
+        <main className="relative flex-1 p-4 sm:p-10 max-w-[1600px] mx-auto overflow-y-auto">
+           {isFilterLoading && (
+             <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/75 dark:bg-slate-950/75 rounded-2xl transition-all duration-300">
+               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-xl flex flex-col items-center gap-3 min-w-[200px] animate-in fade-in zoom-in-95 duration-200">
+                 <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                 <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Refreshing data...</span>
+               </div>
+             </div>
+           )}
            <Tabs value={activeTab} className="w-full">
              <TabsContent value="overview">
-               <OverviewDashboard filters={filters} setFilters={setFilters} regions={regions} />
+               <OverviewDashboard filters={filters} setFilters={setFilters} regions={regions} onLoadingChange={setIsFilterLoading} />
              </TabsContent>
              <TabsContent value="performance">
-               <PerformanceDashboard filters={filters} setFilters={setFilters} regions={regions} />
+               <PerformanceDashboard filters={filters} setFilters={setFilters} regions={regions} onLoadingChange={setIsFilterLoading} />
              </TabsContent>
              <TabsContent value="enrollment">
-               <EnrollmentDashboard filters={filters} setFilters={setFilters} regions={regions} />
+               <EnrollmentDashboard filters={filters} setFilters={setFilters} regions={regions} onLoadingChange={setIsFilterLoading} />
              </TabsContent>
              <TabsContent value="teachers">
-               <TeacherDashboard filters={filters} setFilters={setFilters} />
+               <TeacherDashboard filters={filters} setFilters={setFilters} onLoadingChange={setIsFilterLoading} />
              </TabsContent>
              <TabsContent value="infrastructure">
                <InfrastructureDashboard />
@@ -1595,7 +1624,7 @@ export default function GovernmentPortal() {
                <BoardingAnalytics />
              </TabsContent>
              <TabsContent value="feeding">
-               <FeedingDashboard filters={filters} setFilters={setFilters} regions={regions} />
+               <FeedingDashboard filters={filters} setFilters={setFilters} regions={regions} onLoadingChange={setIsFilterLoading} />
              </TabsContent>
              <TabsContent value="staffing-overview">
                <StaffingOverview />
