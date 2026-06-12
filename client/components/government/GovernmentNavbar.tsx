@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Menu, X, LogOut, Settings, ChevronDown, GraduationCap, Building2, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -79,22 +80,20 @@ export default function GovernmentNavbar({
             </div>
           </div>
 
-          <div className="flex items-center gap-1 sm:gap-4 ml-auto">
-            {/* Search Input Button */}
-            <div className="relative mr-2 hidden md:block">
-              <Button
-                variant="outline"
-                className="w-48 sm:w-64 justify-start text-left text-slate-500 dark:text-slate-400 font-normal rounded-xl h-10 border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 focus-within:ring-2 focus-within:ring-blue-500/20"
-                onClick={onSearchClick}
-              >
-                <Search className="h-4 w-4 mr-2 text-slate-400 shrink-0" />
-                <span className="text-xs truncate">Search provinces, districts...</span>
-                <kbd className="pointer-events-none absolute right-2 top-2.5 hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
-                  <span className="text-xs">⌘</span>K
-                </kbd>
-              </Button>
+          {/* Search Bar (Center) */}
+          <div className="hidden md:flex flex-1 max-w-md mx-8 cursor-pointer" onClick={onSearchClick}>
+            <div className="relative w-full">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+              <Input
+                type="search"
+                placeholder="Search provinces, districts, schools..."
+                className="w-full pl-9 h-10 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 focus-visible:ring-blue-500 rounded-xl cursor-pointer"
+                readOnly
+              />
             </div>
-            
+          </div>
+
+          <div className="flex items-center gap-1 sm:gap-4 ml-auto">
             {/* Mobile Search Icon Button */}
             <Button
               variant="ghost"
