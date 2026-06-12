@@ -14,6 +14,7 @@ import { SubmitButton } from '@/components/ui/submit-button';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabase';
 import { db } from '@/lib/offline';
+import { syncFetch } from '@/lib/syncService';
 import {
   User,
   Briefcase,
@@ -55,6 +56,7 @@ export default function TeacherProfileSetupModal({
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
+  const [localOpen, setLocalOpen] = useState(true);
 
   // Step 1: Personal Details
   const [personal, setPersonal] = useState(() => {
@@ -133,9 +135,9 @@ export default function TeacherProfileSetupModal({
     setStep(s => s + 1);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isStep5Valid) {
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!isEmailOnly && !isStep5Valid) {
       toast({ title: 'Required fields missing', description: 'Please fill in all required qualification details.', variant: 'destructive' });
       return;
     }
@@ -169,7 +171,7 @@ export default function TeacherProfileSetupModal({
         completion_year: qualifications.completion_year ? parseInt(qualifications.completion_year) : null,
       };
 
-      const res = await fetch('/api/teacher/profile/setup', {
+      const result = await syncFetch('/api/teacher/profile/setup', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -178,18 +180,20 @@ export default function TeacherProfileSetupModal({
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || 'Failed to save profile');
-      }
-
       // Invalidate offline query cache
       await db.cache.delete(`supabase:profile:${profile.id}`);
 
-      toast({ title: 'Profile Complete!', description: 'Your profile has been saved. Refreshing the portal...' });
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
+      if (result.offline) {
+        toast({ title: 'Offline Mode', description: 'Profile setup queued and will sync when online.' });
+        setLocalOpen(false);
+        onComplete();
+      } else {
+        toast({ title: 'Profile Complete!', description: 'Your profile has been saved. Refreshing the portal...' });
+        setLocalOpen(false);
+        setTimeout(() => {
+          onComplete();
+        }, 2000);
+      }
     } catch (error: any) {
       toast({ title: 'Error', description: error.message || 'Failed to save profile.', variant: 'destructive' });
     } finally {
@@ -198,7 +202,7 @@ export default function TeacherProfileSetupModal({
   };
 
   return (
-    <Dialog open={isOpen}>
+    <Dialog open={isOpen && localOpen}>
       <DialogContent
         className="sm:max-w-[560px] p-0 overflow-hidden bg-white dark:bg-slate-900 border border-indigo-100 dark:border-indigo-900/40 shadow-2xl [&>button.absolute]:hidden"
         onInteractOutside={(e) => {
@@ -219,36 +223,42 @@ export default function TeacherProfileSetupModal({
               <User className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="font-black text-lg leading-tight">Complete Your Profile</h2>
-              <p className="text-indigo-200 text-xs font-medium">Required for Government Reporting & Analytics</p>
+              <h2 className="font-black text-lg leading-tight">
+                {isEmailOnly ? 'Update Email Address' : 'Complete Your Profile'}
+              </h2>
+              <p className="text-indigo-200 text-xs font-medium">
+                {isEmailOnly ? 'A valid Yahoo or Gmail address is required for communication.' : 'Required for Government Reporting & Analytics'}
+              </p>
             </div>
           </div>
 
           {/* Step Indicator */}
-          <div className="flex items-center gap-1 mt-4">
-            {STEPS.map((s, idx) => {
-              const Icon = s.icon;
-              const isActive = step === s.id;
-              const isDone = step > s.id;
-              return (
-                <React.Fragment key={s.id}>
-                  <div className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all duration-200',
-                    isActive ? 'bg-white text-indigo-700 shadow-lg' :
-                    isDone ? 'bg-indigo-500/60 text-white' :
-                    'bg-indigo-800/40 text-indigo-300'
-                  )}>
-                    {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Icon className="h-3.5 w-3.5" />}
-                    <span className="hidden sm:inline">{s.label}</span>
-                    <span className="sm:hidden">{s.id}</span>
-                  </div>
-                  {idx < STEPS.length - 1 && (
-                    <div className={cn('flex-1 h-[2px] mx-1 rounded-full', step > s.id ? 'bg-white/60' : 'bg-indigo-800/40')} />
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </div>
+          {!isEmailOnly && (
+            <div className="flex items-center gap-1 mt-4">
+              {STEPS.map((s, idx) => {
+                const Icon = s.icon;
+                const isActive = step === s.id;
+                const isDone = step > s.id;
+                return (
+                  <React.Fragment key={s.id}>
+                    <div className={cn(
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all duration-200',
+                      isActive ? 'bg-white text-indigo-700 shadow-lg' :
+                      isDone ? 'bg-indigo-500/60 text-white' :
+                      'bg-indigo-800/40 text-indigo-300'
+                    )}>
+                      {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Icon className="h-3.5 w-3.5" />}
+                      <span className="hidden sm:inline">{s.label}</span>
+                      <span className="sm:hidden">{s.id}</span>
+                    </div>
+                    {idx < STEPS.length - 1 && (
+                      <div className={cn('flex-1 h-[2px] mx-1 rounded-full', step > s.id ? 'bg-white/60' : 'bg-indigo-800/40')} />
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Form Body */}
@@ -258,10 +268,10 @@ export default function TeacherProfileSetupModal({
             <div className="space-y-4">
               <DialogHeader className="mb-2">
                 <DialogTitle className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                  <User className="h-4 w-4 text-indigo-600" /> Basic Info
+                  <User className="h-4 w-4 text-indigo-600" /> {isEmailOnly ? 'Update Email Address' : 'Basic Info'}
                 </DialogTitle>
                 <DialogDescription className="text-xs">
-                  Your name and contact information.
+                  {isEmailOnly ? 'We need a valid contact email to ensure you receive system updates and notifications.' : 'Your name and contact information.'}
                 </DialogDescription>
               </DialogHeader>
 
@@ -599,19 +609,39 @@ export default function TeacherProfileSetupModal({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setEmailDismissed(true)}
+                  onClick={() => {
+                    if (isEmailOnly) {
+                      setEmailDismissed(true);
+                      onComplete();
+                    } else {
+                      setEmailDismissed(true);
+                    }
+                  }}
                   className="text-slate-500 hover:text-slate-700"
                 >
                   Skip Email
                 </Button>
               )}
-              <Button
-                type="button"
-                onClick={handleNext}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5"
-              >
-                Next <ChevronRight className="h-4 w-4" />
-              </Button>
+              {isEmailOnly ? (
+                <SubmitButton
+                  type="button"
+                  onClick={() => handleSubmit()}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5"
+                  loading={isSaving}
+                  loadingText="Saving..."
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                  Save Email
+                </SubmitButton>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={handleNext}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5"
+                >
+                  Next <ChevronRight className="h-4 w-4" />
+                </Button>
+              )}
             </div>
           ) : (
             <SubmitButton

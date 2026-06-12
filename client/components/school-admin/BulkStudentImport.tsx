@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { syncFetch } from '@/lib/syncService';
 
 interface ImportedStudent {
   name: string;
@@ -140,7 +141,7 @@ export default function BulkStudentImport({ onImportSuccess }: { onImportSuccess
             const batch = updatedData.slice(i, i + BATCH_SIZE);
             
             try {
-                const response = await fetch('/api/school/students/bulk', {
+                const result = await syncFetch('/api/school/students/bulk', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -149,18 +150,16 @@ export default function BulkStudentImport({ onImportSuccess }: { onImportSuccess
                     body: JSON.stringify({ students: batch })
                 });
 
-                const result = await response.json();
-
-                if (response.ok) {
+                if (result.offline) {
+                    successCount += batch.length;
+                    for (let j = 0; j < batch.length; j++) {
+                        updatedData[i + j].status = 'Success';
+                        updatedData[i + j].message = 'Queued offline';
+                    }
+                } else {
                     successCount += result.importedCount || batch.length;
                     for (let j = 0; j < batch.length; j++) {
                         updatedData[i + j].status = 'Success';
-                    }
-                } else {
-                    errorCount += batch.length;
-                    for (let j = 0; j < batch.length; j++) {
-                        updatedData[i + j].status = 'Error';
-                        updatedData[i + j].message = result.message || 'Batch failed';
                     }
                 }
             } catch (error: any) {

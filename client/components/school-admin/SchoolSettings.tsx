@@ -37,6 +37,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { markSettingsCompletionPopupEligibleInOneMinute } from '@/lib/settingsCompletionPrompt';
+import { processSchoolAsset } from '@/lib/uploadUtils';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AdminManagement from './AdminManagement';
@@ -129,11 +130,11 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
   const fetchMetadata = async () => {
     setIsLoadingMeta(true);
     try {
-      const catRes = await fetch('/api/admin/school-categories');
-      const countRes = await fetch('/api/admin/countries');
+      const catData = await syncFetch('/api/admin/school-categories', { cacheKey: 'admin-school-categories' });
+      const countData = await syncFetch('/api/admin/countries', { cacheKey: 'admin-countries' });
       
-      if (catRes.ok) setCategories(await catRes.json());
-      if (countRes.ok) setCountries(await countRes.json());
+      if (catData) setCategories(catData);
+      if (countData) setCountries(countData);
     } catch (error) {
       console.error('Error fetching metadata:', error);
     } finally {
@@ -210,13 +211,11 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-      const res = await fetch('/api/school/subjects', {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      const data = await syncFetch('/api/school/subjects', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        cacheKey: 'school-subjects-list'
       });
-      if (res.ok) {
-        const data = await res.json();
-        setAvailableSubjects(data || []);
-      }
+      setAvailableSubjects(data || []);
     } catch (err) {
       console.error('Error fetching available subjects:', err);
     }
@@ -226,13 +225,11 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-      const res = await fetch('/api/school/ministry-calendar', {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      const data = await syncFetch('/api/school/ministry-calendar', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        cacheKey: 'school-ministry-calendar'
       });
-      if (res.ok) {
-        const data = await res.json();
-        setMinistryCalendar(data || []);
-      }
+      setMinistryCalendar(data || []);
     } catch (err) {
       console.error('Error fetching ministry calendar:', err);
     }
@@ -290,7 +287,7 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/settings', {
+      const result = await syncFetch('/api/school/settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -302,29 +299,30 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
         })
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to update settings');
+      if (result.offline) {
+        toast({
+          title: "Offline Mode",
+          description: "School settings update queued and will sync when online.",
+        });
+      } else {
+        setSchool(result);
+        if (onSettingsSaved) {
+          onSettingsSaved(result);
+        }
+        const wasIctIncomplete =
+          !formData.ict_name.trim() || !formData.ict_email.trim() || !formData.ict_phone.trim();
+        const isIctNowComplete =
+          Boolean(result.ict_name?.trim()) &&
+          Boolean(result.ict_email?.trim()) &&
+          Boolean(result.ict_phone?.trim());
+        if (wasIctIncomplete && isIctNowComplete) {
+          markSettingsCompletionPopupEligibleInOneMinute();
+        }
+        toast({
+          title: "Success",
+          description: "Settings updated successfully"
+        });
       }
-
-      const updatedSchool = await response.json();
-      setSchool(updatedSchool);
-      if (onSettingsSaved) {
-        onSettingsSaved(updatedSchool);
-      }
-      const wasIctIncomplete =
-        !formData.ict_name.trim() || !formData.ict_email.trim() || !formData.ict_phone.trim();
-      const isIctNowComplete =
-        Boolean(updatedSchool.ict_name?.trim()) &&
-        Boolean(updatedSchool.ict_email?.trim()) &&
-        Boolean(updatedSchool.ict_phone?.trim());
-      if (wasIctIncomplete && isIctNowComplete) {
-        markSettingsCompletionPopupEligibleInOneMinute();
-      }
-      toast({
-        title: "Success",
-        description: "School settings updated successfully.",
-      });
     } catch (error: any) {
       console.error('Error updating settings:', error);
       toast({
@@ -1284,40 +1282,29 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
 
                         setIsSaving(true);
                         try {
-                          const fileExt = file.name.split('.').pop();
-                          const fileName = `${asset.id}-${Date.now()}.${fileExt}`;
-
-                          // Read file as base64
-                          const reader = new FileReader();
-                          const fileDataPromise = new Promise<string>((resolve) => {
-                            reader.onload = () => resolve(reader.result as string);
-                            reader.readAsDataURL(file);
-                          });
-
-                          const fileData = await fileDataPromise;
-
-                          // Get session for auth header
-                          const { data: { session } } = await supabase.auth.getSession();
-
-                          const response = await fetch('/api/school/upload-asset', {
-                            method: 'POST',
-                            headers: {
-                              'Content-Type': 'application/json',
-                              'Authorization': `Bearer ${session?.access_token}`
-                            },
-                            body: JSON.stringify({
-                              fileName,
-                              fileData,
-                              contentType: file.type
-                            })
-                          });
-
-                          if (!response.ok) {
-                            const errData = await response.json();
-                            throw new Error(errData.message || 'Failed to upload asset');
+                          const schoolId = school?.id;
+                          if (!schoolId) {
+                            throw new Error("School details are not loaded yet. Please wait and try again.");
                           }
 
-                          const { publicUrl } = await response.json();
+                          // Process file (convert to WebP and validate <= 5MB)
+                          const processedFile = await processSchoolAsset(file);
+
+                          const filePath = `${schoolId}/${asset.id}-${Date.now()}.webp`;
+
+                          const { data, error } = await supabase.storage
+                            .from('school-assets')
+                            .upload(filePath, processedFile, {
+                              cacheControl: '31536000, immutable',
+                              upsert: true
+                            });
+
+                          if (error) throw error;
+
+                          const { data: { publicUrl } } = supabase.storage
+                            .from('school-assets')
+                            .getPublicUrl(data.path);
+
                           setFormData(prev => ({ ...prev, [asset.id]: publicUrl }));
                           toast({ title: "Success", description: `${asset.label} uploaded temporarily. Save changes to finalise.` });
                         } catch (err: any) {

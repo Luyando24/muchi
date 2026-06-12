@@ -1,6 +1,7 @@
 
 import { Router, Request, Response } from 'express';
 import { supabaseAdmin } from '../lib/supabase.js';
+import { notifySystemAdmins } from '../services/emailService.js';
 import { requireActiveLicense } from '../middleware/license.js';
 import { ensureSchoolSettings } from '../lib/school-settings.js';
 import { randomUUID } from 'crypto';
@@ -24,7 +25,7 @@ const requireTeacher = async (req: Request, res: Response, next: any) => {
 
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('*, schools(name, id, location_type)')
+      .select('id, full_name, role, secondary_role, school_id')
       .eq('id', user.id)
       .single();
 
@@ -805,6 +806,41 @@ router.put('/profile/setup', requireTeacher, async (req: Request, res: Response)
 
     if (error) throw error;
     res.json(data);
+
+    // Notify system admins asynchronously
+    (async () => {
+      try {
+        const { data: school } = await supabaseAdmin
+          .from("schools")
+          .select("name")
+          .eq("id", profile.school_id || data.school_id)
+          .single();
+        const schoolName = school?.name || "Unknown School";
+
+        await notifySystemAdmins(
+          `[MUCHI Admin] Teacher Profile Completed - ${data.full_name} (${schoolName})`,
+          `
+            <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;">
+              <h2>Teacher Profile Setup Completed</h2>
+              <p><strong>Teacher Name:</strong> ${data.full_name}</p>
+              <p><strong>Email:</strong> ${data.email || 'N/A'}</p>
+              <p><strong>Phone Number:</strong> ${data.phone_number || 'N/A'}</p>
+              <p><strong>Role:</strong> ${data.current_role || 'N/A'}</p>
+              <p><strong>Department:</strong> ${data.department || 'N/A'}</p>
+              <p><strong>Highest Qualification:</strong> ${data.highest_qualification || 'N/A'}</p>
+              <p><strong>Institution:</strong> ${data.institution_name || 'N/A'}</p>
+              <p><strong>Field of Study:</strong> ${data.field_of_study || 'N/A'}</p>
+              <p><strong>Completion Year:</strong> ${data.completion_year || 'N/A'}</p>
+              <p><strong>School:</strong> ${schoolName}</p>
+              <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+            </div>
+          `,
+          `Teacher Profile Setup Completed\n\nTeacher Name: ${data.full_name}\nEmail: ${data.email || 'N/A'}\nPhone Number: ${data.phone_number || 'N/A'}\nRole: ${data.current_role || 'N/A'}\nDepartment: ${data.department || 'N/A'}\nHighest Qualification: ${data.highest_qualification || 'N/A'}\nInstitution: ${data.institution_name || 'N/A'}\nField of Study: ${data.field_of_study || 'N/A'}\nCompletion Year: ${data.completion_year || 'N/A'}\nSchool: ${schoolName}\nTime: ${new Date().toLocaleString()}`
+        );
+      } catch (err) {
+        console.error("Failed to notify system admins about teacher profile completion:", err);
+      }
+    })();
   } catch (error: any) {
     console.error('Teacher Profile Setup Error:', error);
     res.status(500).json({ message: error.message });

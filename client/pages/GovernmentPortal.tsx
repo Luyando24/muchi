@@ -56,6 +56,7 @@ import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from "@/components/ui/use-toast";
+import { syncFetch } from '@/lib/syncService';
 import ThemeToggle from '@/components/navigation/ThemeToggle';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -131,10 +132,11 @@ function OverviewDashboard({
         if (filters.province !== 'All') url += `province=${encodeURIComponent(filters.province)}&`;
         if (filters.district !== 'All') url += `district=${encodeURIComponent(filters.district)}`;
 
-        const res = await fetch(url, {
-          headers: { 'Authorization': `Bearer ${session?.access_token}` }
+        const data = await syncFetch(url, {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` },
+          cacheKey: `gov-overview-${filters.province}-${filters.district}`
         });
-        if (res.ok) setStats(await res.json());
+        if (data) setStats(data);
       } catch (err) {
         console.error(err);
       } finally {
@@ -538,10 +540,11 @@ function PerformanceDashboard({
         if (filters.province !== 'All') url += `province=${encodeURIComponent(filters.province)}&`;
         if (filters.district !== 'All') url += `district=${encodeURIComponent(filters.district)}`;
 
-        const res = await fetch(url, {
-          headers: { 'Authorization': `Bearer ${session?.access_token}` }
+        const data = await syncFetch(url, {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` },
+          cacheKey: `gov-performance-overview-${filters.province}-${filters.district}`
         });
-        if (res.ok) setStats(await res.json());
+        if (data) setStats(data);
       } catch (err) {
         console.error(err);
       } finally {
@@ -824,6 +827,7 @@ function FeedingDashboard({
   const [schools, setSchools] = useState<any[]>([]);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     async function load() {
@@ -832,15 +836,24 @@ function FeedingDashboard({
       try {
         const { data: { session } } = await supabase.auth.getSession();
         
-        const [statsRes, schoolsRes, reqRes] = await Promise.all([
-          fetch('/api/government/feeding-program/stats', { headers: { 'Authorization': `Bearer ${session?.access_token}` } }),
-          fetch(`/api/government/feeding-program/schools?province=${filters.province !== 'All' ? filters.province : ''}&district=${filters.district !== 'All' ? filters.district : ''}`, { headers: { 'Authorization': `Bearer ${session?.access_token}` } }),
-          fetch('/api/government/feeding-program/procurements/pending', { headers: { 'Authorization': `Bearer ${session?.access_token}` } })
+        const [statsData, schoolsData, reqData] = await Promise.all([
+          syncFetch('/api/government/feeding-program/stats', { 
+            headers: { 'Authorization': `Bearer ${session?.access_token}` },
+            cacheKey: 'gov-feeding-program-stats'
+          }),
+          syncFetch(`/api/government/feeding-program/schools?province=${filters.province !== 'All' ? filters.province : ''}&district=${filters.district !== 'All' ? filters.district : ''}`, { 
+            headers: { 'Authorization': `Bearer ${session?.access_token}` },
+            cacheKey: `gov-feeding-program-schools-${filters.province}-${filters.district}`
+          }),
+          syncFetch('/api/government/feeding-program/procurements/pending', { 
+            headers: { 'Authorization': `Bearer ${session?.access_token}` },
+            cacheKey: 'gov-feeding-program-procurements-pending'
+          })
         ]);
 
-        if (statsRes.ok) setStats(await statsRes.json());
-        if (schoolsRes.ok) setSchools(await schoolsRes.json());
-        if (reqRes.ok) setPendingRequests(await reqRes.json());
+        if (statsData) setStats(statsData);
+        if (schoolsData) setSchools(schoolsData);
+        if (reqData) setPendingRequests(reqData);
       } catch (err) {
         console.error(err);
       } finally {
@@ -1075,19 +1088,59 @@ function FeedingDashboard({
                         <p className="text-sm text-muted-foreground mb-4">{req.quantity} {req.unit} of {req.item_name}</p>
                         <div className="flex gap-2">
                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={async () => {
-                              const res = await fetch(`/api/government/feeding-program/procurements/${req.id}/approve`, {
-                                 method: 'POST',
-                                 headers: { 'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` }
-                              });
-                              if(res.ok) setPendingRequests(prev => prev.filter(p => p.id !== req.id));
-                           }}>Approve</Button>
+                               try {
+                                 const session = (await supabase.auth.getSession()).data.session;
+                                 const result = await syncFetch(`/api/government/feeding-program/procurements/${req.id}/approve`, {
+                                    method: 'POST',
+                                    headers: { 'Authorization': `Bearer ${session?.access_token}` }
+                                 });
+                                 if (result.offline) {
+                                   toast({
+                                     title: 'Offline Mode',
+                                     description: 'Procurement approval queued.'
+                                   });
+                                 } else {
+                                   toast({
+                                     title: 'Success',
+                                     description: 'Procurement approved.'
+                                   });
+                                 }
+                                 setPendingRequests(prev => prev.filter(p => p.id !== req.id));
+                               } catch (err: any) {
+                                 toast({
+                                   title: 'Error',
+                                   description: err.message,
+                                   variant: 'destructive'
+                                 });
+                               }
+                            }}>Approve</Button>
                            <Button size="sm" variant="destructive" onClick={async () => {
-                              const res = await fetch(`/api/government/feeding-program/procurements/${req.id}/reject`, {
-                                 method: 'POST',
-                                 headers: { 'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` }
-                              });
-                              if(res.ok) setPendingRequests(prev => prev.filter(p => p.id !== req.id));
-                           }}>Reject</Button>
+                               try {
+                                 const session = (await supabase.auth.getSession()).data.session;
+                                 const result = await syncFetch(`/api/government/feeding-program/procurements/${req.id}/reject`, {
+                                    method: 'POST',
+                                    headers: { 'Authorization': `Bearer ${session?.access_token}` }
+                                 });
+                                 if (result.offline) {
+                                   toast({
+                                     title: 'Offline Mode',
+                                     description: 'Procurement rejection queued.'
+                                   });
+                                 } else {
+                                   toast({
+                                     title: 'Success',
+                                     description: 'Procurement rejected.'
+                                   });
+                                 }
+                                 setPendingRequests(prev => prev.filter(p => p.id !== req.id));
+                               } catch (err: any) {
+                                 toast({
+                                   title: 'Error',
+                                   description: err.message,
+                                   variant: 'destructive'
+                                 });
+                               }
+                            }}>Reject</Button>
                         </div>
                      </Card>
                   ))}
@@ -1122,8 +1175,11 @@ function EnrollmentDashboard({
       if (onLoadingChange) onLoadingChange(true);
       const { data: { session } } = await supabase.auth.getSession();
       let url = `/api/government/enrollment-analytics?province=${filters.province !== 'All' ? filters.province : ''}&district=${filters.district !== 'All' ? filters.district : ''}`;
-      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
-      if (res.ok) setData(await res.json());
+      const resData = await syncFetch(url, {
+        headers: { 'Authorization': `Bearer ${session?.access_token}` },
+        cacheKey: `gov-enrollment-analytics-${filters.province}-${filters.district}`
+      });
+      if (resData) setData(resData);
       setLoading(false);
       if (onLoadingChange) onLoadingChange(false);
     }
@@ -1225,8 +1281,11 @@ function TeacherDashboard({
         if (onLoadingChange) onLoadingChange(true);
         const { data: { session } } = await supabase.auth.getSession();
         let url = `/api/government/teacher-analytics?province=${filters.province !== 'All' ? filters.province : ''}&district=${filters.district !== 'All' ? filters.district : ''}`;
-        const res = await fetch(url, { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
-        if (res.ok) setData(await res.json());
+        const resData = await syncFetch(url, {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` },
+          cacheKey: `gov-teacher-analytics-${filters.province}-${filters.district}`
+        });
+        if (resData) setData(resData);
         setLoading(false);
         if (onLoadingChange) onLoadingChange(false);
       }
@@ -1299,8 +1358,11 @@ function InfrastructureDashboard() {
         async function load() {
             setLoading(true);
             const { data: { session } } = await supabase.auth.getSession();
-            const res = await fetch('/api/government/infrastructure-analytics', { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
-            if (res.ok) setData(await res.json());
+             const resData = await syncFetch('/api/government/infrastructure-analytics', {
+               headers: { 'Authorization': `Bearer ${session?.access_token}` },
+               cacheKey: 'gov-infrastructure-analytics'
+             });
+             if (resData) setData(resData);
             setLoading(false);
         }
         load();
@@ -1389,7 +1451,7 @@ export default function GovernmentPortal() {
       }
 
       const { data: profile } = await supabase.from('profiles')
-        .select('*')
+        .select('id, full_name, role, secondary_role')
         .eq('id', user.id)
         .single();
 
@@ -1407,10 +1469,11 @@ export default function GovernmentPortal() {
     async function fetchRegions() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch('/api/government/regions', {
-          headers: { 'Authorization': `Bearer ${session?.access_token}` }
-        });
-        if (res.ok) setRegions(await res.json());
+         const regionsData = await syncFetch('/api/government/regions', {
+           headers: { 'Authorization': `Bearer ${session?.access_token}` },
+           cacheKey: 'gov-regions'
+         });
+         if (regionsData) setRegions(regionsData);
       } catch (err) {
         console.error("Failed to fetch regions", err);
       }
@@ -1443,12 +1506,13 @@ export default function GovernmentPortal() {
       setIsSearching(true);
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch(`/api/government/search?query=${encodeURIComponent(searchQuery)}`, {
-          headers: { 'Authorization': `Bearer ${session?.access_token}` }
-        });
-        if (res.ok) {
-          setSearchResults(await res.json());
-        }
+         const searchData = await syncFetch(`/api/government/search?query=${encodeURIComponent(searchQuery)}`, {
+           headers: { 'Authorization': `Bearer ${session?.access_token}` },
+           cacheKey: `gov-search-${searchQuery}`
+         });
+         if (searchData) {
+           setSearchResults(searchData);
+         }
       } catch (err) {
         console.error("Search error:", err);
       } finally {

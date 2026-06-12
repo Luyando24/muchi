@@ -24,6 +24,7 @@ interface SmtpConfig {
   username: string; password: string;
   from_name: string; from_email: string;
   is_active: boolean;
+  notification_emails?: string;
   last_tested_at?: string; last_test_status?: string; last_test_error?: string;
 }
 
@@ -93,6 +94,7 @@ function SmtpSettings() {
   const [config, setConfig] = useState<SmtpConfig>({
     host: '', port: 587, secure: false, username: '', password: '',
     from_name: 'MUCHI', from_email: '', is_active: false,
+    notification_emails: '',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -236,6 +238,13 @@ function SmtpSettings() {
               <Label htmlFor="from-email">From Email</Label>
               <Input id="from-email" type="email" placeholder="noreply@muchiapp.com" value={config.from_email}
                 onChange={e => setConfig({ ...config, from_email: e.target.value })} />
+            </div>
+
+            <div className="space-y-2 pt-2 border-t">
+              <Label htmlFor="notification-emails">System Notification Emails</Label>
+              <Textarea id="notification-emails" placeholder="admin1@example.com, admin2@example.com" value={config.notification_emails || ''}
+                onChange={e => setConfig({ ...config, notification_emails: e.target.value })} rows={3} className="font-mono text-sm" />
+              <p className="text-xs text-slate-500">Specify a list of comma-separated email addresses where system notifications (such as mandatory onboarding data completions) should be sent, in addition to accounts with the System Admin role.</p>
             </div>
 
             <div className="pt-2 border-t">

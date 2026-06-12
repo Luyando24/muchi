@@ -45,6 +45,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
 import { Tender } from '@shared/api';
+import { processSchoolAsset } from '@/lib/uploadUtils';
+import { syncFetch } from '@/lib/syncService';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { 
   Dialog, 
@@ -151,18 +153,18 @@ export default function WebsiteManagement() {
 
       const headers = { 'Authorization': `Bearer ${session.access_token}` };
 
-      const [contentRes, postsRes, schoolRes] = await Promise.all([
-        fetch('/api/school/website-content', { headers }),
-        fetch('/api/school/blog-posts', { headers }),
-        fetch('/api/school/settings', { headers })
+      const [contentData, postsData, schoolData] = await Promise.all([
+        syncFetch('/api/school/website-content', { headers }),
+        syncFetch('/api/school/blog-posts', { headers }),
+        syncFetch('/api/school/settings', { headers })
       ]);
 
-      if (contentRes.ok) setContent(await contentRes.json());
-      if (postsRes.ok) setPosts(await postsRes.json());
-      if (schoolRes.ok) setSchool(await schoolRes.json());
+      if (contentData) setContent(contentData);
+      if (postsData) setPosts(postsData);
+      if (schoolData) setSchool(schoolData);
       
-      const tendersRes = await fetch('/api/school/tenders', { headers });
-      if (tendersRes.ok) setTenders(await tendersRes.json());
+      const tendersData = await syncFetch('/api/school/tenders', { headers });
+      if (tendersData) setTenders(tendersData);
     } catch (error) {
       console.error('Error fetching website data:', error);
       toast({ title: "Error", description: "Failed to load website data", variant: "destructive" });
@@ -176,7 +178,7 @@ export default function WebsiteManagement() {
     setIsSaving(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/school/website-content', {
+      const result = await syncFetch('/api/school/website-content', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -185,8 +187,11 @@ export default function WebsiteManagement() {
         body: JSON.stringify(content)
       });
 
-      if (!res.ok) throw new Error('Failed to update content');
-      toast({ title: "Success", description: "Website content updated" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Website content update queued offline." });
+      } else {
+        toast({ title: "Success", description: "Website content updated" });
+      }
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
@@ -206,7 +211,7 @@ export default function WebsiteManagement() {
       const method = editingPost.id ? 'PUT' : 'POST';
       const url = editingPost.id ? `/api/school/blog-posts/${editingPost.id}` : '/api/school/blog-posts';
 
-      const res = await fetch(url, {
+      const result = await syncFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -215,9 +220,11 @@ export default function WebsiteManagement() {
         body: JSON.stringify(editingPost)
       });
 
-      if (!res.ok) throw new Error('Failed to save post');
-      
-      toast({ title: "Success", description: `Post ${editingPost.id ? 'updated' : 'created'} successfully` });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: `Blog post ${editingPost.id ? 'update' : 'creation'} queued offline.` });
+      } else {
+        toast({ title: "Success", description: `Post ${editingPost.id ? 'updated' : 'created'} successfully` });
+      }
       setEditingPost(null);
       fetchData(); // Refresh list
     } catch (error: any) {
@@ -232,14 +239,17 @@ export default function WebsiteManagement() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`/api/school/blog-posts/${id}`, {
+      const result = await syncFetch(`/api/school/blog-posts/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session?.access_token}` }
       });
 
-      if (!res.ok) throw new Error('Failed to delete post');
-      setPosts(posts.filter(p => p.id !== id));
-      toast({ title: "Success", description: "Post deleted" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Blog post deletion queued offline." });
+      } else {
+        setPosts(posts.filter(p => p.id !== id));
+        toast({ title: "Success", description: "Post deleted" });
+      }
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     }
@@ -254,14 +264,16 @@ export default function WebsiteManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
 
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+      // Convert image to WebP and enforce 5MB limit
+      const processedFile = await processSchoolAsset(file);
+
+      const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.webp`;
       const filePath = `blog-covers/${fileName}`;
 
       const { data, error } = await supabase.storage
         .from('school-assets')
-        .upload(filePath, file, {
-          cacheControl: '3600',
+        .upload(filePath, processedFile, {
+          cacheControl: '31536000, immutable',
           upsert: false
         });
 
@@ -292,14 +304,16 @@ export default function WebsiteManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
 
-      const fileExt = file.name.split('.').pop();
-      const fileName = `hero_${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+      // Convert image to WebP and enforce 5MB limit
+      const processedFile = await processSchoolAsset(file);
+
+      const fileName = `hero_${Math.random().toString(36).substring(2)}_${Date.now()}.webp`;
       const filePath = `hero-images/${fileName}`;
 
       const { data, error } = await supabase.storage
         .from('school-assets')
-        .upload(filePath, file, {
-          cacheControl: '3600',
+        .upload(filePath, processedFile, {
+          cacheControl: '31536000, immutable',
           upsert: false
         });
 
@@ -331,7 +345,7 @@ export default function WebsiteManagement() {
       const method = editingTender.id ? 'PUT' : 'POST';
       const url = editingTender.id ? `/api/school/tenders/${editingTender.id}` : '/api/school/tenders';
 
-      const res = await fetch(url, {
+      const result = await syncFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -340,9 +354,11 @@ export default function WebsiteManagement() {
         body: JSON.stringify(editingTender)
       });
 
-      if (!res.ok) throw new Error('Failed to save tender');
-      
-      toast({ title: "Success", description: `Tender ${editingTender.id ? 'updated' : 'published'} successfully` });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: `Tender ${editingTender.id ? 'update' : 'publication'} queued offline.` });
+      } else {
+        toast({ title: "Success", description: `Tender ${editingTender.id ? 'updated' : 'published'} successfully` });
+      }
       setEditingTender(null);
       fetchData();
     } catch (error: any) {
@@ -357,14 +373,17 @@ export default function WebsiteManagement() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`/api/school/tenders/${id}`, {
+      const result = await syncFetch(`/api/school/tenders/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session?.access_token}` }
       });
 
-      if (!res.ok) throw new Error('Failed to delete tender');
-      setTenders(tenders.filter(t => t.id !== id));
-      toast({ title: "Success", description: "Tender deleted" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Tender deletion queued offline." });
+      } else {
+        setTenders(tenders.filter(t => t.id !== id));
+        toast({ title: "Success", description: "Tender deleted" });
+      }
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     }

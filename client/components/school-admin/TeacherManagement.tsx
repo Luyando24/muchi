@@ -147,7 +147,7 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
         return;
       }
 
-      const response = await fetch('/api/school/teachers/bulk-complete', {
+      const result = await syncFetch('/api/school/teachers/bulk-complete', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -159,13 +159,17 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
         })
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Failed to bulk update');
-
-      toast({
-        title: "Success",
-        description: `Successfully updated ${selectedTeachers.length} teachers`,
-      });
+      if (result.offline) {
+        toast({
+          title: "Offline Mode",
+          description: `Bulk update queued and will sync when online.`,
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: `Successfully updated ${selectedTeachers.length} teachers`,
+        });
+      }
       setIsBulkCompleteOpen(false);
       setSelectedTeachers([]);
       setBulkFields({
@@ -403,20 +407,24 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/teachers/${promoteTargetId}/promote`, {
+      const result = await syncFetch(`/api/school/teachers/${promoteTargetId}/promote`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`
         }
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Failed to promote teacher');
-
-      toast({
-        title: "Success",
-        description: "Teacher promoted to School Admin successfully",
-      });
+      if (result.offline) {
+        toast({
+          title: "Offline Mode",
+          description: "Promotion queued and will sync when online.",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Teacher promoted to School Admin successfully",
+        });
+      }
       setPromoteTargetId(null);
       fetchTeachers();
     } catch (error: any) {
@@ -438,19 +446,24 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/teachers/${deleteTargetId}`, {
+      const result = await syncFetch(`/api/school/teachers/${deleteTargetId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${session.access_token}`
         }
       });
 
-      if (!response.ok) throw new Error('Failed to delete teacher');
-
-      toast({
-        title: "Success",
-        description: "Teacher deleted successfully",
-      });
+      if (result.offline) {
+        toast({
+          title: "Offline Mode",
+          description: "Teacher deletion queued and will sync when online.",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Teacher deleted successfully",
+        });
+      }
       setDeleteTargetId(null);
       fetchTeachers();
     } catch (error: any) {
@@ -471,20 +484,16 @@ export default function TeacherManagement({ initialViewId, onClearViewId }: { in
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const promises = selectedTeachers.map(id => fetch(`/api/school/teachers/${id}`, {
+      const promises = selectedTeachers.map(id => syncFetch(`/api/school/teachers/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       }));
 
       const results = await Promise.all(promises);
-      const failed = results.filter(r => !r.ok);
+      const anyOffline = results.some(r => r.offline);
 
-      if (failed.length > 0) {
-        toast({ 
-          title: "Partial Success", 
-          description: `Deleted ${selectedTeachers.length - failed.length} teachers. ${failed.length} failed.`,
-          variant: "destructive" 
-        });
+      if (anyOffline) {
+        toast({ title: "Offline Mode", description: `Deletion of ${selectedTeachers.length} teachers queued offline.` });
       } else {
         toast({ title: "Success", description: `${selectedTeachers.length} teachers deleted successfully` });
       }

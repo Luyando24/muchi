@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabase';
+import { syncFetch } from '@/lib/syncService';
 import { Loader2, Plus, Receipt, FileText } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
@@ -35,11 +36,10 @@ export default function SchoolFeesManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       
       // Fetch settings
-      const settingsRes = await fetch('/api/admin/settings', {
+      const settingsData = await syncFetch('/api/admin/settings', {
         headers: { 'Authorization': `Bearer ${session?.access_token}` }
       });
-      if (settingsRes.ok) {
-        const settingsData = await settingsRes.json();
+      if (settingsData) {
         setCurrencySettings({
           default: settingsData.default_currency || 'ZMW',
           supported: JSON.parse(settingsData.supported_currencies || '["ZMW"]')
@@ -70,26 +70,23 @@ export default function SchoolFeesManagement() {
       }
 
       // Fetch structures
-      const structRes = await fetch('/api/finance/fees/structures', {
+      const structuresData = await syncFetch('/api/finance/fees/structures', {
         headers: { 'Authorization': `Bearer ${session?.access_token}` }
       });
-      if (structRes.ok) setFeeStructures(await structRes.json());
+      if (structuresData) setFeeStructures(structuresData);
 
       // Fetch invoices
-      const invRes = await fetch('/api/finance/invoices', {
+      const invoicesData = await syncFetch('/api/finance/invoices', {
         headers: { 'Authorization': `Bearer ${session?.access_token}` }
       });
-      if (invRes.ok) setInvoices(await invRes.json());
+      if (invoicesData) setInvoices(invoicesData);
 
       // Fetch school settings for academic year default
-      const settingsSchoolRes = await fetch('/api/school/settings', {
+      const settingsSchool = await syncFetch('/api/school/settings', {
         headers: { 'Authorization': `Bearer ${session?.access_token}` }
       });
-      if (settingsSchoolRes.ok) {
-        const settingsSchool = await settingsSchoolRes.json();
-        if (settingsSchool.academic_year) {
-          setAcademicYear(settingsSchool.academic_year.toString());
-        }
+      if (settingsSchool && settingsSchool.academic_year) {
+        setAcademicYear(settingsSchool.academic_year.toString());
       }
 
     } catch (error) {
@@ -108,7 +105,7 @@ export default function SchoolFeesManagement() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/finance/fees/structures', {
+      const result = await syncFetch('/api/finance/fees/structures', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -117,9 +114,11 @@ export default function SchoolFeesManagement() {
         body: JSON.stringify(data)
       });
 
-      if (!res.ok) throw new Error(await res.text());
-
-      toast({ title: 'Success', description: 'Fee structure created.' });
+      if (result.offline) {
+        toast({ title: 'Offline Mode', description: 'Fee structure creation queued offline.' });
+      } else {
+        toast({ title: 'Success', description: 'Fee structure created.' });
+      }
       fetchData();
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Error', description: err.message });

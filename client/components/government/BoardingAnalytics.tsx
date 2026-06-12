@@ -29,6 +29,7 @@ import {
 } from 'recharts';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
+import { syncFetch } from '@/lib/syncService';
 
 export default function BoardingAnalytics() {
   const [data, setData] = useState<any>(null);
@@ -40,11 +41,12 @@ export default function BoardingAnalytics() {
       setLoading(true);
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch('/api/government/boarding-analytics', { 
-          headers: { 'Authorization': `Bearer ${session?.access_token}` } 
+        const boardingData = await syncFetch('/api/government/boarding-analytics', { 
+          headers: { 'Authorization': `Bearer ${session?.access_token}` },
+          cacheKey: 'gov-boarding-analytics'
         });
-        if (res.ok) {
-          setData(await res.json());
+        if (boardingData) {
+          setData(boardingData);
         }
       } catch (err) {
         console.error('Error fetching boarding analytics:', err);

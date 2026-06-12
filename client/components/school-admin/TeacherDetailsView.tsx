@@ -28,6 +28,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/lib/supabase';
+import { syncFetch } from '@/lib/syncService';
 import { useToast } from "@/components/ui/use-toast";
 import {
   Dialog,
@@ -205,7 +206,7 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch(`/api/school/teachers/${teacherId}/cpd`, {
+      const result = await syncFetch(`/api/school/teachers/${teacherId}/cpd`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -214,9 +215,11 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
         body: JSON.stringify(cpdForm)
       });
 
-      if (!res.ok) throw new Error('Failed to add CPD record');
-
-      toast({ title: "Success", description: "CPD record added successfully" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "CPD record queued and will sync when online." });
+      } else {
+        toast({ title: "Success", description: "CPD record added successfully" });
+      }
       setIsAddCpdOpen(false);
       setCpdForm({
         course_name: '',
@@ -228,12 +231,14 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
       });
       
       // Refresh teacher data
-      const updatedRes = await fetch(`/api/school/teachers/${teacherId}`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
-      });
-      if (updatedRes.ok) {
-        const data = await updatedRes.json();
+      try {
+        const data = await syncFetch(`/api/school/teachers/${teacherId}`, {
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+          forceSync: true
+        });
         setTeacher(data);
+      } catch (err) {
+        console.error('Failed to refresh teacher data:', err);
       }
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -247,22 +252,26 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch(`/api/school/teachers/${teacherId}/cpd/${cpdId}`, {
+      const result = await syncFetch(`/api/school/teachers/${teacherId}/cpd/${cpdId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
-      if (!res.ok) throw new Error('Failed to delete CPD record');
-
-      toast({ title: "Success", description: "CPD record deleted successfully" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "CPD record deletion queued and will sync when online." });
+      } else {
+        toast({ title: "Success", description: "CPD record deleted successfully" });
+      }
       
       // Refresh teacher data
-      const updatedRes = await fetch(`/api/school/teachers/${teacherId}`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
-      });
-      if (updatedRes.ok) {
-        const data = await updatedRes.json();
+      try {
+        const data = await syncFetch(`/api/school/teachers/${teacherId}`, {
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+          forceSync: true
+        });
         setTeacher(data);
+      } catch (err) {
+        console.error('Failed to refresh teacher data:', err);
       }
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -287,7 +296,7 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch(`/api/school/teachers/${teacherId}/career`, {
+      const result = await syncFetch(`/api/school/teachers/${teacherId}/career`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -296,9 +305,11 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
         body: JSON.stringify(careerForm)
       });
 
-      if (!res.ok) throw new Error('Failed to add career record');
-
-      toast({ title: "Success", description: "Career history record added successfully" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Career history record queued and will sync when online." });
+      } else {
+        toast({ title: "Success", description: "Career history record added successfully" });
+      }
       setIsAddCareerOpen(false);
       setCareerForm({
         previous_role: '',
@@ -309,12 +320,14 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
       });
       
       // Refresh teacher data
-      const updatedRes = await fetch(`/api/school/teachers/${teacherId}`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
-      });
-      if (updatedRes.ok) {
-        const data = await updatedRes.json();
+      try {
+        const data = await syncFetch(`/api/school/teachers/${teacherId}`, {
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+          forceSync: true
+        });
         setTeacher(data);
+      } catch (err) {
+        console.error('Failed to refresh teacher data:', err);
       }
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -328,22 +341,26 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch(`/api/school/teachers/${teacherId}/career/${careerId}`, {
+      const result = await syncFetch(`/api/school/teachers/${teacherId}/career/${careerId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
-      if (!res.ok) throw new Error('Failed to delete career history record');
-
-      toast({ title: "Success", description: "Career history record deleted successfully" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Career history record deletion queued and will sync when online." });
+      } else {
+        toast({ title: "Success", description: "Career history record deleted successfully" });
+      }
       
       // Refresh teacher data
-      const updatedRes = await fetch(`/api/school/teachers/${teacherId}`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
-      });
-      if (updatedRes.ok) {
-        const data = await updatedRes.json();
+      try {
+        const data = await syncFetch(`/api/school/teachers/${teacherId}`, {
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+          forceSync: true
+        });
         setTeacher(data);
+      } catch (err) {
+        console.error('Failed to refresh teacher data:', err);
       }
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -355,20 +372,18 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
-        const res = await fetch('/api/school/class-subjects/allocation-options', {
+        const data = await syncFetch('/api/school/class-subjects/allocation-options', {
           headers: { 'Authorization': `Bearer ${session.access_token}` }
         });
-        if (res.ok) {
-          const data = await res.json();
+        if (data) {
           setAvailableSubjects(data);
         }
 
-        const deptRes = await fetch('/api/school/departments', {
+        const deptData = await syncFetch('/api/school/departments', {
           headers: { 'Authorization': `Bearer ${session.access_token}` }
         });
-        if (deptRes.ok) {
-          const data = await deptRes.json();
-          setDepartments(data);
+        if (deptData) {
+          setDepartments(deptData);
         }
       } catch (e) {
         console.error('Error fetching subjects:', e);
@@ -386,11 +401,10 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
 
         const headers = { 'Authorization': `Bearer ${session.access_token}` };
 
-        const res = await fetch(`/api/school/teachers/${teacherId}`, { headers });
+        const data = await syncFetch(`/api/school/teachers/${teacherId}`, { headers });
 
-        if (!res.ok) throw new Error('Failed to fetch teacher details');
+        if (!data) throw new Error('Failed to fetch teacher details');
 
-        const data = await res.json();
         setTeacher(data);
         
         // Initialize profile form
@@ -453,7 +467,8 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
         ? profileForm.qualifications.split(',').map((s: string) => s.trim()).filter((s: string) => s)
         : profileForm.qualifications;
 
-      const res = await fetch(`/api/school/teachers/${teacher.profile.id}`, {
+      // Note: mutations like PUT use syncFetch as well, which triggers cache invalidation
+      const res = await syncFetch(`/api/school/teachers/${teacher.profile.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -466,17 +481,14 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
         })
       });
 
-      if (!res.ok) throw new Error('Failed to update profile');
-
       toast({ title: "Success", description: "Profile updated successfully" });
       setViewMode('view');
       
-      // Refresh data
-      const updatedRes = await fetch(`/api/school/teachers/${teacherId}`, {
+      // Refresh data using syncFetch (which is now clean from cache because of PUT invalidation)
+      const data = await syncFetch(`/api/school/teachers/${teacherId}`, {
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
-      if (updatedRes.ok) {
-        const data = await updatedRes.json();
+      if (data) {
         setTeacher(data);
       }
       
@@ -1334,19 +1346,17 @@ export default function TeacherDetailsView({ teacherId, onBack, initialMode }: T
                         if (name && name.trim()) {
                           try {
                             const { data: { session } } = await supabase.auth.getSession();
-                            const res = await fetch('/api/school/departments', {
+                            const newDept = await syncFetch('/api/school/departments', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}`},
                               body: JSON.stringify({ name: name.trim() })
                             });
-                            if (res.ok) {
-                              const newDept = await res.json();
+                            if (newDept.offline) {
+                              toast({ title: "Offline Mode", description: "Department creation queued and will sync when online." });
+                            } else {
                               setDepartments(prev => [...prev, newDept].sort((a,b) => a.name.localeCompare(b.name)));
                               setProfileForm((prev: any) => ({ ...prev, department: newDept.name }));
                               toast({ title: "Success", description: "Department created" });
-                            } else {
-                              const err = await res.json();
-                              toast({ title: "Error", description: err.message, variant: "destructive" });
                             }
                           } catch(e: any) {
                             toast({ title: "Error", description: "Failed to create department", variant: "destructive" });

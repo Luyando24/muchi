@@ -4,6 +4,8 @@ import * as os from 'os';
 import * as crypto from 'crypto';
 import { SmsService } from '../services/smsService.js';
 import { WhatsAppService } from '../services/whatsappService.js';
+import { notifySystemAdmins } from '../services/emailService.js';
+import { checkIncompleteSchoolOnboardings } from '../services/onboardingReminderService.js';
 
 const router = Router();
 
@@ -100,6 +102,29 @@ router.post('/create-school', requireSystemAdmin, async (req: Request, res: Resp
         email: user.user.email
       }
     });
+
+    // Notify system admins asynchronously
+    (async () => {
+      try {
+        await notifySystemAdmins(
+          `[MUCHI Admin] New School Account Created - ${school.name}`,
+          `
+            <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;">
+              <h2>New School Created (Admin Action)</h2>
+              <p><strong>School Name:</strong> ${school.name}</p>
+              <p><strong>URL Slug:</strong> ${school.slug}</p>
+              <p><strong>Subscription Plan:</strong> ${school.plan || 'Standard'}</p>
+              <p><strong>Admin Contact:</strong> ${adminName} (${adminEmail})</p>
+              <p><strong>Created By:</strong> ${(req as any).user?.email || 'System Admin'}</p>
+              <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+            </div>
+          `,
+          `New School Created (Admin Action)\n\nSchool Name: ${school.name}\nURL Slug: ${school.slug}\nSubscription Plan: ${school.plan || 'Standard'}\nAdmin Contact: ${adminName} (${adminEmail})\nCreated By: ${(req as any).user?.email || 'System Admin'}\nTime: ${new Date().toLocaleString()}`
+        );
+      } catch (err) {
+        console.error("Failed to notify system admins about school creation:", err);
+      }
+    })();
 
   } catch (error: any) {
     console.error('Create School Error:', error);
@@ -2506,7 +2531,7 @@ import {
 router.get('/email/smtp', requireSystemAdmin, async (req: Request, res: Response) => {
   try {
     const config = await getSmtpConfig();
-    if (!config) return res.json({ host: '', port: 587, secure: false, username: '', password: '', from_name: 'MUCHI', from_email: '', is_active: false });
+    if (!config) return res.json({ host: '', port: 587, secure: false, username: '', password: '', from_name: 'MUCHI', from_email: '', is_active: false, notification_emails: '' });
     // Mask password
     res.json({ ...config, password: config.password ? '••••••••' : '' });
   } catch (error: any) {
@@ -2516,10 +2541,20 @@ router.get('/email/smtp', requireSystemAdmin, async (req: Request, res: Response
 
 // PUT /api/admin/email/smtp — Save SMTP config
 router.put('/email/smtp', requireSystemAdmin, async (req: Request, res: Response) => {
-  const { host, port, secure, username, password, from_name, from_email, is_active } = req.body;
+  const { host, port, secure, username, password, from_name, from_email, is_active, notification_emails } = req.body;
   try {
     // Build update object — only update password if a real value provided (not masked placeholder)
-    const updateData: any = { host, port: Number(port), secure: Boolean(secure), username, from_name, from_email, is_active: Boolean(is_active), updated_at: new Date().toISOString() };
+    const updateData: any = { 
+      host, 
+      port: Number(port), 
+      secure: Boolean(secure), 
+      username, 
+      from_name, 
+      from_email, 
+      is_active: Boolean(is_active), 
+      notification_emails: notification_emails || '',
+      updated_at: new Date().toISOString() 
+    };
     if (password && password !== '••••••••') {
       updateData.password = password;
     }
@@ -2824,6 +2859,23 @@ router.get('/email/logs', requireSystemAdmin, async (req: Request, res: Response
     if (error) throw error;
     res.json(data || []);
   } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+// GET /api/admin/cron/onboarding-reminders — Cron job to trigger bi-weekly notifications
+router.get('/cron/onboarding-reminders', async (req: Request, res: Response) => {
+  // Security check: Verify Vercel Cron Secret in production
+  const authHeader = req.headers.authorization;
+  if (process.env.VERCEL && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(401).json({ message: 'Unauthorized: Invalid cron secret' });
+  }
+
+  try {
+    console.log('[Cron] Onboarding reminders cron triggered');
+    await checkIncompleteSchoolOnboardings();
+    res.json({ success: true, message: 'Onboarding reminder check executed successfully.' });
+  } catch (error: any) {
+    console.error('[Cron] Onboarding reminders cron failed:', error);
     res.status(500).json({ message: error.message });
   }
 });

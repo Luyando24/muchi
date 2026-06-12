@@ -49,6 +49,7 @@ import { PaginationControls } from '@/components/ui/pagination-controls';
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { syncFetch } from '@/lib/syncService';
+import { getProfileSchoolId, schoolCacheKey } from '@/lib/schoolScope';
 import {
   BarChart,
   Bar,
@@ -163,19 +164,13 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('school_id')
-        .eq('id', session.user.id)
-        .single();
+      const headers = { 'Authorization': `Bearer ${session.access_token}` };
+      const schoolId = await getProfileSchoolId();
 
-      if (!profile) return;
-
-      const { data: settings } = await supabase
-        .from('schools')
-        .select('*')
-        .eq('id', profile.school_id)
-        .maybeSingle();
+      const settings = await syncFetch('/api/school/settings', {
+        headers,
+        cacheKey: schoolCacheKey('school-settings', schoolId)
+      });
 
       if (settings) {
         setSchoolSettings(settings);

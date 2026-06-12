@@ -26,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
+import { syncFetch } from '@/lib/syncService';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 
@@ -55,11 +56,11 @@ export default function AccommodationManagement() {
     setLoadingStats(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/school/accommodation/stats', {
+      const data = await syncFetch('/api/school/accommodation/stats', {
         headers: { 'Authorization': `Bearer ${session?.access_token}` }
       });
-      if (res.ok) {
-        setStats(await res.json());
+      if (data) {
+        setStats(data);
       }
     } catch (err) {
       console.error(err);
@@ -71,12 +72,12 @@ export default function AccommodationManagement() {
   const fetchBlocksAndRooms = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const [blockRes, roomRes] = await Promise.all([
-        fetch('/api/school/accommodation/blocks', { headers: { 'Authorization': `Bearer ${session?.access_token}` } }),
-        fetch('/api/school/accommodation/rooms', { headers: { 'Authorization': `Bearer ${session?.access_token}` } })
+      const [blockData, roomData] = await Promise.all([
+        syncFetch('/api/school/accommodation/blocks', { headers: { 'Authorization': `Bearer ${session?.access_token}` } }),
+        syncFetch('/api/school/accommodation/rooms', { headers: { 'Authorization': `Bearer ${session?.access_token}` } })
       ]);
-      if (blockRes.ok) setBlocks(await blockRes.json());
-      if (roomRes.ok) setRooms(await roomRes.json());
+      if (blockData) setBlocks(blockData);
+      if (roomData) setRooms(roomData);
     } catch (err) {
       console.error(err);
     }
@@ -86,14 +87,14 @@ export default function AccommodationManagement() {
     setLoadingData(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const [allocRes, appRes, studentRes] = await Promise.all([
-        fetch('/api/school/accommodation/allocations', { headers: { 'Authorization': `Bearer ${session?.access_token}` } }),
-        fetch('/api/school/accommodation/applications', { headers: { 'Authorization': `Bearer ${session?.access_token}` } }),
-        fetch('/api/school/accommodation/students', { headers: { 'Authorization': `Bearer ${session?.access_token}` } })
+      const [allocData, appData, studentData] = await Promise.all([
+        syncFetch('/api/school/accommodation/allocations', { headers: { 'Authorization': `Bearer ${session?.access_token}` } }),
+        syncFetch('/api/school/accommodation/applications', { headers: { 'Authorization': `Bearer ${session?.access_token}` } }),
+        syncFetch('/api/school/accommodation/students', { headers: { 'Authorization': `Bearer ${session?.access_token}` } })
       ]);
-      if (allocRes.ok) setAllocations(await allocRes.json());
-      if (appRes.ok) setApplications(await appRes.json());
-      if (studentRes.ok) setStudents(await studentRes.json());
+      if (allocData) setAllocations(allocData);
+      if (appData) setApplications(appData);
+      if (studentData) setStudents(studentData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -104,16 +105,13 @@ export default function AccommodationManagement() {
   const fetchSettings = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/school/settings', {
+      const data = await syncFetch('/api/school/settings', {
         headers: { 'Authorization': `Bearer ${session?.access_token}` }
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.academic_year) {
-          const yearStr = data.academic_year.toString();
-          setCurrentAcademicYear(yearStr);
-          setNewAllocation(prev => ({ ...prev, academic_year: yearStr }));
-        }
+      if (data && data.academic_year) {
+        const yearStr = data.academic_year.toString();
+        setCurrentAcademicYear(yearStr);
+        setNewAllocation(prev => ({ ...prev, academic_year: yearStr }));
       }
     } catch (err) {
       console.error(err);
@@ -133,7 +131,7 @@ export default function AccommodationManagement() {
     setSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/school/accommodation/blocks', {
+      const result = await syncFetch('/api/school/accommodation/blocks', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -141,15 +139,14 @@ export default function AccommodationManagement() {
         },
         body: JSON.stringify(newBlock)
       });
-      if (res.ok) {
-        toast({ title: 'Success', description: 'Hostel block created successfully.' });
-        setNewBlock({ name: '', gender_policy: 'Mixed' });
-        fetchBlocksAndRooms();
-        fetchStats();
+      if (result.offline) {
+        toast({ title: 'Offline Mode', description: 'Block creation queued offline.' });
       } else {
-        const err = await res.json();
-        throw new Error(err.message || 'Failed to create block');
+        toast({ title: 'Success', description: 'Hostel block created successfully.' });
       }
+      setNewBlock({ name: '', gender_policy: 'Mixed' });
+      fetchBlocksAndRooms();
+      fetchStats();
     } catch (err: any) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally {
@@ -161,15 +158,17 @@ export default function AccommodationManagement() {
     if (!confirm('Are you sure you want to delete this block? All associated rooms and allocations will be deleted.')) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`/api/school/accommodation/blocks/${id}`, {
+      const result = await syncFetch(`/api/school/accommodation/blocks/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session?.access_token}` }
       });
-      if (res.ok) {
+      if (result.offline) {
+        toast({ title: 'Offline Mode', description: 'Block deletion queued offline.' });
+      } else {
         toast({ title: 'Success', description: 'Block deleted.' });
-        fetchBlocksAndRooms();
-        fetchStats();
       }
+      fetchBlocksAndRooms();
+      fetchStats();
     } catch (err) {
       console.error(err);
     }
@@ -181,7 +180,7 @@ export default function AccommodationManagement() {
     setSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/school/accommodation/rooms', {
+      const result = await syncFetch('/api/school/accommodation/rooms', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -189,15 +188,14 @@ export default function AccommodationManagement() {
         },
         body: JSON.stringify(newRoom)
       });
-      if (res.ok) {
-        toast({ title: 'Success', description: 'Room created successfully.' });
-        setNewRoom({ block_id: '', room_number: '', capacity: '' });
-        fetchBlocksAndRooms();
-        fetchStats();
+      if (result.offline) {
+        toast({ title: 'Offline Mode', description: 'Room creation queued offline.' });
       } else {
-        const err = await res.json();
-        throw new Error(err.message || 'Failed to create room');
+        toast({ title: 'Success', description: 'Room created successfully.' });
       }
+      setNewRoom({ block_id: '', room_number: '', capacity: '' });
+      fetchBlocksAndRooms();
+      fetchStats();
     } catch (err: any) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally {
@@ -209,15 +207,17 @@ export default function AccommodationManagement() {
     if (!confirm('Are you sure you want to delete this room?')) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`/api/school/accommodation/rooms/${id}`, {
+      const result = await syncFetch(`/api/school/accommodation/rooms/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session?.access_token}` }
       });
-      if (res.ok) {
+      if (result.offline) {
+        toast({ title: 'Offline Mode', description: 'Room deletion queued offline.' });
+      } else {
         toast({ title: 'Success', description: 'Room deleted.' });
-        fetchBlocksAndRooms();
-        fetchStats();
       }
+      fetchBlocksAndRooms();
+      fetchStats();
     } catch (err) {
       console.error(err);
     }
@@ -229,7 +229,7 @@ export default function AccommodationManagement() {
     setSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/school/accommodation/allocations', {
+      const result = await syncFetch('/api/school/accommodation/allocations', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -237,15 +237,14 @@ export default function AccommodationManagement() {
         },
         body: JSON.stringify(newAllocation)
       });
-      if (res.ok) {
-        toast({ title: 'Success', description: 'Student allocated to room successfully.' });
-        setNewAllocation({ student_id: '', room_id: '', academic_year: currentAcademicYear });
-        fetchAllocationsAndApps();
-        fetchStats();
+      if (result.offline) {
+        toast({ title: 'Offline Mode', description: 'Allocation queued offline.' });
       } else {
-        const err = await res.json();
-        throw new Error(err.message || 'Failed to allocate student');
+        toast({ title: 'Success', description: 'Student allocated to room successfully.' });
       }
+      setNewAllocation({ student_id: '', room_id: '', academic_year: currentAcademicYear });
+      fetchAllocationsAndApps();
+      fetchStats();
     } catch (err: any) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally {
@@ -257,15 +256,17 @@ export default function AccommodationManagement() {
     if (!confirm('Are you sure you want to vacate this allocation?')) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`/api/school/accommodation/allocations/${id}`, {
+      const result = await syncFetch(`/api/school/accommodation/allocations/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session?.access_token}` }
       });
-      if (res.ok) {
+      if (result.offline) {
+        toast({ title: 'Offline Mode', description: 'Vacate action queued offline.' });
+      } else {
         toast({ title: 'Success', description: 'Student has vacated the room.' });
-        fetchAllocationsAndApps();
-        fetchStats();
       }
+      fetchAllocationsAndApps();
+      fetchStats();
     } catch (err) {
       console.error(err);
     }
@@ -274,7 +275,7 @@ export default function AccommodationManagement() {
   const handleUpdateAppStatus = async (id: string, status: string) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`/api/school/accommodation/applications/${id}`, {
+      const result = await syncFetch(`/api/school/accommodation/applications/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -282,11 +283,13 @@ export default function AccommodationManagement() {
         },
         body: JSON.stringify({ status })
       });
-      if (res.ok) {
+      if (result.offline) {
+        toast({ title: 'Offline Mode', description: 'Application update queued offline.' });
+      } else {
         toast({ title: 'Success', description: `Application ${status.toLowerCase()} successfully.` });
-        fetchAllocationsAndApps();
-        fetchStats();
       }
+      fetchAllocationsAndApps();
+      fetchStats();
     } catch (err) {
       console.error(err);
     }
@@ -297,7 +300,7 @@ export default function AccommodationManagement() {
     setSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/school/accommodation/notify-shortage', {
+      const result = await syncFetch('/api/school/accommodation/notify-shortage', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -309,8 +312,10 @@ export default function AccommodationManagement() {
           shortage: stats.shortage
         })
       });
-      if (res.ok) {
-        toast({ title: 'Notification Sent', description: 'Ministry of Education portal has been notified of the critical shortage.' });
+      if (result.offline) {
+        toast({ title: 'Offline Mode', description: 'Ministry notification queued offline.' });
+      } else {
+        toast({ title: 'Success', description: 'Ministry notified of bed space shortage successfully.' });
       }
     } catch (err) {
       console.error(err);

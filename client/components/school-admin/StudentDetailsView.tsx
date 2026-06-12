@@ -30,6 +30,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/lib/supabase';
+import { syncFetch } from '@/lib/syncService';
 import { useToast } from "@/components/ui/use-toast";
 import {
   Dialog,
@@ -143,54 +144,51 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
         const headers = { 'Authorization': `Bearer ${session.access_token}` };
 
         // Fetch settings first
-        const settingsRes = await fetch('/api/school/settings', { headers });
-        let settings = { academic_year: new Date().getFullYear().toString(), current_term: 'Term 1' };
+        const settings = await syncFetch('/api/school/settings', { headers });
+        let settingsObj = { academic_year: new Date().getFullYear().toString(), current_term: 'Term 1' };
         
-        if (settingsRes.ok) {
-            const data = await settingsRes.json();
-            settings = { 
-                academic_year: data.academic_year || settings.academic_year, 
-                current_term: data.current_term || settings.current_term 
+        if (settings) {
+            settingsObj = { 
+                academic_year: settings.academic_year || settingsObj.academic_year, 
+                current_term: settings.current_term || settingsObj.current_term 
             };
         }
         
-        setSelectedTerm(settings.current_term);
-        setCurrentAcademicYear(settings.academic_year);
-        setEnrollForm(prev => ({ ...prev, academicYear: settings.academic_year }));
-        setGradeForm(prev => ({ ...prev, term: settings.current_term, academicYear: settings.academic_year }));
-        setAttendanceForm(prev => ({ ...prev, term: settings.current_term, academicYear: settings.academic_year }));
+        setSelectedTerm(settingsObj.current_term);
+        setCurrentAcademicYear(settingsObj.academic_year);
+        setEnrollForm(prev => ({ ...prev, academicYear: settingsObj.academic_year }));
+        setGradeForm(prev => ({ ...prev, term: settingsObj.current_term, academicYear: settingsObj.academic_year }));
+        setAttendanceForm(prev => ({ ...prev, term: settingsObj.current_term, academicYear: settingsObj.academic_year }));
 
-        const [studentRes, classesRes, subjectsRes] = await Promise.all([
-          fetch(`/api/school/students/${studentId}/details`, { headers }),
-          fetch('/api/school/classes', { headers }),
-          fetch('/api/school/subjects', { headers })
+        const [studentData, classesData, subjectsData] = await Promise.all([
+          syncFetch(`/api/school/students/${studentId}/details`, { headers }),
+          syncFetch('/api/school/classes', { headers }),
+          syncFetch('/api/school/subjects', { headers })
         ]);
 
-        if (!studentRes.ok) throw new Error('Failed to fetch student details');
+        if (!studentData) throw new Error('Failed to fetch student details');
 
-        const data = await studentRes.json();
-        setStudent(data);
+        setStudent(studentData);
         
         // Initialize profile form
         setProfileForm({
-          firstName: data.profile.full_name.split(' ')[0],
-          lastName: data.profile.full_name.split(' ').slice(1).join(' '),
-          email: data.profile.email,
-          phone_number: data.profile.phone_number,
-          address: data.profile.address,
-          date_of_birth: data.profile.date_of_birth,
-          gender: data.profile.gender,
-          guardian: data.profile.guardian_name,
-          guardian_contact: data.profile.guardian_contact,
-          status: data.profile.enrollment_status,
-          fees: data.profile.fees_status
+          firstName: studentData.profile.full_name.split(' ')[0],
+          lastName: studentData.profile.full_name.split(' ').slice(1).join(' '),
+          email: studentData.profile.email,
+          phone_number: studentData.profile.phone_number,
+          address: studentData.profile.address,
+          date_of_birth: studentData.profile.date_of_birth,
+          gender: studentData.profile.gender,
+          guardian: studentData.profile.guardian_name,
+          guardian_contact: studentData.profile.guardian_contact,
+          status: studentData.profile.enrollment_status,
+          fees: studentData.profile.fees_status
         });
 
-        if (classesRes.ok) {
-          const classesJson = await classesRes.json();
-          setClasses(classesJson?.data || classesJson);
+        if (classesData) {
+          setClasses(classesData?.data || classesData);
         }
-        if (subjectsRes.ok) setSubjects(await subjectsRes.json());
+        if (subjectsData) setSubjects(subjectsData);
 
       } catch (error: any) {
         console.error('Error fetching data:', error);
@@ -216,7 +214,7 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch(`/api/school/students/${student.profile.id}`, {
+      const result = await syncFetch(`/api/school/students/${student.profile.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -225,12 +223,13 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
         body: JSON.stringify(profileForm)
       });
 
-      if (!res.ok) throw new Error('Failed to update profile');
-
-      toast({ title: "Success", description: "Profile updated successfully" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Profile update queued and will sync when online." });
+      } else {
+        toast({ title: "Success", description: "Profile updated successfully" });
+        window.location.reload();
+      }
       setIsEditProfileOpen(false);
-      // Refresh data
-      window.location.reload(); // Simplest way to refresh for now, or re-fetch
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
@@ -245,7 +244,7 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch(`/api/school/students/${studentId}/enroll`, {
+      const result = await syncFetch(`/api/school/students/${studentId}/enroll`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -254,9 +253,11 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
         body: JSON.stringify(enrollForm)
       });
 
-      if (!res.ok) throw new Error('Failed to enroll student');
-
-      toast({ title: "Success", description: "Enrollment updated successfully" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Enrollment updated offline." });
+      } else {
+        toast({ title: "Success", description: "Enrollment updated successfully" });
+      }
       setIsEnrollOpen(false);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -272,7 +273,7 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch(`/api/school/students/${studentId}/grades`, {
+      const result = await syncFetch(`/api/school/students/${studentId}/grades`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -281,9 +282,11 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
         body: JSON.stringify({ ...gradeForm, percentage: gradeForm.percentage ? Math.round(parseFloat(gradeForm.percentage)) : 0 })
       });
 
-      if (!res.ok) throw new Error('Failed to add grade');
-
-      toast({ title: "Success", description: "Grade added successfully" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Grade submission queued and will sync when online." });
+      } else {
+        toast({ title: "Success", description: "Grade added successfully" });
+      }
       setIsGradeOpen(false);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -299,7 +302,7 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch(`/api/school/students/${studentId}/attendance`, {
+      const result = await syncFetch(`/api/school/students/${studentId}/attendance`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -308,9 +311,11 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
         body: JSON.stringify(attendanceForm)
       });
 
-      if (!res.ok) throw new Error('Failed to record attendance');
-
-      toast({ title: "Success", description: "Attendance recorded successfully" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Attendance recorded offline." });
+      } else {
+        toast({ title: "Success", description: "Attendance recorded successfully" });
+      }
       setIsAttendanceOpen(false);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -326,7 +331,7 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch(`/api/school/students/${studentId}/finance`, {
+      const result = await syncFetch(`/api/school/students/${studentId}/finance`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -335,11 +340,13 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
         body: JSON.stringify(financeForm)
       });
 
-      if (!res.ok) throw new Error('Failed to update finance status');
-
-      toast({ title: "Success", description: "Finance status updated successfully" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Finance status update queued offline." });
+      } else {
+        toast({ title: "Success", description: "Finance status updated successfully" });
+        window.location.reload();
+      }
       setIsFinanceOpen(false);
-      window.location.reload();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {

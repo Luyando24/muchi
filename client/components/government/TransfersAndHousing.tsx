@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Home, ArrowRightLeft, HeartHandshake, Filter, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { syncFetch } from '@/lib/syncService';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#71717a', '#ef4444'];
 
@@ -23,8 +24,11 @@ export default function TransfersAndHousing() {
     async function fetchRegions() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch('/api/government/regions', { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
-        if (res.ok) setRegions(await res.json());
+        const regionsData = await syncFetch('/api/government/regions', {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` },
+          cacheKey: 'gov-regions'
+        });
+        if (regionsData) setRegions(regionsData);
       } catch (err) {}
     }
     fetchRegions();
@@ -39,8 +43,11 @@ export default function TransfersAndHousing() {
         if (filters.province !== 'All') url += `province=${encodeURIComponent(filters.province)}&`;
         if (filters.district !== 'All') url += `district=${encodeURIComponent(filters.district)}`;
 
-        const res = await fetch(url, { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
-        if (res.ok) setData(await res.json());
+        const resData = await syncFetch(url, {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` },
+          cacheKey: `gov-transfers-housing-${filters.province}-${filters.district}`
+        });
+        if (resData) setData(resData);
       } catch (err) {
       } finally { setLoading(false); }
     }

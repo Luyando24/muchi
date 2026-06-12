@@ -13,7 +13,7 @@ async function getUser(req: Request) {
   if (!user) return null;
   
   // Get profile
-  const { data: profile } = await supabaseAdmin.from('profiles').select('*').eq('id', user.id).single();
+  const { data: profile } = await supabaseAdmin.from('profiles').select('id, role, school_id').eq('id', user.id).single();
   return { user, profile };
 }
 

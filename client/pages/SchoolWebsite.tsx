@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { GraduationCap, BookOpen, Users, Calendar, MapPin, Phone, Mail, Clock, Award, CheckCircle2, User as UserIcon, Globe, Facebook, Twitter, Instagram, Linkedin, FileText, Upload, Plus, ArrowRight, User as AuthorIcon, Briefcase } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { processSchoolAsset } from '@/lib/uploadUtils';
 
 interface BlogPost {
   id: string;
@@ -64,6 +65,14 @@ interface WebsiteContent {
     required: boolean;
   }>;
 }
+
+export const getOptimizedImageUrl = (url: string | undefined, width = 800) => {
+  if (!url) return '';
+  if (url.includes('/storage/v1/object/public/')) {
+    return url.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/') + `?width=${width}&quality=80&resize=contain`;
+  }
+  return url;
+};
 
 export default function SchoolWebsite() {
   const { slug } = useParams<{ slug: string }>();
@@ -179,13 +188,19 @@ export default function SchoolWebsite() {
       
       for (const [docName, file] of docEntries) {
         if (file) {
-          const fileExt = file.name.split('.').pop();
+          // Process file (convert image to WebP, enforce 5MB size limit)
+          const processedFile = await processSchoolAsset(file);
+
+          const isImage = file.type.startsWith('image/');
+          const fileExt = isImage ? 'webp' : file.name.split('.').pop();
           const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
           const filePath = `applications/${slug}/${fileName}`;
           
           const { data, error } = await supabase.storage
             .from('school-assets')
-            .upload(filePath, file);
+            .upload(filePath, processedFile, {
+              cacheControl: '31536000, immutable'
+            });
             
           if (error) throw error;
           
@@ -273,7 +288,7 @@ export default function SchoolWebsite() {
           <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
             {school.logo_url || school.logo ? (
               <img 
-                src={school.logo_url || school.logo} 
+                src={getOptimizedImageUrl(school.logo_url || school.logo, 100)} 
                 alt={`${school.name} Logo`} 
                 className="h-10 w-10 object-contain"
               />
@@ -318,7 +333,7 @@ export default function SchoolWebsite() {
               <section className="relative bg-slate-900 text-white py-24 lg:py-32 overflow-hidden">
                 <div className="absolute inset-0 z-0">
                   <img 
-                    src={websiteContent?.hero_image_url || "/images/herobg.jpg"} 
+                    src={getOptimizedImageUrl(websiteContent?.hero_image_url, 1200) || "/images/herobg.jpg"} 
                     alt="School Campus" 
                     className="w-full h-full object-cover opacity-20"
                   />
@@ -482,7 +497,7 @@ export default function SchoolWebsite() {
                             <Card key={post.id} className="group overflow-hidden border-none shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 bg-white">
                               <div className="aspect-video relative overflow-hidden bg-slate-100">
                                 {post.cover_image_url ? (
-                                  <img src={post.cover_image_url} alt={post.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                  <img src={getOptimizedImageUrl(post.cover_image_url, 600)} alt={post.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                                 ) : (
                                   <div className="flex items-center justify-center h-full text-slate-300">
                                     <GraduationCap className="h-12 w-12 opacity-20" />
@@ -637,7 +652,7 @@ export default function SchoolWebsite() {
                     <Card key={post.id} className="group overflow-hidden border-none shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 bg-white flex flex-col">
                       <div className="aspect-video relative overflow-hidden bg-slate-100">
                         {post.cover_image_url ? (
-                          <img src={post.cover_image_url} alt={post.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                          <img src={getOptimizedImageUrl(post.cover_image_url, 600)} alt={post.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                         ) : (
                           <div className="flex items-center justify-center h-full text-slate-300">
                             <GraduationCap className="h-12 w-12 opacity-20" />
@@ -746,7 +761,7 @@ export default function SchoolWebsite() {
             <div className="col-span-1 md:col-span-2">
               <div className="flex items-center gap-2 mb-4">
                 {school.logo_url || school.logo ? (
-                  <img src={school.logo_url || school.logo} alt={school.name} className="h-10 w-10 object-contain bg-white rounded p-1" />
+                  <img src={getOptimizedImageUrl(school.logo_url || school.logo, 100)} alt={school.name} className="h-10 w-10 object-contain bg-white rounded p-1" />
                 ) : (
                   <GraduationCap className="h-8 w-8 text-primary" />
                 )}
@@ -810,7 +825,7 @@ function NewsDetailRoute({ blogPosts, school }: { blogPosts: BlogPost[], school:
         <article>
           <div className="relative aspect-video w-full overflow-hidden rounded-2xl mb-12 shadow-xl ring-1 ring-slate-200">
             {post.cover_image_url ? (
-              <img src={post.cover_image_url} alt={post.title} className="w-full h-full object-cover" />
+              <img src={getOptimizedImageUrl(post.cover_image_url, 1200)} alt={post.title} className="w-full h-full object-cover" />
             ) : (
               <div className="flex items-center justify-center h-full bg-slate-50 text-slate-300">
                 <GraduationCap className="h-20 w-20 opacity-20" />

@@ -133,7 +133,7 @@ export default function ApplicationsView() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/applications/${selectedApp.id}/approve-enroll`, {
+      const result = await syncFetch(`/api/school/applications/${selectedApp.id}/approve-enroll`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -142,26 +142,27 @@ export default function ApplicationsView() {
         body: JSON.stringify(enrollForm)
       });
 
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to enroll student");
-      }
-
-      toast({ 
-        title: "Student Enrolled", 
-        description: (
-          <div className="flex flex-col gap-2">
-            <p>{selectedApp.full_name} has been enrolled successfully.</p>
-            <div className="bg-slate-100 dark:bg-slate-800 p-2 rounded text-xs font-mono space-y-1">
-              <p>Email: {data.email}</p>
-              <p>Student #: {data.studentNumber}</p>
-              <p>Password: {enrollForm.password}</p>
+      if (result.offline) {
+        toast({ 
+          title: "Offline Mode", 
+          description: "Student enrollment queued for sync. Credentials will be generated when online." 
+        });
+      } else {
+        toast({ 
+          title: "Student Enrolled", 
+          description: (
+            <div className="flex flex-col gap-2">
+              <p>{selectedApp.full_name} has been enrolled successfully.</p>
+              <div className="bg-slate-100 dark:bg-slate-800 p-2 rounded text-xs font-mono space-y-1">
+                <p>Email: {result.email}</p>
+                <p>Student #: {result.studentNumber}</p>
+                <p>Password: {enrollForm.password}</p>
+              </div>
+              <p className="text-[10px] text-slate-500 italic">Please share these credentials with the student.</p>
             </div>
-            <p className="text-[10px] text-slate-500 italic">Please share these credentials with the student.</p>
-          </div>
-        )
-      });
+          )
+        });
+      }
       setIsEnrollDialogOpen(false);
       setSelectedApp(null);
       fetchApplications();

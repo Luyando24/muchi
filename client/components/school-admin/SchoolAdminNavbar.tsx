@@ -39,6 +39,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Notification } from '@shared/api';
 import { useToast } from "@/components/ui/use-toast";
+import { syncFetch } from '@/lib/syncService';
 import { OfflineIndicator } from '@/components/navigation/OfflineIndicator';
 import { getSubdomainUrl } from '@/lib/subdomain';
 
@@ -133,17 +134,15 @@ export default function SchoolAdminNavbar({
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/notifications', {
+      const data = await syncFetch('/api/school/notifications', {
         headers: {
           'Authorization': `Bearer ${session.access_token}`
-        }
+        },
+        cacheKey: 'school-notifications'
       });
 
-      if (!response.ok) throw new Error('Failed to fetch notifications');
-
-      const data: Notification[] = await response.json();
-      setNotifications(data);
-      setUnreadCount(data.filter(n => !n.is_read).length);
+      setNotifications(data || []);
+      setUnreadCount((data || []).filter((n: Notification) => !n.is_read).length);
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
@@ -156,7 +155,7 @@ export default function SchoolAdminNavbar({
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      await fetch(`/api/school/notifications/${id}/read`, {
+      const result = await syncFetch(`/api/school/notifications/${id}/read`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${session.access_token}`
@@ -165,6 +164,10 @@ export default function SchoolAdminNavbar({
 
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
       setUnreadCount(prev => Math.max(0, prev - 1));
+
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Notification mark-as-read queued for sync." });
+      }
     } catch (error) {
       console.error('Error marking notification as read:', error);
     }
@@ -184,14 +187,14 @@ export default function SchoolAdminNavbar({
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/search?q=${encodeURIComponent(query)}`, {
+      const data = await syncFetch(`/api/school/search?q=${encodeURIComponent(query)}`, {
         headers: {
           'Authorization': `Bearer ${session.access_token}`
-        }
+        },
+        cacheKey: `school-search-${query}`
       });
 
-      if (response.ok) {
-        const data = await response.json();
+      if (data) {
         setSearchResults(data);
       }
     } catch (error) {

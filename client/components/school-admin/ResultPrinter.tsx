@@ -51,6 +51,7 @@ import {
 } from '@/components/ui/table';
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
+import { syncFetch } from '@/lib/syncService';
 import { ReportCardContent } from '@/components/shared/ReportCardContent';
 
 interface Class {
@@ -114,12 +115,10 @@ export default function ResultPrinter() {
             if (classData) setClasses(classData);
 
             // 2. Fetch Settings for Term/Year
-            const response = await fetch('/api/school/settings', {
+            const settings = await syncFetch('/api/school/settings', {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
-            if (response.ok) {
-                const settings = await response.json();
-                
+            if (settings) {
                 let examTypes = ['Mid Term', 'End of Term'];
                 if (settings.exam_types && settings.exam_types.length > 0) {
                     examTypes = settings.exam_types;
@@ -176,42 +175,37 @@ export default function ResultPrinter() {
             if (!session) return;
 
             // Check if class has anomalies before printing
-            const anomaliesResponse = await fetch('/api/school/grades/anomalies', {
+            const anomaliesData = await syncFetch('/api/school/grades/anomalies', {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
-            if (anomaliesResponse.ok) {
-                const anomaliesData = await anomaliesResponse.json();
+            if (anomaliesData && anomaliesData.length > 0) {
                 // We need to fetch enrollments for these anomalies to check if they belong to the selected class
-                if (anomaliesData && anomaliesData.length > 0) {
-                    const studentIds = [...new Set(anomaliesData.map((a: any) => a.studentId))].filter(Boolean);
-                    
-                    if (studentIds.length > 0) {
-                        const { data: anomalousEnrollments } = await supabase
-                            .from('enrollments')
-                            .select('student_id, class_id')
-                            .in('student_id', studentIds)
-                            .eq('class_id', filters.classId)
-                            .eq('academic_year', filters.academicYear);
-                            
-                        if (anomalousEnrollments && anomalousEnrollments.length > 0) {
-                            setBlockerMessage("Cannot print report cards. There are grade anomalies (scores > 100%) in this class. Please resolve them in the Data Audit section first.");
-                            setIsBlockerOpen(true);
-                            setIsPrinting(false);
-                            return;
-                        }
+                const studentIds = [...new Set(anomaliesData.map((a: any) => a.studentId))].filter(Boolean);
+                
+                if (studentIds.length > 0) {
+                    const { data: anomalousEnrollments } = await supabase
+                        .from('enrollments')
+                        .select('student_id, class_id')
+                        .in('student_id', studentIds)
+                        .eq('class_id', filters.classId)
+                        .eq('academic_year', filters.academicYear);
+                        
+                    if (anomalousEnrollments && anomalousEnrollments.length > 0) {
+                        setBlockerMessage("Cannot print report cards. There are grade anomalies (scores > 100%) in this class. Please resolve them in the Data Audit section first.");
+                        setIsBlockerOpen(true);
+                        setIsPrinting(false);
+                        return;
                     }
                 }
             }
 
-            const response = await fetch(`/api/school/results/batch-report-cards?classId=${filters.classId}&term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`, {
+            const data = await syncFetch(`/api/school/results/batch-report-cards?classId=${filters.classId}&term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`, {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
 
-            if (!response.ok) throw new Error('Failed to fetch batch report cards');
-
-            const data = await response.json();
-            if (data.length === 0) {
+            if (!data || data.length === 0) {
                 toast({ title: "No Data", description: "No published results found for this selection." });
+                setIsPrinting(false);
                 return;
             }
 
@@ -242,11 +236,10 @@ export default function ResultPrinter() {
             if (!session) return;
 
             // Check if student has anomalies before printing
-            const anomaliesResponse = await fetch('/api/school/grades/anomalies', {
+            const anomaliesData = await syncFetch('/api/school/grades/anomalies', {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
-            if (anomaliesResponse.ok) {
-                const anomaliesData = await anomaliesResponse.json();
+            if (anomaliesData) {
                 const studentHasAnomaly = anomaliesData.some((a: any) => a.studentId === studentId && a.academicYear === filters.academicYear);
                 
                 if (studentHasAnomaly) {
@@ -257,13 +250,12 @@ export default function ResultPrinter() {
                 }
             }
 
-            const response = await fetch(`/api/school/results/report-card/${studentId}?term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`, {
+            const data = await syncFetch(`/api/school/results/report-card/${studentId}?term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`, {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
 
-            if (!response.ok) throw new Error('Failed to load report card');
+            if (!data) throw new Error('Failed to load report card');
 
-            const data = await response.json();
             setBatchData([data]);
 
             // Set document title for PDF filename
@@ -290,13 +282,12 @@ export default function ResultPrinter() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
 
-            const response = await fetch(`/api/school/results/report-card/${studentId}?term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`, {
+            const data = await syncFetch(`/api/school/results/report-card/${studentId}?term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`, {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
 
-            if (!response.ok) throw new Error('Failed to load report card');
+            if (!data) throw new Error('Failed to load report card');
 
-            const data = await response.json();
             setPreviewData(data);
             setIsPreviewOpen(true);
         } catch (error: any) {

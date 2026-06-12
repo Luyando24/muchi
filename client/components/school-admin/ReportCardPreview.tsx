@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase';
+import { syncFetch } from '@/lib/syncService';
 import { ReportCardContent } from '@/components/shared/ReportCardContent';
 
 interface ReportCardProps {
@@ -37,17 +38,13 @@ export default function ReportCardPreview({ studentId, term, examType, academicY
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
 
-        const response = await fetch(`/api/school/results/report-card/${studentId}?term=${encodeURIComponent(term)}&examType=${encodeURIComponent(examType)}&academicYear=${encodeURIComponent(academicYear)}`, {
+        const reportData = await syncFetch(`/api/school/results/report-card/${studentId}?term=${encodeURIComponent(term)}&examType=${encodeURIComponent(examType)}&academicYear=${encodeURIComponent(academicYear)}`, {
           headers: {
             'Authorization': `Bearer ${session.access_token}`
-          }
+          },
+          cacheKey: `school-report-card-${studentId}-${term}-${examType}-${academicYear}`
         });
 
-        if (!response.ok) {
-          throw new Error('Failed to load report card');
-        }
-
-        const reportData = await response.json();
         setData(reportData);
       } catch (err: any) {
         setError(err.message);

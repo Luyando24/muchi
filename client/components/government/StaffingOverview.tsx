@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Users, AlertTriangle, Filter, Search, UserMinus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { syncFetch } from '@/lib/syncService';
 
 export default function StaffingOverview() {
   const [data, setData] = useState({
@@ -24,10 +25,11 @@ export default function StaffingOverview() {
     async function fetchRegions() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch('/api/government/regions', {
-          headers: { 'Authorization': `Bearer ${session?.access_token}` }
+        const regionsData = await syncFetch('/api/government/regions', {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` },
+          cacheKey: 'gov-regions'
         });
-        if (res.ok) setRegions(await res.json());
+        if (regionsData) setRegions(regionsData);
       } catch (err) {}
     }
     fetchRegions();
@@ -42,8 +44,11 @@ export default function StaffingOverview() {
         if (filters.province !== 'All') url += `province=${encodeURIComponent(filters.province)}&`;
         if (filters.district !== 'All') url += `district=${encodeURIComponent(filters.district)}`;
 
-        const res = await fetch(url, { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
-        if (res.ok) setData(await res.json());
+        const resData = await syncFetch(url, {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` },
+          cacheKey: `gov-staffing-overview-${filters.province}-${filters.district}`
+        });
+        if (resData) setData(resData);
       } catch (err) {
         console.error(err);
       } finally {

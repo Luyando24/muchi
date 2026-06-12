@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { WhatsAppService } from "../services/whatsappService.js";
 import { SmsService } from "../services/smsService.js";
+import { sendEmail, notifySystemAdmins } from "../services/emailService.js";
 import { requireActiveLicense } from "../middleware/license.js";
 import { rateLimiter } from "../middleware/rateLimiter.js";
 import { ensureSchoolSettings } from "../lib/school-settings.js";
@@ -1471,6 +1472,37 @@ router.post(
         studentNumber: studentNumber,
         emailUsed: emailToUse,
       });
+
+      // Notify system admins asynchronously
+      (async () => {
+        try {
+          const { data: school } = await supabaseAdmin
+            .from("schools")
+            .select("name")
+            .eq("id", schoolId)
+            .single();
+          const schoolName = school?.name || "Unknown School";
+
+          await notifySystemAdmins(
+            `[MUCHI Admin] New Student Added - ${name} (${schoolName})`,
+            `
+              <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;">
+                <h2>New Student Registered</h2>
+                <p><strong>Name:</strong> ${name}</p>
+                <p><strong>Email:</strong> ${emailToUse}</p>
+                <p><strong>Student Number:</strong> ${studentNumber}</p>
+                <p><strong>Class:</strong> ${className}</p>
+                <p><strong>School:</strong> ${schoolName}</p>
+                <p><strong>Added By:</strong> ${profile.full_name}</p>
+                <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+              </div>
+            `,
+            `New Student Registered\n\nName: ${name}\nEmail: ${emailToUse}\nStudent Number: ${studentNumber}\nClass: ${className}\nSchool: ${schoolName}\nAdded By: ${profile.full_name}\nTime: ${new Date().toLocaleString()}`
+          );
+        } catch (err) {
+          console.error("Failed to notify system admins about new student:", err);
+        }
+      })();
     } catch (error: any) {
       console.error("Create Student Error:", error);
       res.status(500).json({ message: error.message });
@@ -1627,6 +1659,36 @@ router.post(
         errors,
         success: errors.length === 0,
       });
+
+      // Notify system admins asynchronously
+      (async () => {
+        try {
+          if (importedCount > 0) {
+            const { data: school } = await supabaseAdmin
+              .from("schools")
+              .select("name")
+              .eq("id", schoolId)
+              .single();
+            const schoolName = school?.name || "Unknown School";
+
+            await notifySystemAdmins(
+              `[MUCHI Admin] Bulk Students Imported - ${schoolName}`,
+              `
+                <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;">
+                  <h2>Bulk Students Import Completed</h2>
+                  <p><strong>School:</strong> ${schoolName}</p>
+                  <p><strong>Successfully Imported:</strong> ${importedCount} / ${students.length} students</p>
+                  <p><strong>Added By:</strong> ${profile.full_name}</p>
+                  <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+                </div>
+              `,
+              `Bulk Students Import Completed\n\nSchool: ${schoolName}\nSuccessfully Imported: ${importedCount} / ${students.length} students\nAdded By: ${profile.full_name}\nTime: ${new Date().toLocaleString()}`
+            );
+          }
+        } catch (err) {
+          console.error("Failed to notify system admins about bulk students import:", err);
+        }
+      })();
     } catch (error: any) {
       console.error("Bulk Import Error:", error);
       res.status(500).json({ message: error.message });
@@ -1885,6 +1947,36 @@ router.post(
       results,
       success: errors.length === 0,
     });
+
+    // Notify system admins asynchronously
+    (async () => {
+      try {
+        if (importedCount > 0) {
+          const { data: school } = await supabaseAdmin
+            .from("schools")
+            .select("name")
+            .eq("id", schoolId)
+            .single();
+          const schoolName = school?.name || "Unknown School";
+
+          await notifySystemAdmins(
+            `[MUCHI Admin] Bulk Teachers Imported - ${schoolName}`,
+            `
+              <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;">
+                <h2>Bulk Teachers Import Completed</h2>
+                <p><strong>School:</strong> ${schoolName}</p>
+                <p><strong>Successfully Imported:</strong> ${importedCount} / ${teachers.length} teachers</p>
+                <p><strong>Added By:</strong> ${profile.full_name}</p>
+                <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+              </div>
+            `,
+            `Bulk Teachers Import Completed\n\nSchool: ${schoolName}\nSuccessfully Imported: ${importedCount} / ${teachers.length} teachers\nAdded By: ${profile.full_name}\nTime: ${new Date().toLocaleString()}`
+          );
+        }
+      } catch (err) {
+        console.error("Failed to notify system admins about bulk teachers import:", err);
+      }
+    })();
   },
 );
 
@@ -3874,6 +3966,37 @@ router.post(
       res
         .status(201)
         .json({ message: "Teacher created successfully", user: user.user });
+
+      // Notify system admins asynchronously
+      (async () => {
+        try {
+          const { data: school } = await supabaseAdmin
+            .from("schools")
+            .select("name")
+            .eq("id", schoolId)
+            .single();
+          const schoolName = school?.name || "Unknown School";
+
+          await notifySystemAdmins(
+            `[MUCHI Admin] New Teacher Added - ${name} (${schoolName})`,
+            `
+              <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;">
+                <h2>New Teacher Registered</h2>
+                <p><strong>Name:</strong> ${name}</p>
+                <p><strong>Email:</strong> ${emailToUse}</p>
+                <p><strong>Staff Number:</strong> ${staffNumber}</p>
+                <p><strong>Department:</strong> ${department || 'Unassigned'}</p>
+                <p><strong>School:</strong> ${schoolName}</p>
+                <p><strong>Added By:</strong> ${profile.full_name}</p>
+                <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+              </div>
+            `,
+            `New Teacher Registered\n\nName: ${name}\nEmail: ${emailToUse}\nStaff Number: ${staffNumber}\nDepartment: ${department || 'Unassigned'}\nSchool: ${schoolName}\nAdded By: ${profile.full_name}\nTime: ${new Date().toLocaleString()}`
+          );
+        } catch (err) {
+          console.error("Failed to notify system admins about new teacher:", err);
+        }
+      })();
     } catch (error: any) {
       console.error("Create Teacher Error:", error);
       res.status(500).json({ message: error.message });
@@ -7255,6 +7378,89 @@ router.post(
 
       if (error) throw error;
       res.status(201).json(data);
+
+      // Async email sending to all valid teacher emails
+      (async () => {
+        try {
+          const { data: teachers, error: teachersError } = await supabaseAdmin
+            .from("profiles")
+            .select("email, full_name")
+            .eq("school_id", schoolId)
+            .or("role.eq.teacher,secondary_role.eq.teacher");
+
+          if (teachersError) {
+            console.error("[Announcements Email] DB Error fetching teachers:", teachersError);
+            return;
+          }
+
+          const teacherEmails = teachers
+            ?.map((t: any) => t.email?.trim())
+            .filter((email: any) => email && email.includes("@") && email.includes(".")) || [];
+
+          if (teacherEmails.length > 0) {
+            console.log(`[Announcements Email] Queueing emails to ${teacherEmails.length} teachers`);
+            await Promise.allSettled(
+              teacherEmails.map((email: string) => {
+                const htmlBody = `
+                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333; line-height: 1.6;">
+                    <div style="background-color: #4f46e5; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+                      <h1 style="margin: 0; font-size: 20px;">School Announcement</h1>
+                      <p style="margin: 5px 0 0 0; opacity: 0.9;">Priority: ${data.priority || 'Normal'}</p>
+                    </div>
+                    <div style="padding: 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px; background-color: #f9fafb;">
+                      <h2 style="margin-top: 0; color: #111827;">${data.title}</h2>
+                      <div style="white-space: pre-wrap; color: #4b5563; font-size: 15px; margin-bottom: 20px;">
+                        ${data.content}
+                      </div>
+                      <hr style="margin: 20px 0; border: 0; border-top: 1px solid #e5e7eb;" />
+                      <p style="margin: 0; font-size: 12px; color: #9ca3af;">
+                        Posted by: <strong>${data.author}</strong> on ${data.date}
+                      </p>
+                    </div>
+                  </div>
+                `;
+
+                return sendEmail({
+                  to: email,
+                  subject: `[School Announcement] ${data.title}`,
+                  html: htmlBody,
+                  text: `School Announcement: ${data.title}\n\nPriority: ${data.priority || 'Normal'}\n\n${data.content}\n\nPosted by: ${data.author} on ${data.date}`,
+                });
+              })
+            );
+            console.log(`[Announcements Email] Sent emails to ${teacherEmails.length} teachers`);
+          }
+
+          // Notify system admins about the new announcement
+          const { data: school } = await supabaseAdmin
+            .from("schools")
+            .select("name")
+            .eq("id", schoolId)
+            .single();
+          const schoolName = school?.name || "Unknown School";
+
+          await notifySystemAdmins(
+            `[MUCHI Admin] New Announcement Posted - ${schoolName}`,
+            `
+              <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;">
+                <h2>New Announcement Posted</h2>
+                <p><strong>School:</strong> ${schoolName}</p>
+                <p><strong>Title:</strong> ${data.title}</p>
+                <p><strong>Priority:</strong> ${data.priority || 'Normal'}</p>
+                <p><strong>Author:</strong> ${data.author}</p>
+                <p><strong>Content:</strong></p>
+                <div style="background-color: #f3f4f6; padding: 15px; border-radius: 6px; white-space: pre-wrap;">
+                  ${data.content}
+                </div>
+                <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+              </div>
+            `,
+            `New Announcement Posted\n\nSchool: ${schoolName}\nTitle: ${data.title}\nPriority: ${data.priority || 'Normal'}\nAuthor: ${data.author}\nContent:\n${data.content}\nTime: ${new Date().toLocaleString()}`
+          );
+        } catch (emailErr) {
+          console.error("[Announcements Email] Async email sending/notification failed:", emailErr);
+        }
+      })();
     } catch (error: any) {
       console.error("Create Announcement Error:", error);
       res.status(500).json({ message: error.message });
@@ -7531,6 +7737,32 @@ router.put(
     } = req.body;
 
     try {
+      // Get previous settings to compare completion
+      const { data: oldSchool } = await supabaseAdmin
+        .from("schools")
+        .select("*")
+        .eq("id", schoolId)
+        .single();
+
+      const calculateCompletion = (schoolObj: any) => {
+        if (!schoolObj) return 0;
+        const fields = [
+          "name", "school_type", "academic_year", "current_term", "email", "phone",
+          "province", "district", "logo_url", "headteacher_name", "signature_url",
+          "ict_name", "ict_email", "ict_phone", "boarding_status", "gender_composition"
+        ];
+        let filledCount = 0;
+        fields.forEach(key => {
+          const value = schoolObj[key];
+          if (value && typeof value === 'string' && value.trim() !== '') {
+            filledCount++;
+          }
+        });
+        return fields.length > 0 ? Math.round((filledCount / fields.length) * 100) : 100;
+      };
+
+      const oldPercent = calculateCompletion(oldSchool);
+
       const stdPrimary = Array.isArray(compulsory_subjects_primary)
         ? compulsory_subjects_primary.map((s: string) => standardizeSubjectName(s))
         : undefined;
@@ -7593,6 +7825,72 @@ router.put(
       }
       
       res.json(data);
+
+      const newPercent = calculateCompletion(data);
+      const transitionedToComplete = oldPercent < 90 && newPercent >= 90;
+
+      // Notify system admins asynchronously
+      (async () => {
+        try {
+          if (transitionedToComplete) {
+            await notifySystemAdmins(
+              `[MUCHI Onboarding] School Mandatory Onboarding Upload Completed - ${data.name}`,
+              `
+                <div style="font-family: Arial, sans-serif; padding: 24px; color: #1e293b; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+                  <div style="background: #10b981; padding: 20px; border-radius: 8px 8px 0 0; text-align: center; color: white;">
+                    <h2 style="margin: 0; font-size: 22px;">✅ Mandatory Data Upload Completed</h2>
+                    <p style="margin: 4px 0 0; opacity: 0.9;">School Onboarding Settings are now fully set up!</p>
+                  </div>
+                  <div style="padding: 20px; font-size: 14px; line-height: 1.6;">
+                    <p>Dear System Admin,</p>
+                    <p>The school <strong>${data.name}</strong> has successfully completed its mandatory profile onboarding setup details (completion progress: <strong>${newPercent}%</strong>).</p>
+                    
+                    <h3 style="border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; color: #0f172a; margin-top: 24px;">School Details</h3>
+                    <table style="width: 100%; font-size: 13px; margin-top: 8px; border-collapse: collapse;">
+                      <tr><td style="padding: 6px 0; font-weight: bold; width: 140px; color: #64748b;">School Name:</td><td style="color: #0f172a;">${data.name}</td></tr>
+                      <tr><td style="padding: 6px 0; font-weight: bold; color: #64748b;">School Type:</td><td style="color: #0f172a;">${data.school_type || 'N/A'}</td></tr>
+                      <tr><td style="padding: 6px 0; font-weight: bold; color: #64748b;">Headteacher:</td><td style="color: #0f172a;">${data.headteacher_name || 'N/A'}</td></tr>
+                      <tr><td style="padding: 6px 0; font-weight: bold; color: #64748b;">Province:</td><td style="color: #0f172a;">${data.province || 'N/A'}</td></tr>
+                      <tr><td style="padding: 6px 0; font-weight: bold; color: #64748b;">District:</td><td style="color: #0f172a;">${data.district || 'N/A'}</td></tr>
+                      <tr><td style="padding: 6px 0; font-weight: bold; color: #64748b;">ICT Contact:</td><td style="color: #0f172a;">${data.ict_name || 'N/A'} (${data.ict_phone || 'N/A'})</td></tr>
+                    </table>
+                    
+                    <div style="margin-top: 24px; padding: 12px; background: #f8fafc; border-left: 4px solid #10b981; border-radius: 4px; font-size: 13px; color: #475569;">
+                      <strong>Action Taken:</strong> School onboarding requirements have been verified. System access restrictions for this school are now removed.
+                    </div>
+                  </div>
+                  <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                  <div style="text-align: center; color: #64748b; font-size: 11px;">
+                    Sent automatically by MUCHI System Admin Alerts.
+                  </div>
+                </div>
+              `,
+              `School Mandatory Onboarding Upload Completed\n\nSchool: ${data.name}\nProgress: ${newPercent}%\nSchool Type: ${data.school_type || 'N/A'}\nHeadteacher: ${data.headteacher_name || 'N/A'}\nProvince: ${data.province || 'N/A'}\nDistrict: ${data.district || 'N/A'}\nICT Contact: ${data.ict_name || 'N/A'} (${data.ict_phone || 'N/A'})`
+            );
+          } else {
+            await notifySystemAdmins(
+              `[MUCHI Admin] School Profile Completed/Updated - ${data.name}`,
+              `
+                <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;">
+                  <h2>School Profile Onboarding Settings Saved</h2>
+                  <p><strong>School Name:</strong> ${data.name}</p>
+                  <p><strong>Headteacher Name:</strong> ${data.headteacher_name || 'N/A'}</p>
+                  <p><strong>Province:</strong> ${data.province || 'N/A'}</p>
+                  <p><strong>District:</strong> ${data.district || 'N/A'}</p>
+                  <p><strong>Location:</strong> ${data.location_type || 'N/A'}</p>
+                  <p><strong>Boarding Status:</strong> ${data.boarding_status || 'N/A'}</p>
+                  <p><strong>School Type:</strong> ${data.school_type || 'N/A'}</p>
+                  <p><strong>Updated By Profile ID:</strong> ${profile.id} (${profile.full_name})</p>
+                  <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+                </div>
+              `,
+              `School Profile Onboarding Settings Saved\n\nSchool Name: ${data.name}\nHeadteacher Name: ${data.headteacher_name || 'N/A'}\nProvince: ${data.province || 'N/A'}\nDistrict: ${data.district || 'N/A'}\nLocation: ${data.location_type || 'N/A'}\nBoarding Status: ${data.boarding_status || 'N/A'}\nSchool Type: ${data.school_type || 'N/A'}\nUpdated By Profile ID: ${profile.id} (${profile.full_name})\nTime: ${new Date().toLocaleString()}`
+            );
+          }
+        } catch (err) {
+          console.error("Failed to notify system admins about school settings update:", err);
+        }
+      })();
     } catch (error: any) {
       console.error("Update School Settings Error:", error);
       res.status(500).json({ message: error.message });

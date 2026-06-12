@@ -10,6 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from "@/components/ui/progress";
+import { syncFetch } from '@/lib/syncService';
 
 interface ImportedTeacher {
   name: string;
@@ -134,7 +135,7 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
         const batch = updatedData.slice(i, i + BATCH_SIZE);
         
         try {
-            const response = await fetch('/api/school/teachers/bulk', {
+            const result = await syncFetch('/api/school/teachers/bulk', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -143,9 +144,13 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
                 body: JSON.stringify({ teachers: batch })
             });
 
-            const result = await response.json();
-
-            if (response.ok) {
+            if (result.offline) {
+                successCount += batch.length;
+                for (let j = 0; j < batch.length; j++) {
+                    updatedData[i + j].status = 'Success';
+                    updatedData[i + j].message = 'Queued offline';
+                }
+            } else {
                 successCount += result.importedCount;
                 
                 // Map results back to the original rows
@@ -165,12 +170,6 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
                     for (let j = 0; j < batch.length; j++) {
                         updatedData[i + j].status = 'Success';
                     }
-                }
-            } else {
-                errorCount += batch.length;
-                for (let j = 0; j < batch.length; j++) {
-                    updatedData[i + j].status = 'Error';
-                    updatedData[i + j].message = result.message || 'Batch failed';
                 }
             }
         } catch (error: any) {

@@ -394,7 +394,7 @@ export default function GradebookView() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/grades/clear', {
+      const result = await syncFetch('/api/school/grades/clear', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -409,10 +409,11 @@ export default function GradebookView() {
         })
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Failed to clear grades');
-
-      toast({ title: "Success", description: data.message });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Grade clearing queued for sync." });
+      } else {
+        toast({ title: "Success", description: result.message || "Grades cleared successfully" });
+      }
       setIsClearModalOpen(false);
       // Reload gradebook
       loadGradebookData();

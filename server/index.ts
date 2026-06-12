@@ -20,6 +20,7 @@ import { Logger } from './lib/logger.js';
 import { requestLogger, errorLogger } from './middleware/logging.js';
 import { CONFIG } from '../shared/config.js';
 import { trackActiveUser } from './lib/activeUsers.js';
+import { startOnboardingCheckScheduler } from './services/onboardingReminderService.js';
 
 const app = express();
 const port = CONFIG.server.port;
@@ -96,6 +97,11 @@ if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
   app.listen(port, () => {
     Logger.info(`Server running on port ${port}`);
   });
+}
+
+// Start the onboarding reminder check scheduler (unless running on Vercel or in tests)
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
+  startOnboardingCheckScheduler();
 }
 
 export default app;

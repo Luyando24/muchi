@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
+import { syncFetch } from '@/lib/syncService';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 interface TimetableEntry {
@@ -114,27 +115,24 @@ export default function TimetableManagement() {
       const headers = { 'Authorization': `Bearer ${session.access_token}` };
 
       // Fetch school settings first for defaults
-      const settingsRes = await fetch('/api/school/settings', { headers });
-      if (settingsRes.ok) {
-        const settings = await settingsRes.json();
+      const settings = await syncFetch('/api/school/settings', { headers });
+      if (settings) {
         setSelectedTerm(settings.current_term || 'Term 1');
         setSelectedYear(settings.academic_year || new Date().getFullYear().toString());
       }
 
-      const [classesRes, subjectsRes, teachersRes] = await Promise.all([
-        fetch('/api/school/classes?limit=500', { headers }),
-        fetch('/api/school/subjects', { headers }),
-        fetch('/api/school/teachers?limit=500', { headers })
+      const [classesData, subjectsData, teachersData] = await Promise.all([
+        syncFetch('/api/school/classes?limit=500', { headers }),
+        syncFetch('/api/school/subjects', { headers }),
+        syncFetch('/api/school/teachers?limit=500', { headers })
       ]);
 
-      if (classesRes.ok) {
-        const d = await classesRes.json();
-        setClasses(d?.data || d);
+      if (classesData) {
+        setClasses(classesData?.data || classesData);
       }
-      if (subjectsRes.ok) setSubjects(await subjectsRes.json());
-      if (teachersRes.ok) {
-        const d = await teachersRes.json();
-        setTeachers(d?.data || d);
+      if (subjectsData) setSubjects(subjectsData);
+      if (teachersData) {
+        setTeachers(teachersData?.data || teachersData);
       }
 
     } catch (error) {
@@ -158,14 +156,13 @@ export default function TimetableManagement() {
         url += `?${params.toString()}`;
       }
 
-      const response = await fetch(url, {
+      const data = await syncFetch(url, {
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
-      if (!response.ok) throw new Error('Failed to fetch timetable');
-
-      const data = await response.json();
-      setEntries(data);
+      if (data) {
+        setEntries(data);
+      }
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
@@ -191,7 +188,7 @@ export default function TimetableManagement() {
         term: selectedTerm
       };
 
-      const response = await fetch(url, {
+      const result = await syncFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -200,9 +197,11 @@ export default function TimetableManagement() {
         body: JSON.stringify(payload)
       });
 
-      if (!response.ok) throw new Error('Failed to save timetable entry');
-
-      toast({ title: "Success", description: `Timetable entry ${isEditing ? 'updated' : 'created'} successfully` });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: `Timetable entry ${isEditing ? 'update' : 'creation'} queued offline.` });
+      } else {
+        toast({ title: "Success", description: `Timetable entry ${isEditing ? 'updated' : 'created'} successfully` });
+      }
       setIsDialogOpen(false);
       fetchTimetable();
       resetForm();
@@ -220,14 +219,16 @@ export default function TimetableManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/timetables/${deleteTargetId}`, {
+      const result = await syncFetch(`/api/school/timetables/${deleteTargetId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
-      if (!response.ok) throw new Error('Failed to delete entry');
-
-      toast({ title: "Success", description: "Entry deleted successfully" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Timetable deletion queued offline." });
+      } else {
+        toast({ title: "Success", description: "Entry deleted successfully" });
+      }
       setDeleteTargetId(null);
       fetchTimetable();
     } catch (error: any) {

@@ -34,6 +34,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { syncFetch } from '@/lib/syncService';
 
 interface CalendarEntry {
   id: string;
@@ -81,13 +82,12 @@ export default function GovernmentSchoolCalendar() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-      const res = await fetch('/api/government/calendar', {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      const data = await syncFetch('/api/government/calendar', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        cacheKey: 'gov-calendar'
       });
-      if (res.ok) {
-        setCalendar(await res.json());
-      } else {
-        throw new Error('Failed to load calendar entries');
+      if (data) {
+        setCalendar(data);
       }
     } catch (err: any) {
       console.error(err);
@@ -199,7 +199,7 @@ export default function GovernmentSchoolCalendar() {
         midterm_end: formData.type === 'Term' ? (formData.midterm_end || null) : null
       };
 
-      const res = await fetch(url, {
+      const result = await syncFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -208,18 +208,20 @@ export default function GovernmentSchoolCalendar() {
         body: JSON.stringify(payload)
       });
 
-      if (res.ok) {
+      if (result.offline) {
+        toast({
+          title: 'Offline Mode',
+          description: `Calendar entry ${editingEntry ? 'update' : 'creation'} queued and will sync when online.`
+        });
+      } else {
         toast({
           title: 'Success',
           description: `Calendar entry ${editingEntry ? 'updated' : 'created'} successfully.`
         });
-        setIsFormOpen(false);
-        resetForm();
-        fetchCalendar();
-      } else {
-        const errData = await res.json();
-        throw new Error(errData.message || 'Failed to save calendar entry');
       }
+      setIsFormOpen(false);
+      resetForm();
+      fetchCalendar();
     } catch (err: any) {
       console.error(err);
       toast({
@@ -239,22 +241,24 @@ export default function GovernmentSchoolCalendar() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch(`/api/government/calendar/${deleteTargetId}`, {
+      const result = await syncFetch(`/api/government/calendar/${deleteTargetId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
-      if (res.ok) {
+      if (result.offline) {
+        toast({
+          title: 'Offline Mode',
+          description: 'Calendar entry deletion queued.'
+        });
+      } else {
         toast({
           title: 'Success',
           description: 'Calendar entry deleted successfully.'
         });
-        setDeleteTargetId(null);
-        fetchCalendar();
-      } else {
-        const errData = await res.json();
-        throw new Error(errData.message || 'Failed to delete calendar entry');
       }
+      setDeleteTargetId(null);
+      fetchCalendar();
     } catch (err: any) {
       console.error(err);
       toast({
@@ -273,22 +277,24 @@ export default function GovernmentSchoolCalendar() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch('/api/government/calendar/reset', {
+      const result = await syncFetch('/api/government/calendar/reset', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
-      if (res.ok) {
+      if (result.offline) {
+        toast({
+          title: 'Offline Mode',
+          description: 'Calendar reset queued.'
+        });
+      } else {
         toast({
           title: 'Success',
           description: 'Calendar restored to standard Ministry guidelines successfully.'
         });
-        setIsResetConfirmOpen(false);
-        fetchCalendar();
-      } else {
-        const errData = await res.json();
-        throw new Error(errData.message || 'Failed to reset calendar');
       }
+      setIsResetConfirmOpen(false);
+      fetchCalendar();
     } catch (err: any) {
       console.error(err);
       toast({

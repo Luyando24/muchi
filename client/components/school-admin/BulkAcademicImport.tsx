@@ -10,6 +10,7 @@ import { Upload, FileSpreadsheet, CheckCircle2, Loader2, Download, AlertCircle, 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase';
+import { syncFetch } from '@/lib/syncService';
 import { standardizeSubjectName, standardizeClassName, standardizeDepartmentName } from '@shared/name-standardization';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -148,16 +149,19 @@ function DepartmentsPanel({ onSuccess }: { onSuccess: () => void }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
-      const res = await fetch('/api/school/departments/bulk', {
+      const json = await syncFetch('/api/school/departments/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
         body: JSON.stringify({ departments: preview }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.message);
+
+      if (json.offline) {
+        toast({ title: 'Offline Mode', description: 'Departments batch queued for sync.' });
+      } else {
+        toast({ title: 'Import Done', description: `${json.importedCount} departments imported.` });
+      }
       setResult(json);
-      toast({ title: 'Import Done', description: `${json.importedCount} departments imported.` });
-      if (json.importedCount > 0) onSuccess();
+      if (json.importedCount > 0 || json.offline) onSuccess();
       setPreview([]);
       setFile(null);
     } catch (err: any) {
@@ -250,16 +254,19 @@ function SubjectsPanel({ onSuccess }: { onSuccess: () => void }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
-      const res = await fetch('/api/school/subjects/bulk', {
+      const json = await syncFetch('/api/school/subjects/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
         body: JSON.stringify({ subjects: preview }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.message);
+
+      if (json.offline) {
+        toast({ title: 'Offline Mode', description: 'Subjects batch queued for sync.' });
+      } else {
+        toast({ title: 'Import Done', description: `${json.importedCount} subjects imported.` });
+      }
       setResult(json);
-      toast({ title: 'Import Done', description: `${json.importedCount} subjects imported.` });
-      if (json.importedCount > 0) onSuccess();
+      if (json.importedCount > 0 || json.offline) onSuccess();
       setPreview([]);
       setFile(null);
     } catch (err: any) {
@@ -363,16 +370,19 @@ function ClassesPanel({ onSuccess }: { onSuccess: () => void }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
-      const res = await fetch('/api/school/classes/bulk', {
+      const json = await syncFetch('/api/school/classes/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
         body: JSON.stringify({ classes: preview }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.message);
+
+      if (json.offline) {
+        toast({ title: 'Offline Mode', description: 'Classes batch queued for sync.' });
+      } else {
+        toast({ title: 'Import Done', description: `${json.importedCount} classes imported.` });
+      }
       setResult(json);
-      toast({ title: 'Import Done', description: `${json.importedCount} classes imported.` });
-      if (json.importedCount > 0) onSuccess();
+      if (json.importedCount > 0 || json.offline) onSuccess();
       setPreview([]);
       setFile(null);
     } catch (err: any) {

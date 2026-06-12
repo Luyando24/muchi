@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
+import { syncFetch } from '@/lib/syncService';
 
 interface SettingsForm {
   gov_ptr_critical_threshold: number;
@@ -52,22 +53,22 @@ export default function GovernmentSettings() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch('/api/government/settings', {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      const data = await syncFetch('/api/government/settings', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        cacheKey: 'gov-settings'
       });
 
-      if (!res.ok) throw new Error('Failed to load settings');
-      const data = await res.json();
-      
-      setForm({
-        gov_ptr_critical_threshold: parseInt(data.gov_ptr_critical_threshold) || defaultForm.gov_ptr_critical_threshold,
-        gov_ptr_warning_threshold: parseInt(data.gov_ptr_warning_threshold) || defaultForm.gov_ptr_warning_threshold,
-        gov_pass_rate_threshold: parseInt(data.gov_pass_rate_threshold) || defaultForm.gov_pass_rate_threshold,
-        gov_attendance_threshold: parseInt(data.gov_attendance_threshold) || defaultForm.gov_attendance_threshold,
-        gov_promotion_min_tenure: parseInt(data.gov_promotion_min_tenure) || defaultForm.gov_promotion_min_tenure,
-        gov_promotion_min_qualification: data.gov_promotion_min_qualification || defaultForm.gov_promotion_min_qualification,
-        gov_diploma_upgrade_years_threshold: parseInt(data.gov_diploma_upgrade_years_threshold) || defaultForm.gov_diploma_upgrade_years_threshold
-      });
+      if (data) {
+        setForm({
+          gov_ptr_critical_threshold: parseInt(data.gov_ptr_critical_threshold) || defaultForm.gov_ptr_critical_threshold,
+          gov_ptr_warning_threshold: parseInt(data.gov_ptr_warning_threshold) || defaultForm.gov_ptr_warning_threshold,
+          gov_pass_rate_threshold: parseInt(data.gov_pass_rate_threshold) || defaultForm.gov_pass_rate_threshold,
+          gov_attendance_threshold: parseInt(data.gov_attendance_threshold) || defaultForm.gov_attendance_threshold,
+          gov_promotion_min_tenure: parseInt(data.gov_promotion_min_tenure) || defaultForm.gov_promotion_min_tenure,
+          gov_promotion_min_qualification: data.gov_promotion_min_qualification || defaultForm.gov_promotion_min_qualification,
+          gov_diploma_upgrade_years_threshold: parseInt(data.gov_diploma_upgrade_years_threshold) || defaultForm.gov_diploma_upgrade_years_threshold
+        });
+      }
     } catch (err: any) {
       console.error(err);
       toast({
@@ -100,7 +101,7 @@ export default function GovernmentSettings() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('No active session found.');
 
-      const res = await fetch('/api/government/settings', {
+      const result = await syncFetch('/api/government/settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -109,15 +110,17 @@ export default function GovernmentSettings() {
         body: JSON.stringify(form)
       });
 
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.message || 'Failed to update settings');
+      if (result.offline) {
+        toast({
+          title: 'Offline Mode',
+          description: 'Settings update queued and will sync when online.'
+        });
+      } else {
+        toast({
+          title: 'Settings Saved',
+          description: 'Ministry parameters and system configurations have been updated successfully.'
+        });
       }
-
-      toast({
-        title: 'Settings Saved',
-        description: 'Ministry parameters and system configurations have been updated successfully.'
-      });
     } catch (err: any) {
       console.error(err);
       toast({

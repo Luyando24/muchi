@@ -281,6 +281,8 @@ export default function TeacherPortal() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [unreadAnnouncements, setUnreadAnnouncements] = useState<Announcement[]>([]);
+  const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
 
@@ -456,6 +458,34 @@ export default function TeacherPortal() {
     }
   }, [profile]);
 
+  const handleMarkAnnouncementsAsRead = () => {
+    try {
+      const readIds = JSON.parse(localStorage.getItem('read_announcement_ids') || '[]');
+      const newReadIds = Array.from(new Set([...readIds, ...unreadAnnouncements.map(a => a.id)]));
+      localStorage.setItem('read_announcement_ids', JSON.stringify(newReadIds));
+      setIsAnnouncementModalOpen(false);
+      setUnreadAnnouncements([]);
+    } catch (e) {
+      console.error('Error saving read announcement IDs:', e);
+    }
+  };
+
+  useEffect(() => {
+    const hasActiveProfileSetup = isProfileIncomplete || (needsEmailUpdate && !emailWarningDismissed);
+    if (!hasActiveProfileSetup && announcements && announcements.length > 0) {
+      try {
+        const readIds = JSON.parse(localStorage.getItem('read_announcement_ids') || '[]');
+        const unread = announcements.filter(a => !readIds.includes(a.id));
+        if (unread.length > 0) {
+          setUnreadAnnouncements(unread);
+          setIsAnnouncementModalOpen(true);
+        }
+      } catch (e) {
+        console.error('Error parsing read announcement IDs:', e);
+      }
+    }
+  }, [announcements, isProfileIncomplete, needsEmailUpdate, emailWarningDismissed]);
+
   const handleUpdatePassword = async () => {
     if (!newPassword || !confirmPassword) {
       toast({
@@ -538,7 +568,7 @@ export default function TeacherPortal() {
       const { data: profiles } = await offlineQuery(
         supabase
           .from('profiles')
-          .select('*, schools(*)')
+          .select('id, full_name, email, phone_number, role, secondary_role, current_role, is_temp_password, temp_password_expires_at, temp_password_set_at, gender, date_of_birth, marital_status, address, disability_status, employment_date, department, housing_status, highest_qualification, institution_name, completion_year, field_of_study, school_id, location_type, accommodation_provided, schools(ict_name, ict_email, ict_phone)')
           .eq('id', user.id)
           .limit(1),
         `profile:${user.id}`
@@ -1026,14 +1056,14 @@ export default function TeacherPortal() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/search?q=${encodeURIComponent(query)}`, {
+      const data = await syncFetch(`/api/school/search?q=${encodeURIComponent(query)}`, {
         headers: {
           'Authorization': `Bearer ${session.access_token}`
-        }
+        },
+        cacheKey: `school-search-${query}`
       });
 
-      if (response.ok) {
-        const data = await response.json();
+      if (data) {
         setSearchResults(data);
       }
     } catch (error) {
@@ -2986,6 +3016,69 @@ export default function TeacherPortal() {
         />
       )}
 
+      {/* Unread Announcements Popup Modal */}
+      {isAnnouncementModalOpen && unreadAnnouncements.length > 0 && (
+        <Dialog open={isAnnouncementModalOpen} onOpenChange={(open) => { if (!open) handleMarkAnnouncementsAsRead(); }}>
+          <DialogContent className="sm:max-w-[550px] p-0 overflow-hidden bg-white dark:bg-slate-900 border border-indigo-100 dark:border-indigo-900/40 shadow-2xl rounded-2xl">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-5 text-white flex items-center gap-3">
+              <div className="bg-white/20 p-2.5 rounded-xl animate-pulse">
+                <Megaphone className="h-6 w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg font-black leading-tight text-white">
+                  New School Announcements
+                </DialogTitle>
+                <DialogDescription className="text-indigo-100 text-xs font-medium">
+                  Please review the latest updates from school administration.
+                </DialogDescription>
+              </div>
+            </div>
+
+            <div className="p-6 max-h-[60vh] overflow-y-auto space-y-4">
+              {unreadAnnouncements.map((announcement) => (
+                <div 
+                  key={announcement.id} 
+                  className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 space-y-3"
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <h4 className="font-bold text-slate-900 dark:text-white leading-tight">
+                      {announcement.title}
+                    </h4>
+                    <Badge 
+                      className={cn(
+                        "text-[9px] font-bold uppercase tracking-wider py-0.5 px-2",
+                        announcement.priority === 'High' ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
+                        announcement.priority === 'Low' ? "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400" :
+                        "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                      )}
+                    >
+                      {announcement.priority || 'Normal'}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed whitespace-pre-wrap">
+                    {announcement.content}
+                  </p>
+                  <div className="flex justify-between items-center text-[10px] text-slate-400 dark:text-slate-500 font-semibold border-t border-slate-100 dark:border-slate-800/60 pt-2.5">
+                    <span>By: {announcement.author}</span>
+                    <span>{announcement.date}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="px-6 pb-6 pt-4 border-t border-slate-100 dark:border-slate-800/80 flex justify-end">
+              <Button
+                onClick={handleMarkAnnouncementsAsRead}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/10 px-5"
+              >
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Mark all as read
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* Mobile Bottom Navigation */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-40 px-2 py-2 safe-area-bottom shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
         <div className="flex justify-around items-center">
@@ -3222,12 +3315,11 @@ const TeacherMinistryCalendar = () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
-        const res = await fetch('/api/school/ministry-calendar', {
-          headers: { 'Authorization': `Bearer ${session.access_token}` }
+        const data = await syncFetch('/api/school/ministry-calendar', {
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+          cacheKey: 'school-ministry-calendar'
         });
-        if (res.ok) {
-          setCalendar(await res.json());
-        }
+        setCalendar(data || []);
       } catch (err) {
         console.error('Failed to load ministry calendar', err);
       } finally {

@@ -12,6 +12,7 @@ export interface SmtpConfig {
   from_name: string;
   from_email: string;
   is_active: boolean;
+  notification_emails?: string;
 }
 
 export interface SendEmailOptions {
@@ -239,5 +240,68 @@ async function logEmail(opts: {
   } catch (err) {
     // Non-critical, don't throw
     console.error('[emailService] Failed to log email:', err);
+  }
+}
+
+// ─── Notify all System Admins ────────────────────────────────────────────────
+export async function notifySystemAdmins(subject: string, html: string, text: string, templateKey?: string): Promise<{ success: boolean; count: number }> {
+  try {
+    const { data: admins, error } = await supabaseAdmin
+      .from('profiles')
+      .select('email')
+      .eq('role', 'system_admin');
+
+    if (error) throw error;
+
+    const adminEmails = admins
+      ?.map((a: any) => a.email?.trim())
+      .filter((email: any) => email && email.includes('@') && email.includes('.')) || [];
+
+    // Also fetch custom notification emails from SMTP settings
+    let customEmails: string[] = [];
+    try {
+      const { data: smtpConfig } = await supabaseAdmin
+        .from('email_smtp_config')
+        .select('notification_emails')
+        .limit(1)
+        .single();
+      
+      if (smtpConfig?.notification_emails) {
+        customEmails = smtpConfig.notification_emails
+          .split(',')
+          .map((e: string) => e.trim())
+          .filter((e: string) => e && e.includes('@') && e.includes('.'));
+      }
+    } catch (smtpErr) {
+      console.error('[emailService] Failed to fetch custom notification emails:', smtpErr);
+    }
+
+    // Merge and de-duplicate emails
+    const allEmails = Array.from(new Set([...adminEmails, ...customEmails]));
+
+    if (allEmails.length === 0) {
+      console.log('[emailService] No system admins or custom notification emails found to notify.');
+      return { success: false, count: 0 };
+    }
+
+    console.log(`[emailService] Sending system admin notifications to: ${allEmails.join(', ')}`);
+
+    // Send to all admins in parallel
+    await Promise.allSettled(
+      allEmails.map((email: string) => 
+        sendEmail({
+          to: email,
+          subject,
+          html,
+          text,
+          templateKey,
+        })
+      )
+    );
+
+    return { success: true, count: allEmails.length };
+  } catch (err) {
+    console.error('[emailService] Failed to notify system admins:', err);
+    return { success: false, count: 0 };
   }
 }

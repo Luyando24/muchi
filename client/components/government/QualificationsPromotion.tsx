@@ -13,6 +13,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
   ResponsiveContainer, AreaChart, Area 
 } from 'recharts';
+import { syncFetch } from '@/lib/syncService';
 
 const QUAL_ORDER = ["Certificate", "Diploma", "Bachelor's Degree", "Master's Degree", "PhD"];
 
@@ -42,10 +43,11 @@ export default function QualificationsPromotion() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
-        const res = await fetch('/api/government/regions', { 
-          headers: { 'Authorization': `Bearer ${session.access_token}` } 
+        const regionsData = await syncFetch('/api/government/regions', { 
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+          cacheKey: 'gov-regions'
         });
-        if (res.ok) setRegions(await res.json());
+        if (regionsData) setRegions(regionsData);
       } catch (err) {
         console.error("Failed to load regions:", err);
       }
@@ -63,11 +65,11 @@ export default function QualificationsPromotion() {
         if (filters.province !== 'All') url += `province=${encodeURIComponent(filters.province)}&`;
         if (filters.district !== 'All') url += `district=${encodeURIComponent(filters.district)}`;
 
-        const res = await fetch(url, { 
-          headers: { 'Authorization': `Bearer ${session.access_token}` } 
+        const result = await syncFetch(url, { 
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+          cacheKey: `gov-qualifications-${filters.province}-${filters.district}`
         });
-        if (res.ok) {
-          const result = await res.json();
+        if (result) {
           setData({
             qualifications: result.qualifications || [],
             distribution: result.distribution || {},

@@ -254,7 +254,7 @@ export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardP
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No session found");
 
-      const response = await fetch(`/api/school/approvals/${id}`, {
+      const result = await syncFetch(`/api/school/approvals/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -263,12 +263,17 @@ export default function SchoolDashboard({ onRelaunchTutorial }: SchoolDashboardP
         body: JSON.stringify({ status })
       });
 
-      if (!response.ok) throw new Error(`Failed to ${status.toLowerCase()} request`);
-
-      toast({
-        title: "Success",
-        description: `Request ${status.toLowerCase()} successfully`
-      });
+      if (result.offline) {
+        toast({
+          title: "Offline Mode",
+          description: `Request update queued and will process when online.`
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: `Request ${status.toLowerCase()} successfully`
+        });
+      }
 
       fetchDashboardData(); // Refresh data
     } catch (err: any) {

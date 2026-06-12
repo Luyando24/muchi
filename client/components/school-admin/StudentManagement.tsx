@@ -52,6 +52,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/supabase';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { syncFetch } from '@/lib/syncService';
+import { getProfileSchoolId, schoolCacheKey } from '@/lib/schoolScope';
 import { PaginationControls } from '@/components/ui/pagination-controls';
 import type { PaginatedResponse } from '@shared/api';
 
@@ -202,11 +203,13 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/details', {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      const schoolId = await getProfileSchoolId();
+      const data = await syncFetch('/api/school/details', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        cacheKey: schoolCacheKey('school-details', schoolId)
       });
-      if (response.ok) {
-        setSchoolInfo(await response.json());
+      if (data) {
+        setSchoolInfo(data);
       }
     } catch (error) {
       console.error('Error fetching school details:', error);
@@ -248,7 +251,7 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/create-student', {
+      const result = await syncFetch('/api/school/create-student', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -264,15 +267,17 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
         })
       });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Failed to register student');
+      if (result.offline) {
+        toast({
+          title: "Offline Mode",
+          description: "Student registration queued for sync.",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Student registered successfully",
+        });
       }
-
-      toast({
-        title: "Success",
-        description: "Student registered successfully",
-      });
       setIsRegisterOpen(false);
       resetForm();
       fetchStudents();
@@ -315,7 +320,7 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/students/${currentStudent.id}`, {
+      const result = await syncFetch(`/api/school/students/${currentStudent.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -332,12 +337,17 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
         })
       });
 
-      if (!response.ok) throw new Error('Failed to update student');
-
-      toast({
-        title: "Success",
-        description: "Student updated successfully",
-      });
+      if (result.offline) {
+        toast({
+          title: "Offline Mode",
+          description: "Student update queued for sync.",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Student updated successfully",
+        });
+      }
       setIsEditOpen(false);
       fetchStudents();
     } catch (error: any) {
@@ -358,19 +368,24 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/students/${deleteTargetId}`, {
+      const result = await syncFetch(`/api/school/students/${deleteTargetId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${session.access_token}`
         }
       });
 
-      if (!response.ok) throw new Error('Failed to delete student');
-
-      toast({
-        title: "Success",
-        description: "Student deleted successfully",
-      });
+      if (result.offline) {
+        toast({
+          title: "Offline Mode",
+          description: "Student deletion queued for sync.",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Student deleted successfully",
+        });
+      }
       setDeleteTargetId(null);
       fetchStudents();
     } catch (error: any) {
@@ -391,19 +406,18 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const promises = selectedStudents.map(id => fetch(`/api/school/students/${id}`, {
+      const promises = selectedStudents.map(id => syncFetch(`/api/school/students/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       }));
 
       const results = await Promise.all(promises);
-      const failed = results.filter(r => !r.ok);
+      const offlineCount = results.filter(r => r?.offline).length;
 
-      if (failed.length > 0) {
+      if (offlineCount > 0) {
         toast({ 
-          title: "Partial Success", 
-          description: `Deleted ${selectedStudents.length - failed.length} students. ${failed.length} failed.`,
-          variant: "destructive" 
+          title: "Offline Mode", 
+          description: `${offlineCount} student deletion operations queued for sync.` 
         });
       } else {
         toast({ title: "Success", description: `${selectedStudents.length} students deleted successfully` });
@@ -425,24 +439,25 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/students/re-match-classes', {
+      const result = await syncFetch('/api/school/students/re-match-classes', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`
         }
       });
 
-      const result = await response.json();
-
-      if (response.ok) {
+      if (result.offline) {
+        toast({
+          title: "Offline Mode",
+          description: "Class rematch queued for sync.",
+        });
+      } else {
         toast({
           title: "Re-match Complete",
           description: result.message,
         });
-        fetchStudents();
-      } else {
-        throw new Error(result.message || 'Failed to re-match classes');
       }
+      fetchStudents();
     } catch (error: any) {
       toast({
         title: "Error",
@@ -465,14 +480,12 @@ export default function StudentManagement({ initialViewId, onClearViewId }: { in
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/students?all=true', {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      const result = await syncFetch('/api/school/students?all=true', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        cacheKey: 'school-students-all'
       });
-
-      if (!response.ok) throw new Error('Failed to fetch full student list');
       
-      const result = await response.json();
-      const allStudents = result.data || [];
+      const allStudents = result.data || result || [];
 
       if (allStudents.length === 0) {
         toast({

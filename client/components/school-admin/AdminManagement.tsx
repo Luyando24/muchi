@@ -56,6 +56,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { syncFetch } from '@/lib/syncService';
+import { getProfileSchoolId, schoolCacheKey } from '@/lib/schoolScope';
 
 // Schema for creating a school admin
 const adminSchema = z.object({
@@ -118,16 +120,15 @@ export default function AdminManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/admins', {
+      const schoolId = await getProfileSchoolId();
+      const data = await syncFetch('/api/school/admins', {
         headers: {
           'Authorization': `Bearer ${session.access_token}`
-        }
+        },
+        cacheKey: schoolCacheKey('school-admins', schoolId)
       });
 
-      if (!response.ok) throw new Error('Failed to fetch admins');
-
-      const data = await response.json();
-      setAdmins(data);
+      setAdmins(data || []);
     } catch (error: any) {
       console.error('Error fetching admins:', error);
       toast({
@@ -145,7 +146,7 @@ export default function AdminManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/admins', {
+      const result = await syncFetch('/api/school/admins', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -154,15 +155,17 @@ export default function AdminManagement() {
         body: JSON.stringify(values)
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to create admin');
+      if (result.offline) {
+        toast({
+          title: "Offline Mode",
+          description: "Admin creation queued for sync.",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "School admin created successfully.",
+        });
       }
-
-      toast({
-        title: "Success",
-        description: "School admin created successfully.",
-      });
 
       setIsDialogOpen(false);
       form.reset();
@@ -184,17 +187,16 @@ export default function AdminManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/admins/${deleteTargetId}`, {
+      const result = await syncFetch(`/api/school/admins/${deleteTargetId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to delete admin');
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Admin deletion queued for sync." });
+      } else {
+        toast({ title: "Success", description: "Admin removed successfully." });
       }
-
-      toast({ title: "Success", description: "Admin removed successfully." });
       setDeleteTargetId(null);
       fetchAdmins();
     } catch (error: any) {
@@ -217,7 +219,7 @@ export default function AdminManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/admins/${resetTargetId}/reset-password`, {
+      const result = await syncFetch(`/api/school/admins/${resetTargetId}/reset-password`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -226,12 +228,11 @@ export default function AdminManagement() {
         body: JSON.stringify({ newPassword })
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to reset password');
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Password reset queued for sync." });
+      } else {
+        toast({ title: "Success", description: "Password reset successfully." });
       }
-
-      toast({ title: "Success", description: "Password reset successfully." });
       setResetTargetId(null);
       setNewPassword('');
     } catch (error: any) {
@@ -249,17 +250,16 @@ export default function AdminManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/admins/${assignTeacherTargetId}/assign-teacher`, {
+      const result = await syncFetch(`/api/school/admins/${assignTeacherTargetId}/assign-teacher`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to assign teacher role');
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Teacher role assignment queued for sync." });
+      } else {
+        toast({ title: "Success", description: "Teacher role assigned successfully." });
       }
-
-      toast({ title: "Success", description: "Teacher role assigned successfully." });
       setAssignTeacherTargetId(null);
       fetchAdmins();
     } catch (error: any) {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { syncFetch } from '@/lib/syncService';
 import {
   Store,
   Plus,
@@ -198,11 +199,10 @@ export default function TuckshopManagement() {
   const fetchProducts = async (sid: string) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
-    const res = await fetch('/api/school/tuckshop/inventory', {
+    const data = await syncFetch('/api/school/tuckshop/inventory', {
       headers: { 'Authorization': `Bearer ${session.access_token}` }
     });
-    if (res.ok) {
-      const data = await res.json();
+    if (data) {
       setProducts(data || []);
     }
   };
@@ -210,11 +210,10 @@ export default function TuckshopManagement() {
   const fetchSales = async (sid: string) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
-    const res = await fetch('/api/school/tuckshop/sales', {
+    const data = await syncFetch('/api/school/tuckshop/sales', {
       headers: { 'Authorization': `Bearer ${session.access_token}` }
     });
-    if (res.ok) {
-      const data = await res.json();
+    if (data) {
       setSales(data || []);
     }
   };
@@ -222,11 +221,10 @@ export default function TuckshopManagement() {
   const fetchStaff = async (sid: string) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
-    const res = await fetch('/api/school/tuckshop/staff', {
+    const data = await syncFetch('/api/school/tuckshop/staff', {
       headers: { 'Authorization': `Bearer ${session.access_token}` }
     });
-    if (res.ok) {
-      const data = await res.json();
+    if (data) {
       setStaff(data || []);
     }
   };
@@ -234,11 +232,10 @@ export default function TuckshopManagement() {
   const fetchAnalytics = async (sid: string) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
-    const res = await fetch('/api/school/tuckshop/analytics', {
+    const data = await syncFetch('/api/school/tuckshop/analytics', {
       headers: { 'Authorization': `Bearer ${session.access_token}` }
     });
-    if (res.ok) {
-      const data = await res.json();
+    if (data) {
       setAnalytics(data);
     }
   };
@@ -310,7 +307,7 @@ export default function TuckshopManagement() {
       
       const method = editingProduct ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
+      const result = await syncFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -319,15 +316,17 @@ export default function TuckshopManagement() {
         body: JSON.stringify(productForm)
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || 'Failed to save product');
+      if (result.offline) {
+        toast({
+          title: 'Offline Mode',
+          description: `${productForm.name} save queued and will sync when online.`
+        });
+      } else {
+        toast({
+          title: 'Product Saved',
+          description: `${productForm.name} saved successfully.`
+        });
       }
-
-      toast({
-        title: 'Product Saved',
-        description: `${productForm.name} saved successfully.`
-      });
 
       setIsProductModalOpen(false);
       if (schoolId) {
@@ -352,20 +351,22 @@ export default function TuckshopManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch(`/api/school/tuckshop/inventory/${id}`, {
+      const result = await syncFetch(`/api/school/tuckshop/inventory/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || 'Failed to delete product');
+      if (result.offline) {
+        toast({
+          title: 'Offline Mode',
+          description: `${name} deletion queued and will sync when online.`
+        });
+      } else {
+        toast({
+          title: 'Product Deleted',
+          description: `${name} has been removed from inventory.`
+        });
       }
-
-      toast({
-        title: 'Product Deleted',
-        description: `${name} has been removed from inventory.`
-      });
 
       if (schoolId) {
         await fetchProducts(schoolId);
@@ -475,7 +476,7 @@ export default function TuckshopManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch('/api/school/tuckshop/sales', {
+      const result = await syncFetch('/api/school/tuckshop/sales', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -490,15 +491,17 @@ export default function TuckshopManagement() {
         })
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || 'Checkout failed');
+      if (result.offline) {
+        toast({
+          title: 'Offline Mode',
+          description: 'Checkout transaction queued and will sync when online.'
+        });
+      } else {
+        toast({
+          title: 'Checkout Successful',
+          description: 'Transaction recorded and stock updated.'
+        });
       }
-
-      toast({
-        title: 'Checkout Successful',
-        description: 'Transaction recorded and stock updated.'
-      });
 
       // Reset Cart and Buyer states
       setCart([]);
@@ -540,7 +543,7 @@ export default function TuckshopManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch('/api/school/tuckshop/staff', {
+      const result = await syncFetch('/api/school/tuckshop/staff', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -549,15 +552,17 @@ export default function TuckshopManagement() {
         body: JSON.stringify(staffForm)
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || 'Failed to assign staff');
+      if (result.offline) {
+        toast({
+          title: 'Offline Mode',
+          description: 'Staff operator assignment queued and will sync when online.'
+        });
+      } else {
+        toast({
+          title: 'Staff Assigned',
+          description: 'Operator assigned successfully.'
+        });
       }
-
-      toast({
-        title: 'Staff Assigned',
-        description: 'Operator assigned successfully.'
-      });
 
       setIsStaffModalOpen(false);
       setStaffForm({ user_id: '', role: 'Seller', status: 'Active' });
@@ -579,7 +584,7 @@ export default function TuckshopManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch(`/api/school/tuckshop/staff/${id}`, {
+      const result = await syncFetch(`/api/school/tuckshop/staff/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -588,15 +593,17 @@ export default function TuckshopManagement() {
         body: JSON.stringify({ status: nextStatus })
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || 'Failed to update status');
+      if (result.offline) {
+        toast({
+          title: 'Offline Mode',
+          description: `Staff status update queued and will sync when online.`
+        });
+      } else {
+        toast({
+          title: 'Status Updated',
+          description: `Staff operator is now ${nextStatus}.`
+        });
       }
-
-      toast({
-        title: 'Status Updated',
-        description: `Staff operator is now ${nextStatus}.`
-      });
 
       if (schoolId) await fetchStaff(schoolId);
     } catch (err: any) {
@@ -615,20 +622,22 @@ export default function TuckshopManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch(`/api/school/tuckshop/staff/${id}`, {
+      const result = await syncFetch(`/api/school/tuckshop/staff/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || 'Failed to delete assignment');
+      if (result.offline) {
+        toast({
+          title: 'Offline Mode',
+          description: 'Staff operator removal queued and will sync when online.'
+        });
+      } else {
+        toast({
+          title: 'Staff Removed',
+          description: 'Operator assignment deleted successfully.'
+        });
       }
-
-      toast({
-        title: 'Staff Removed',
-        description: 'Operator assignment deleted successfully.'
-      });
 
       if (schoolId) await fetchStaff(schoolId);
     } catch (err: any) {

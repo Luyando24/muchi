@@ -279,7 +279,7 @@ export default function AcademicManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/classes/${allocationClassId}/subjects/assign`, {
+      const result = await syncFetch(`/api/school/classes/${allocationClassId}/subjects/assign`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -291,12 +291,11 @@ export default function AcademicManagement() {
         })
       });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Failed to assign subject');
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Subject assignment queued for sync." });
+      } else {
+        toast({ title: "Success", description: "Subject assigned successfully" });
       }
-
-      toast({ title: "Success", description: "Subject assigned successfully" });
       setIsAddAllocationOpen(false);
       setAllocationForm({ subjectId: '', teacherId: '' });
       fetchAllocations(allocationClassId);
@@ -316,14 +315,16 @@ export default function AcademicManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/classes/${allocationClassId}/subjects/${subjectId}`, {
+      const result = await syncFetch(`/api/school/classes/${allocationClassId}/subjects/${subjectId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
-      if (!response.ok) throw new Error('Failed to remove subject');
-
-      toast({ title: "Success", description: "Subject removed successfully" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Subject removal queued for sync." });
+      } else {
+        toast({ title: "Success", description: "Subject removed successfully" });
+      }
       fetchAllocations(allocationClassId);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -374,14 +375,16 @@ export default function AcademicManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/subjects/${confirmState.id}`, {
+      const result = await syncFetch(`/api/school/subjects/${confirmState.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
-      if (!response.ok) throw new Error('Failed to delete subject');
-
-      toast({ title: "Success", description: "Subject deleted successfully" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Subject deletion queued for sync." });
+      } else {
+        toast({ title: "Success", description: "Subject deleted successfully" });
+      }
       setConfirmState({ type: null });
       fetchData();
     } catch (error: any) {
@@ -435,14 +438,16 @@ export default function AcademicManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/classes/${confirmState.id}`, {
+      const result = await syncFetch(`/api/school/classes/${confirmState.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
-      if (!response.ok) throw new Error('Failed to delete class');
-
-      toast({ title: "Success", description: "Class deleted successfully" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Class deletion queued for sync." });
+      } else {
+        toast({ title: "Success", description: "Class deleted successfully" });
+      }
       setConfirmState({ type: null });
       fetchData();
     } catch (error: any) {
@@ -463,7 +468,7 @@ export default function AcademicManagement() {
       const url = isEdit ? `/api/school/departments/${deptForm.id}` : '/api/school/departments';
       const method = isEdit ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const result = await syncFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -472,9 +477,11 @@ export default function AcademicManagement() {
         body: JSON.stringify(deptForm)
       });
 
-      if (!response.ok) throw new Error('Failed to save department');
-
-      toast({ title: "Success", description: `Department ${isEdit ? 'updated' : 'created'} successfully` });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Department changes queued for sync." });
+      } else {
+        toast({ title: "Success", description: `Department ${isEdit ? 'updated' : 'created'} successfully` });
+      }
       setIsAddDeptOpen(false);
       setIsEditDeptOpen(false);
       setDeptForm({ id: '', name: '', head_of_department_id: '' });
@@ -493,14 +500,16 @@ export default function AcademicManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/departments/${confirmState.id}`, {
+      const result = await syncFetch(`/api/school/departments/${confirmState.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
-      if (!response.ok) throw new Error('Failed to delete department');
-
-      toast({ title: "Success", description: "Department deleted successfully" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Department deletion queued for sync." });
+      } else {
+        toast({ title: "Success", description: "Department deleted successfully" });
+      }
       setConfirmState({ type: null });
       fetchData();
     } catch (error: any) {
@@ -524,22 +533,22 @@ export default function AcademicManagement() {
       if (!session) return;
 
       const path = type === 'subject' ? 'subjects' : (type === 'class' ? 'classes' : type + 's');
-      const promises = ids.map(id => fetch(`/api/school/${path}/${id}`, {
+      const promises = ids.map(id => syncFetch(`/api/school/${path}/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       }));
 
       const results = await Promise.all(promises);
-      const failed = results.filter(r => !r.ok);
+      const failed = results.filter(r => !r || r.error);
 
       if (failed.length > 0) {
         toast({ 
           title: "Partial Success", 
-          description: `Successfully deleted ${ids.length - failed.length} items. ${failed.length} failed.`,
+          description: `Successfully processed ${ids.length - failed.length} items. ${failed.length} failed.`,
           variant: "destructive" 
         });
       } else {
-        toast({ title: "Success", description: `${ids.length} items deleted successfully` });
+        toast({ title: "Success", description: `${ids.length} items processed successfully` });
       }
 
       if (type === 'class') setSelectedClasses([]);
@@ -582,7 +591,7 @@ export default function AcademicManagement() {
         throw new Error('Min and max values must be valid numbers.');
       }
 
-      const response = await fetch(url, {
+      const result = await syncFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -591,12 +600,11 @@ export default function AcademicManagement() {
         body: JSON.stringify(payload)
       });
 
-      if (!response.ok) {
-        const errBody = await response.json().catch(() => ({}));
-        throw new Error(errBody.message || 'Failed to save grading scale');
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Grading scale changes queued for sync." });
+      } else {
+        toast({ title: "Success", description: `Grading scale ${isEdit ? 'updated' : 'created'} successfully` });
       }
-
-      toast({ title: "Success", description: `Grading scale ${isEdit ? 'updated' : 'created'} successfully` });
       setIsAddScaleOpen(false);
       setIsEditScaleOpen(false);
       setScaleForm({ id: '', grade: '', min_percentage: 0, max_percentage: 100, description: '', section: 'secondary' });
@@ -615,14 +623,16 @@ export default function AcademicManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/grading-scales/${confirmState.id}`, {
+      const result = await syncFetch(`/api/school/grading-scales/${confirmState.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
-      if (!response.ok) throw new Error('Failed to delete grading scale');
-
-      toast({ title: "Success", description: "Grading scale deleted successfully" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Grading scale deletion queued for sync." });
+      } else {
+        toast({ title: "Success", description: "Grading scale deleted successfully" });
+      }
       setConfirmState({ type: null });
       fetchData();
     } catch (error: any) {
@@ -643,7 +653,7 @@ export default function AcademicManagement() {
       const url = isEdit ? `/api/school/grading-weights/${weightForm.id}` : '/api/school/grading-weights';
       const method = isEdit ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const result = await syncFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -652,9 +662,11 @@ export default function AcademicManagement() {
         body: JSON.stringify(weightForm)
       });
 
-      if (!response.ok) throw new Error('Failed to save grading weight');
-
-      toast({ title: "Success", description: `Grading weight ${isEdit ? 'updated' : 'created'} successfully` });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Grading weight changes queued for sync." });
+      } else {
+        toast({ title: "Success", description: `Grading weight ${isEdit ? 'updated' : 'created'} successfully` });
+      }
       setIsAddWeightOpen(false);
       setIsEditWeightOpen(false);
       setWeightForm({ id: '', assessment_type: '', weight_percentage: 0 });
@@ -673,14 +685,16 @@ export default function AcademicManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/grading-weights/${confirmState.id}`, {
+      const result = await syncFetch(`/api/school/grading-weights/${confirmState.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
-      if (!response.ok) throw new Error('Failed to delete assessment weight');
-
-      toast({ title: "Success", description: "Assessment weight deleted successfully" });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Assessment weight deletion queued for sync." });
+      } else {
+        toast({ title: "Success", description: "Assessment weight deleted successfully" });
+      }
       setConfirmState({ type: null });
       fetchData();
     } catch (error: any) {
@@ -698,11 +712,11 @@ export default function AcademicManagement() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-      const res = await fetch(`/api/school/classes/${cls.id}/subjects`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      const data = await syncFetch(`/api/school/classes/${cls.id}/subjects`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        cacheKey: `class-subjects-${cls.id}`
       });
-      if (res.ok) {
-        const data = await res.json();
+      if (data) {
         setSelectedClassSubjects(data.map((s: any) => s.id));
       }
     } catch (error) {
@@ -717,7 +731,7 @@ export default function AcademicManagement() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-      const res = await fetch(`/api/school/classes/${selectedClassId}/subjects`, {
+      const result = await syncFetch(`/api/school/classes/${selectedClassId}/subjects`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -725,8 +739,12 @@ export default function AcademicManagement() {
         },
         body: JSON.stringify({ subjectIds: selectedClassSubjects })
       });
-      if (!res.ok) throw new Error('Failed to save subjects');
-      toast({ title: "Success", description: "Class subjects updated successfully" });
+      
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Class subjects update queued for sync." });
+      } else {
+        toast({ title: "Success", description: "Class subjects updated successfully" });
+      }
       setIsManageSubjectsOpen(false);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -747,7 +765,7 @@ export default function AcademicManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/grades/calculate', {
+      const data = await syncFetch('/api/school/grades/calculate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -764,17 +782,10 @@ export default function AcademicManagement() {
         })
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        // If blocked by unpublished grades, show the readiness report instead of just a toast
-        if (response.status === 400 && data.unpublished && data.unpublished.length > 0) {
-          setUnpublishedGrades(data.unpublished);
-          setIsReadinessReportOpen(true);
-          toast({ title: "Calculation Blocked", description: data.message, variant: "destructive" });
-        } else {
-          throw new Error(data.message || 'Failed to calculate grades');
-        }
+      if (data.unpublished && data.unpublished.length > 0) {
+        setUnpublishedGrades(data.unpublished);
+        setIsReadinessReportOpen(true);
+        toast({ title: "Calculation Blocked", description: data.message || "Unpublished grades exist.", variant: "destructive" });
         return;
       }
 
@@ -814,14 +825,12 @@ export default function AcademicManagement() {
         academicYear: calcForm.academicYear
       });
 
-      const response = await fetch(`/api/school/grades/readiness?${params}`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      const data = await syncFetch(`/api/school/grades/readiness?${params}`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        cacheKey: `grades-readiness-${calcForm.classId}-${calcForm.term}-${calcForm.examType}-${calcForm.academicYear}`
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message);
-
-      setUnpublishedGrades(data);
+      setUnpublishedGrades(data || []);
       setIsReadinessReportOpen(true);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -841,16 +850,14 @@ export default function AcademicManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/grades/status?classId=${calcForm.classId === 'all' ? '' : calcForm.classId}&term=${encodeURIComponent(calcForm.term)}&examType=${encodeURIComponent(calcForm.examType)}&academicYear=${encodeURIComponent(calcForm.academicYear)}`, {
+      const data = await syncFetch(`/api/school/grades/status?classId=${calcForm.classId === 'all' ? '' : calcForm.classId}&term=${encodeURIComponent(calcForm.term)}&examType=${encodeURIComponent(calcForm.examType)}&academicYear=${encodeURIComponent(calcForm.academicYear)}`, {
         headers: {
           'Authorization': `Bearer ${session.access_token}`
-        }
+        },
+        cacheKey: `grades-status-${calcForm.classId}-${calcForm.term}-${calcForm.examType}-${calcForm.academicYear}`
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Failed to fetch status');
-
-      setGradeStatus(data);
+      setGradeStatus(data || []);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
@@ -866,7 +873,7 @@ export default function AcademicManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/results/publish', {
+      const result = await syncFetch('/api/school/results/publish', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -881,10 +888,11 @@ export default function AcademicManagement() {
         })
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Failed to publish results');
-
-      toast({ title: "Success", description: data.message });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Results publication queued for sync." });
+      } else {
+        toast({ title: "Success", description: result.message || "Results published successfully" });
+      }
       setConfirmState({ type: null });
       handleCheckStatus();
     } catch (error: any) {
@@ -934,7 +942,7 @@ export default function AcademicManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/grades/migrate', {
+      const result = await syncFetch('/api/school/grades/migrate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -950,10 +958,11 @@ export default function AcademicManagement() {
         })
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Failed to move grades');
-
-      toast({ title: "Success", description: data.message });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Grade migration queued for sync." });
+      } else {
+        toast({ title: "Success", description: result.message || "Grades moved successfully" });
+      }
       setIsMigrateModalOpen(false);
       setTargetExamType('');
       // Force refresh the readiness/status checks if they were open
@@ -1564,22 +1573,23 @@ export default function AcademicManagement() {
                             if (name && name.trim()) {
                               try {
                                 const { data: { session } } = await supabase.auth.getSession();
-                                const res = await fetch('/api/school/departments', {
+                                const newDept = await syncFetch('/api/school/departments', {
                                   method: 'POST',
                                   headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}`},
                                   body: JSON.stringify({ name: name.trim() })
                                 });
-                                if (res.ok) {
-                                  const newDept = await res.json();
+                                if (newDept.offline) {
+                                  toast({ title: "Offline Mode", description: "Department creation queued for sync." });
+                                  const tempDept = { id: `temp-${Date.now()}`, name: name.trim() };
+                                  setDepartments(prev => [...prev, tempDept].sort((a,b) => a.name.localeCompare(b.name)));
+                                  setSubjectForm({ ...subjectForm, department: tempDept.name });
+                                } else {
                                   setDepartments(prev => [...prev, newDept].sort((a,b) => a.name.localeCompare(b.name)));
                                   setSubjectForm({ ...subjectForm, department: newDept.name });
                                   toast({ title: "Success", description: "Department created" });
-                                } else {
-                                  const err = await res.json();
-                                  toast({ title: "Error", description: err.message, variant: "destructive" });
                                 }
                               } catch(e: any) {
-                                toast({ title: "Error", description: "Failed to create department", variant: "destructive" });
+                                toast({ title: "Error", description: e.message || "Failed to create department", variant: "destructive" });
                               }
                             }
                           }}
@@ -1787,20 +1797,23 @@ export default function AcademicManagement() {
                                  const { data: { session } } = await supabase.auth.getSession();
                                  if (!session) return;
                                  
-                                 const response = await fetch(`/api/school/classes/${allocationClassId}/subjects/assign`, {
-                                    method: 'POST',
-                                    headers: {
-                                      'Content-Type': 'application/json',
-                                      'Authorization': `Bearer ${session.access_token}`
-                                    },
-                                    body: JSON.stringify({
-                                      subjectId: cs.id,
-                                      teacherId: newTeacherId === "unassigned" ? null : newTeacherId
-                                    })
-                                 });
-                                 
-                                 if (!response.ok) throw new Error("Failed");
-                                 toast({ title: "Success", description: "Teacher updated" });
+                                 const result = await syncFetch(`/api/school/classes/${allocationClassId}/subjects/assign`, {
+                                     method: 'POST',
+                                     headers: {
+                                       'Content-Type': 'application/json',
+                                       'Authorization': `Bearer ${session.access_token}`
+                                     },
+                                     body: JSON.stringify({
+                                       subjectId: cs.id,
+                                       teacherId: newTeacherId === "unassigned" ? null : newTeacherId
+                                     })
+                                  });
+                                  
+                                  if (result.offline) {
+                                    toast({ title: "Offline Mode", description: "Teacher update queued for sync." });
+                                  } else {
+                                    toast({ title: "Success", description: "Teacher updated" });
+                                  }
                                  fetchAllocations(allocationClassId);
                                } catch (e) {
                                  toast({ title: "Error", description: "Failed to update teacher", variant: "destructive" });
@@ -2756,19 +2769,20 @@ export default function AcademicManagement() {
                     if (name && name.trim()) {
                       try {
                         const { data: { session } } = await supabase.auth.getSession();
-                        const res = await fetch('/api/school/departments', {
+                        const newDept = await syncFetch('/api/school/departments', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}`},
                           body: JSON.stringify({ name: name.trim() })
                         });
-                        if (res.ok) {
-                          const newDept = await res.json();
+                        if (newDept.offline) {
+                          toast({ title: "Offline Mode", description: "Department creation queued for sync." });
+                          const tempDept = { id: `temp-${Date.now()}`, name: name.trim() };
+                          setDepartments(prev => [...prev, tempDept].sort((a,b) => a.name.localeCompare(b.name)));
+                          setSubjectForm({ ...subjectForm, department: tempDept.name });
+                        } else {
                           setDepartments(prev => [...prev, newDept].sort((a,b) => a.name.localeCompare(b.name)));
                           setSubjectForm({ ...subjectForm, department: newDept.name });
                           toast({ title: "Success", description: "Department created" });
-                        } else {
-                          const err = await res.json();
-                          toast({ title: "Error", description: err.message, variant: "destructive" });
                         }
                       } catch(e: any) {
                         toast({ title: "Error", description: "Failed to create department", variant: "destructive" });

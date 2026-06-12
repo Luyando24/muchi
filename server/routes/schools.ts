@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { School } from '../../shared/api.js';
 import { supabaseAdmin } from '../lib/supabase.js';
+import { notifySystemAdmins } from '../services/emailService.js';
 
 const router = Router();
 
@@ -352,6 +353,32 @@ router.post('/register', async (req: Request, res: Response) => {
       message: 'Registration submitted successfully! Your school is currently pending approval by a system administrator.',
       schoolId: school.id
     });
+
+    // Notify system admins asynchronously
+    (async () => {
+      try {
+        await notifySystemAdmins(
+          `[MUCHI Admin] New School Pending Approval - ${school.name}`,
+          `
+            <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;">
+              <h2>New School Self-Registration Submitted</h2>
+              <p><strong>School Name:</strong> ${school.name}</p>
+              <p><strong>URL Slug:</strong> ${school.slug}</p>
+              <p><strong>School Type:</strong> ${school.school_type || 'Secondary'}</p>
+              <p><strong>Location:</strong> ${school.district || 'N/A'}, ${school.province || 'N/A'}, ${school.country || 'Zambia'}</p>
+              <p><strong>Admin Contact:</strong> ${adminName} (${adminEmail})</p>
+              <p><strong>Subscription Plan:</strong> ${planToUse}</p>
+              <hr style="margin: 20px 0; border: 0; border-top: 1px solid #e5e7eb;" />
+              <p style="color: #6b7280; font-size: 13px;">This school is currently set to <strong>Pending Approval</strong> and requires a system admin to assign a license or activate the account.</p>
+              <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+            </div>
+          `,
+          `New School Self-Registration Submitted\n\nSchool Name: ${school.name}\nURL Slug: ${school.slug}\nSchool Type: ${school.school_type || 'Secondary'}\nLocation: ${school.district || 'N/A'}, ${school.province || 'N/A'}, ${school.country || 'Zambia'}\nAdmin Contact: ${adminName} (${adminEmail})\nSubscription Plan: ${planToUse}\nTime: ${new Date().toLocaleString()}`
+        );
+      } catch (err) {
+        console.error("Failed to notify system admins about new school registration:", err);
+      }
+    })();
 
   } catch (error: any) {
     console.error('School Self-Registration Error:', error);

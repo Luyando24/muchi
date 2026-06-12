@@ -304,21 +304,14 @@ export default function SchoolAdminPortal() {
 
         const headers = { Authorization: `Bearer ${session.access_token}` };
 
-        // 1. License Check (HEAD request)
-        const response = await fetch('/api/school/dashboard', {
-          method: 'HEAD',
-          headers
-        });
-
-        if (response.status === 403) {
-          // If 403, it could be license or role/profile issues
-          // Let's try a GET to get the error message
-          const getRes = await fetch('/api/school/dashboard', {
-            method: 'GET',
-            headers
+        // 1. License Check
+        try {
+          await syncFetch('/api/school/dashboard', {
+            headers,
+            forceSync: true
           });
-          const errorData = await getRes.json().catch(() => ({ message: "Your school license has expired or is invalid." }));
-          setLicenseError(errorData.message || "Your school license has expired or is invalid.");
+        } catch (err: any) {
+          setLicenseError(err.message || "Your school license has expired or is invalid.");
         }
 
         const profileSchoolId = profile?.school_id ?? (await getProfileSchoolId());
@@ -414,7 +407,7 @@ export default function SchoolAdminPortal() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/settings', {
+      const updatedSchool = await syncFetch('/api/school/settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -427,18 +420,19 @@ export default function SchoolAdminPortal() {
         }),
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to save ICT contact details');
+      if (updatedSchool.offline) {
+        toast({
+          title: "Offline Mode",
+          description: "ICT contact details queued and will sync when online.",
+        });
+      } else {
+        setSchoolSettings(updatedSchool);
+        markSettingsCompletionPopupEligibleInOneMinute();
+        toast({
+          title: "Contact saved",
+          description: "ICT support details saved. You can now use all platform features.",
+        });
       }
-
-      const updatedSchool = await response.json();
-      setSchoolSettings(updatedSchool);
-      markSettingsCompletionPopupEligibleInOneMinute();
-      toast({
-        title: "Contact saved",
-        description: "ICT support details saved. You can now use all platform features.",
-      });
     } catch (error: any) {
       console.error('Error saving ICT details:', error);
       toast({
@@ -467,7 +461,7 @@ export default function SchoolAdminPortal() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/settings', {
+      const updatedSchool = await syncFetch('/api/school/settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -479,22 +473,21 @@ export default function SchoolAdminPortal() {
         }),
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to save boarding details');
+      if (updatedSchool.offline) {
+        toast({
+          title: "Offline Mode",
+          description: "Boarding configuration queued and will sync when online.",
+        });
+      } else {
+        setSchoolSettings(updatedSchool);
+        toast({
+          title: "Configuration saved",
+          description: "Boarding configuration saved. Refreshing the portal...",
+        });
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
       }
-
-      const updatedSchool = await response.json();
-      setSchoolSettings(updatedSchool);
-      toast({
-        title: "Configuration saved",
-        description: "Boarding configuration saved. Refreshing the portal...",
-      });
-      
-      // Auto-refresh the page after a short delay so the user sees the toast
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
     } catch (error: any) {
       console.error('Error saving boarding details:', error);
       toast({
@@ -546,7 +539,7 @@ export default function SchoolAdminPortal() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/school/setup/claim-reward', {
+      const result = await syncFetch('/api/school/setup/claim-reward', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -554,20 +547,20 @@ export default function SchoolAdminPortal() {
         },
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to claim reward');
+      if (result.offline) {
+        toast({
+          title: "Offline Mode",
+          description: "Reward claim queued and will process when online.",
+        });
+      } else {
+        setSetupRewardClaimed(true);
+        setShowSetupReminder(false);
+        toast({
+          title: "Reward Claimed!",
+          description: result.message || `Successfully claimed ${setupRewardDays} free days!`,
+        });
+        setRefreshTrigger(prev => prev + 1);
       }
-
-      const result = await response.json();
-      setSetupRewardClaimed(true);
-      setShowSetupReminder(false);
-      toast({
-        title: "Reward Claimed!",
-        description: result.message || `Successfully claimed ${setupRewardDays} free days!`,
-      });
-      
-      setRefreshTrigger(prev => prev + 1);
     } catch (error: any) {
       console.error('Error claiming setup reward:', error);
       toast({
@@ -1084,12 +1077,11 @@ const AdminMinistryCalendar = () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
-        const res = await fetch('/api/school/ministry-calendar', {
-          headers: { 'Authorization': `Bearer ${session.access_token}` }
+        const data = await syncFetch('/api/school/ministry-calendar', {
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+          cacheKey: 'school-ministry-calendar'
         });
-        if (res.ok) {
-          setCalendar(await res.json());
-        }
+        setCalendar(data || []);
       } catch (err) {
         console.error('Failed to load ministry calendar', err);
       } finally {

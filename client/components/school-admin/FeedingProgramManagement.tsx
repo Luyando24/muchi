@@ -42,6 +42,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from '@/lib/utils';
+import { syncFetch } from '@/lib/syncService';
+import { getProfileSchoolId, schoolCacheKey } from '@/lib/schoolScope';
 
 export default function FeedingProgramManagement() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -72,18 +74,19 @@ export default function FeedingProgramManagement() {
       if (!session) return;
 
       const headers = { 'Authorization': `Bearer ${session.access_token}` };
+      const schoolId = await getProfileSchoolId();
 
       const [invRes, delRes, procRes, mealRes] = await Promise.all([
-        fetch('/api/school/feeding-program/inventory', { headers }),
-        fetch('/api/school/feeding-program/deliveries', { headers }),
-        fetch('/api/school/feeding-program/procurements', { headers }),
-        fetch('/api/school/feeding-program/meals', { headers })
+        syncFetch('/api/school/feeding-program/inventory', { headers, cacheKey: schoolCacheKey('feeding-inventory', schoolId) }),
+        syncFetch('/api/school/feeding-program/deliveries', { headers, cacheKey: schoolCacheKey('feeding-deliveries', schoolId) }),
+        syncFetch('/api/school/feeding-program/procurements', { headers, cacheKey: schoolCacheKey('feeding-procurements', schoolId) }),
+        syncFetch('/api/school/feeding-program/meals', { headers, cacheKey: schoolCacheKey('feeding-meals', schoolId) })
       ]);
 
-      if (invRes.ok) setInventory(await invRes.json());
-      if (delRes.ok) setDeliveries(await delRes.json());
-      if (procRes.ok) setProcurements(await procRes.json());
-      if (mealRes.ok) setMeals(await mealRes.json());
+      setInventory(invRes || []);
+      setDeliveries(delRes || []);
+      setProcurements(procRes || []);
+      setMeals(mealRes || []);
 
     } catch (error) {
       console.error('Error fetching feeding program data:', error);
@@ -103,7 +106,7 @@ export default function FeedingProgramManagement() {
     setIsFormSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/school/feeding-program/procurements', {
+      const result = await syncFetch('/api/school/feeding-program/procurements', {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${session?.access_token}`,
@@ -117,15 +120,14 @@ export default function FeedingProgramManagement() {
         })
       });
       
-      if (res.ok) {
-        toast({ title: "Success", description: "Procurement request submitted." });
-        setIsProcurementModalOpen(false);
-        setProcForm({ itemName: '', quantity: '', unit: '', estimatedCost: '' });
-        const procRes = await fetch('/api/school/feeding-program/procurements', { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
-        if (procRes.ok) setProcurements(await procRes.json());
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Procurement request queued for sync." });
       } else {
-        toast({ title: "Error", description: "Failed to submit request.", variant: "destructive" });
+        toast({ title: "Success", description: "Procurement request submitted." });
       }
+      setIsProcurementModalOpen(false);
+      setProcForm({ itemName: '', quantity: '', unit: '', estimatedCost: '' });
+      fetchData();
     } catch (e) {
       console.error(e);
       toast({ title: "Error", description: "An error occurred.", variant: "destructive" });
@@ -150,7 +152,7 @@ export default function FeedingProgramManagement() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/school/feeding-program/meals', {
+      const result = await syncFetch('/api/school/feeding-program/meals', {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${session?.access_token}`,
@@ -164,15 +166,14 @@ export default function FeedingProgramManagement() {
         })
       });
       
-      if (res.ok) {
-        toast({ title: "Success", description: "Meal record added." });
-        setIsMealModalOpen(false);
-        setMealForm({ mealType: '', beneficiaries: '', itemsUsed: '' });
-        const mealsRes = await fetch('/api/school/feeding-program/meals', { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
-        if (mealsRes.ok) setMeals(await mealsRes.json());
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Meal record queued for sync." });
       } else {
-        toast({ title: "Error", description: "Failed to add meal record.", variant: "destructive" });
+        toast({ title: "Success", description: "Meal record added." });
       }
+      setIsMealModalOpen(false);
+      setMealForm({ mealType: '', beneficiaries: '', itemsUsed: '' });
+      fetchData();
     } catch (e) {
       console.error(e);
       toast({ title: "Error", description: "An error occurred.", variant: "destructive" });
@@ -409,19 +410,16 @@ export default function FeedingProgramManagement() {
                              {delivery.status !== 'Received' && (
                                 <Button size="sm" variant="outline" className="h-8 text-[10px] font-bold uppercase tracking-wider" onClick={async () => {
                                    try {
-                                      const res = await fetch(`/api/school/feeding-program/deliveries/${delivery.id}/receive`, {
+                                      const result = await syncFetch(`/api/school/feeding-program/deliveries/${delivery.id}/receive`, {
                                          method: 'POST',
                                          headers: { 'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` }
                                       });
-                                      if (res.ok) {
-                                         // Refresh data
-                                         const [invRes, delRes] = await Promise.all([
-                                            fetch('/api/school/feeding-program/inventory', { headers: { 'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` } }),
-                                            fetch('/api/school/feeding-program/deliveries', { headers: { 'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` } })
-                                         ]);
-                                         if (invRes.ok) setInventory(await invRes.json());
-                                         if (delRes.ok) setDeliveries(await delRes.json());
+                                      if (result.offline) {
+                                         toast({ title: "Offline Mode", description: "Delivery receipt queued for sync." });
+                                      } else {
+                                         toast({ title: "Success", description: "Delivery received." });
                                       }
+                                      fetchData();
                                    } catch (e) { console.error(e); }
                                 }}>Confirm Receipt</Button>
                              )}

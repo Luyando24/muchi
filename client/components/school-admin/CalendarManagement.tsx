@@ -139,11 +139,6 @@ export default function CalendarManagement() {
     setIsFormSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!navigator.onLine) {
-        toast({ title: 'Offline', description: 'Cannot delete event while offline.', variant: 'destructive' as any });
-        return;
-      }
-
       if (!session) {
         toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
         return;
@@ -152,7 +147,7 @@ export default function CalendarManagement() {
       const url = editingId ? `/api/school/calendar/${editingId}` : '/api/school/calendar';
       const method = editingId ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const result = await syncFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -161,15 +156,17 @@ export default function CalendarManagement() {
         body: JSON.stringify(formData)
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to save event');
+      if (result.offline) {
+        toast({
+          title: "Offline Mode",
+          description: `Event ${editingId ? 'update' : 'creation'} queued and will sync when online.`,
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: `Event ${editingId ? 'updated' : 'added'} successfully.`,
+        });
       }
-
-      toast({
-        title: "Success",
-        description: `Event ${editingId ? 'updated' : 'added'} successfully.`,
-      });
       setIsAddOpen(false);
       resetForm();
       fetchEvents();
@@ -192,16 +189,18 @@ export default function CalendarManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/school/calendar/${deleteTargetId}`, {
+      const result = await syncFetch(`/api/school/calendar/${deleteTargetId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${session.access_token}`
         }
       });
 
-      if (!response.ok) throw new Error('Failed to delete event');
-
-      toast({ title: "Success", description: "Event deleted successfully." });
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Event deletion queued and will sync when online." });
+      } else {
+        toast({ title: "Success", description: "Event deleted successfully." });
+      }
       setDeleteTargetId(null);
       fetchEvents();
     } catch (error: any) {

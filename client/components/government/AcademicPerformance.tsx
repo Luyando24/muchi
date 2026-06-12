@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, TrendingUp, Filter, AlertCircle, Activity } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { syncFetch } from '@/lib/syncService';
 
 export default function AcademicPerformance() {
   const [data, setData] = useState({ performanceList: [] as any[] });
@@ -15,8 +16,11 @@ export default function AcademicPerformance() {
     async function fetchRegions() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch('/api/government/regions', { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
-        if (res.ok) setRegions(await res.json());
+        const regionsData = await syncFetch('/api/government/regions', {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` },
+          cacheKey: 'gov-regions'
+        });
+        if (regionsData) setRegions(regionsData);
       } catch (err) {}
     }
     fetchRegions();
@@ -31,8 +35,11 @@ export default function AcademicPerformance() {
         if (filters.province !== 'All') url += `province=${encodeURIComponent(filters.province)}&`;
         if (filters.district !== 'All') url += `district=${encodeURIComponent(filters.district)}`;
 
-        const res = await fetch(url, { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
-        if (res.ok) setData(await res.json());
+        const resData = await syncFetch(url, {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` },
+          cacheKey: `gov-academic-performance-${filters.province}-${filters.district}`
+        });
+        if (resData) setData(resData);
       } catch (err) {
       } finally { setLoading(false); }
     }
