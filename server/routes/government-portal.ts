@@ -79,6 +79,126 @@ router.get('/regions', requireGovernmentAccess, async (req: Request, res: Respon
   }
 });
 
+// GET /api/government/search
+router.get('/search', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const query = req.query.query ? String(req.query.query).trim() : '';
+  if (!query) {
+    return res.json({ provinces: [], districts: [], schools: [] });
+  }
+
+  try {
+    // 1. Fetch schools matching query
+    const { data: schools, error: schoolErr } = await supabaseAdmin
+      .from('schools')
+      .select('id, name, province, district, boarding_status, category, school_type')
+      .ilike('name', `%${query}%`)
+      .limit(10);
+
+    if (schoolErr) throw schoolErr;
+
+    // 2. Fetch distinct provinces matching query (case-insensitive)
+    const { data: allProvinces, error: provErr } = await supabaseAdmin
+      .from('schools')
+      .select('province')
+      .not('province', 'is', null);
+
+    if (provErr) throw provErr;
+
+    const uniqueProvinces = Array.from(new Set(allProvinces.map(p => p.province as string)));
+    const matchingProvinces = uniqueProvinces
+      .filter((p): p is string => typeof p === 'string' && p.toLowerCase().includes(query.toLowerCase()))
+      .slice(0, 10);
+
+    // 3. Fetch distinct districts matching query (case-insensitive)
+    const { data: allDistricts, error: distErr } = await supabaseAdmin
+      .from('schools')
+      .select('district, province')
+      .not('district', 'is', null);
+
+    if (distErr) throw distErr;
+
+    const matchingDistricts: { name: string, province: string }[] = [];
+    allDistricts.forEach(d => {
+      const districtName = d.district as string;
+      const provinceName = d.province as string;
+      if (districtName && districtName.toLowerCase().includes(query.toLowerCase())) {
+        if (!matchingDistricts.some(md => md.name.toLowerCase() === districtName.toLowerCase())) {
+          matchingDistricts.push({
+            name: districtName,
+            province: provinceName || ''
+          });
+        }
+      }
+    });
+
+    // For matched schools, fetch stats
+    const schoolIds = schools?.map(s => s.id) || [];
+    let schoolMetrics: any[] = [];
+
+    if (schoolIds.length > 0) {
+      const [
+        { data: demographics },
+        { data: teacherCounts },
+        { data: gradeAnalytics },
+        { data: attendanceData }
+      ] = await Promise.all([
+        supabaseAdmin.from('student_demographics_by_school').select('school_id, student_count').in('school_id', schoolIds),
+        supabaseAdmin.from('teachers').select('school_id').in('school_id', schoolIds),
+        supabaseAdmin.from('grade_analytics_by_school').select('school_id, avg_percentage').in('school_id', schoolIds),
+        supabaseAdmin.from('attendance_analytics_by_school').select('school_id, present_days, total_days').in('school_id', schoolIds)
+      ]);
+
+      const studentCountsMap = new Map<string, number>();
+      demographics?.forEach(d => {
+        studentCountsMap.set(d.school_id, (studentCountsMap.get(d.school_id) || 0) + Number(d.student_count || 0));
+      });
+
+      const teacherCountsMap = new Map<string, number>();
+      teacherCounts?.forEach(t => {
+        if (t.school_id) {
+          teacherCountsMap.set(t.school_id, (teacherCountsMap.get(t.school_id) || 0) + 1);
+        }
+      });
+
+      const gradesMap = new Map<string, number>();
+      gradeAnalytics?.forEach(g => {
+        gradesMap.set(g.school_id, Number(g.avg_percentage || 0));
+      });
+
+      const attendanceMap = new Map<string, { present: number, total: number }>();
+      attendanceData?.forEach(a => {
+        attendanceMap.set(a.school_id, { present: Number(a.present_days || 0), total: Number(a.total_days || 0) });
+      });
+
+      schoolMetrics = schools.map(school => {
+        const studentCount = studentCountsMap.get(school.id) || 0;
+        const teacherCount = teacherCountsMap.get(school.id) || 0;
+        const passRate = gradesMap.get(school.id) || 0;
+        const att = attendanceMap.get(school.id);
+        const attendanceRate = att && att.total > 0 ? Number((att.present / att.total * 100).toFixed(1)) : 0;
+
+        return {
+          ...school,
+          studentCount,
+          teacherCount,
+          studentTeacherRatio: teacherCount > 0 ? Number((studentCount / teacherCount).toFixed(1)) : studentCount,
+          passRate: Number(passRate.toFixed(1)),
+          attendanceRate
+        };
+      });
+    }
+
+    res.json({
+      provinces: matchingProvinces,
+      districts: matchingDistricts.slice(0, 10),
+      schools: schoolMetrics
+    });
+  } catch (error: any) {
+    console.error("Government Search Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // GET /api/government/population-data
 router.get('/population-data', requireGovernmentAccess, async (req: Request, res: Response) => {
   try {

@@ -66,6 +66,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 
 import GovernmentNavbar from '@/components/government/GovernmentNavbar';
@@ -87,7 +88,15 @@ const getColor = (index: number): string => COLORS[index % COLORS.length];
 
 // --- SUB-COMPONENTS --- //
 
-function OverviewDashboard() {
+function OverviewDashboard({
+  filters,
+  setFilters,
+  regions
+}: {
+  filters: { province: string; district: string };
+  setFilters: React.Dispatch<React.SetStateAction<{ province: string; district: string }>>;
+  regions: { province: string; districts: string[] }[];
+}) {
   const [stats, setStats] = useState({ 
     totalSchools: 0, 
     totalStudents: 0, 
@@ -107,24 +116,7 @@ function OverviewDashboard() {
     } as any
   });
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ province: 'All', district: 'All' });
   const [searchQuery, setSearchQuery] = useState('');
-  const [regions, setRegions] = useState<{ province: string, districts: string[] }[]>([]);
-
-  useEffect(() => {
-    async function fetchRegions() {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch('/api/government/regions', {
-          headers: { 'Authorization': `Bearer ${session?.access_token}` }
-        });
-        if (res.ok) setRegions(await res.json());
-      } catch (err) {
-        console.error("Failed to fetch regions", err);
-      }
-    }
-    fetchRegions();
-  }, []);
 
   useEffect(() => {
     async function load() {
@@ -511,7 +503,15 @@ function OverviewDashboard() {
 }
 
 
-function PerformanceDashboard() {
+function PerformanceDashboard({
+  filters,
+  setFilters,
+  regions
+}: {
+  filters: { province: string; district: string };
+  setFilters: React.Dispatch<React.SetStateAction<{ province: string; district: string }>>;
+  regions: { province: string; districts: string[] }[];
+}) {
   const [stats, setStats] = useState({ 
     nationalPassRate: 0, 
     topSchools: [] as any[], 
@@ -520,23 +520,6 @@ function PerformanceDashboard() {
     genderBreakdown: { Male: 0, Female: 0, Other: 0 } as any
   });
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ province: 'All', district: 'All' });
-  const [regions, setRegions] = useState<{ province: string, districts: string[] }[]>([]);
-
-  useEffect(() => {
-    async function fetchRegions() {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch('/api/government/regions', {
-          headers: { 'Authorization': `Bearer ${session?.access_token}` }
-        });
-        if (res.ok) setRegions(await res.json());
-      } catch (err) {
-        console.error("Failed to fetch regions", err);
-      }
-    }
-    fetchRegions();
-  }, []);
 
   useEffect(() => {
     async function load() {
@@ -818,28 +801,19 @@ function PerformanceDashboard() {
 }
 
 
-function FeedingDashboard() {
+function FeedingDashboard({
+  filters,
+  setFilters,
+  regions
+}: {
+  filters: { province: string; district: string };
+  setFilters: React.Dispatch<React.SetStateAction<{ province: string; district: string }>>;
+  regions: { province: string; districts: string[] }[];
+}) {
   const [stats, setStats] = useState<any>(null);
   const [schools, setSchools] = useState<any[]>([]);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [filters, setFilters] = useState({ province: 'All', district: 'All' });
-  const [regions, setRegions] = useState<{ province: string, districts: string[] }[]>([]);
-
-  useEffect(() => {
-    async function fetchRegions() {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch('/api/government/regions', {
-          headers: { 'Authorization': `Bearer ${session?.access_token}` }
-        });
-        if (res.ok) setRegions(await res.json());
-      } catch (err) {
-        console.error("Failed to fetch regions", err);
-      }
-    }
-    fetchRegions();
-  }, []);
 
   useEffect(() => {
     async function load() {
@@ -1116,20 +1090,17 @@ function FeedingDashboard() {
   );
 }
 
-function EnrollmentDashboard() {
+function EnrollmentDashboard({
+  filters,
+  setFilters,
+  regions
+}: {
+  filters: { province: string; district: string };
+  setFilters: React.Dispatch<React.SetStateAction<{ province: string; district: string }>>;
+  regions: { province: string; districts: string[] }[];
+}) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ province: 'All', district: 'All' });
-  const [regions, setRegions] = useState<{ province: string, districts: string[] }[]>([]);
-
-  useEffect(() => {
-    async function fetchRegions() {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/government/regions', { headers: { 'Authorization': `Bearer ${session?.access_token}` } });
-      if (res.ok) setRegions(await res.json());
-    }
-    fetchRegions();
-  }, []);
 
   useEffect(() => {
     async function load() {
@@ -1220,10 +1191,15 @@ function EnrollmentDashboard() {
   );
 }
 
-function TeacherDashboard() {
+function TeacherDashboard({
+  filters,
+  setFilters
+}: {
+  filters: { province: string; district: string };
+  setFilters: React.Dispatch<React.SetStateAction<{ province: string; district: string }>>;
+}) {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const [filters, setFilters] = useState({ province: 'All', district: 'All' });
   
     useEffect(() => {
       async function load() {
@@ -1369,6 +1345,20 @@ export default function GovernmentPortal() {
   const [activeTab, setActiveTab] = useState('overview');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  const [filters, setFilters] = useState({ province: 'All', district: 'All' });
+  const [regions, setRegions] = useState<{ province: string, districts: string[] }[]>([]);
+
+  // Search states
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{ provinces: string[], districts: { name: string, province: string }[], schools: any[] }>({
+    provinces: [],
+    districts: [],
+    schools: []
+  });
+  const [isSearching, setIsSearching] = useState(false);
+  const [selectedSchool, setSelectedSchool] = useState<any | null>(null);
+
   useEffect(() => {
     async function checkUser() {
       const { data: { user } } = await supabase.auth.getUser();
@@ -1391,6 +1381,62 @@ export default function GovernmentPortal() {
     }
     checkUser();
   }, [navigate]);
+
+  useEffect(() => {
+    async function fetchRegions() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch('/api/government/regions', {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` }
+        });
+        if (res.ok) setRegions(await res.json());
+      } catch (err) {
+        console.error("Failed to fetch regions", err);
+      }
+    }
+    if (user) {
+      fetchRegions();
+    }
+  }, [user]);
+
+  // Keyboard shortcut CMD/Ctrl + K
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Debounced search queries
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults({ provinces: [], districts: [], schools: [] });
+      return;
+    }
+
+    const delayDebounceFn = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`/api/government/search?query=${encodeURIComponent(searchQuery)}`, {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` }
+        });
+        if (res.ok) {
+          setSearchResults(await res.json());
+        }
+      } catch (err) {
+        console.error("Search error:", err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -1460,6 +1506,7 @@ export default function GovernmentPortal() {
         setActiveTab={setActiveTab}
         onLogout={handleLogout}
         userProfile={user}
+        onSearchClick={() => setIsSearchOpen(true)}
       />
 
       <div className="flex flex-1">
@@ -1530,16 +1577,16 @@ export default function GovernmentPortal() {
         <main className="flex-1 p-4 sm:p-10 max-w-[1600px] mx-auto overflow-y-auto">
            <Tabs value={activeTab} className="w-full">
              <TabsContent value="overview">
-               <OverviewDashboard />
+               <OverviewDashboard filters={filters} setFilters={setFilters} regions={regions} />
              </TabsContent>
              <TabsContent value="performance">
-               <PerformanceDashboard />
+               <PerformanceDashboard filters={filters} setFilters={setFilters} regions={regions} />
              </TabsContent>
              <TabsContent value="enrollment">
-               <EnrollmentDashboard />
+               <EnrollmentDashboard filters={filters} setFilters={setFilters} regions={regions} />
              </TabsContent>
              <TabsContent value="teachers">
-               <TeacherDashboard />
+               <TeacherDashboard filters={filters} setFilters={setFilters} />
              </TabsContent>
              <TabsContent value="infrastructure">
                <InfrastructureDashboard />
@@ -1548,7 +1595,7 @@ export default function GovernmentPortal() {
                <BoardingAnalytics />
              </TabsContent>
              <TabsContent value="feeding">
-               <FeedingDashboard />
+               <FeedingDashboard filters={filters} setFilters={setFilters} regions={regions} />
              </TabsContent>
              <TabsContent value="staffing-overview">
                <StaffingOverview />
@@ -1577,6 +1624,218 @@ export default function GovernmentPortal() {
             </Tabs>
          </main>
       </div>
+
+      {/* Search Dialog */}
+      <Dialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+        <DialogContent className="max-w-2xl p-0 overflow-hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-800">
+            <Search className="h-5 w-5 text-slate-400 shrink-0" />
+            <input
+              type="text"
+              placeholder="Search provinces, districts, schools..."
+              className="w-full bg-transparent border-none outline-none text-slate-900 dark:text-white placeholder:text-slate-400 text-base py-1"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              autoFocus
+            />
+            {isSearching && <Loader2 className="h-4 w-4 animate-spin text-blue-600 shrink-0" />}
+          </div>
+          
+          <div className="max-h-[400px] overflow-y-auto p-4 space-y-6">
+            {!searchQuery.trim() && (
+              <div className="text-center py-8 text-slate-400 dark:text-slate-500">
+                <Search className="h-10 w-10 mx-auto mb-2 opacity-20 text-blue-500" />
+                <p className="text-sm">Type to search the educational ecosystem...</p>
+                <p className="text-xs mt-1">E.g., "Lusaka", "Western", "Secondary"</p>
+              </div>
+            )}
+
+            {searchQuery.trim() && !isSearching && searchResults.provinces.length === 0 && searchResults.districts.length === 0 && searchResults.schools.length === 0 && (
+              <div className="text-center py-8 text-slate-400 dark:text-slate-500">
+                <p className="text-sm">No results found for "{searchQuery}"</p>
+              </div>
+            )}
+
+            {/* Provinces */}
+            {searchResults.provinces.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Provinces</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {searchResults.provinces.map((prov) => (
+                    <button
+                      key={prov}
+                      className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-blue-50 dark:bg-slate-800/40 dark:hover:bg-blue-900/10 text-left border border-slate-100 dark:border-slate-800/60 transition-colors group w-full"
+                      onClick={() => {
+                        setFilters({ province: prov, district: 'All' });
+                        setActiveTab('overview');
+                        setIsSearchOpen(false);
+                      }}
+                    >
+                      <div>
+                        <p className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400">{prov}</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-bold">Province</p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Districts */}
+            {searchResults.districts.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Districts</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {searchResults.districts.map((dist) => (
+                    <button
+                      key={dist.name}
+                      className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-blue-50 dark:bg-slate-800/40 dark:hover:bg-blue-900/10 text-left border border-slate-100 dark:border-slate-800/60 transition-colors group w-full"
+                      onClick={() => {
+                        setFilters({ province: dist.province, district: dist.name });
+                        setActiveTab('overview');
+                        setIsSearchOpen(false);
+                      }}
+                    >
+                      <div>
+                        <p className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400">{dist.name}</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-bold">{dist.province} Province</p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Schools */}
+            {searchResults.schools.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Schools</h4>
+                <div className="space-y-2">
+                  {searchResults.schools.map((school) => (
+                    <button
+                      key={school.id}
+                      className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-blue-50 dark:bg-slate-800/40 dark:hover:bg-blue-900/10 text-left border border-slate-100 dark:border-slate-800/60 transition-colors group"
+                      onClick={() => {
+                        setSelectedSchool(school);
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-colors shrink-0">
+                          <School className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400">{school.name}</p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
+                            {school.district}, {school.province}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right hidden sm:block">
+                          <p className="text-xs font-bold text-blue-600 dark:text-blue-400">{school.passRate}% Pass</p>
+                          <p className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Grade Average</p>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* School Detail Modal */}
+      <Dialog open={!!selectedSchool} onOpenChange={(open) => !open && setSelectedSchool(null)}>
+        <DialogContent className="max-w-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6">
+          {selectedSchool && (
+            <div className="space-y-6">
+              <div className="flex items-start gap-4">
+                <div className="h-12 w-12 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-blue-500/20">
+                  <School className="h-6 w-6" />
+                </div>
+                <div className="space-y-1 flex-1">
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white leading-tight">{selectedSchool.name}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <Map className="h-3 w-3 text-slate-400" /> {selectedSchool.district}, {selectedSchool.province}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 rounded-xl">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">School Type</span>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white mt-1">{selectedSchool.school_type || 'General'}</p>
+                </div>
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 rounded-xl">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Category</span>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white mt-1">{selectedSchool.category || 'Government'}</p>
+                </div>
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 rounded-xl">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Boarding Status</span>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white mt-1">{selectedSchool.boarding_status || 'Day'}</p>
+                </div>
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 rounded-xl">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Student-Teacher Ratio</span>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white mt-1">{selectedSchool.studentTeacherRatio}:1</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100/30 dark:border-blue-900/20 rounded-xl text-center">
+                  <Users className="h-5 w-5 text-blue-600 dark:text-blue-400 mx-auto mb-1.5" />
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Students</span>
+                  <p className="text-base font-black text-slate-900 dark:text-white mt-0.5">{selectedSchool.studentCount?.toLocaleString() || '0'}</p>
+                </div>
+                <div className="p-4 bg-purple-50/50 dark:bg-purple-900/10 border border-purple-100/30 dark:border-purple-900/20 rounded-xl text-center">
+                  <Users2 className="h-5 w-5 text-purple-600 dark:text-purple-400 mx-auto mb-1.5" />
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Staff</span>
+                  <p className="text-base font-black text-slate-900 dark:text-white mt-0.5">{selectedSchool.teacherCount || '0'}</p>
+                </div>
+                <div className="p-4 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100/30 dark:border-emerald-900/20 rounded-xl text-center">
+                  <ClipboardList className="h-5 w-5 text-emerald-600 dark:text-emerald-400 mx-auto mb-1.5" />
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Attendance</span>
+                  <p className="text-base font-black text-slate-900 dark:text-white mt-0.5">{selectedSchool.attendanceRate || '0'}%</p>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-900 dark:bg-slate-800 text-white rounded-xl flex items-center justify-between shadow-md">
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Academic Outcomes</span>
+                  <h4 className="text-lg font-bold mt-0.5">Average Pass Rate</h4>
+                </div>
+                <div className="text-right">
+                  <span className="text-3xl font-black text-blue-400">{selectedSchool.passRate || '0'}%</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <Button
+                  className="flex-1 rounded-xl bg-blue-600 text-white hover:bg-blue-700 h-11 font-bold"
+                  onClick={() => {
+                    setFilters({ province: selectedSchool.province, district: selectedSchool.district });
+                    setActiveTab('overview');
+                    setSelectedSchool(null);
+                    setIsSearchOpen(false);
+                  }}
+                >
+                  Filter Dashboard to Region
+                </Button>
+                <Button
+                  variant="outline"
+                  className="rounded-xl h-11 border-slate-200 dark:border-slate-700"
+                  onClick={() => setSelectedSchool(null)}
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
