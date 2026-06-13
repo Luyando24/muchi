@@ -1,3 +1,9 @@
+import dotenv from 'dotenv';
+import path from 'path';
+
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+
 import express from 'express';
 import cors from 'cors';
 
@@ -21,6 +27,7 @@ import { requestLogger, errorLogger } from './middleware/logging.js';
 import { CONFIG } from '../shared/config.js';
 import { trackActiveUser } from './lib/activeUsers.js';
 import { startOnboardingCheckScheduler } from './services/onboardingReminderService.js';
+import { startSchoolReminderScheduler } from './services/schoolReminderService.js';
 
 const app = express();
 const port = CONFIG.server.port;
@@ -102,6 +109,7 @@ if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
 // Start the onboarding reminder check scheduler (unless running on Vercel or in tests)
 if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
   startOnboardingCheckScheduler();
+  startSchoolReminderScheduler();
 }
 
 export default app;

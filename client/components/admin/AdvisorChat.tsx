@@ -78,6 +78,24 @@ export default function AdvisorChat({ sharedData, isLoading = false, fullScreen 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
+  const [typingText, setTypingText] = useState<string>('');
+  const [isTyping, setIsTyping] = useState<boolean>(false);
+  const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Switch session switch / unmount timer cleanup
+  useEffect(() => {
+    if (typingTimerRef.current) {
+      clearInterval(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
+    setIsTyping(false);
+    setTypingText('');
+    return () => {
+      if (typingTimerRef.current) {
+        clearInterval(typingTimerRef.current);
+      }
+    };
+  }, [activeSessionId]);
 
   // Load chats from LocalStorage on mount
   useEffect(() => {
@@ -172,7 +190,7 @@ export default function AdvisorChat({ sharedData, isLoading = false, fullScreen 
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeSession?.messages, loading]);
+  }, [activeSession?.messages, loading, typingText]);
 
   const handleSendMessage = async (textToSend?: string) => {
     const messageText = textToSend || input;
@@ -261,14 +279,37 @@ export default function AdvisorChat({ sharedData, isLoading = false, fullScreen 
       }
 
       const result = await response.json();
-      const assistantMsg: Message = { role: 'assistant', content: result.insights };
+      const fullContent = result.insights;
 
-      const finalSession: ChatSession = {
-        ...updatedSession,
-        messages: [...updatedMessages, assistantMsg]
-      };
+      setIsTyping(true);
+      setTypingText('');
 
-      saveSessions(sessions.map(s => s.id === activeSession.id ? finalSession : s));
+      let currentIndex = 0;
+      const chunkSize = 12;
+      const intervalSpeed = 10;
+
+      if (typingTimerRef.current) {
+        clearInterval(typingTimerRef.current);
+      }
+
+      typingTimerRef.current = setInterval(() => {
+        currentIndex += chunkSize;
+        if (currentIndex >= fullContent.length) {
+          if (typingTimerRef.current) clearInterval(typingTimerRef.current);
+          typingTimerRef.current = null;
+
+          const assistantMsg: Message = { role: 'assistant', content: fullContent };
+          const finalSession: ChatSession = {
+            ...updatedSession,
+            messages: [...updatedMessages, assistantMsg]
+          };
+          saveSessions(sessions.map(s => s.id === activeSession.id ? finalSession : s));
+          setIsTyping(false);
+          setTypingText('');
+        } else {
+          setTypingText(fullContent.substring(0, currentIndex));
+        }
+      }, intervalSpeed);
     } catch (err: any) {
       console.error('AI chat error:', err);
       toast({
@@ -387,7 +428,7 @@ export default function AdvisorChat({ sharedData, isLoading = false, fullScreen 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search chat history..." 
-              className="pl-9 h-9 bg-[#1c1c1c] border-[#262626] text-white placeholder-zinc-550 text-xs rounded-lg focus:border-emerald-500 focus:ring-0"
+              className="pl-9 h-9 bg-[#1c1c1c] border-[#262626] text-white placeholder-zinc-550 text-base md:text-xs rounded-lg focus:border-emerald-500 focus:ring-0"
             />
           </div>
         </div>
@@ -450,7 +491,7 @@ export default function AdvisorChat({ sharedData, isLoading = false, fullScreen 
       <div className="flex-1 flex flex-col bg-[#1c1c1c] h-full relative">
         
         {/* Chat Header */}
-        <div className="h-14 border-b border-[#242424] bg-[#1c1c1c] px-4 md:px-6 flex items-center justify-between">
+        <div className="h-14 border-b border-[#242424] bg-[#1c1c1c] px-4 md:px-6 flex items-center justify-between sticky top-0 z-30 w-full shrink-0">
           <div className="flex items-center gap-2">
             {/* Mobile menu trigger */}
             <Button
@@ -576,6 +617,16 @@ export default function AdvisorChat({ sharedData, isLoading = false, fullScreen 
                 </div>
               ))}
 
+              {isTyping && typingText && (
+                <div className="w-full">
+                  <div className="flex justify-start w-full py-1">
+                    <div className="flex-1 text-sm leading-relaxed text-zinc-300 space-y-1.5">
+                      {renderMarkdownText(typingText)}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {loading && (
                 <div className="flex justify-start items-center gap-2 py-2.5 w-full">
                   <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
@@ -603,14 +654,14 @@ export default function AdvisorChat({ sharedData, isLoading = false, fullScreen 
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={isLoading ? "Syncing live telemetry context..." : "Ask Business Advisor (e.g., 'What is our break-even target?')"}
                 disabled={loading || isLoading}
-                rows={1}
+                rows={2}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
+                   if (e.key === 'Enter' && !e.shiftKey) {
+                     e.preventDefault();
+                     handleSendMessage();
+                   }
                 }}
-                className="bg-transparent text-sm text-white placeholder-zinc-550 outline-none w-full border-none focus:ring-0 resize-none py-1.5 px-2 max-h-32 disabled:cursor-not-allowed"
+                className="bg-transparent text-base md:text-sm text-white placeholder-zinc-550 outline-none w-full border-none focus:ring-0 resize-none py-2 px-3 min-h-[56px] max-h-32 disabled:cursor-not-allowed"
               />
               <div className="flex items-center justify-between border-t border-[#2d2d2d] pt-2 mt-2">
                 <div className="flex items-center gap-2">

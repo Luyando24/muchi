@@ -6,6 +6,7 @@ import { SmsService } from '../services/smsService.js';
 import { WhatsAppService } from '../services/whatsappService.js';
 import { notifySystemAdmins } from '../services/emailService.js';
 import { checkIncompleteSchoolOnboardings } from '../services/onboardingReminderService.js';
+import { sendSchoolUsageSubscriptionReminders } from '../services/schoolReminderService.js';
 
 const router = Router();
 
@@ -2500,17 +2501,22 @@ ${inactivePaying.map((s: any) => `* **${s.name}** (${s.plan} Plan, **${s.student
   : `* **No Churn Risks Flagged:** All paying schools have recorded user activity in the last 7 days! Keep up the adoption monitoring.`
 }`;
     } else {
-      responseText = `### 🤖 Conversational AI Business Advisor
+      const userQuestion = messages && messages.length > 0 ? messages[messages.length - 1].content : '';
+      responseText = `### 🤖 Business Growth Advisor Insights
+       
+Thank you for your question: *"${userQuestion}"*. 
 
-Hello! I am your MUCHI platform growth coach. I have analyzed your SaaS metrics, CRM funnel, and operational overheads (ZMW 2,420 monthly fixed costs). 
+As your growth advisor, I have analyzed your SaaS platform parameters:
+* **Active Subscriptions:** ${context?.summary?.activeSubscriptions || 0} paying schools.
+* **Monthly Fixed Costs:** ZMW 2,420 (including Vercel hosting, Supabase DB, AI APIs, internet, and bank fees).
+* **Current MRR:** ZMW ${(context?.summary?.mrr || 0).toFixed(2)}.
 
-I can help you formulate concrete plans to generate revenue and scale this business. What would you like to discuss?
-* **"How can we cover our ZMW 2,420 fixed costs?"** (Break-even & cost analysis)
-* **"Show me school up-sell opportunities"** (Capacity & tier limits checks)
-* **"Where can we generate expansion revenue?"** (Tuckshop & feeding module cross-selling)
-* **"Are there any churn risks?"** (Activity monitoring & logins checks)
-* **"Draft an email to pitch a tuckshop module"** (Marketing copy generation)
-`;
+**Actionable growth recommendations for MUCHI:**
+1. **Tier Capacity Enforcements:** Check for Standard plan schools approaching 500 students to upsell them to the Premium Tier.
+2. **Modular Expansion:** Pitch Tuckshop POS and Feeding program modules to highly active schools to increase our ARPU.
+3. **Billing Cycle Optimizations:** Shift schools from monthly to Termly or Annual upfront invoices to secure hosting/DB capital.
+
+Let me know if you would like me to draft an email template, look into capacity metrics, or outline a customer success plan for any specific school!`;
     }
 
     return res.json({ insights: responseText, model: 'simulated' });
@@ -3341,6 +3347,9 @@ router.post('/email/rules/:id/trigger', requireSystemAdmin, async (req: Request,
           }
         }
       });
+    } else if (rule.trigger_event.includes('school_usage_subscription_reminder')) {
+      await sendSchoolUsageSubscriptionReminders(rule.id);
+      return res.json({ message: 'School usage & subscription reminders triggered successfully.' });
     } else {
       // For now, if the logic isn't written for the specific event, just pretend we found no targets.
       // Or we can return an error.
@@ -3404,6 +3413,24 @@ router.get('/cron/onboarding-reminders', async (req: Request, res: Response) => 
     res.json({ success: true, message: 'Onboarding reminder check executed successfully.' });
   } catch (error: any) {
     console.error('[Cron] Onboarding reminders cron failed:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/admin/cron/school-reminders — Cron job to trigger weekly usage & subscription notifications
+router.get('/cron/school-reminders', async (req: Request, res: Response) => {
+  // Security check: Verify Vercel Cron Secret in production
+  const authHeader = req.headers.authorization;
+  if (process.env.VERCEL && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(401).json({ message: 'Unauthorized: Invalid cron secret' });
+  }
+
+  try {
+    console.log('[Cron] Weekly school usage & subscription reminders cron triggered');
+    await sendSchoolUsageSubscriptionReminders();
+    res.json({ success: true, message: 'Weekly school usage & subscription reminders executed successfully.' });
+  } catch (error: any) {
+    console.error('[Cron] Weekly school usage & subscription reminders cron failed:', error);
     res.status(500).json({ message: error.message });
   }
 });
