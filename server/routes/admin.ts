@@ -2359,13 +2359,45 @@ router.post('/finances/ai-chat', requireSystemAdmin, async (req: Request, res: R
   const { messages, model, context } = req.body;
   const selectedModel = model || 'llama-3.3-70b-versatile';
 
+  // 1. Fetch active subscription plans from database
+  let plansList = [
+    { name: 'Free Trial', price: 0, billing_cycle: 'custom', description: 'All features valid for 2 months' },
+    { name: 'Starter', price: 1000, billing_cycle: 'termly', description: 'Valid for 1 term' },
+    { name: 'Pro (2 terms)', price: 2000, billing_cycle: 'custom', description: 'Valid for 2 terms' },
+    { name: 'Premium', price: 3000, billing_cycle: 'yearly', description: 'Valid for 1 year (3 terms)' }
+  ];
+
+  try {
+    const { data: dbPlans } = await supabaseAdmin
+      .from('subscription_plans')
+      .select('*')
+      .eq('is_active', true)
+      .order('price', { ascending: true });
+
+    if (dbPlans && dbPlans.length > 0) {
+      plansList = dbPlans.map((p: any) => ({
+        name: p.name,
+        price: Number(p.price) || 0,
+        billing_cycle: p.billing_cycle || 'custom',
+        description: p.description || ''
+      }));
+    }
+  } catch (err) {
+    console.error('[AI Chat] Failed to fetch subscription plans from database:', err);
+  }
+
+  const pricingPlansStr = plansList.map(p => 
+    `- **${p.name}**: ${p.description || ''} | Price: ZMW ${p.price.toLocaleString()} | Cycle: ${p.billing_cycle}`
+  ).join('\n');
+
   const systemInstructions = `
     You are the MUCHI Platform Business Advisor Chat Assistant. You are a senior SaaS business consultant helping system administrators optimize their EdTech platform for revenue generation, school adoption, and pricing tiers.
     
     Platform Parameters:
-    - We sell subscription licenses to schools (e.g. Standard, Premium tiers).
-    - Standard plan limit is 500 students, Premium plan limit is 1000 students.
     - Active users are teachers and students adopting the system.
+    
+    Active Pricing Plans (from Database):
+    ${pricingPlansStr}
     
     Platform Fixed Monthly Operating Expenses:
     - Vercel Hosting: $20 (ZMW 520)
@@ -2392,7 +2424,7 @@ router.post('/finances/ai-chat', requireSystemAdmin, async (req: Request, res: R
     
     Your objectives are to:
     1. Focus heavily on **maximizing revenue generation** and adopting/retaining accounts.
-    2. Suggest **up-selling opportunities** (identify schools on Standard or Free plans exceeding or approaching 500 students, and recommend moving them to Premium).
+    2. Suggest **up-selling opportunities** (identify schools on Free Trial or lower tiers and recommend moving them to higher-value plans like Starter, Pro, or Premium).
     3. Identify **expansion revenue opportunities** (recommend highly active schools, e.g. >30 logins/30d, to pitch premium add-on modules like Tuckshop Management or Feeding Program modules to increase ARPU).
     4. Warn of **churn risks** (flag paying schools with 0 recent logins in the last 7 days and suggest customer success outreach to protect recurring revenue).
     5. Audit **onboarding progress** (point out schools stuck with incomplete setup, e.g. <90% profile progress or <5 class uploads, and give tips to onboard them faster to start realizing contract value).
@@ -2414,7 +2446,8 @@ router.post('/finances/ai-chat', requireSystemAdmin, async (req: Request, res: R
     if (lastUserMsg.includes('burn') || lastUserMsg.includes('expense') || lastUserMsg.includes('cost') || lastUserMsg.includes('break-even') || lastUserMsg.includes('break even') || lastUserMsg.includes('vercel') || lastUserMsg.includes('supabase') || lastUserMsg.includes('internet')) {
       const mrr = context?.summary?.mrr || 0;
       const netProfit = mrr - 2420;
-      const schoolsNeeded = Math.ceil(2420 / (context?.summary?.arpu || 500));
+      const avgPrice = plansList.reduce((sum, p) => sum + p.price, 0) / plansList.length;
+      const schoolsNeeded = Math.ceil(2420 / (context?.summary?.arpu || avgPrice || 1000));
       
       responseText = `### 💰 Monthly Operating Expenses & Break-Even Analysis
 
@@ -2432,45 +2465,52 @@ Here is a detailed breakdown of your current fixed operating expenses:
 * **Net Operating Position:** ${netProfit >= 0 ? `🟢 **ZMW ${netProfit.toFixed(2)} Profit**` : `🔴 **ZMW ${Math.abs(netProfit).toFixed(2)} Deficit (Burn)**`}
 
 **Path to Profitability:**
-1. **Break-Even Target:** At an Average Revenue Per School (ARPU) of **ZMW ${context?.summary?.arpu || 500}**, you need at least **${schoolsNeeded}** active paying schools to cover your fixed costs.
-2. **Billing Invoicing:** We recommend moving schools to **Termly** (3 cycles per year) or **Yearly** plans with a 10% discount. This provides immediate cash flow to cover hosting/database overheads upfront.
-3. **Variable Travel Expenses:** Minimize physical travel by shifting demos and ICT setup training to virtual sessions (via Google Meet/Zoom) to reduce travel burn.`;
-    } else if (lastUserMsg.includes('upsell') || lastUserMsg.includes('up-sell') || lastUserMsg.includes('upgrade') || lastUserMsg.includes('capacity') || lastUserMsg.includes('limit') || lastUserMsg.includes('standard') || lastUserMsg.includes('premium')) {
+1. **Break-Even Target:** At an Average Revenue Per School (ARPU) of **ZMW ${context?.summary?.arpu || avgPrice || 1000}**, you need at least **${schoolsNeeded}** active paying schools to cover your fixed costs.
+2. **Billing Invoicing:** We recommend moving schools to **Termly** or **Yearly** plans. This provides immediate cash flow to cover hosting/database overheads upfront.
+3. **Variable Travel Expenses:** Minimize physical travel by shifting demos and ICT setup training to virtual sessions to reduce travel burn.`;
+    } else if (lastUserMsg.includes('upsell') || lastUserMsg.includes('up-sell') || lastUserMsg.includes('upgrade') || lastUserMsg.includes('capacity') || lastUserMsg.includes('limit') || lastUserMsg.includes('standard') || lastUserMsg.includes('premium') || lastUserMsg.includes('starter') || lastUserMsg.includes('pro') || lastUserMsg.includes('free') || lastUserMsg.includes('trial')) {
       const schools = context?.schools || [];
-      const standardLimit = 500;
-      const schoolsNearing = schools.filter((s: any) => {
+      const trialOrStarterSchools = schools.filter((s: any) => {
         const planName = String(s.plan || '').toLowerCase();
-        const students = Number(s.students || 0);
-        return (planName === 'standard' || planName === 'free') && students >= standardLimit * 0.8;
+        return planName.includes('free') || planName.includes('trial') || planName.includes('starter');
       });
 
-      responseText = `### 📈 Up-selling & Capacity Upgrades Analysis
+      let recommendationsList = '';
+      if (trialOrStarterSchools.length > 0) {
+        recommendationsList = trialOrStarterSchools.map((s: any) => {
+          const currentPlan = s.plan || 'Free Trial';
+          const nextPlan = currentPlan.toLowerCase().includes('free') ? 'Starter (ZMW 1,000/term)' : 'Premium (ZMW 3,000/year)';
+          return `* **${s.name}** (Current Plan: *${currentPlan}*): **${s.students}** registered students. Recommend upgrading them to **${nextPlan}**.`;
+        }).join('\n');
+      } else {
+        recommendationsList = `* No schools are currently on Free Trial or Starter plans. All active clients are on Pro or Premium tiers!`;
+      }
 
-To maximize subscription revenue, we must enforce student capacity tier limits:
-* **Standard Plan Limit:** 500 students
-* **Premium Plan Limit:** 1000 students
+      responseText = `### 📈 Up-selling & Subscription Upgrades Strategy
+      
+To maximize platform revenue, we should actively migrate schools from free trials and starter plans to higher value tiers:
 
-${schoolsNearing.length > 0 
-  ? `Here are the schools currently approaching or exceeding plan limits:
-${schoolsNearing.map((s: any) => `* **${s.name}** (${s.plan} Plan): **${s.students}** students. (Capacity utilization: **${Math.round((s.students / 500) * 100)}%**).`).join('\n')}
+**Current Database Pricing Plans:**
+${pricingPlansStr}
 
-**Monetization Recommendations:**
-1. **Arakan Up-sell Drive:** Reach out to their ICT or headteacher contact. Pitch them on the Premium Tier to prevent system lockouts and unlock higher student limits.
-2. **Draft Up-sell Email Template:**
+**Upgrade Recommendations & Target Candidates:**
+${recommendationsList}
+
+**Suggested Actions:**
+1. **Target Trial Expiry:** Reach out to schools on *Free Trial* nearing the 2-month expiry. Focus on *${trialOrStarterSchools[0]?.name || 'Zamara Christian Academy'}* and pitch the *Starter* or *Premium* plan.
+2. **Value-Based Pitch Email Template:**
    \`\`\`
-   Subject: Arakan School: Subscription Plan Upgrade Notice
+   Subject: Upgrade to MUCHI Premium - Transitioning from Free Trial
    
    Dear School Administrator,
    
-   We have noticed that Arakan School's student enrollment has reached ${schoolsNearing[0]?.students || 480} students. This is nearing the 500 student limit of your Standard Plan.
+   We hope you have enjoyed your MUCHI free trial over the last few weeks.
    
-   To avoid any system interruption for teachers and students, we recommend upgrading to our Premium Tier (up to 1000 students), which also includes advanced reporting and student analytics.
+   To maintain access to teacher gradebooks and student report card generation for the next term, we recommend upgrading to our Starter Plan (ZMW 1,000/term) or our Premium Plan (ZMW 3,000/year, which offers full-year coverage).
    
-   Please let us know if we can assist you with this upgrade for the upcoming term.
+   Please let us know if we can assist you with setting up your termly invoice.
    \`\`\`
-`
-  : `* No schools are currently approaching plan capacity limits (80%+ of 500 students standard limit). All active clients are safely within bounds.`
-}`;
+`;
     } else if (lastUserMsg.includes('expansion') || lastUserMsg.includes('module') || lastUserMsg.includes('tuckshop') || lastUserMsg.includes('feeding') || lastUserMsg.includes('active')) {
       responseText = `### ➕ Expansion Revenue (Premium Add-ons)
 
@@ -2511,10 +2551,13 @@ As your growth advisor, I have analyzed your SaaS platform parameters:
 * **Monthly Fixed Costs:** ZMW 2,420 (including Vercel hosting, Supabase DB, AI APIs, internet, and bank fees).
 * **Current MRR:** ZMW ${(context?.summary?.mrr || 0).toFixed(2)}.
 
+**Active Platform Subscription Tiers:**
+${pricingPlansStr}
+
 **Actionable growth recommendations for MUCHI:**
-1. **Tier Capacity Enforcements:** Check for Standard plan schools approaching 500 students to upsell them to the Premium Tier.
-2. **Modular Expansion:** Pitch Tuckshop POS and Feeding program modules to highly active schools to increase our ARPU.
-3. **Billing Cycle Optimizations:** Shift schools from monthly to Termly or Annual upfront invoices to secure hosting/DB capital.
+1. **Enforce Tier Migration:** Transition schools currently on *Free Trial* to *Starter* or *Premium* plans.
+2. **Modular Expansion:** Cross-sell POS Tuckshop and Feeding modules to adopted schools to boost ARPU.
+3. **Upfront Invoicing:** Lock in cash flows using Termly or Annual upfront invoices.
 
 Let me know if you would like me to draft an email template, look into capacity metrics, or outline a customer success plan for any specific school!`;
     }
