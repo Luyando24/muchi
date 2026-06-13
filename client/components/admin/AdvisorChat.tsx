@@ -16,7 +16,8 @@ import {
   LineChart,
   HelpCircle,
   Menu,
-  ArrowLeft
+  ArrowLeft,
+  RefreshCw
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -192,19 +193,32 @@ export default function AdvisorChat({ sharedData, isLoading = false, fullScreen 
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeSession?.messages, loading, typingText]);
 
-  const handleSendMessage = async (textToSend?: string) => {
-    const messageText = textToSend || input;
-    if (!messageText.trim() || loading) return;
+  const handleSendMessage = async (textToSend?: string, isRetry: boolean = false) => {
+    if (loading) return;
 
-    if (!textToSend) setInput('');
+    let messageText = '';
+    let updatedMessages: Message[] = [];
 
-    // 1. Create a user message
-    const userMsg: Message = { role: 'user', content: messageText };
-    const updatedMessages = [...(activeSession?.messages || []), userMsg];
+    if (isRetry) {
+      // Find all user messages in the session
+      const userMsgs = activeSession.messages.filter(m => m.role === 'user');
+      if (userMsgs.length === 0) return;
+      messageText = userMsgs[userMsgs.length - 1].content;
+      
+      // Slice off the last message (which is the error message)
+      updatedMessages = activeSession.messages.slice(0, -1);
+    } else {
+      messageText = textToSend || input;
+      if (!messageText.trim()) return;
+
+      if (!textToSend) setInput('');
+      const userMsg: Message = { role: 'user', content: messageText };
+      updatedMessages = [...(activeSession?.messages || []), userMsg];
+    }
 
     // Auto update chat title if it is the first user message
     let updatedTitle = activeSession.title;
-    if (activeSession.messages.length === 0) {
+    if (activeSession.messages.length === 0 || (isRetry && updatedMessages.length === 1)) {
       updatedTitle = messageText.length > 28 ? messageText.substring(0, 28) + '...' : messageText;
     }
 
@@ -284,17 +298,17 @@ export default function AdvisorChat({ sharedData, isLoading = false, fullScreen 
       setIsTyping(true);
       setTypingText('');
 
-      let currentIndex = 0;
-      const chunkSize = 12;
-      const intervalSpeed = 10;
+      // Split content into words and whitespace tokens (including newlines) to write smoothly left-to-right
+      const tokens = fullContent.split(/(\s+)/);
+      let currentTokenIndex = 0;
+      const intervalSpeed = 15; // 15ms per token for smooth pacing
 
       if (typingTimerRef.current) {
         clearInterval(typingTimerRef.current);
       }
 
       typingTimerRef.current = setInterval(() => {
-        currentIndex += chunkSize;
-        if (currentIndex >= fullContent.length) {
+        if (currentTokenIndex >= tokens.length) {
           if (typingTimerRef.current) clearInterval(typingTimerRef.current);
           typingTimerRef.current = null;
 
@@ -307,7 +321,8 @@ export default function AdvisorChat({ sharedData, isLoading = false, fullScreen 
           setIsTyping(false);
           setTypingText('');
         } else {
-          setTypingText(fullContent.substring(0, currentIndex));
+          setTypingText((prev) => prev + tokens[currentTokenIndex]);
+          currentTokenIndex++;
         }
       }, intervalSpeed);
     } catch (err: any) {
@@ -611,6 +626,18 @@ export default function AdvisorChat({ sharedData, isLoading = false, fullScreen 
                     <div className="flex justify-start w-full py-1">
                       <div className="flex-1 text-sm leading-relaxed text-zinc-300 space-y-1.5">
                         {renderMarkdownText(msg.content)}
+                        {midx === activeSession.messages.length - 1 && msg.content.includes('Communication Error') && (
+                          <div className="mt-2">
+                            <Button
+                              onClick={() => handleSendMessage('', true)}
+                              disabled={loading}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-8 px-3 rounded-lg flex items-center gap-1.5 transition-all"
+                            >
+                              <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+                              Retry Request
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
