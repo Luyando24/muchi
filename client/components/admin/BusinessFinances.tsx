@@ -14,7 +14,13 @@ import {
   TrendingDown,
   Trash2,
   ListFilter,
-  FileText
+  FileText,
+  Sparkles,
+  AlertTriangle,
+  Percent,
+  Sliders,
+  HelpCircle,
+  Activity
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -97,7 +103,77 @@ interface Transaction {
   created_at: string;
 }
 
-export default function BusinessFinances() {
+interface Prospect {
+  id: string;
+  school_name: string;
+  contact_name?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  status: 'New' | 'Contacted' | 'Demo Scheduled' | 'Negotiation' | 'Closed Won' | 'Closed Lost';
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface SchoolStudentCount {
+  school_id: string;
+  student_count: number;
+  teacher_count: number;
+}
+
+interface RegisteredSchool {
+  id: string;
+  name: string;
+  plan: string;
+  created_at: string;
+}
+
+const renderMarkdown = (text: string) => {
+  return text.split('\n').map((line, idx) => {
+    let trimmed = line.trim();
+    if (trimmed.startsWith('###')) {
+      return <h4 key={idx} className="text-base font-black text-slate-900 dark:text-white mt-4 mb-2 flex items-center gap-1.5">{trimmed.replace('###', '').trim()}</h4>;
+    }
+    if (trimmed.startsWith('##')) {
+      return <h3 key={idx} className="text-lg font-black text-slate-900 dark:text-white mt-5 mb-3">{trimmed.replace('##', '').trim()}</h3>;
+    }
+    if (trimmed.startsWith('#')) {
+      return <h2 key={idx} className="text-xl font-black text-slate-900 dark:text-white mt-6 mb-4">{trimmed.replace('#', '').trim()}</h2>;
+    }
+    if (trimmed.startsWith('*') || trimmed.startsWith('-')) {
+      const rawText = trimmed.substring(1).trim();
+      const parts = rawText.split('**');
+      return (
+        <li key={idx} className="ml-4 list-disc text-sm text-slate-700 dark:text-slate-355 my-1.5 leading-relaxed">
+          {parts.map((part, pidx) => pidx % 2 === 1 ? <strong key={pidx} className="font-bold text-slate-900 dark:text-white">{part}</strong> : part)}
+        </li>
+      );
+    }
+    if (trimmed.startsWith('---')) {
+      return <hr key={idx} className="my-4 border-slate-200 dark:border-slate-800" />;
+    }
+    if (trimmed.startsWith('•')) {
+      const rawText = trimmed.substring(1).trim();
+      const parts = rawText.split('**');
+      return (
+        <li key={idx} className="ml-4 list-disc text-sm text-slate-700 dark:text-slate-355 my-1.5 leading-relaxed">
+          {parts.map((part, pidx) => pidx % 2 === 1 ? <strong key={pidx} className="font-bold text-slate-900 dark:text-white">{part}</strong> : part)}
+        </li>
+      );
+    }
+    if (trimmed.length === 0) return <div key={idx} className="h-2" />;
+    
+    const parts = line.split('**');
+    return (
+      <p key={idx} className="text-sm text-slate-750 dark:text-slate-300 my-1.5 leading-relaxed">
+        {parts.map((part, pidx) => pidx % 2 === 1 ? <strong key={pidx} className="font-bold text-slate-900 dark:text-white">{part}</strong> : part)}
+      </p>
+    );
+  });
+};
+
+export default function BusinessFinances({ sharedData }: { sharedData?: any }) {
   const [stats, setStats] = useState<FinanceStats | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -142,6 +218,19 @@ export default function BusinessFinances() {
   const [exportPeriod, setExportPeriod] = useState<'all' | '30days' | 'thisMonth' | 'lastMonth' | 'thisYear' | 'custom'>('all');
   const [exportStartDate, setExportStartDate] = useState('');
   const [exportEndDate, setExportEndDate] = useState('');
+
+  // Analytics & Prospects states
+  const [prospects, setProspects] = useState<Prospect[]>([]);
+  const [schoolStudentCounts, setSchoolStudentCounts] = useState<SchoolStudentCount[]>([]);
+  const [registeredSchools, setRegisteredSchools] = useState<RegisteredSchool[]>([]);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  const [aiInsights, setAiInsights] = useState<string>('');
+  const [loadingAi, setLoadingAi] = useState(false);
+
+  // Pricing & Marketing simulation states
+  const [simPriceChange, setSimPriceChange] = useState<number>(0); // percent
+  const [simConversionChange, setSimConversionChange] = useState<number>(0); // percent
+  const [simMarketingChange, setSimMarketingChange] = useState<number>(0); // percent
 
   const fetchFinanceData = async () => {
     try {
@@ -217,17 +306,119 @@ export default function BusinessFinances() {
     }
   };
 
+  const fetchAnalyticsData = async () => {
+    try {
+      setLoadingAnalytics(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      // 1. Fetch prospects
+      const prospectsResponse = await fetch('/api/admin/prospects', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      });
+      if (prospectsResponse.ok) {
+        const prospectsData = await prospectsResponse.json();
+        setProspects(prospectsData);
+      }
+
+      // 2. Fetch school profile counts
+      if (sharedData?.schoolsWithStats) {
+        const counts = sharedData.schoolsWithStats.map((s: any) => ({
+          school_id: s.id,
+          student_count: s.student_count || 0,
+          teacher_count: s.teacher_count || 0
+        }));
+        setSchoolStudentCounts(counts);
+      } else {
+        const { data: countsData, error: countsError } = await supabase
+          .from('school_profile_counts')
+          .select('*');
+        if (countsError) {
+          console.error('Error fetching profile counts:', countsError);
+        } else if (countsData) {
+          setSchoolStudentCounts(countsData);
+        }
+      }
+
+      // 3. Fetch registered schools
+      if (sharedData?.schoolsWithStats) {
+        const schools = sharedData.schoolsWithStats.map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          plan: s.plan || 'Free',
+          created_at: s.created_at
+        }));
+        setRegisteredSchools(schools);
+      } else {
+        const { data: schoolsData, error: schoolsError } = await supabase
+          .from('schools')
+          .select('id, name, plan, created_at');
+        if (schoolsError) {
+          console.error('Error fetching schools:', schoolsError);
+        } else if (schoolsData) {
+          setRegisteredSchools(schoolsData);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching analytics data:', err);
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  };
+
+  const fetchAiInsights = async (payload: any) => {
+    try {
+      setLoadingAi(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("No active session");
+
+      const response = await fetch('/api/admin/finances/ai-insights', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.message || 'Failed to fetch AI insights');
+      }
+
+      const result = await response.json();
+      setAiInsights(result.insights);
+      toast({
+        title: "AI Analysis Complete",
+        description: "Pricing and marketing recommendations loaded successfully."
+      });
+    } catch (err: any) {
+      console.error('AI Insights Error:', err);
+      toast({
+        title: "AI Analysis Failed",
+        description: err.message || "Failed to generate AI insights",
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingAi(false);
+    }
+  };
+
   useEffect(() => {
     fetchFinanceData();
     fetchPlans();
     fetchTransactions();
-  }, []);
+    fetchAnalyticsData();
+  }, [sharedData]);
 
   const refreshAll = () => {
     fetchFinanceData();
     fetchPlans();
     fetchTransactions();
-    toast({ title: "Refreshing", description: "Updating ledger registry and subscription details." });
+    fetchAnalyticsData();
+    toast({ title: "Refreshing", description: "Updating ledger registry, analytics data, and subscription details." });
   };
 
   const copyToClipboard = (text: string, id: string) => {
@@ -825,6 +1016,81 @@ export default function BusinessFinances() {
 
   const netBalance = totalOpIncome - totalOpExpense;
 
+  // Analytics & BI computations
+  const totalProspects = prospects.length;
+  
+  const funnelCounts = {
+    'New': prospects.filter(p => p.status === 'New').length,
+    'Contacted': prospects.filter(p => p.status === 'Contacted').length,
+    'Demo Scheduled': prospects.filter(p => p.status === 'Demo Scheduled').length,
+    'Negotiation': prospects.filter(p => p.status === 'Negotiation').length,
+    'Closed Won': prospects.filter(p => p.status === 'Closed Won').length,
+    'Closed Lost': prospects.filter(p => p.status === 'Closed Lost').length,
+  };
+  
+  const contactedCount = prospects.filter(p => p.status !== 'New').length;
+  const demoCount = prospects.filter(p => !['New', 'Contacted'].includes(p.status)).length;
+  const negotiationCount = prospects.filter(p => ['Negotiation', 'Closed Won', 'Closed Lost'].includes(p.status)).length;
+  const convertedLeads = funnelCounts['Closed Won'];
+  
+  const leadToContactRate = totalProspects > 0 ? Math.round((contactedCount / totalProspects) * 100) : 0;
+  const contactToDemoRate = contactedCount > 0 ? Math.round((demoCount / contactedCount) * 100) : 0;
+  const demoToNegotiationRate = demoCount > 0 ? Math.round((negotiationCount / demoCount) * 100) : 0;
+  const winRate = totalProspects > 0 ? Math.round((convertedLeads / totalProspects) * 100) : 0;
+
+  const marketingSpend = transactions
+    .filter(t => t.type === 'expense' && t.category.toLowerCase() === 'marketing')
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+
+  const customersAcquired = convertedLeads || stats?.summary.activeSubscriptions || 0;
+  const cac = customersAcquired > 0 ? Math.round(marketingSpend / customersAcquired) : 0;
+
+  const totalLicenses = stats?.licenses.length || 0;
+  const expiredLicenses = stats?.licenses.filter(l => l.status === 'expired' || l.status === 'suspended').length || 0;
+  const churnRate = totalLicenses > 0 ? (expiredLicenses / totalLicenses) : 0;
+
+  const totalContractValue = stats?.licenses.reduce((sum, l) => sum + Number(l.totalCost), 0) || 0;
+  const acv = totalLicenses > 0 ? totalContractValue / totalLicenses : 0;
+
+  const arpu = stats?.summary.arpu || 500;
+  const ltv = churnRate > 0 ? Math.round(arpu / churnRate) : Math.round(arpu * 36);
+  const ltvToCacRatio = cac > 0 ? Number((ltv / cac).toFixed(1)) : 0;
+
+  // Platform Fixed Expenses Context
+  const fixedExpenses = 2420;
+  const nowForBurn = new Date();
+  const travelSpendThisMonth = transactions
+    .filter(t => {
+      const isTravel = t.type === 'expense' && t.category.toLowerCase().includes('travel');
+      if (!isTravel) return false;
+      const txDate = new Date(t.date);
+      return txDate.getMonth() === nowForBurn.getMonth() && txDate.getFullYear() === nowForBurn.getFullYear();
+    })
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+  const netMonthlyPosition = (stats?.summary.mrr || 0) - fixedExpenses - travelSpendThisMonth;
+
+  const capacityWarnings = registeredSchools
+    .map(school => {
+      const planObj = plans.find(p => p.name.toLowerCase() === school.plan.toLowerCase());
+      const countObj = schoolStudentCounts.find(c => c.school_id === school.id);
+      const studentCount = countObj?.student_count || 0;
+      
+      if (planObj && planObj.max_students) {
+        const limit = planObj.max_students;
+        const utilization = (studentCount / limit) * 100;
+        return {
+          schoolId: school.id,
+          schoolName: school.name,
+          planName: school.plan,
+          studentCount,
+          limit,
+          utilization: Math.round(utilization)
+        };
+      }
+      return null;
+    })
+    .filter((warning): warning is NonNullable<typeof warning> => warning !== null && warning.utilization >= 80);
+
   if (loading && !stats) {
     return (
       <div className="flex flex-col items-center justify-center h-96 gap-4">
@@ -854,7 +1120,7 @@ export default function BusinessFinances() {
       </div>
 
       <Tabs defaultValue="subscriptions" className="w-full">
-        <TabsList className="flex overflow-x-auto w-full max-w-full h-auto gap-1 bg-slate-100 p-1 dark:bg-slate-800 rounded-lg border scrollbar-none mb-4">
+        <TabsList className="flex overflow-x-auto w-full max-w-full h-auto gap-1 bg-slate-100 p-1 dark:bg-slate-850 rounded-lg border scrollbar-none mb-4">
           <TabsTrigger value="subscriptions" className="font-bold text-sm py-2.5 px-4 shrink-0">
             <span className="hidden sm:inline">Subscription Revenue</span>
             <span className="sm:hidden">Subscriptions</span>
@@ -863,11 +1129,15 @@ export default function BusinessFinances() {
             <span className="hidden sm:inline">Operational Ledger (Incomes & Expenses)</span>
             <span className="sm:hidden">Operational Ledger</span>
           </TabsTrigger>
+          <TabsTrigger value="analytics" className="font-bold text-sm py-2.5 px-4 shrink-0">
+            <span className="hidden sm:inline">Conversion & BI Analytics</span>
+            <span className="sm:hidden">BI Analytics</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="subscriptions" className="space-y-6">
           {/* Metrics Summary Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <Card className="hover:shadow-md transition-shadow">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
@@ -904,6 +1174,26 @@ export default function BusinessFinances() {
                 <div className="mt-3 flex items-center gap-1 text-xs text-slate-500">
                   <span className="font-semibold text-emerald-600">Active</span>
                   <span>subscriptions current month</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-md transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Net Profit / Burn Rate</p>
+                    <h3 className={`text-2xl font-black mt-1 ${netMonthlyPosition >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {formatCurrency(netMonthlyPosition)}
+                    </h3>
+                  </div>
+                  <div className={`p-3 rounded-xl ${netMonthlyPosition >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400'}`}>
+                    {netMonthlyPosition >= 0 ? <TrendingUp className="h-6 w-6" /> : <TrendingDown className="h-6 w-6" />}
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-col gap-0.5 text-[10px] text-slate-500">
+                  <span className="font-semibold text-slate-900 dark:text-white">Fixed Overhead: ZMW 2,420.00</span>
+                  <span>Travel variable: ZMW {travelSpendThisMonth.toFixed(2)}</span>
                 </div>
               </CardContent>
             </Card>
@@ -950,7 +1240,7 @@ export default function BusinessFinances() {
             </Card>
           </div>
 
-          {/* Visualizations Charts */}
+          {/* Visualizations Charts & Overheads */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Sales Trend Chart */}
             <Card className="lg:col-span-2">
@@ -986,50 +1276,110 @@ export default function BusinessFinances() {
               </CardContent>
             </Card>
 
-            {/* Plan Distribution Chart */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Active Plan Distribution</CardTitle>
-                <CardDescription>Breakdown of active subscriber tiers</CardDescription>
-              </CardHeader>
-              <CardContent className="h-[300px] flex flex-col justify-center">
-                {stats?.planDistribution && stats.planDistribution.length > 0 ? (
-                  <div className="h-full flex flex-col justify-center">
-                    <ResponsiveContainer width="100%" height="80%">
-                      <PieChart>
-                        <Pie
-                          data={stats.planDistribution}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={50}
-                          outerRadius={75}
-                          paddingAngle={5}
-                          dataKey="value"
-                          nameKey="name"
-                        >
-                          {stats.planDistribution.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip formatter={(value) => [`${value} active`, 'Tiers']} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 justify-center text-xs mt-2 font-medium">
-                      {stats.planDistribution.map((entry, index) => (
-                        <div key={entry.name} className="flex items-center gap-1.5">
-                          <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}></span>
-                          <span className="text-slate-600 dark:text-slate-300">{entry.name}: {entry.value}</span>
-                        </div>
-                      ))}
+            <div className="space-y-6">
+              {/* Plan Distribution Chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Active Plan Distribution</CardTitle>
+                  <CardDescription>Breakdown of active subscriber tiers</CardDescription>
+                </CardHeader>
+                <CardContent className="h-[200px] flex flex-col justify-center">
+                  {stats?.planDistribution && stats.planDistribution.length > 0 ? (
+                    <div className="h-full flex flex-col justify-center">
+                      <ResponsiveContainer width="100%" height="75%">
+                        <PieChart>
+                          <Pie
+                            data={stats.planDistribution}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={40}
+                            outerRadius={60}
+                            paddingAngle={5}
+                            dataKey="value"
+                            nameKey="name"
+                          >
+                            {stats.planDistribution.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value) => [`${value} active`, 'Tiers']} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 justify-center text-[10px] mt-1 font-medium">
+                        {stats.planDistribution.map((entry, index) => (
+                          <div key={entry.name} className="flex items-center gap-1">
+                            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}></span>
+                            <span className="text-slate-600 dark:text-slate-300">{entry.name}: {entry.value}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-slate-400 italic text-sm text-center">
+                      No active subscriptions to display distribution.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Fixed Monthly Overheads Card */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Fixed Monthly Overheads</CardTitle>
+                  <CardDescription className="text-xs">Operational expenses (1 USD = 26 ZMW)</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0 px-4 pb-4">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader className="[&_tr]:border-b-0">
+                        <TableRow className="hover:bg-transparent border-b-0">
+                          <TableHead className="h-7 text-[10px] font-bold uppercase py-0">Item</TableHead>
+                          <TableHead className="h-7 text-right text-[10px] font-bold uppercase py-0">USD</TableHead>
+                          <TableHead className="h-7 text-right text-[10px] font-bold uppercase py-0">ZMW</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow className="hover:bg-transparent h-7 border-b border-slate-100 dark:border-slate-800">
+                          <TableCell className="py-1 text-xs font-medium">Vercel Hosting</TableCell>
+                          <TableCell className="py-1 text-right text-xs font-mono">$20.00</TableCell>
+                          <TableCell className="py-1 text-right text-xs font-semibold font-mono">K520.00</TableCell>
+                        </TableRow>
+                        <TableRow className="hover:bg-transparent h-7 border-b border-slate-100 dark:border-slate-800">
+                          <TableCell className="py-1 text-xs font-medium">Supabase Database</TableCell>
+                          <TableCell className="py-1 text-right text-xs font-mono">$25.00</TableCell>
+                          <TableCell className="py-1 text-right text-xs font-semibold font-mono">K650.00</TableCell>
+                        </TableRow>
+                        <TableRow className="hover:bg-transparent h-7 border-b border-slate-100 dark:border-slate-800">
+                          <TableCell className="py-1 text-xs font-medium">AI Subscription</TableCell>
+                          <TableCell className="py-1 text-right text-xs font-mono">$25.00</TableCell>
+                          <TableCell className="py-1 text-right text-xs font-semibold font-mono">K650.00</TableCell>
+                        </TableRow>
+                        <TableRow className="hover:bg-transparent h-7 border-b border-slate-100 dark:border-slate-800">
+                          <TableCell className="py-1 text-xs font-medium">Internet Service</TableCell>
+                          <TableCell className="py-1 text-right text-xs font-mono">-</TableCell>
+                          <TableCell className="py-1 text-right text-xs font-semibold font-mono">K500.00</TableCell>
+                        </TableRow>
+                        <TableRow className="hover:bg-transparent h-7 border-b border-slate-100 dark:border-slate-800">
+                          <TableCell className="py-1 text-xs font-medium">Bank Account Fee</TableCell>
+                          <TableCell className="py-1 text-right text-xs font-mono">-</TableCell>
+                          <TableCell className="py-1 text-right text-xs font-semibold font-mono">K100.00</TableCell>
+                        </TableRow>
+                        <TableRow className="hover:bg-transparent h-7 border-b border-slate-100 dark:border-slate-800">
+                          <TableCell className="py-1 text-xs font-medium text-slate-400">Salaries</TableCell>
+                          <TableCell className="py-1 text-right text-xs font-mono text-slate-400">-</TableCell>
+                          <TableCell className="py-1 text-right text-xs font-semibold font-mono text-slate-400">K0.00</TableCell>
+                        </TableRow>
+                        <TableRow className="hover:bg-transparent h-7 font-black border-t-2 border-slate-200 dark:border-slate-700">
+                          <TableCell className="py-2 text-xs text-slate-900 dark:text-white">Total Overhead</TableCell>
+                          <TableCell className="py-2 text-right text-xs font-mono font-bold">$70.00</TableCell>
+                          <TableCell className="py-2 text-right text-xs font-mono font-bold text-blue-600 dark:text-blue-400">K2,420.00</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
                   </div>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-slate-400 italic text-sm text-center">
-                    No active subscriptions to display distribution.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
           </div>
 
           {/* Subscription Pricing Manager & Tier Controller */}
@@ -1365,6 +1715,553 @@ export default function BusinessFinances() {
                   </Table>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="analytics" className="space-y-6">
+          {/* Automated Onboarding Reminders Info banner */}
+          {sharedData?.lastOnboardingReminder && (
+            <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/20 dark:border-blue-900/30 dark:bg-blue-950/10 flex items-center gap-3 text-xs text-slate-700 dark:text-slate-350 shadow-sm">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+              </span>
+              <div className="flex-1">
+                <p className="font-bold text-blue-900 dark:text-blue-400">Automated Setup Auditing Active</p>
+                <p className="text-[11px] text-slate-500 mt-0.5 leading-normal">
+                  Last bi-weekly onboarding activity email dispatched to admins: <strong className="font-semibold">{new Date(sharedData.lastOnboardingReminder.sent_at).toLocaleDateString()} at {new Date(sharedData.lastOnboardingReminder.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong> (Recipient: {sharedData.lastOnboardingReminder.recipient}, Status: {sharedData.lastOnboardingReminder.status}).
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Analytics Summary Card Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card className="hover:shadow-md transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total Funnel Leads</p>
+                    <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                      {prospects.length}
+                    </h3>
+                  </div>
+                  <div className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-xl">
+                    <Activity className="h-6 w-6" />
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
+                  <span className="font-semibold text-slate-905 dark:text-white">{funnelCounts['Closed Won']}</span>
+                  <span>won /</span>
+                  <span className="font-semibold text-slate-905 dark:text-white">{funnelCounts['Closed Lost']}</span>
+                  <span>lost leads</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-md transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Pipeline Win Rate</p>
+                    <h3 className="text-2xl font-black text-emerald-600 mt-1">
+                      {winRate}%
+                    </h3>
+                  </div>
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-xl">
+                    <Percent className="h-6 w-6" />
+                  </div>
+                </div>
+                <div className="mt-3 text-xs text-slate-500">
+                  <span>Lead-to-paying conversion efficiency</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-md transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Customer Churn Rate</p>
+                    <h3 className="text-2xl font-black text-rose-600 mt-1">
+                      {Math.round(churnRate * 100)}%
+                    </h3>
+                  </div>
+                  <div className="p-3 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 rounded-xl">
+                    <TrendingDown className="h-6 w-6" />
+                  </div>
+                </div>
+                <div className="mt-3 text-xs text-slate-550">
+                  <span>Based on expired vs total licenses</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-md transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Avg Contract Value (ACV)</p>
+                    <h3 className="text-2xl font-black text-purple-600 mt-1">
+                      {formatCurrency(acv)}
+                    </h3>
+                  </div>
+                  <div className="p-3 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-xl">
+                    <Building2 className="h-6 w-6" />
+                  </div>
+                </div>
+                <div className="mt-3 text-xs text-slate-550">
+                  <span>Average value per license generated</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Sales Pipeline Funnel chart */}
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-blue-600" />
+                  Sales Funnel Conversion Path
+                </CardTitle>
+                <CardDescription>Visualizing stage drop-off and conversion rates across the leads lifecycle.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {prospects.length === 0 ? (
+                  <div className="h-64 flex items-center justify-center text-slate-400 italic text-sm">
+                    No prospects in CRM pipeline to visualize funnel.
+                  </div>
+                ) : (
+                  <div className="space-y-5">
+                    {/* Funnel Stage 1: New Leads */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                        <span>1. New Leads (Total Prospects)</span>
+                        <span>{totalProspects} Schools (100%)</span>
+                      </div>
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-6 rounded-md overflow-hidden relative">
+                        <div className="bg-blue-600 h-full rounded-md transition-all duration-500" style={{ width: '100%' }}></div>
+                      </div>
+                    </div>
+
+                    {/* Funnel Stage 2: Contacted */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                        <span>2. Contacted & Engaged</span>
+                        <span>{contactedCount} Schools ({leadToContactRate}%)</span>
+                      </div>
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-6 rounded-md overflow-hidden relative">
+                        <div className="bg-blue-500 h-full rounded-md transition-all duration-500" style={{ width: `${leadToContactRate}%` }}></div>
+                        {leadToContactRate > 0 && (
+                          <span className="absolute right-2.5 top-1 text-[10px] text-slate-500 font-bold">
+                            Dropoff: {100 - leadToContactRate}%
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Funnel Stage 3: Demo Scheduled */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                        <span>3. Demos Completed</span>
+                        <span>{demoCount} Schools ({totalProspects > 0 ? Math.round((demoCount / totalProspects) * 100) : 0}%)</span>
+                      </div>
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-6 rounded-md overflow-hidden relative">
+                        <div className="bg-indigo-500 h-full rounded-md transition-all duration-500" style={{ width: `${totalProspects > 0 ? (demoCount / totalProspects) * 100 : 0}%` }}></div>
+                        {contactedCount > 0 && (
+                          <span className="absolute right-2.5 top-1 text-[10px] text-slate-500 font-bold">
+                            Contact-to-Demo Conversion: {contactToDemoRate}%
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Funnel Stage 4: Negotiation */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                        <span>4. Negotiation & Pricing Review</span>
+                        <span>{negotiationCount} Schools ({totalProspects > 0 ? Math.round((negotiationCount / totalProspects) * 100) : 0}%)</span>
+                      </div>
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-6 rounded-md overflow-hidden relative">
+                        <div className="bg-purple-500 h-full rounded-md transition-all duration-500" style={{ width: `${totalProspects > 0 ? (negotiationCount / totalProspects) * 100 : 0}%` }}></div>
+                        {demoCount > 0 && (
+                          <span className="absolute right-2.5 top-1 text-[10px] text-slate-500 font-bold">
+                            Demo-to-Negotiation: {demoToNegotiationRate}%
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Funnel Stage 5: Won (Registered) */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                        <span>5. Converted (Closed Won)</span>
+                        <span className="text-emerald-600 font-black">{convertedLeads} Schools ({winRate}%)</span>
+                      </div>
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-6 rounded-md overflow-hidden relative">
+                        <div className="bg-emerald-500 h-full rounded-md transition-all duration-500" style={{ width: `${winRate}%` }}></div>
+                        <span className="absolute right-2.5 top-1 text-[10px] text-slate-550 font-bold">
+                          Overall Win Rate: {winRate}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Customer Lifetime Value (LTV) vs Customer Acquisition Cost (CAC) Analysis */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-emerald-600" />
+                  LTV : CAC Economics
+                </CardTitle>
+                <CardDescription>Measure business sustainability and marketing spend ROI.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  <div className="flex justify-between border-b pb-2">
+                    <span className="text-sm text-slate-550 dark:text-slate-400 font-medium">Marketing Spend:</span>
+                    <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(marketingSpend)}</span>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <span className="text-sm text-slate-550 dark:text-slate-400 font-medium">Customer Acquisition Cost:</span>
+                    <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(cac)}</span>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <span className="text-sm text-slate-550 dark:text-slate-400 font-medium">Estimated LTV:</span>
+                    <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(ltv)}</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2">
+                    <span className="text-sm text-slate-550 dark:text-slate-400 font-bold">LTV to CAC Ratio:</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl font-black text-slate-900 dark:text-white">{ltvToCacRatio}x</span>
+                      {(() => {
+                        if (cac === 0) return <Badge className="bg-slate-500 text-white font-bold border-none">Organic</Badge>;
+                        if (ltvToCacRatio >= 3.0) return <Badge className="bg-emerald-500 text-white font-bold border-none">Healthy</Badge>;
+                        if (ltvToCacRatio >= 1.0) return <Badge className="bg-amber-500 text-white font-bold border-none">Warning</Badge>;
+                        return <Badge className="bg-rose-500 text-white font-bold border-none">Critical</Badge>;
+                      })()}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Health Meter Visualization */}
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                    <span>Critical (&lt;1x)</span>
+                    <span>Target (3x)</span>
+                    <span>Scale (&gt;5x)</span>
+                  </div>
+                  <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden relative">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        cac === 0 ? 'bg-slate-400' :
+                        ltvToCacRatio >= 3.0 ? 'bg-emerald-500' :
+                        ltvToCacRatio >= 1.0 ? 'bg-amber-500' : 'bg-rose-500'
+                      }`}
+                      style={{ width: `${Math.min(100, cac === 0 ? 100 : (ltvToCacRatio / 6) * 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Strategic Commentary */}
+                <div className="p-3 bg-slate-50 dark:bg-slate-900/50 border rounded-lg text-xs leading-relaxed text-slate-655 dark:text-slate-400">
+                  {cac === 0 ? (
+                    <p>• **Organic Growth:** Your marketing spend is ZMW 0.00, meaning CAC is technically zero. While highly efficient, this limits your growth ceiling. Consider deploying a budget on local search/social ads to test if paid customer acquisition can scale lead volume.</p>
+                  ) : ltvToCacRatio >= 3.0 ? (
+                    <p>• **Scalable Efficiency:** Your LTV is over 3x higher than your CAC. This indicates a highly profitable acquisition engine. You can aggressively increase marketing budgets on high-converting channels to acquire more schools.</p>
+                  ) : ltvToCacRatio >= 1.0 ? (
+                    <p>• **Low Efficiency:** Your customer acquisition cost is close to the lifetime revenue they generate. Focus on increasing subscription prices, reducing churn, or targeting high-value private schools to increase your ARPU.</p>
+                  ) : (
+                    <p>• **Critical Loss:** You are spending more to acquire a customer than they generate in their lifetime. Immediately optimize marketing spend, eliminate low-performing ad channels, and increase plans' subscription fees.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Groq AI Strategic Advisory Panel */}
+          <Card className="border-blue-200 dark:border-blue-900/30 shadow-md bg-gradient-to-br from-white to-blue-50/20 dark:from-slate-950 dark:to-blue-950/5">
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2 text-slate-900 dark:text-white">
+                  <Sparkles className="h-5 w-5 text-blue-600 dark:text-blue-400 animate-pulse" />
+                  Groq AI Pricing & Marketing Strategy Advisor
+                </CardTitle>
+                <CardDescription>
+                  Uses Llama 3 via Groq to analyze your platform metrics, pipeline conversion funnel, and financial ledger to generate custom, actionable growth strategies.
+                </CardDescription>
+              </div>
+              <Button 
+                onClick={() => {
+                  const schoolsList = registeredSchools.map(s => {
+                    const countObj = schoolStudentCounts.find(c => c.school_id === s.id);
+                    const sharedSchool = sharedData?.schoolsWithStats?.find((sh: any) => sh.id === s.id);
+                    return {
+                      name: s.name,
+                      plan: s.plan,
+                      students: countObj?.student_count || 0,
+                      onboarding_status: sharedSchool?.onboarding_status || 'Pending',
+                      profile_completion: sharedSchool?.profile_completion || 0,
+                      classes_count: sharedSchool?.classes_count || 0,
+                      subjects_count: sharedSchool?.subjects_count || 0,
+                      active7d: sharedSchool?.sign_ins_7d || 0,
+                      active30d: sharedSchool?.sign_ins_30d || 0
+                    };
+                  });
+                  fetchAiInsights({
+                    summary: stats?.summary,
+                    funnel: funnelCounts,
+                    marketingSpend,
+                    cac,
+                    ltv,
+                    ltvToCacRatio,
+                    plans: stats?.planDistribution,
+                    schools: schoolsList,
+                    fixedExpenses: 2420,
+                    travelExpenses: travelSpendThisMonth
+                  });
+                }} 
+                disabled={loadingAi || loading}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold shrink-0 self-start sm:self-center"
+              >
+                {loadingAi ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin text-white" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4 mr-2 text-white" />
+                    Generate AI Insights
+                  </>
+                )}
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {aiInsights ? (
+                <div className="p-5 bg-white dark:bg-slate-900/50 rounded-xl border border-blue-100 dark:border-blue-950 text-slate-850 dark:text-slate-300 max-h-[450px] overflow-y-auto scrollbar-thin">
+                  {renderMarkdown(aiInsights)}
+                </div>
+              ) : (
+                <div className="text-center py-10 border border-dashed rounded-xl bg-slate-50/50 dark:bg-slate-900/20">
+                  <Sparkles className="h-10 w-10 text-blue-300 dark:text-blue-700 mx-auto mb-3 animate-pulse" />
+                  <h4 className="text-sm font-bold text-slate-700 dark:text-slate-350">No Strategy Logged</h4>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 leading-relaxed">
+                    Click the "Generate AI Insights" button above to dynamically consult Groq AI based on your live financial and pipeline status.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Warning Capacity Alert section */}
+          {capacityWarnings.length > 0 && (
+            <Card className="border-amber-200 dark:border-amber-900/30 bg-amber-50/10 dark:bg-amber-950/5">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                  <AlertTriangle className="h-5 w-5" />
+                  Pricing Capacity Alerts
+                </CardTitle>
+                <CardDescription>
+                  The following schools are approaching or have exceeded their current subscription plan student capacity limits. Use this to contact them for an upgrade.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {capacityWarnings.map((warning, index) => (
+                    <div key={index} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 rounded-xl border bg-white dark:bg-slate-900 gap-4 shadow-sm">
+                      <div>
+                        <h4 className="font-bold text-slate-900 dark:text-white text-sm">{warning.schoolName}</h4>
+                        <p className="text-xs text-slate-505">
+                          Current Tier: <strong className="font-semibold text-slate-800 dark:text-slate-350">{warning.planName}</strong>
+                        </p>
+                      </div>
+                      <div className="flex flex-col sm:items-end w-full sm:w-auto gap-1">
+                        <div className="flex justify-between w-full text-xs font-semibold text-slate-655 dark:text-slate-400">
+                          <span>Capacity Utilization:</span>
+                          <span className="text-amber-600 dark:text-amber-400 font-bold">{warning.studentCount} / {warning.limit} students ({warning.utilization}%)</span>
+                        </div>
+                        <div className="w-full sm:w-48 bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                          <div 
+                            className="bg-amber-500 h-full rounded-full transition-all duration-300"
+                            style={{ width: `${Math.min(100, warning.utilization)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Interactive Pricing and Marketing Decision Simulator */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Sliders className="h-5 w-5 text-blue-650" />
+                Strategic Growth Simulator
+              </CardTitle>
+              <CardDescription>
+                Simulate changes in pricing model, conversion improvement, and marketing budgets to preview projected outcomes.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              {/* Sliders Control Section */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {/* Price Change slider */}
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <Label htmlFor="price-sim" className="text-xs font-bold text-slate-500 uppercase tracking-wider">Subscription Price Adjust</Label>
+                    <span className="text-sm font-black text-blue-600 dark:text-blue-400">{simPriceChange >= 0 ? `+${simPriceChange}` : simPriceChange}%</span>
+                  </div>
+                  <input 
+                    id="price-sim"
+                    type="range"
+                    min="-50"
+                    max="100"
+                    value={simPriceChange}
+                    onChange={(e) => setSimPriceChange(Number(e.target.value))}
+                    className="w-full h-1.5 cursor-pointer bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none accent-blue-650"
+                  />
+                  <p className="text-[10px] text-slate-505 leading-normal">
+                    Adjust subscription fees across all plans. Affects ARPU and Lifetime Value.
+                  </p>
+                </div>
+
+                {/* Conversion Rate slider */}
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <Label htmlFor="conv-sim" className="text-xs font-bold text-slate-500 uppercase tracking-wider">Funnel Conversion Adjust</Label>
+                    <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">{simConversionChange >= 0 ? `+${simConversionChange}` : simConversionChange}%</span>
+                  </div>
+                  <input 
+                    id="conv-sim"
+                    type="range"
+                    min="-50"
+                    max="100"
+                    value={simConversionChange}
+                    onChange={(e) => setSimConversionChange(Number(e.target.value))}
+                    className="w-full h-1.5 cursor-pointer bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none accent-emerald-500"
+                  />
+                  <p className="text-[10px] text-slate-505 leading-normal">
+                    Improve sales outreach or demo success. Affects lead win rate and customer count.
+                  </p>
+                </div>
+
+                {/* Marketing Spend slider */}
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <Label htmlFor="marketing-sim" className="text-xs font-bold text-slate-500 uppercase tracking-wider">Marketing Budget Adjust</Label>
+                    <span className="text-sm font-black text-purple-600 dark:text-purple-400">{simMarketingChange >= 0 ? `+${simMarketingChange}` : simMarketingChange}%</span>
+                  </div>
+                  <input 
+                    id="marketing-sim"
+                    type="range"
+                    min="-100"
+                    max="200"
+                    value={simMarketingChange}
+                    onChange={(e) => setSimMarketingChange(Number(e.target.value))}
+                    className="w-full h-1.5 cursor-pointer bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none accent-purple-500"
+                  />
+                  <p className="text-[10px] text-slate-550 leading-normal">
+                    Adjust marketing and advertising spend. Affects marketing cost basis and CAC.
+                  </p>
+                </div>
+              </div>
+
+              {/* Simulation Results Section */}
+              {(() => {
+                const simulatedArpu = arpu * (1 + simPriceChange / 100);
+                const simulatedSpend = marketingSpend * (1 + simMarketingChange / 100);
+                const simulatedWinRate = Math.min(100, winRate * (1 + simConversionChange / 100));
+                
+                const simulatedCustomers = totalProspects > 0 ? Math.round(totalProspects * (simulatedWinRate / 100)) : (stats?.summary.activeSubscriptions || 0);
+                const simulatedCac = simulatedCustomers > 0 ? Math.round(simulatedSpend / simulatedCustomers) : 0;
+                
+                const simulatedLtv = churnRate > 0 ? Math.round(simulatedArpu / churnRate) : Math.round(simulatedArpu * 36);
+                const simulatedRatio = simulatedCac > 0 ? Number((simulatedLtv / simulatedCac).toFixed(1)) : 0;
+
+                const arpuDiff = simulatedArpu - arpu;
+                const spendDiff = simulatedSpend - marketingSpend;
+                const winRateDiff = simulatedWinRate - winRate;
+                const cacDiff = simulatedCac - cac;
+                const ltvDiff = simulatedLtv - ltv;
+
+                return (
+                  <div className="p-6 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800 space-y-6">
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider border-b pb-2">Projected Simulation Outcomes</h4>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                      {/* Sim Output 1: Win Rate */}
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Projected Win Rate</span>
+                        <h5 className="text-xl font-black text-slate-900 dark:text-white">
+                          {simulatedWinRate.toFixed(0)}%
+                        </h5>
+                        {winRateDiff !== 0 && (
+                          <p className={`text-[10px] font-bold ${winRateDiff > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {winRateDiff > 0 ? `+${winRateDiff.toFixed(0)}%` : `${winRateDiff.toFixed(0)}%`} vs current
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Sim Output 2: Projected CAC */}
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Projected CAC</span>
+                        <h5 className="text-xl font-black text-slate-900 dark:text-white">
+                          {formatCurrency(simulatedCac)}
+                        </h5>
+                        {cacDiff !== 0 && (
+                          <p className={`text-[10px] font-bold ${cacDiff < 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {cacDiff > 0 ? `+${formatCurrency(cacDiff)}` : `${formatCurrency(cacDiff)}`} vs current
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Sim Output 3: Projected LTV */}
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Projected LTV</span>
+                        <h5 className="text-xl font-black text-slate-900 dark:text-white">
+                          {formatCurrency(simulatedLtv)}
+                        </h5>
+                        {ltvDiff !== 0 && (
+                          <p className={`text-[10px] font-bold ${ltvDiff > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {ltvDiff > 0 ? `+${formatCurrency(ltvDiff)}` : `${formatCurrency(ltvDiff)}`} vs current
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Sim Output 4: Simulated Ratio */}
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Projected LTV:CAC</span>
+                        <div className="flex items-center gap-1.5">
+                          <h5 className="text-xl font-black text-slate-900 dark:text-white">
+                            {simulatedCac > 0 ? `${simulatedRatio}x` : 'N/A'}
+                          </h5>
+                          {simulatedCac > 0 && (
+                            <Badge className={
+                              simulatedRatio >= 3.0 ? 'bg-emerald-500 text-white font-bold border-none' :
+                              simulatedRatio >= 1.0 ? 'bg-amber-500 text-white font-bold border-none' :
+                              'bg-rose-500 text-white font-bold border-none'
+                            }>
+                              {simulatedRatio >= 3.0 ? 'Healthy' : simulatedRatio >= 1.0 ? 'Warning' : 'Critical'}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-500">
+                          Target baseline: 3.0x or higher
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>

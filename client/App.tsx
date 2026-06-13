@@ -25,6 +25,7 @@ import SchoolAdminPortal from "./pages/SchoolAdminPortal";
 import SchoolWebsite from "./pages/SchoolWebsite";
 import GovernmentPortal from "./pages/GovernmentPortal";
 import SystemAdminPortal from "./pages/SystemAdminPortal";
+import BusinessAdvisorPage from "./pages/BusinessAdvisorPage";
 import VerifyReport from "./pages/VerifyReport";
 import DataAuditPage from "./pages/DataAuditPage";
 import CheckResults from "./pages/CheckResults";
@@ -163,6 +164,14 @@ const SystemSubdomainApp = () => (
         element={<SystemAdminLogin />}
       />
       <Route
+        path="/business-advisor"
+        element={
+          <ProtectedRoute allowedRoles={["system_admin"]}>
+            <BusinessAdvisorPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/*"
         element={
           <ProtectedRoute allowedRoles={["system_admin"]}>
@@ -224,6 +233,14 @@ const RootApp = () => (
         element={
           <ProtectedRoute allowedRoles={["school_admin","bursar","registrar","exam_officer","academic_auditor","accounts","content_manager","system_admin"]}>
             <DataAuditPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/system-admin/business-advisor"
+        element={
+          <ProtectedRoute allowedRoles={["system_admin"]}>
+            <BusinessAdvisorPage />
           </ProtectedRoute>
         }
       />

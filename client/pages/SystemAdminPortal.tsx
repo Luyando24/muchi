@@ -50,9 +50,11 @@ import SystemDashboard from '@/components/admin/SystemDashboard';
 import SystemAdminNavbar from '@/components/admin/SystemAdminNavbar';
 import GovernmentPortal from '@/pages/GovernmentPortal';
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, Wrench, DollarSign, UserPlus } from 'lucide-react';
+import { Loader2, Wrench, DollarSign, UserPlus, Sparkles } from 'lucide-react';
 import BusinessFinances from '@/components/admin/BusinessFinances';
 import ProspectsManagement from '@/components/admin/ProspectsManagement';
+import AdvisorChat from '@/components/admin/AdvisorChat';
+import FloatingAdvisorChat from '@/components/admin/FloatingAdvisorChat';
 
 // Mock data for System Admin Portal
 const databaseBackups: any[] = [];
@@ -62,11 +64,51 @@ const securityLogs: any[] = [];
 const systemLogs: any[] = [];
 
 export default function SystemAdminPortal() {
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const queryTab = new URLSearchParams(window.location.search).get('tab');
+  const [activeTab, setActiveTab] = useState(queryTab || "dashboard");
+
+  React.useEffect(() => {
+    const qTab = new URLSearchParams(window.location.search).get('tab');
+    if (qTab && qTab !== activeTab) {
+      setActiveTab(qTab);
+    }
+  }, [window.location.search]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isFixingEnrollments, setIsFixingEnrollments] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [loadingDashboard, setLoadingDashboard] = useState(true);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoadingDashboard(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch('/api/admin/dashboard', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch dashboard data: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setDashboardData(data);
+    } catch (error) {
+      console.error('Error fetching dashboard data in portal:', error);
+    } finally {
+      setLoadingDashboard(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchDashboardData();
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -120,6 +162,7 @@ export default function SystemAdminPortal() {
     { id: "schools", label: "Schools Management", icon: Building },
     { id: "prospects", label: "Prospects & CRM", icon: UserPlus },
     { id: "finances", label: "Business Finances", icon: DollarSign },
+    { id: "business-advisor", label: "Business Advisor", icon: Sparkles },
     { id: "users", label: "User Directory", icon: Users },
     { id: "infrastructure", label: "Infrastructure", icon: Server },
     { id: "settings", label: "Global Settings", icon: Settings },
@@ -151,7 +194,14 @@ export default function SystemAdminPortal() {
                     variant={activeTab === item.id ? "secondary" : "ghost"}
                     className={`w-full justify-start ${activeTab === item.id ? 'bg-blue-600 text-white hover:bg-blue-700' : 'hover:bg-slate-800 hover:text-white'}`}
                     onClick={() => {
-                      setActiveTab(item.id);
+                      if (item.id === 'business-advisor') {
+                        const isSubdomain = window.location.hostname.startsWith('system.');
+                        const path = isSubdomain ? '/business-advisor' : '/system-admin/business-advisor';
+                        const url = `${window.location.origin}${path}`;
+                        window.open(url, '_blank');
+                      } else {
+                        setActiveTab(item.id);
+                      }
                       setIsSidebarOpen(false);
                     }}
                   >
@@ -188,9 +238,14 @@ export default function SystemAdminPortal() {
         <main className="flex-1 p-6 overflow-y-auto h-[calc(100vh-64px)] pb-24 lg:pb-6">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             {/* Dashboard Tab */}
-        <TabsContent value="dashboard" className="space-y-6">
-          <SystemDashboard onNavigate={setActiveTab} />
-        </TabsContent>
+            <TabsContent value="dashboard" className="space-y-6">
+              <SystemDashboard 
+                onNavigate={setActiveTab} 
+                sharedData={dashboardData} 
+                loadingShared={loadingDashboard} 
+                onRefreshShared={fetchDashboardData} 
+              />
+            </TabsContent>
 
             {/* Global Settings Tab */}
             <TabsContent value="settings" className="space-y-6">
@@ -199,7 +254,7 @@ export default function SystemAdminPortal() {
 
             {/* Schools Tab */}
             <TabsContent value="schools" className="space-y-6">
-              <SchoolManagement />
+              <SchoolManagement sharedData={dashboardData} />
             </TabsContent>
 
             {/* Prospects Tab */}
@@ -209,7 +264,12 @@ export default function SystemAdminPortal() {
 
             {/* Finances Tab */}
             <TabsContent value="finances" className="space-y-6">
-              <BusinessFinances />
+              <BusinessFinances sharedData={dashboardData} />
+            </TabsContent>
+
+            {/* Business Advisor Tab */}
+            <TabsContent value="business-advisor" className="space-y-6">
+              <AdvisorChat sharedData={dashboardData} isLoading={loadingDashboard} />
             </TabsContent>
 
             {/* Users Tab */}
@@ -558,6 +618,8 @@ export default function SystemAdminPortal() {
           <span>More</span>
         </button>
       </div>
+
+      <FloatingAdvisorChat sharedData={dashboardData} />
     </div>
   );
 }

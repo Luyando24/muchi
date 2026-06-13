@@ -95,7 +95,7 @@ interface School {
   student_count?: number;
 }
 
-export default function SchoolManagement() {
+export default function SchoolManagement({ sharedData }: { sharedData?: any }) {
   const [schools, setSchools] = useState<School[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -219,11 +219,11 @@ export default function SchoolManagement() {
     },
   });
 
-  // Fetch schools on mount
+  // Fetch schools on mount or when sharedData changes
   useEffect(() => {
     fetchSchools();
     fetchPlans();
-  }, []);
+  }, [sharedData]);
 
   const fetchPlans = async () => {
     try {
@@ -252,27 +252,35 @@ export default function SchoolManagement() {
   const fetchSchools = async () => {
     setLoading(true);
     try {
-      const [schoolsRes, countsRes] = await Promise.all([
-        supabase
-          .from('schools')
-          .select('*, school_licenses(*), school_contact_logs(contacted_at, channel)')
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('school_profile_counts')
-          .select('*')
-      ]);
+      // 1. Fetch schools, licenses and logs
+      const schoolsRes = await supabase
+        .from('schools')
+        .select('*, school_licenses(*), school_contact_logs(contacted_at, channel)')
+        .order('created_at', { ascending: false });
 
       if (schoolsRes.error) throw schoolsRes.error;
-      if (countsRes.error) throw countsRes.error;
 
+      // 2. Map student & teacher counts
       const schoolTeacherCounts: Record<string, number> = {};
       const schoolStudentCounts: Record<string, number> = {};
 
-      if (countsRes.data) {
-        countsRes.data.forEach((row: any) => {
-          schoolTeacherCounts[row.school_id] = row.teacher_count;
-          schoolStudentCounts[row.school_id] = row.student_count;
+      if (sharedData?.schoolsWithStats) {
+        sharedData.schoolsWithStats.forEach((s: any) => {
+          schoolTeacherCounts[s.id] = s.teacher_count || 0;
+          schoolStudentCounts[s.id] = s.student_count || 0;
         });
+      } else {
+        const countsRes = await supabase
+          .from('school_profile_counts')
+          .select('*');
+        if (countsRes.error) {
+          console.warn('Fallback profile counts fetch failed:', countsRes.error);
+        } else if (countsRes.data) {
+          countsRes.data.forEach((row: any) => {
+            schoolTeacherCounts[row.school_id] = row.teacher_count || 0;
+            schoolStudentCounts[row.school_id] = row.student_count || 0;
+          });
+        }
       }
 
       const schoolsWithCounts = (schoolsRes.data || []).map((s: any) => ({

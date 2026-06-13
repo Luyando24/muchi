@@ -657,7 +657,10 @@ router.get('/dashboard', requireSystemAdmin, async (req: Request, res: Response)
       supabaseAdmin.from('subscription_plans').select('*')
     ]);
 
+    const nowDate = new Date();
     let totalRevenue = 0;
+    let mrr = 0;
+    let activeSubscriptionsCount = 0;
 
     if (!licensesRes.error && !plansRes.error && licensesRes.data && plansRes.data) {
       const licenses = licensesRes.data;
@@ -685,6 +688,11 @@ router.get('/dashboard', requireSystemAdmin, async (req: Request, res: Response)
       };
 
       licenses.forEach((license: any) => {
+        const planNameLower = String(license.plan || '').toLowerCase();
+        if (planNameLower.includes('trial') || planNameLower.includes('free')) {
+          return;
+        }
+
         const planInfo = getPlanInfo(license.plan);
         const startDate = new Date(license.start_date);
         const endDate = new Date(license.end_date);
@@ -707,6 +715,18 @@ router.get('/dashboard', requireSystemAdmin, async (req: Request, res: Response)
 
         const totalCost = planInfo.price * numberOfCycles;
         totalRevenue += totalCost;
+
+        const isActive = license.status === 'active' && endDate > nowDate;
+        if (isActive) {
+          let monthlyContribution = planInfo.price;
+          if (planInfo.durationUnit === 'months' && planInfo.durationValue > 0) {
+            monthlyContribution = planInfo.price / planInfo.durationValue;
+          } else if (planInfo.durationUnit === 'days' && planInfo.durationValue > 0) {
+            monthlyContribution = (planInfo.price / planInfo.durationValue) * 30;
+          }
+          mrr += monthlyContribution;
+          activeSubscriptionsCount++;
+        }
       });
     }
 
@@ -824,25 +844,87 @@ router.get('/dashboard', requireSystemAdmin, async (req: Request, res: Response)
       }
     });
 
+    // Fetch classes, subjects, and latest email log for onboarding reminder
+    const [classesRes, subjectsRes, lastEmailLogRes] = await Promise.all([
+      supabaseAdmin.from('classes').select('id, school_id'),
+      supabaseAdmin.from('subjects').select('id, school_id'),
+      supabaseAdmin
+        .from('email_logs')
+        .select('sent_at, recipient, status')
+        .eq('template_key', 'onboarding_reminder')
+        .order('sent_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    ]);
+
+    const classes = classesRes.data || [];
+    const subjects = subjectsRes.data || [];
+    const lastEmailLog = lastEmailLogRes.data || null;
+
+    const schoolClassesCount: Record<string, number> = {};
+    const schoolSubjectsCount: Record<string, number> = {};
+
+    classes.forEach((c: any) => {
+      schoolClassesCount[c.school_id] = (schoolClassesCount[c.school_id] || 0) + 1;
+    });
+    subjects.forEach((sub: any) => {
+      schoolSubjectsCount[sub.school_id] = (schoolSubjectsCount[sub.school_id] || 0) + 1;
+    });
+
     // Fetch all schools to map stats
     const { data: allSchools, error: allSchoolsErr } = await supabaseAdmin
       .from('schools')
-      .select('id, name, slug, created_at');
+      .select(`
+        id, name, slug, plan, onboarding_status, created_at,
+        school_type, academic_year, current_term, email, phone,
+        province, district, logo_url, headteacher_name, signature_url,
+        ict_name, ict_email, ict_phone, boarding_status, gender_composition
+      `);
 
     let inactiveSchools: any[] = [];
     let topPerformingSchools: any[] = [];
+    let schoolsWithStats: any[] = [];
 
     if (allSchools) {
-      const schoolsWithStats = allSchools.map((s: any) => ({
-        id: s.id,
-        name: s.name,
-        slug: s.slug,
-        created_at: s.created_at,
-        student_count: schoolStudentCount[s.id] || 0,
-        teacher_count: schoolTeacherCount[s.id] || 0,
-        sign_ins_7d: schoolSignIns7d[s.id] || 0,
-        sign_ins_30d: schoolSignIns30d[s.id] || 0
-      }));
+      schoolsWithStats = allSchools.map((s: any) => {
+        // Calculate profile completion percentage (matching onboardingReminderService)
+        const fields = [
+          "name", "school_type", "academic_year", "current_term", "email", "phone",
+          "province", "district", "logo_url", "headteacher_name", "signature_url",
+          "ict_name", "ict_email", "ict_phone", "boarding_status", "gender_composition"
+        ];
+        let filledCount = 0;
+        fields.forEach(key => {
+          const value = s[key];
+          if (value && typeof value === 'string' && value.trim() !== '') {
+            filledCount++;
+          }
+        });
+        const profileCompletion = fields.length > 0 ? Math.round((filledCount / fields.length) * 100) : 100;
+
+        const classesCount = schoolClassesCount[s.id] || 0;
+        const subjectsCount = schoolSubjectsCount[s.id] || 0;
+        
+        // Onboarding is incomplete if profile progress < 90% OR classes < 5 OR subjects < 5
+        const isOnboardingIncomplete = profileCompletion < 90 || classesCount < 5 || subjectsCount < 5;
+
+        return {
+          id: s.id,
+          name: s.name,
+          slug: s.slug,
+          plan: s.plan || 'Free',
+          onboarding_status: s.onboarding_status || 'Pending',
+          created_at: s.created_at,
+          student_count: schoolStudentCount[s.id] || 0,
+          teacher_count: schoolTeacherCount[s.id] || 0,
+          sign_ins_7d: schoolSignIns7d[s.id] || 0,
+          sign_ins_30d: schoolSignIns30d[s.id] || 0,
+          profile_completion: profileCompletion,
+          classes_count: classesCount,
+          subjects_count: subjectsCount,
+          is_onboarding_incomplete: isOnboardingIncomplete
+        };
+      });
 
       // Inactive schools: no user signed in in past 7 days OR less than 20 users signed in in past 30 days
       inactiveSchools = schoolsWithStats
@@ -913,10 +995,23 @@ router.get('/dashboard', requireSystemAdmin, async (req: Request, res: Response)
         totalRevenue,
         onlineUsers
       },
+      summary: {
+        totalRevenue,
+        mrr,
+        activeSubscriptions: activeSubscriptionsCount,
+        arpu: activeSubscriptionsCount > 0 ? Math.round(mrr / activeSubscriptionsCount) : 0,
+        totalSchools: schoolsCount || 0
+      },
       recentSchools: recentSchoolsWithCounts || [],
       activities: sortedActivities,
       inactiveSchools,
-      topPerformingSchools
+      topPerformingSchools,
+      schoolsWithStats,
+      lastOnboardingReminder: lastEmailLog ? {
+        sent_at: lastEmailLog.sent_at,
+        recipient: lastEmailLog.recipient,
+        status: lastEmailLog.status
+      } : null
     });
   } catch (error: any) {
     console.error('Dashboard Stats Error:', error);
@@ -1843,6 +1938,9 @@ router.get('/finances/stats', requireSystemAdmin, async (req: Request, res: Resp
     // Calculate revenue metrics
     const now = new Date();
     const processedLicenses = licenses.map((license: any) => {
+      const planNameLower = String(license.plan || '').toLowerCase();
+      const isTrial = planNameLower.includes('trial') || planNameLower.includes('free');
+
       const planInfo = getPlanInfo(license.plan);
       const startDate = new Date(license.start_date);
       const endDate = new Date(license.end_date);
@@ -1864,11 +1962,13 @@ router.get('/finances/stats', requireSystemAdmin, async (req: Request, res: Resp
         numberOfCycles = 1;
       }
 
-      const totalCost = planInfo.price * numberOfCycles;
-      totalRevenue += totalCost;
+      const totalCost = isTrial ? 0 : (planInfo.price * numberOfCycles);
+      if (!isTrial) {
+        totalRevenue += totalCost;
+      }
 
       const isActive = license.status === 'active' && endDate > now;
-      if (isActive) {
+      if (isActive && !isTrial) {
         // Normalize MRR to monthly value
         let monthlyContribution = planInfo.price;
         if (planInfo.durationUnit === 'months' && planInfo.durationValue > 0) {
@@ -2020,6 +2120,434 @@ router.delete('/finances/transactions/:id', requireSystemAdmin, async (req: Requ
   }
 });
 
+// POST /api/admin/finances/ai-insights
+// Generates pricing, conversion and marketing strategic advice using Groq AI
+router.post('/finances/ai-insights', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { summary, funnel, marketingSpend, cac, ltv, ltvToCacRatio, plans, schools } = req.body;
+
+  const promptContent = `
+    Analyze the following EdTech SaaS metrics for the MUCHI Platform:
+    
+    1. Financial Summary:
+       - Lifetime Revenue: ZMW ${summary?.totalRevenue || 0}
+       - Monthly Recurring Revenue (MRR): ZMW ${summary?.mrr || 0}
+       - Average Revenue Per School (ARPU): ZMW ${summary?.arpu || 0}
+       - Active Subscriptions: ${summary?.activeSubscriptions || 0}
+       - Total Registered Schools: ${summary?.totalSchools || 0}
+       
+    2. CRM Leads Funnel:
+       - New Leads: ${funnel?.New || 0}
+       - Contacted: ${funnel?.Contacted || 0}
+       - Demo Scheduled: ${funnel?.['Demo Scheduled'] || 0}
+       - Negotiation: ${funnel?.Negotiation || 0}
+       - Converted (Closed Won): ${funnel?.['Closed Won'] || 0}
+       - Lost (Closed Lost): ${funnel?.['Closed Lost'] || 0}
+       
+    3. Unit Economics & Marketing Spend:
+       - Total Marketing Spend (from Ledger): ZMW ${marketingSpend || 0}
+       - Customer Acquisition Cost (CAC): ZMW ${cac || 0}
+       - Estimated Customer Lifetime Value (LTV): ZMW ${ltv || 0}
+       - LTV:CAC Ratio: ${ltvToCacRatio || 0}x
+       
+    4. Plan Distribution:
+       ${JSON.stringify(plans || [])}
+       
+    5. Registered Schools Capacity, Onboarding & User Activity Details:
+       ${JSON.stringify(schools || [])}
+
+    6. Platform Fixed Monthly Operating Expenses:
+       - Vercel Hosting: $20 (ZMW 520)
+       - Supabase Database: $25 (ZMW 650)
+       - AI Subscription: $25 (ZMW 650)
+       - Internet Connection: ZMW 500
+       - Bank Maintenance Fee: ZMW 100
+       - Salaries: ZMW 0
+       - Total Fixed Overheads: ZMW 2,420 monthly (assuming 1 USD = 26 ZMW conversion rate).
+       
+    Please generate a professional, highly strategic SaaS growth and revenue expansion report in markdown format. 
+    Your analysis and recommendations must be strictly focused on **maximizing revenue generation, up-selling, and adopting/retaining accounts**:
+    - **Fixed Operating Expenses & Break-Even Analysis:** Compare the current MRR with the total fixed overheads (ZMW 2,420/month) and variable spends. Provide recommendations on how many schools are needed to break even, and suggest strategies to reach profitability.
+    - **Pricing Optimization & Up-selling:** Are we underpricing? How can we package tiers better? (Suggest termly/yearly pricing strategies, and student capacity scaling). Point out any specific schools from the capacity details list that should be upgraded to Premium (Standard plan limit is 500 students, Premium is 1000) to capture expansion revenue.
+    - **Expansion Revenue (Upsell Add-ons):** Identify highly active schools (high logins and student count) that are prime candidates for pitching add-on modules (e.g., Tuckshop Management, Feeding Program modules) to increase overall ARPU.
+    - **Churn Prevention (Revenue Protection):** Identify paying schools with high student counts but 0 or low user activity (7-day logins) that present high churn risk, and suggest intervention.
+    - **Onboarding Speed-to-Revenue:** Highlight schools whose setup progress is stalled (low profile checklist completion, few class uploads) and provide strategies to onboard them faster to realize contract value.
+    - **Marketing & Funnel Strategy:** How can we optimize the sales funnel? If CAC is high or LTV:CAC is low, how do we fix it? If we have organic growth (CAC = 0), how should we start scaling marketing?
+    
+    Use bold headers, lists, and bullet points. Make it actionable, direct, and concise. No conversational fluff or introductions.
+  `;
+
+  const apiKey = process.env.GROQ_API_KEY;
+
+  if (!apiKey || apiKey.trim() === '' || apiKey === 'your_groq_api_key_here') {
+    // Generate simulated response
+    const winRate = funnel ? Math.round(((funnel['Closed Won'] || 0) / ((Object.values(funnel) as number[]).reduce((a: number, b: number) => a + b, 0) || 1)) * 100) : 0;
+    const totalLeads = funnel ? (Object.values(funnel) as number[]).reduce((a: number, b: number) => a + b, 0) : 0;
+    
+    const mrr = summary?.mrr || 0;
+    const netProfit = mrr - 2420;
+    const schoolsNeeded = Math.ceil(2420 / (summary?.arpu || 500));
+
+    let capacityAlerts = "";
+    let expansionAlerts = "";
+    let churnAlerts = "";
+    let onboardingAlerts = "";
+
+    if (schools && Array.isArray(schools)) {
+      const standardLimit = 500;
+      const premiumLimit = 1000;
+      
+      // 1. Capacity Up-sell alerts
+      const schoolsNearingCapacity = schools.filter((s: any) => {
+        const planName = String(s.plan || '').toLowerCase();
+        const students = Number(s.students || 0);
+        if (planName === 'standard' || planName === 'free') {
+          return students >= standardLimit * 0.8;
+        } else if (planName === 'premium') {
+          return students >= premiumLimit * 0.8;
+        }
+        return false;
+      });
+
+      if (schoolsNearingCapacity.length > 0) {
+        capacityAlerts = `\n  • **Immediate Up-sell & Tier Upgrades:**\n` + 
+          schoolsNearingCapacity.map((s: any) => {
+            const planName = String(s.plan || '');
+            const limit = planName.toLowerCase() === 'standard' ? standardLimit : premiumLimit;
+            return `    - **${s.name}** has **${s.students}** students on the **${planName}** plan (${Math.round((s.students/limit)*100)}% limit). Up-sell to Premium immediately.`;
+          }).join('\n');
+      }
+
+      // 2. Expansion revenue alerts
+      const highUsageSchools = schools.filter((s: any) => {
+        const active30d = Number(s.active30d || 0);
+        const planName = String(s.plan || '').toLowerCase();
+        return active30d > 30 && planName !== 'free';
+      });
+
+      if (highUsageSchools.length > 0) {
+        expansionAlerts = `\n  • **Expansion Revenue Opportunities (Pitch Add-on Modules):**\n` +
+          highUsageSchools.map((s: any) => {
+            return `    - **${s.name}** has high adopter activity (**${s.active30d}** active users/30d). Target them to purchase the **Tuckshop Management** or **Feeding Program** add-on modules to drive expansion ARPU.`;
+          }).join('\n');
+      }
+
+      // 3. Churn alerts
+      const churnRiskSchools = schools.filter((s: any) => {
+        const active7d = Number(s.active7d || 0);
+        const students = Number(s.students || 0);
+        const planName = String(s.plan || '').toLowerCase();
+        return active7d === 0 && students > 0 && planName !== 'free';
+      });
+
+      if (churnRiskSchools.length > 0) {
+        churnAlerts = `\n  • **Subscription Churn Risk Alerts (Revenue Protection):**\n` +
+          churnRiskSchools.map((s: any) => {
+            return `    - **${s.name}** is on the paying **${s.plan}** plan with **${s.students}** students, but has **0** active users in the last 7 days. High churn risk! Initiate immediate customer success intervention.`;
+          }).join('\n');
+      }
+
+      // 4. Onboarding adoption alerts
+      const stuckOnboarding = schools.filter((s: any) => {
+        const status = String(s.onboarding_status || '').toLowerCase();
+        const progress = Number(s.profile_completion || 0);
+        const classes = Number(s.classes_count || 0);
+        return (status === 'pending' || status === 'onboarding' || progress < 90 || classes < 5);
+      });
+
+      if (stuckOnboarding.length > 0) {
+        onboardingAlerts = `\n  • **Onboarding Adoptions (Time-to-Revenue):**\n` +
+          stuckOnboarding.map((s: any) => {
+            return `    - **${s.name}** setup progress is stalled (**${s.profile_completion || 0}%** profile, **${s.classes_count || 0}** class uploads). Action: Support team should contact their ICT lead to finalize setup and unlock contract value.`;
+          }).join('\n');
+      }
+    }
+
+    const simulatedResponse = `### ⚠️ Groq AI API Key Not Configured
+To enable live, dynamic AI analytics powered by Llama 3 on Groq, please set your \`GROQ_API_KEY\` in your \`.env\` file.
+
+Below is an automated, revenue-focused business intelligence analysis based on your current metrics, school onboarding progress, and user logins:
+
+---
+
+### 1. Funnel & Sales Pipeline Assessment
+* **Pipeline Health:** Total of **${totalLeads}** leads recorded in the CRM.
+* **Lead Conversion (Win Rate):** **${winRate}%** of prospects successfully converted to paying customers.
+* **Strategic Revenue Insights:**
+  ${winRate < 15 
+    ? `• **Funnel Bottleneck:** Your win rate of **${winRate}%** is below the SaaS target of 15-20%. This represents lost revenue. Consider doing standard follow-up surveys for lost leads to identify objections (e.g., pricing vs. usability) and address friction in school demonstrations.` 
+    : `• **Strong Funnel Conversion:** Your win rate of **${winRate}%** is excellent. This shows high product-market fit. Focus marketing efforts on filling the top of the funnel to scale conversions.`
+  }
+  • **Leads Volume:** With **${funnel?.New || 0}** new leads and **${funnel?.Contacted || 0}** contacted, accelerate sales outreach to shorten the sales cycle and generate faster subscription bookings.
+
+### 2. Marketing Efficiency & Unit Economics (CAC / LTV)
+* **Customer Acquisition Cost (CAC):** ZMW ${cac ? Number(cac).toFixed(2) : '0.00'}
+* **Customer Lifetime Value (LTV):** ZMW ${ltv ? Number(ltv).toFixed(2) : '0.00'}
+* **LTV:CAC Efficiency Ratio:** **${ltvToCacRatio ? Number(ltvToCacRatio).toFixed(1) : '0.0'}x**
+* **Strategic Revenue Guidance:**
+  ${cac === 0 
+    ? `• **Pure Organic Growth:** Your CAC is currently ZMW 0.00. While highly cost-efficient, relying solely on organic sign-ups limits scale. You should allocate a trial budget (e.g., ZMW 2,000/month) to paid channels (local search ads, Facebook campaigns targeting private school directors) to see if you can accelerate high-value sales bookings.`
+    : ltvToCacRatio && ltvToCacRatio < 3 
+      ? `• **Inefficient Unit Economics (Ratio < 3x):** You are spending ZMW ${Number(cac).toFixed(2)} to acquire a school, which is too high relative to its lifetime value. Focus on increasing subscription prices, reducing churn, and targeting higher-value private schools rather than smaller primary schools.`
+      : `• **Highly Scalable Unit Economics (Ratio: ${ltvToCacRatio ? Number(ltvToCacRatio).toFixed(1) : '0.0'}x):** Your customer lifetime value is significantly higher than acquisition costs. You have a green light to scale up marketing spend on high-performing channels to accelerate market capture.`
+  }
+
+### 3. Fixed Operating Expenses & Break-Even Analysis
+* **Fixed Monthly Overhead:** **ZMW 2,420.00**
+  - Vercel Hosting: ZMW 520 ($20.00)
+  - Supabase Database: ZMW 650 ($25.00)
+  - AI Subscription: ZMW 650 ($25.00)
+  - Internet Connection: ZMW 500
+  - Bank Maintenance Fee: ZMW 100
+  - Salaries: ZMW 0.00 (None allocated yet)
+* **Operating Position:** ${netProfit >= 0 ? `🟢 **ZMW ${netProfit.toFixed(2)} Profit**` : `🔴 **ZMW ${Math.abs(netProfit).toFixed(2)} Deficit (Burn)**`}
+* **Break-Even Target:** You need at least **${schoolsNeeded}** active paying schools (at ARPU ZMW ${summary?.arpu || 500}) to cover fixed overheads. Migrating accounts to Termly or Yearly billing is highly recommended to secure upfront cash flow.
+
+### 4. Monetization, Up-sell & Expansion Action Plan
+* **Average Revenue Per School (ARPU):** ZMW ${summary?.arpu ? Number(summary.arpu).toFixed(2) : '0.00'}
+* **Plan Popularity:** Your active tiers distribution shows where revenue is concentrated.
+* **Pricing & Up-sell Action Plan:**
+  1. **Upfront Billing:** Migrate schools from monthly billing to **Termly** (3 cycles per year) or **Yearly** billing. Offer a 10-15% discount for yearly plans. This locks in revenue, reduces churn, and provides upfront cash flow to cover your CAC.
+  2. **Student Capacity Limits:** Strictly enforce plan student limits.${capacityAlerts || '\n  • No schools are currently approaching plan capacity limits.'}
+  3. **Module Expansion:** Pitch tuckshop or feeding program add-ons to active accounts.${expansionAlerts || '\n  • No schools currently meet the active usage criteria for module expansion pitches.'}
+  4. **Revenue Protection (Churn Mitigation):** Follow up with silent paying schools to prevent cancellations.${churnAlerts || '\n  • No paying schools are currently flagged as inactive.'}
+  5. **Adopt-to-Revenue Onboarding:** Support stuck schools to realize setup completions.${onboardingAlerts || '\n  • No schools are currently stuck in the onboarding process.'}
+`;
+    return res.json({ insights: simulatedResponse, model: 'simulated' });
+  }
+
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a senior SaaS business intelligence analyst and strategic growth consultant specialized in EdTech platforms. Analyze the provided conversion, pricing, onboarding, and marketing metrics and output a detailed, professional report with executive strategic recommendations. Keep it concise, action-oriented, and write in Markdown. Do not include introductory conversational fluff. Suggest pricing and marketing strategy changes focused heavily on up-selling, module expansion, churn mitigation, and overall revenue generation.'
+          },
+          {
+            role: 'user',
+            content: promptContent
+          }
+        ],
+        temperature: 0.2
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    const insights = result.choices?.[0]?.message?.content || 'No insights returned.';
+    res.json({ insights, model: 'llama-3.3-70b-versatile' });
+  } catch (error: any) {
+    console.error('Error fetching Groq insights:', error);
+    res.status(500).json({ message: 'Failed to generate AI insights: ' + error.message });
+  }
+});
+
+// POST /api/admin/finances/ai-chat
+// Conversational business analytics advisor powered by Groq AI
+router.post('/finances/ai-chat', requireSystemAdmin, async (req: Request, res: Response) => {
+  const { messages, model, context } = req.body;
+  const selectedModel = model || 'llama-3.3-70b-versatile';
+
+  const systemInstructions = `
+    You are the MUCHI Platform Business Advisor Chat Assistant. You are a senior SaaS business consultant helping system administrators optimize their EdTech platform for revenue generation, school adoption, and pricing tiers.
+    
+    Platform Parameters:
+    - We sell subscription licenses to schools (e.g. Standard, Premium tiers).
+    - Standard plan limit is 500 students, Premium plan limit is 1000 students.
+    - Active users are teachers and students adopting the system.
+    
+    Platform Fixed Monthly Operating Expenses:
+    - Vercel Hosting: $20 (ZMW 520)
+    - Supabase Database: $25 (ZMW 650)
+    - AI Subscription: $25 (ZMW 650)
+    - Internet: ZMW 500
+    - Bank Account Fee: ZMW 100
+    - Salaries: ZMW 0 (none yet)
+    - TOTAL FIXED OVERHEADS: ZMW 2,420 monthly (assuming 1 USD = 26 ZMW conversion rate).
+    
+    Live Business Statistics:
+    - Lifetime Revenue: ZMW ${context?.summary?.totalRevenue || 0}
+    - MRR (Monthly Recurring Revenue): ZMW ${context?.summary?.mrr || 0}
+    - ARPU (Average Revenue per School): ZMW ${context?.summary?.arpu || 0}
+    - Active Subscriptions: ${context?.summary?.activeSubscriptions || 0}
+    - Total Marketing Spend: ZMW ${context?.marketingSpend || 0}
+    - Customer Acquisition Cost (CAC): ZMW ${context?.cac || 0}
+    - Customer Lifetime Value (LTV): ZMW ${context?.ltv || 0}
+    - LTV:CAC Ratio: ${context?.ltvToCacRatio || 0}x
+    - Leads in Funnel: ${JSON.stringify(context?.funnel || {})}
+    
+    Registered Schools & Setup Progress:
+    ${JSON.stringify(context?.schools || [])}
+    
+    Your objectives are to:
+    1. Focus heavily on **maximizing revenue generation** and adopting/retaining accounts.
+    2. Suggest **up-selling opportunities** (identify schools on Standard or Free plans exceeding or approaching 500 students, and recommend moving them to Premium).
+    3. Identify **expansion revenue opportunities** (recommend highly active schools, e.g. >30 logins/30d, to pitch premium add-on modules like Tuckshop Management or Feeding Program modules to increase ARPU).
+    4. Warn of **churn risks** (flag paying schools with 0 recent logins in the last 7 days and suggest customer success outreach to protect recurring revenue).
+    5. Audit **onboarding progress** (point out schools stuck with incomplete setup, e.g. <90% profile progress or <5 class uploads, and give tips to onboard them faster to start realizing contract value).
+    6. Advise on **pricing plans & billing models** (recommending migrating from monthly to term-based or year-based invoicing to lock in cash and offset our fixed expenses).
+    
+    Respond in markdown. Keep your responses conversational, concise, professional, and action-oriented. Feel free to draft direct email/pitch templates for administrators.
+  `;
+
+  const apiKey = process.env.GROQ_API_KEY;
+
+  if (!apiKey || apiKey.trim() === '' || apiKey === 'your_groq_api_key_here') {
+    // Generate intelligent simulated response based on user message content
+    const lastUserMsg = messages && messages.length > 0 
+      ? messages[messages.length - 1].content.toLowerCase() 
+      : '';
+
+    let responseText = '';
+
+    if (lastUserMsg.includes('burn') || lastUserMsg.includes('expense') || lastUserMsg.includes('cost') || lastUserMsg.includes('break-even') || lastUserMsg.includes('break even') || lastUserMsg.includes('vercel') || lastUserMsg.includes('supabase') || lastUserMsg.includes('internet')) {
+      const mrr = context?.summary?.mrr || 0;
+      const netProfit = mrr - 2420;
+      const schoolsNeeded = Math.ceil(2420 / (context?.summary?.arpu || 500));
+      
+      responseText = `### 💰 Monthly Operating Expenses & Break-Even Analysis
+
+Here is a detailed breakdown of your current fixed operating expenses:
+* **Vercel Hosting:** ZMW 520 ($20.00)
+* **Supabase Database:** ZMW 650 ($25.00)
+* **AI Subscription:** ZMW 650 ($25.00)
+* **Internet Connection:** ZMW 500
+* **Bank Maintenance Fee:** ZMW 100
+* **Salaries:** ZMW 0.00 (None allocated yet)
+* **TOTAL FIXED OVERHEADS:** **ZMW 2,420.00 / month** (at ZMW 26 / USD rate)
+
+**Current Status:**
+* **MRR:** ZMW ${mrr.toFixed(2)}
+* **Net Operating Position:** ${netProfit >= 0 ? `🟢 **ZMW ${netProfit.toFixed(2)} Profit**` : `🔴 **ZMW ${Math.abs(netProfit).toFixed(2)} Deficit (Burn)**`}
+
+**Path to Profitability:**
+1. **Break-Even Target:** At an Average Revenue Per School (ARPU) of **ZMW ${context?.summary?.arpu || 500}**, you need at least **${schoolsNeeded}** active paying schools to cover your fixed costs.
+2. **Billing Invoicing:** We recommend moving schools to **Termly** (3 cycles per year) or **Yearly** plans with a 10% discount. This provides immediate cash flow to cover hosting/database overheads upfront.
+3. **Variable Travel Expenses:** Minimize physical travel by shifting demos and ICT setup training to virtual sessions (via Google Meet/Zoom) to reduce travel burn.`;
+    } else if (lastUserMsg.includes('upsell') || lastUserMsg.includes('up-sell') || lastUserMsg.includes('upgrade') || lastUserMsg.includes('capacity') || lastUserMsg.includes('limit') || lastUserMsg.includes('standard') || lastUserMsg.includes('premium')) {
+      const schools = context?.schools || [];
+      const standardLimit = 500;
+      const schoolsNearing = schools.filter((s: any) => {
+        const planName = String(s.plan || '').toLowerCase();
+        const students = Number(s.students || 0);
+        return (planName === 'standard' || planName === 'free') && students >= standardLimit * 0.8;
+      });
+
+      responseText = `### 📈 Up-selling & Capacity Upgrades Analysis
+
+To maximize subscription revenue, we must enforce student capacity tier limits:
+* **Standard Plan Limit:** 500 students
+* **Premium Plan Limit:** 1000 students
+
+${schoolsNearing.length > 0 
+  ? `Here are the schools currently approaching or exceeding plan limits:
+${schoolsNearing.map((s: any) => `* **${s.name}** (${s.plan} Plan): **${s.students}** students. (Capacity utilization: **${Math.round((s.students / 500) * 100)}%**).`).join('\n')}
+
+**Monetization Recommendations:**
+1. **Arakan Up-sell Drive:** Reach out to their ICT or headteacher contact. Pitch them on the Premium Tier to prevent system lockouts and unlock higher student limits.
+2. **Draft Up-sell Email Template:**
+   \`\`\`
+   Subject: Arakan School: Subscription Plan Upgrade Notice
+   
+   Dear School Administrator,
+   
+   We have noticed that Arakan School's student enrollment has reached ${schoolsNearing[0]?.students || 480} students. This is nearing the 500 student limit of your Standard Plan.
+   
+   To avoid any system interruption for teachers and students, we recommend upgrading to our Premium Tier (up to 1000 students), which also includes advanced reporting and student analytics.
+   
+   Please let us know if we can assist you with this upgrade for the upcoming term.
+   \`\`\`
+`
+  : `* No schools are currently approaching plan capacity limits (80%+ of 500 students standard limit). All active clients are safely within bounds.`
+}`;
+    } else if (lastUserMsg.includes('expansion') || lastUserMsg.includes('module') || lastUserMsg.includes('tuckshop') || lastUserMsg.includes('feeding') || lastUserMsg.includes('active')) {
+      responseText = `### ➕ Expansion Revenue (Premium Add-ons)
+
+Highly active schools that are fully adopted represent major opportunities for expansion revenue. We can cross-sell them modular add-ons:
+1. **Tuckshop Module:** A point-of-sale and inventory management module for school tuckshops.
+2. **Feeding Program Module:** An inventory/menu management module for boarding schools.
+
+**Target Candidates:**
+* Look for schools with **>30 logins** in the last 30 days (fully adopted).
+* Pitch these add-ons for an additional **ZMW 150 - 250 / month** on top of their base subscription.
+
+**Suggested Pitch Action:**
+Identify the school admin or treasurer of your most active schools. Send them a screen demo of the tuckshop inventory system. Highlight how it eliminates cash handling losses and reports exact daily sales.`;
+    } else if (lastUserMsg.includes('churn') || lastUserMsg.includes('risk') || lastUserMsg.includes('inactive') || lastUserMsg.includes('login')) {
+      const schools = context?.schools || [];
+      const inactivePaying = schools.filter((s: any) => Number(s.active7d || 0) === 0 && String(s.plan || '').toLowerCase() !== 'free');
+
+      responseText = `### 🚨 Subscription Churn Risks & Revenue Protection
+
+We must actively protect existing MRR by checking school logins:
+${inactivePaying.length > 0 
+  ? `Here are paying schools with **0 active users** in the last 7 days:
+${inactivePaying.map((s: any) => `* **${s.name}** (${s.plan} Plan, **${s.students}** students) - 0 active users.`).join('\n')}
+
+**Retention Recommendations:**
+1. **Customer Success Call:** Call their Headteacher or ICT contact immediately. Ask if they need refresher training or if they encountered problems starting the term.
+2. **Adopt Audit:** Check if their profile settings checklist is finalized. If not, adoption is stalled at the entry point.`
+  : `* **No Churn Risks Flagged:** All paying schools have recorded user activity in the last 7 days! Keep up the adoption monitoring.`
+}`;
+    } else {
+      responseText = `### 🤖 Conversational AI Business Advisor
+
+Hello! I am your MUCHI platform growth coach. I have analyzed your SaaS metrics, CRM funnel, and operational overheads (ZMW 2,420 monthly fixed costs). 
+
+I can help you formulate concrete plans to generate revenue and scale this business. What would you like to discuss?
+* **"How can we cover our ZMW 2,420 fixed costs?"** (Break-even & cost analysis)
+* **"Show me school up-sell opportunities"** (Capacity & tier limits checks)
+* **"Where can we generate expansion revenue?"** (Tuckshop & feeding module cross-selling)
+* **"Are there any churn risks?"** (Activity monitoring & logins checks)
+* **"Draft an email to pitch a tuckshop module"** (Marketing copy generation)
+`;
+    }
+
+    return res.json({ insights: responseText, model: 'simulated' });
+  }
+
+  try {
+    const messagesToSend = [
+      { role: 'system', content: systemInstructions },
+      ...messages
+    ];
+
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: selectedModel,
+        messages: messagesToSend,
+        temperature: 0.3
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    const insights = result.choices?.[0]?.message?.content || 'No advisor response returned.';
+    res.json({ insights, model: selectedModel });
+  } catch (error: any) {
+    console.error('Error fetching Groq advisor chat:', error);
+    res.status(500).json({ message: 'Failed to chat with AI advisor: ' + error.message });
+  }
+});
 
 // ==========================================
 // School Project Management & CRM Endpoints

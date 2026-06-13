@@ -46,9 +46,17 @@ interface Alert {
 
 interface SystemDashboardProps {
   onNavigate?: (tab: string) => void;
+  sharedData?: any;
+  loadingShared?: boolean;
+  onRefreshShared?: () => void;
 }
 
-export default function SystemDashboard({ onNavigate }: SystemDashboardProps) {
+export default function SystemDashboard({ 
+  onNavigate, 
+  sharedData, 
+  loadingShared, 
+  onRefreshShared 
+}: SystemDashboardProps) {
   const [stats, setStats] = useState<SystemStats>({
     totalSchools: 0,
     activeUsers: 0,
@@ -96,10 +104,19 @@ export default function SystemDashboard({ onNavigate }: SystemDashboardProps) {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchDashboardData();
-    const interval = setInterval(fetchDashboardData, 15 * 60 * 1000); // Refresh every 15 minutes
-    return () => clearInterval(interval);
-  }, []);
+    if (sharedData) {
+      setStats(sharedData.stats);
+      setRecentSchools(sharedData.recentSchools || []);
+      setActivities(sharedData.activities || []);
+      setInactiveSchools(sharedData.inactiveSchools || []);
+      setTopPerformingSchools(sharedData.topPerformingSchools || []);
+      setLoading(loadingShared !== undefined ? loadingShared : false);
+    } else {
+      fetchDashboardData();
+      const interval = setInterval(fetchDashboardData, 15 * 60 * 1000); // Refresh every 15 minutes
+      return () => clearInterval(interval);
+    }
+  }, [sharedData, loadingShared]);
 
   const fetchDashboardData = async () => {
     try {
@@ -196,7 +213,7 @@ export default function SystemDashboard({ onNavigate }: SystemDashboardProps) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <Button variant="outline" onClick={fetchDashboardData} className="flex-1 sm:flex-none">
+          <Button variant="outline" onClick={onRefreshShared || fetchDashboardData} className="flex-1 sm:flex-none">
             <Activity className="h-4 w-4 mr-2" />
             Refresh
           </Button>
