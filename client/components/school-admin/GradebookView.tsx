@@ -719,6 +719,19 @@ export default function GradebookView() {
     }
   };
 
+  const showAssessmentFilter = !simplifiedAssessmentMode;
+  const showTestTypeFilter = validTestTypes.length > 0 && (testTypesEnabled || simplifiedAssessmentMode) && (selectedExamType === 'Mid Term' || selectedExamType === 'End of Term' || selectedExamType === 'Term');
+  
+  let gridColsClass = "md:grid-cols-5";
+  const activeCols = 4 + (showAssessmentFilter ? 1 : 0) + (showTestTypeFilter ? 1 : 0);
+  if (activeCols === 6) {
+    gridColsClass = "md:grid-cols-3 lg:grid-cols-6";
+  } else if (activeCols === 5) {
+    gridColsClass = "md:grid-cols-5";
+  } else if (activeCols === 4) {
+    gridColsClass = "md:grid-cols-4";
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6 pb-20 sm:pb-0">
       <div className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 -mx-4 px-4 sm:mx-0 sm:px-0 py-3 sm:py-4 border-b mb-2 sm:mb-4 transition-all duration-200">
@@ -829,7 +842,7 @@ export default function GradebookView() {
           </div>
         </CardHeader>
         <CardContent className="p-3 sm:p-6">
-          <div className={cn("grid grid-cols-2 gap-2 sm:gap-4", validTestTypes.length > 0 && (testTypesEnabled || simplifiedAssessmentMode) && (selectedExamType === 'Mid Term' || selectedExamType === 'End of Term' || selectedExamType === 'Term') ? "md:grid-cols-3 lg:grid-cols-6" : "md:grid-cols-5")}>
+          <div className={cn("grid grid-cols-2 gap-2 sm:gap-4", gridColsClass)}>
             <div className="space-y-1">
               <Label className="hidden sm:block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Year</Label>
               <Select value={selectedYear} onValueChange={setSelectedYear}>
