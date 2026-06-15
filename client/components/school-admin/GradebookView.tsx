@@ -320,7 +320,7 @@ export default function GradebookView() {
     if (targetTest && selectedTestType !== targetTest) {
       setSelectedTestType(targetTest);
     }
-  }, [selectedClass, selectedSubject, selectedTerm, selectedYear, simplifiedAssessmentMode, testTypesEnabled, schoolTestTypes]);
+  }, [simplifiedAssessmentMode, testTypesEnabled, schoolTestTypes]);
 
   // Load students and existing grades when selection changes
   useEffect(() => {
