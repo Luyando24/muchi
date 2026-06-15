@@ -158,11 +158,17 @@ export default function GradebookView() {
   const [selectedSubject, setSelectedSubject] = useState<string>(defaultState.defaultSubjectId || '');
   const [selectedTerm, setSelectedTerm] = useState<string>(defaultState.defaultTerm || '');
   const [selectedExamType, setSelectedExamType] = useState<string>(defaultState.defaultExamType || 'End of Term');
-  const [selectedTestType, setSelectedTestType] = useState<string>('none');
+  const [selectedTestType, setSelectedTestType] = useState<string>(() => {
+    const month = new Date().getMonth(); // 0 = Jan, 11 = Dec
+    if (month >= 0 && month <= 4) return 'Test 1';
+    if (month >= 5 && month <= 7) return 'Test 2';
+    return 'Test 3';
+  });
   const [selectedYear, setSelectedYear] = useState<string>(defaultState.defaultYear || '');
   const [availableExamTypes, setAvailableExamTypes] = useState<string[]>(['Mid Term', 'End of Term']);
   const [schoolTestTypes, setSchoolTestTypes] = useState<string[]>([]);
   const [testTypesEnabled, setTestTypesEnabled] = useState<boolean>(false);
+  const [simplifiedAssessmentMode, setSimplifiedAssessmentMode] = useState<boolean>(false);
 
   const validExamTypes = useMemo(
     () => sanitizeSelectStrings(availableExamTypes),
@@ -234,17 +240,39 @@ export default function GradebookView() {
         
         if (settings) {
           setSchoolType(settings.school_type || '');
-          setSchoolTestTypes(sanitizeSelectStrings(settings.test_types || []));
+          const testTypes = sanitizeSelectStrings(settings.test_types || []);
+          setSchoolTestTypes(testTypes);
           setTestTypesEnabled(!!settings.test_types_enabled);
+          const isSimplified = !!settings.simplified_assessment_mode;
+          setSimplifiedAssessmentMode(isSimplified);
+
+          if (testTypes.length > 0) {
+            const month = new Date().getMonth();
+            let initialTest = testTypes[0];
+            if (month >= 0 && month <= 4) {
+              initialTest = testTypes[0];
+            } else if (month >= 5 && month <= 7) {
+              initialTest = testTypes[1] || testTypes[0];
+            } else {
+              initialTest = testTypes[2] || testTypes[1] || testTypes[0];
+            }
+            setSelectedTestType(initialTest);
+          }
+
           if (!defaultState.defaultTerm) setSelectedTerm(settings.current_term || 'Term 1');
           if (!defaultState.defaultYear) setSelectedYear(settings.academic_year || new Date().getFullYear().toString());
-          const examTypes = sanitizeSelectStrings(settings.exam_types || []);
-          if (examTypes.length > 0) {
-            setAvailableExamTypes(examTypes);
-            if (!defaultState.defaultExamType) {
-              setSelectedExamType(
-                examTypes.includes('End of Term') ? 'End of Term' : examTypes[0],
-              );
+          
+          if (isSimplified) {
+            setSelectedExamType('Term');
+          } else {
+            const examTypes = sanitizeSelectStrings(settings.exam_types || []);
+            if (examTypes.length > 0) {
+              setAvailableExamTypes(examTypes);
+              if (!defaultState.defaultExamType) {
+                setSelectedExamType(
+                  examTypes.includes('End of Term') ? 'End of Term' : examTypes[0],
+                );
+              }
             }
           }
         } else {
@@ -273,6 +301,26 @@ export default function GradebookView() {
     };
     loadMetadata();
   }, []);
+
+  // Intelligent month-based auto-selection of test type
+  useEffect(() => {
+    if (!simplifiedAssessmentMode && !testTypesEnabled) return;
+    
+    const testTypesList = schoolTestTypes.length > 0 ? schoolTestTypes : ['Test 1', 'Test 2', 'Test 3'];
+    const month = new Date().getMonth(); // 0 = Jan, 11 = Dec
+    let targetTest = testTypesList[0];
+    if (month >= 0 && month <= 4) { // Jan to May
+      targetTest = testTypesList[0];
+    } else if (month >= 5 && month <= 7) { // Jun to Aug
+      targetTest = testTypesList[1] || testTypesList[0];
+    } else { // Sep to Dec
+      targetTest = testTypesList[2] || testTypesList[1] || testTypesList[0];
+    }
+    
+    if (targetTest && selectedTestType !== targetTest) {
+      setSelectedTestType(targetTest);
+    }
+  }, [selectedClass, selectedSubject, selectedTerm, selectedYear, simplifiedAssessmentMode, testTypesEnabled, schoolTestTypes]);
 
   // Load students and existing grades when selection changes
   useEffect(() => {
@@ -808,23 +856,31 @@ export default function GradebookView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
-              <Label className="hidden sm:block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Assessment</Label>
-              <Select value={selectedExamType} onValueChange={(val) => {
-                setSelectedExamType(val);
-                setSelectedTestType('none'); // Reset test type when assessment type changes
-              }}>
-                <SelectTrigger className="h-11 sm:h-9 text-sm sm:text-sm">
-                  <SelectValue placeholder="Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {validExamTypes.map(type => (
-                    <SelectItem key={type} value={type}>{type}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {validTestTypes.length > 0 && testTypesEnabled && (selectedExamType === 'Mid Term' || selectedExamType === 'End of Term') && (
+            {!simplifiedAssessmentMode && (
+              <div className="space-y-1">
+                <Label className="hidden sm:block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Assessment</Label>
+                <Select value={selectedExamType} onValueChange={(val) => {
+                  setSelectedExamType(val);
+                  const month = new Date().getMonth();
+                  const list = schoolTestTypes.length > 0 ? schoolTestTypes : ['Test 1', 'Test 2', 'Test 3'];
+                  let targetTest = list[0];
+                  if (month >= 0 && month <= 4) targetTest = list[0];
+                  else if (month >= 5 && month <= 7) targetTest = list[1] || list[0];
+                  else targetTest = list[2] || list[1] || list[0];
+                  setSelectedTestType(targetTest);
+                }}>
+                  <SelectTrigger className="h-11 sm:h-9 text-sm sm:text-sm">
+                    <SelectValue placeholder="Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {validExamTypes.map(type => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {validTestTypes.length > 0 && (testTypesEnabled || simplifiedAssessmentMode) && (selectedExamType === 'Mid Term' || selectedExamType === 'End of Term' || selectedExamType === 'Term') && (
               <div className="space-y-1">
                 <Label className="hidden sm:block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Test Type</Label>
                 <Select value={selectedTestType} onValueChange={setSelectedTestType}>
@@ -832,7 +888,6 @@ export default function GradebookView() {
                     <SelectValue placeholder="Select test type..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Standard</SelectItem>
                     {validTestTypes.map(type => (
                       <SelectItem key={type} value={type}>{type}</SelectItem>
                     ))}

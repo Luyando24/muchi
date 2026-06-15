@@ -2410,6 +2410,304 @@ router.post(
   },
 );
 
+// GET /api/school/promotions/class-students/:classId
+// Fetch class students and calculate suggested promotions/graduations
+router.get(
+  "/promotions/class-students/:classId",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { classId } = req.params;
+
+    try {
+      // 1. Fetch class info
+      const { data: classInfo, error: classError } = await supabaseAdmin
+        .from("classes")
+        .select("*")
+        .eq("id", classId)
+        .eq("school_id", schoolId)
+        .single();
+
+      if (classError || !classInfo) {
+        return res.status(404).json({ message: "Class not found" });
+      }
+
+      // 2. Fetch school current academic year
+      const { data: school, error: schoolError } = await supabaseAdmin
+        .from("schools")
+        .select("academic_year")
+        .eq("id", schoolId)
+        .single();
+
+      if (schoolError || !school) {
+        return res.status(404).json({ message: "School settings not found" });
+      }
+
+      const currentAcademicYear = school.academic_year || new Date().getFullYear().toString();
+
+      // 3. Fetch active student enrollments for this class and academic year
+      const { data: enrollments, error: enrollmentsError } = await supabaseAdmin
+        .from("enrollments")
+        .select(`
+          student_id,
+          profiles!inner(
+            id,
+            full_name,
+            student_number,
+            email,
+            enrollment_status
+          )
+        `)
+        .eq("school_id", schoolId)
+        .eq("class_id", classId)
+        .eq("academic_year", currentAcademicYear)
+        .eq("profiles.enrollment_status", "Active");
+
+      if (enrollmentsError) throw enrollmentsError;
+
+      // 4. Fetch all classes in the school
+      const { data: allClasses, error: classesError } = await supabaseAdmin
+        .from("classes")
+        .select("id, name, level")
+        .eq("school_id", schoolId);
+
+      if (classesError) throw classesError;
+
+      // Parse level of current class
+      const currentLevelVal = classInfo.level || classInfo.name.match(/\d+/)?.[0];
+      const currentLevel = currentLevelVal ? parseInt(currentLevelVal) : null;
+      let nextLevelClasses: any[] = [];
+      let suggestedAction: "promote" | "graduate" = "promote";
+
+      if (currentLevel !== null) {
+        const nextLevel = currentLevel + 1;
+        nextLevelClasses = allClasses.filter(c => {
+          const lVal = c.level || c.name.match(/\d+/)?.[0];
+          return lVal && parseInt(lVal) === nextLevel;
+        });
+      }
+
+      if (nextLevelClasses.length === 0) {
+        suggestedAction = "graduate";
+      }
+
+      const getCleanSuffix = (className: string, levelStr: string) => {
+        const regex = new RegExp(`grade\\s*${levelStr}|${levelStr}`, "i");
+        return className.replace(regex, "").replace(/[-\s]+/g, "").trim().toLowerCase();
+      };
+
+      const currentLevelStr = currentLevel !== null ? currentLevel.toString() : "";
+      const currentSuffix = getCleanSuffix(classInfo.name, currentLevelStr);
+
+      // Helper to find best target class
+      const findSuggestedClassId = () => {
+        if (nextLevelClasses.length === 0) return null;
+        if (nextLevelClasses.length === 1) return nextLevelClasses[0].id;
+
+        // Try suffix match
+        const nextLevelStr = (currentLevel! + 1).toString();
+        const suffixMatches = nextLevelClasses.filter(c => {
+          const targetSuffix = getCleanSuffix(c.name, nextLevelStr);
+          return targetSuffix === currentSuffix && currentSuffix !== "";
+        });
+
+        if (suffixMatches.length > 0) return suffixMatches[0].id;
+
+        // Try substring match
+        const substringMatches = nextLevelClasses.filter(c => {
+          const targetSuffix = getCleanSuffix(c.name, nextLevelStr);
+          return (targetSuffix.includes(currentSuffix) || currentSuffix.includes(targetSuffix)) && currentSuffix !== "";
+        });
+
+        if (substringMatches.length > 0) return substringMatches[0].id;
+
+        // Default to the first one
+        return nextLevelClasses[0].id;
+      };
+
+      const suggestedClassId = findSuggestedClassId();
+
+      const students = (enrollments || []).map((e: any) => {
+        const profile = e.profiles;
+        return {
+          studentId: profile.id,
+          fullName: profile.full_name,
+          studentNumber: profile.student_number,
+          email: profile.email,
+          currentClassId: classId,
+          currentClassName: classInfo.name,
+          suggestedAction: suggestedAction,
+          suggestedClassId: suggestedClassId
+        };
+      });
+
+      res.json({
+        students,
+        allClasses,
+        nextLevelClasses,
+        currentAcademicYear
+      });
+    } catch (error: any) {
+      console.error("Fetch Class Students for Promotions Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// POST /api/school/promotions/process
+// Process promotions/repetitions for multiple students
+router.post(
+  "/promotions/process",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { targetAcademicYear, promotions } = req.body;
+
+    if (!targetAcademicYear || !promotions || !Array.isArray(promotions)) {
+      return res.status(400).json({ message: "Invalid promotions parameters" });
+    }
+
+    try {
+      let processedCount = 0;
+      let graduatedCount = 0;
+
+      for (const p of promotions) {
+        const { studentId, action, targetClassId } = p;
+
+        if (action === "promote" && !targetClassId) {
+          // Graduating
+          const { error: profileError } = await supabaseAdmin
+            .from("profiles")
+            .update({
+              grade: "Graduated",
+              enrollment_status: "Graduated"
+            })
+            .eq("id", studentId)
+            .eq("school_id", schoolId);
+
+          if (profileError) throw profileError;
+          graduatedCount++;
+        } else {
+          // Promoting or Repeating into a class
+          if (!targetClassId) {
+            console.warn(`Skipping student ${studentId} promotion due to missing targetClassId`);
+            continue;
+          }
+
+          // 1. Upsert enrollment for target academic year
+          const { data: existingEnrollment } = await supabaseAdmin
+            .from("enrollments")
+            .select("id")
+            .eq("student_id", studentId)
+            .eq("academic_year", targetAcademicYear)
+            .maybeSingle();
+
+          let enrollmentId = existingEnrollment?.id;
+
+          if (existingEnrollment) {
+            const { error: updateError } = await supabaseAdmin
+              .from("enrollments")
+              .update({
+                class_id: targetClassId,
+                status: "Active"
+              })
+              .eq("id", existingEnrollment.id);
+
+            if (updateError) throw updateError;
+          } else {
+            const { data: newEnrollment, error: insertError } = await supabaseAdmin
+              .from("enrollments")
+              .insert({
+                school_id: schoolId,
+                student_id: studentId,
+                class_id: targetClassId,
+                academic_year: targetAcademicYear,
+                status: "Active"
+              })
+              .select()
+              .single();
+
+            if (insertError) throw insertError;
+            enrollmentId = newEnrollment.id;
+          }
+
+          // 2. Fetch target class name to update profile
+          const { data: classData, error: classError } = await supabaseAdmin
+            .from("classes")
+            .select("name")
+            .eq("id", targetClassId)
+            .eq("school_id", schoolId)
+            .single();
+
+          if (classError || !classData) throw new Error("Target class not found");
+
+          // 3. Update profile current grade and ensure enrollment status is Active
+          const { error: profileError } = await supabaseAdmin
+            .from("profiles")
+            .update({
+              grade: classData.name,
+              enrollment_status: "Active"
+            })
+            .eq("id", studentId)
+            .eq("school_id", schoolId);
+
+          if (profileError) throw profileError;
+
+          // 4. Auto-subscribe to class subjects for target year
+          try {
+            const { data: classSubjects, error: subjectsError } = await supabaseAdmin
+              .from("class_subjects")
+              .select("subject_id")
+              .eq("class_id", targetClassId);
+
+            if (subjectsError) {
+              console.error("Error fetching class subjects for promotion:", subjectsError);
+            } else if (classSubjects && classSubjects.length > 0 && enrollmentId) {
+              // Delete existing subjects for this enrollment
+              await supabaseAdmin
+                .from("student_subjects")
+                .delete()
+                .eq("enrollment_id", enrollmentId);
+
+              const studentSubjects = classSubjects.map((cs: any) => ({
+                student_id: studentId,
+                subject_id: cs.subject_id,
+                class_id: targetClassId,
+                academic_year: targetAcademicYear,
+                enrollment_id: enrollmentId
+              }));
+
+              const { error: insertSubjError } = await supabaseAdmin
+                .from("student_subjects")
+                .insert(studentSubjects);
+
+              if (insertSubjError) {
+                console.error("Error inserting student subjects during promotion:", insertSubjError);
+              }
+            }
+          } catch (subError) {
+            console.error("Auto-subject subscription failed during promotion (non-critical):", subError);
+          }
+
+          processedCount++;
+        }
+      }
+
+      res.json({
+        message: `Successfully processed promotions: ${processedCount} students enrolled, ${graduatedCount} students graduated.`,
+        processedCount,
+        graduatedCount
+      });
+    } catch (error: any) {
+      console.error("Process Promotions Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+
 // Helper to calculate grade from percentage
 async function calculateGrade(
   schoolId: string,
@@ -7734,6 +8032,7 @@ router.put(
       ict_phone,
       show_teacher_on_report_card,
       enable_tuckshop,
+      simplified_assessment_mode,
     } = req.body;
 
     try {
@@ -7809,6 +8108,10 @@ router.put(
             enable_tuckshop === undefined
               ? undefined
               : Boolean(enable_tuckshop),
+          simplified_assessment_mode:
+            simplified_assessment_mode === undefined
+              ? undefined
+              : Boolean(simplified_assessment_mode),
           updated_at: new Date(),
         })
         .eq("id", schoolId)

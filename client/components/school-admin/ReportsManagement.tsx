@@ -178,7 +178,9 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
         setSelectedYear(settings.academic_year || new Date().getFullYear().toString());
         
         // Dynamically set default exam type from school settings
-        if (settings.exam_types && settings.exam_types.length > 0) {
+        if (settings.simplified_assessment_mode) {
+          setSelectedExamType("Term");
+        } else if (settings.exam_types && settings.exam_types.length > 0) {
           // If 'End of Term' is available, prefer it as default, otherwise pick the first one
           const preferredDefault = "End of Term";
           const hasPreferred = settings.exam_types.some((t: string) => t === preferredDefault);
@@ -753,25 +755,27 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
               </div>
               <div className="flex flex-col md:flex-row md:items-center gap-3 w-full">
                 <div className="flex flex-nowrap items-center gap-2 w-full md:w-auto">
-                  <div className="flex-1 min-w-0 md:w-[150px] md:flex-none">
-                    <Select value={selectedExamType} onValueChange={setSelectedExamType}>
-                      <SelectTrigger className="h-9 text-[10px] md:text-sm px-2">
-                        <SelectValue placeholder="Assessment" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(schoolSettings?.exam_types && schoolSettings.exam_types.length > 0) ? (
-                          schoolSettings.exam_types.map((type: string) => (
-                            <SelectItem key={type} value={type}>{type}</SelectItem>
-                          ))
-                        ) : (
-                          <>
-                            <SelectItem value="Mid Term">Mid Term</SelectItem>
-                            <SelectItem value="End of Term">End of Term</SelectItem>
-                          </>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {!schoolSettings?.simplified_assessment_mode && (
+                    <div className="flex-1 min-w-0 md:w-[150px] md:flex-none">
+                      <Select value={selectedExamType} onValueChange={setSelectedExamType}>
+                        <SelectTrigger className="h-9 text-[10px] md:text-sm px-2">
+                          <SelectValue placeholder="Assessment" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(schoolSettings?.exam_types && schoolSettings.exam_types.length > 0) ? (
+                            schoolSettings.exam_types.map((type: string) => (
+                              <SelectItem key={type} value={type}>{type}</SelectItem>
+                            ))
+                          ) : (
+                            <>
+                              <SelectItem value="Mid Term">Mid Term</SelectItem>
+                              <SelectItem value="End of Term">End of Term</SelectItem>
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
                   {!isTeacherPortal && (
                     <div className="flex-1 min-w-0 md:w-[150px] md:flex-none">
@@ -1006,25 +1010,27 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
               </div>
               <div className="flex flex-col md:flex-row md:items-center gap-3 w-full">
                 <div className="flex flex-nowrap items-center gap-2 w-full md:w-auto">
-                  <div className="flex-1 min-w-0 md:w-[150px] md:flex-none">
-                    <Select value={selectedExamType} onValueChange={setSelectedExamType}>
-                      <SelectTrigger className="h-9 text-[10px] md:text-sm px-2">
-                        <SelectValue placeholder="Assessment" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(schoolSettings?.exam_types && schoolSettings.exam_types.length > 0) ? (
-                          schoolSettings.exam_types.map((type: string) => (
-                            <SelectItem key={type} value={type}>{type}</SelectItem>
-                          ))
-                        ) : (
-                          <>
-                            <SelectItem value="Mid Term">Mid Term</SelectItem>
-                            <SelectItem value="End of Term">End of Term</SelectItem>
-                          </>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {!schoolSettings?.simplified_assessment_mode && (
+                    <div className="flex-1 min-w-0 md:w-[150px] md:flex-none">
+                      <Select value={selectedExamType} onValueChange={setSelectedExamType}>
+                        <SelectTrigger className="h-9 text-[10px] md:text-sm px-2">
+                          <SelectValue placeholder="Assessment" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(schoolSettings?.exam_types && schoolSettings.exam_types.length > 0) ? (
+                            schoolSettings.exam_types.map((type: string) => (
+                              <SelectItem key={type} value={type}>{type}</SelectItem>
+                            ))
+                          ) : (
+                            <>
+                              <SelectItem value="Mid Term">Mid Term</SelectItem>
+                              <SelectItem value="End of Term">End of Term</SelectItem>
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
                   {!isTeacherPortal && (
                     <div className="flex-1 min-w-0 md:w-[150px] md:flex-none">

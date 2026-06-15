@@ -83,7 +83,12 @@ export async function ensureSchoolSettings(schoolId: string) {
   }
 
   if (school.test_types_enabled === undefined || school.test_types_enabled === null) {
-    updates.test_types_enabled = false;
+    updates.test_types_enabled = true;
+    updated = true;
+  }
+
+  if (school.simplified_assessment_mode === undefined || school.simplified_assessment_mode === null) {
+    updates.simplified_assessment_mode = true;
     updated = true;
   }
 

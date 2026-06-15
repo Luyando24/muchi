@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { standardizeSubjectName, standardizeClassName, standardizeDepartmentName } from '@shared/name-standardization';
-import { Plus, Trash2, Edit, Save, Search, Settings, BookOpen, Calculator, CheckCircle2, AlertTriangle, Loader2, ClipboardList, Send, ArrowRightLeft, Download, Layers, Building, Calendar, Printer, FileSpreadsheet, Lock, ShieldAlert } from 'lucide-react';
+import { Plus, Trash2, Edit, Save, Search, Settings, BookOpen, Calculator, CheckCircle2, AlertTriangle, Loader2, ClipboardList, Send, ArrowRightLeft, Download, Layers, Building, Calendar, Printer, FileSpreadsheet, Lock, ShieldAlert, GraduationCap } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { SubmitButton } from '@/components/ui/submit-button';
@@ -166,6 +166,121 @@ export default function AcademicManagement() {
   const [unpublishedGrades, setUnpublishedGrades] = useState<any[]>([]);
   const [isReadinessReportOpen, setIsReadinessReportOpen] = useState(false);
   const [isLoadingReadiness, setIsLoadingReadiness] = useState(false);
+
+  // Promotions & Repetitions State
+  const [promotionsSourceClassId, setPromotionsSourceClassId] = useState('');
+  const [promotionsTargetYear, setPromotionsTargetYear] = useState('');
+  const [promotionsStudents, setPromotionsStudents] = useState<any[]>([]);
+  const [promotionsAllClasses, setPromotionsAllClasses] = useState<any[]>([]);
+  const [promotionsNextLevelClasses, setPromotionsNextLevelClasses] = useState<any[]>([]);
+  const [isPromotionsLoading, setIsPromotionsLoading] = useState(false);
+  const [isPromotionsSaving, setIsPromotionsSaving] = useState(false);
+  const [isPromotionsConfirmOpen, setIsPromotionsConfirmOpen] = useState(false);
+
+  useEffect(() => {
+    if (schoolSettings?.academic_year) {
+      const currentYear = parseInt(schoolSettings.academic_year);
+      if (!isNaN(currentYear)) {
+        setPromotionsTargetYear((currentYear + 1).toString());
+      }
+    }
+  }, [schoolSettings]);
+
+  const handleLoadPromotionsStudents = async () => {
+    if (!promotionsSourceClassId) {
+      toast({ title: "Error", description: "Please select a source class first", variant: "destructive" });
+      return;
+    }
+    setIsPromotionsLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const headers = { 'Authorization': `Bearer ${session.access_token}` };
+      const response = await syncFetch(`/api/school/promotions/class-students/${promotionsSourceClassId}`, { headers });
+      if (response) {
+        // Map student list with initial action and targetClassId
+        const mapped = response.students.map((s: any) => ({
+          ...s,
+          action: 'promote',
+          targetClassId: s.suggestedClassId
+        }));
+        setPromotionsStudents(mapped);
+        setPromotionsAllClasses(response.allClasses || []);
+        setPromotionsNextLevelClasses(response.nextLevelClasses || []);
+        if (response.currentAcademicYear) {
+          const year = parseInt(response.currentAcademicYear);
+          if (!isNaN(year)) {
+            setPromotionsTargetYear((year + 1).toString());
+          }
+        }
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to load students for promotions", variant: "destructive" });
+    } finally {
+      setIsPromotionsLoading(false);
+    }
+  };
+
+  const handleStudentActionChange = (studentId: string, action: 'promote' | 'repeat') => {
+    setPromotionsStudents(prev => prev.map(s => {
+      if (s.studentId === studentId) {
+        const targetClassId = action === 'repeat' 
+          ? promotionsSourceClassId 
+          : (s.suggestedClassId || (promotionsNextLevelClasses[0]?.id || null));
+        return { ...s, action, targetClassId };
+      }
+      return s;
+    }));
+  };
+
+  const handleStudentTargetClassChange = (studentId: string, targetClassId: string | null) => {
+    setPromotionsStudents(prev => prev.map(s => {
+      if (s.studentId === studentId) {
+        return { ...s, targetClassId };
+      }
+      return s;
+    }));
+  };
+
+  const handleProcessPromotions = async () => {
+    if (promotionsStudents.length === 0) return;
+    setIsPromotionsSaving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const payload = {
+        targetAcademicYear: promotionsTargetYear,
+        promotions: promotionsStudents.map(s => ({
+          studentId: s.studentId,
+          action: s.action,
+          targetClassId: s.action === 'promote' && s.suggestedAction === 'graduate' ? null : s.targetClassId
+        }))
+      };
+
+      const result = await syncFetch('/api/school/promotions/process', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Promotion changes queued for sync." });
+      } else {
+        toast({ title: "Success", description: result.message || "Promotions processed successfully!" });
+      }
+      setIsPromotionsConfirmOpen(false);
+      setPromotionsStudents([]); // Clear list
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to process promotions", variant: "destructive" });
+    } finally {
+      setIsPromotionsSaving(false);
+    }
+  };
+
 
   // Allocation State
   const [allocationClassId, setAllocationClassId] = useState<string>('');
@@ -1094,6 +1209,9 @@ export default function AcademicManagement() {
           </TabsTrigger>
           <TabsTrigger value="grading-weights" className="flex items-center gap-2 px-4 py-2">
             <Layers className="h-4 w-4" /> Weights
+          </TabsTrigger>
+          <TabsTrigger value="promotions" className="flex items-center gap-2 px-4 py-2">
+            <GraduationCap className="h-4 w-4" /> Promotions
           </TabsTrigger>
 
           <div className="ml-auto flex items-center gap-2 px-1 border-l border-slate-200 dark:border-slate-700 ml-4">
@@ -2568,6 +2686,166 @@ export default function AcademicManagement() {
 
         <TabsContent value="printer" className="space-y-4 mt-4">
           <ResultPrinter />
+        </TabsContent>
+
+        <TabsContent value="promotions" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Academic Promotions & Repetitions</CardTitle>
+              <CardDescription>
+                Promote or repeat students from one grade/class level to the next. Auto-matching will suggest classes intelligently.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex flex-col md:flex-row md:items-end gap-4 bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="promo-source-class">Source Class</Label>
+                  <Select value={promotionsSourceClassId} onValueChange={setPromotionsSourceClassId}>
+                    <SelectTrigger id="promo-source-class"><SelectValue placeholder="Select class to promote" /></SelectTrigger>
+                    <SelectContent>
+                      {classes.map((cls) => (
+                        <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 w-full md:w-[200px]">
+                  <Label htmlFor="promo-target-year">Target Academic Year</Label>
+                  <Input 
+                    id="promo-target-year"
+                    value={promotionsTargetYear} 
+                    onChange={e => setPromotionsTargetYear(e.target.value)} 
+                    placeholder="e.g. 2027"
+                  />
+                </div>
+                <Button 
+                  onClick={handleLoadPromotionsStudents} 
+                  disabled={isPromotionsLoading || !promotionsSourceClassId}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-all shadow-sm"
+                >
+                  {isPromotionsLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    "Load Students"
+                  )}
+                </Button>
+              </div>
+
+              {promotionsStudents.length > 0 && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
+                    <Table>
+                      <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
+                        <TableRow>
+                          <TableHead className="font-bold">Student Name & ID</TableHead>
+                          <TableHead className="font-bold">Current Grade</TableHead>
+                          <TableHead className="font-bold">Action</TableHead>
+                          <TableHead className="font-bold">Target Class / Grade</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {promotionsStudents.map((s) => {
+                          const isGraduating = s.action === 'promote' && s.suggestedAction === 'graduate';
+                          return (
+                            <TableRow key={s.studentId}>
+                              <TableCell className="font-medium">
+                                <div>
+                                  <p className="text-slate-900 dark:text-slate-100 font-bold">{s.fullName}</p>
+                                  <p className="text-slate-400 text-xs">{s.studentNumber || 'No Student ID'}</p>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="font-semibold">{s.currentClassName}</Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Select 
+                                  value={s.action} 
+                                  onValueChange={(val: 'promote' | 'repeat') => handleStudentActionChange(s.studentId, val)}
+                                >
+                                  <SelectTrigger className="w-[180px]">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="promote">
+                                      {s.suggestedAction === 'graduate' ? 'Graduate Student' : 'Promote to Next Grade'}
+                                    </SelectItem>
+                                    <SelectItem value="repeat">Repeat Grade</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                              <TableCell>
+                                {isGraduating ? (
+                                  <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-1 px-3">
+                                    Graduated
+                                  </Badge>
+                                ) : (
+                                  <Select 
+                                    value={s.targetClassId || ''} 
+                                    onValueChange={(val) => handleStudentTargetClassChange(s.studentId, val)}
+                                    disabled={s.action === 'repeat'}
+                                  >
+                                    <SelectTrigger className="w-[220px]">
+                                      <SelectValue placeholder="Select target class" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {promotionsAllClasses.map((c: any) => (
+                                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <div className="flex flex-col md:flex-row justify-between items-center bg-slate-50 dark:bg-slate-800/40 p-6 rounded-xl border border-slate-100 dark:border-slate-800 gap-4">
+                    <div className="flex flex-wrap gap-4 text-sm text-slate-600 dark:text-slate-400 font-medium">
+                      <div>Total Students: <span className="font-bold text-slate-900 dark:text-slate-100">{promotionsStudents.length}</span></div>
+                      <div>•</div>
+                      <div>Promoting: <span className="font-bold text-blue-600">{promotionsStudents.filter(s => s.action === 'promote' && s.suggestedAction !== 'graduate').length}</span></div>
+                      <div>•</div>
+                      <div>Repeating: <span className="font-bold text-amber-600">{promotionsStudents.filter(s => s.action === 'repeat').length}</span></div>
+                      <div>•</div>
+                      <div>Graduating: <span className="font-bold text-emerald-600">{promotionsStudents.filter(s => s.action === 'promote' && s.suggestedAction === 'graduate').length}</span></div>
+                    </div>
+                    <Button 
+                      onClick={() => setIsPromotionsConfirmOpen(true)}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition-all px-6 py-2 shadow-md"
+                    >
+                      Process Promotions & Repetitions
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {promotionsStudents.length === 0 && !isPromotionsLoading && (
+                <div className="text-center py-12 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                  <GraduationCap className="mx-auto h-12 w-12 text-slate-300 dark:text-slate-700 mb-3" />
+                  <h3 className="font-bold text-slate-700 dark:text-slate-300 mb-1">No Student Data Loaded</h3>
+                  <p className="text-sm text-slate-500 max-w-sm mx-auto">
+                    Select a class and click "Load Students" to view, customize, and approve grade promotions or retention.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <ConfirmDialog
+            open={isPromotionsConfirmOpen}
+            onOpenChange={setIsPromotionsConfirmOpen}
+            title="Approve Class Promotions?"
+            description={`You are about to process year-end promotions/repetitions for ${promotionsStudents.length} students into the Target Academic Year ${promotionsTargetYear}. Past academic data is completely preserved. Click confirm to process.`}
+            confirmLabel="Confirm & Apply"
+            loading={isPromotionsSaving}
+            onConfirm={handleProcessPromotions}
+          />
         </TabsContent>
       </Tabs>
 

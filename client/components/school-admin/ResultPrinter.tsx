@@ -76,6 +76,7 @@ export default function ResultPrinter() {
     const [previewData, setPreviewData] = useState<any | null>(null);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [printMode, setPrintMode] = useState<'pdf' | 'hardcopy'>('hardcopy');
+    const [simplifiedAssessmentMode, setSimplifiedAssessmentMode] = useState<boolean>(false);
     
     // State for print blocker dialog
     const [isBlockerOpen, setIsBlockerOpen] = useState(false);
@@ -119,6 +120,9 @@ export default function ResultPrinter() {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
             if (settings) {
+                const isSimplified = !!settings.simplified_assessment_mode;
+                setSimplifiedAssessmentMode(isSimplified);
+
                 let examTypes = ['Mid Term', 'End of Term'];
                 if (settings.exam_types && settings.exam_types.length > 0) {
                     examTypes = settings.exam_types;
@@ -126,7 +130,9 @@ export default function ResultPrinter() {
                 setAvailableExamTypes(examTypes);
 
                 // Set 'End of Term' as default if it exists in the available options, otherwise fallback to the first option
-                const defaultExamType = examTypes.includes('End of Term') ? 'End of Term' : examTypes[0];
+                const defaultExamType = isSimplified 
+                    ? 'Term'
+                    : (examTypes.includes('End of Term') ? 'End of Term' : examTypes[0]);
 
                 setFilters(prev => ({
                     ...prev,
@@ -381,22 +387,24 @@ export default function ResultPrinter() {
                                 </Select>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-xs font-medium text-slate-500 uppercase">Assessment</label>
-                                <Select
-                                    value={filters.examType}
-                                    onValueChange={(val) => setFilters(prev => ({ ...prev, examType: val }))}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select Type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {availableExamTypes.map(type => (
-                                            <SelectItem key={type} value={type}>{type}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                            {!simplifiedAssessmentMode && (
+                                <div className="space-y-2">
+                                    <label className="text-xs font-medium text-slate-500 uppercase">Assessment</label>
+                                    <Select
+                                        value={filters.examType}
+                                        onValueChange={(val) => setFilters(prev => ({ ...prev, examType: val }))}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select Type" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {availableExamTypes.map(type => (
+                                                <SelectItem key={type} value={type}>{type}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
 
                             <div className="space-y-2">
                                 <label className="text-xs font-medium text-slate-500 uppercase">Academic Year</label>

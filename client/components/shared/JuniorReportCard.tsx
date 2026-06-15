@@ -35,14 +35,24 @@ export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({ data }) => {
     }
 
     const type = curr.exam_type || curr.examType;
+    const tType = curr.test_type || curr.testType || '';
     const score = curr.percentage;
 
-    if (type === 'Test 1') acc[subjectName].test1 = score;
-    else if (type === 'Test 2') acc[subjectName].test2 = score;
-    else if (type === 'Test 3') acc[subjectName].test3 = score;
-    else if (type === 'End of Term' || type === 'Final Exam') {
+    if (tType === 'Test 1' || type === 'Test 1') acc[subjectName].test1 = score;
+    else if (tType === 'Test 2' || type === 'Test 2') acc[subjectName].test2 = score;
+    else if (tType === 'Test 3' || type === 'Test 3') acc[subjectName].test3 = score;
+    else if (type === 'End of Term' || type === 'Final Exam' || type === 'Term') {
       acc[subjectName].marksScored = score;
       acc[subjectName].percentage = score;
+    }
+
+    // Fallback/Recalculate average marks and marksScored if they are not recorded but tests exist
+    const tests = [acc[subjectName].test1, acc[subjectName].test2, acc[subjectName].test3].filter(v => v !== '-');
+    if (tests.length > 0 && (acc[subjectName].marksScored === '-' || type === 'Term')) {
+      const avg = tests.reduce((a, b) => Number(a) + Number(b), 0) / tests.length;
+      acc[subjectName].avMarks = Math.round(avg);
+      acc[subjectName].marksScored = Math.round(avg);
+      acc[subjectName].percentage = avg;
     }
 
     return acc;

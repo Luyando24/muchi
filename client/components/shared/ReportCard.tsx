@@ -312,6 +312,11 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
 
   // Helper to determine the final percentage for a grouped subject
   const getFinalPercentage = (item: any) => {
+    // If a standard exam/term grade is explicitly recorded, use it directly (handles legacy/standard grades)
+    if (item.exam !== null && item.exam !== undefined) {
+      return item.exam;
+    }
+
     const activeTestTypes = school?.test_types_enabled ? (school?.test_types || []) : [];
     
     if (activeTestTypes.length > 0) {
@@ -399,7 +404,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
         item.test2 = percentage;
       } else if (isTest3) {
         item.test3 = percentage;
-      } else if (g.exam_type === examType) {
+      } else if (g.exam_type === examType || g.exam_type === 'Term') {
         item.exam = percentage;
         item.mainGrade = g;
       }
@@ -468,6 +473,11 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
 
   // Helper to determine subject assessment state (RECORDED, WAITING, ABSENT)
   const getSubjectAssessmentState = React.useCallback((item: any) => {
+    // If standard exam/term grade is recorded, it's RECORDED
+    if (item.exam !== null && item.exam !== undefined) {
+      return 'RECORDED';
+    }
+
     const subId = item.subject?.id || item.subject?.code;
     const activeTestTypes = school?.test_types_enabled ? (school?.test_types || []) : [];
     
@@ -612,7 +622,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
           <div className="flex-1 flex flex-col items-center text-center px-4 space-y-2">
             <h1 className="text-3xl font-black tracking-tight text-slate-900">{school?.name || 'MUCHI ACADEMY'}</h1>
             <div className="flex items-center justify-center gap-2 text-sm font-bold text-slate-900">
-              <span>{term} - {examType}</span>
+              <span>{school?.simplified_assessment_mode ? term : `${term} - ${examType}`}</span>
               <span className="text-slate-300">&bull;</span>
               <span>Academic Year {academicYear}</span>
             </div>

@@ -60,7 +60,8 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
     current_term: '',
     exam_types: [] as string[],
     test_types: [] as string[],
-    test_types_enabled: false,
+    test_types_enabled: true,
+    simplified_assessment_mode: true,
     email: '',
     phone: '',
     address: '',
@@ -167,6 +168,7 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
         exam_types: data.exam_types || ['Mid Term', 'End of Term'],
         test_types: data.test_types || [],
         test_types_enabled: data.test_types_enabled ?? false,
+        simplified_assessment_mode: data.simplified_assessment_mode ?? false,
         email: data.email || '',
         phone: data.phone || '',
         address: data.address || '',
@@ -680,6 +682,19 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
                           checked={formData.test_types_enabled}
                           onCheckedChange={(checked) =>
                             setFormData(prev => ({ ...prev, test_types_enabled: checked }))
+                          }
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between border-t pt-4 border-slate-100 dark:border-slate-800/50">
+                        <div className="space-y-0.5">
+                          <Label className="text-base font-bold text-slate-900 dark:text-white">Simplified Assessment Mode</Label>
+                          <p className="text-xs text-slate-500">Hide Mid-Term and End-of-Term options. All entries are allocated directly into the active Term.</p>
+                        </div>
+                        <Switch
+                          checked={formData.simplified_assessment_mode}
+                          onCheckedChange={(checked) =>
+                            setFormData(prev => ({ ...prev, simplified_assessment_mode: checked }))
                           }
                         />
                       </div>

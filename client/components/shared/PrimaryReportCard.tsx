@@ -34,7 +34,8 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
           'Test 2': null,
           'Test 3': null,
           'Mid Term': null,
-          'End of Term': null
+          'End of Term': null,
+          'Term': null
         },
         allGrades: [],
         teacherName: g.subjects?.teacherName || null
@@ -44,11 +45,13 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
     subData.allGrades.push(g);
     
     // Map existing exam types to our test columns
-    if (g.exam_type.includes('1')) subData.tests['Test 1'] = g.percentage;
-    else if (g.exam_type.includes('2')) subData.tests['Test 2'] = g.percentage;
-    else if (g.exam_type.includes('3')) subData.tests['Test 3'] = g.percentage;
+    const tType = g.test_type || '';
+    if (tType === 'Test 1' || g.exam_type.includes('1')) subData.tests['Test 1'] = g.percentage;
+    else if (tType === 'Test 2' || g.exam_type.includes('2')) subData.tests['Test 2'] = g.percentage;
+    else if (tType === 'Test 3' || g.exam_type.includes('3')) subData.tests['Test 3'] = g.percentage;
     else if (g.exam_type.toLowerCase().includes('mid')) subData.tests['Mid Term'] = g.percentage;
     else if (g.exam_type.toLowerCase().includes('end')) subData.tests['End of Term'] = g.percentage;
+    else if (g.exam_type === 'Term' || g.exam_type === examType) subData.tests['Term'] = g.percentage;
   });
 
   const subjectList = Array.from(subjectsMap.values());
@@ -231,12 +234,13 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
               {subjectList.map((sub: any, i: number) => {
                 // Determine which percentage to use for "AV MARKS" and "MARKS SCORED"
                 // If "End of Term" exists, use that, otherwise use "Mid Term", otherwise average of tests
-                const endOfTerm = sub.tests['End of Term'];
-                const midTerm = sub.tests['Mid Term'];
-                const tests = [sub.tests['Test 1'], sub.tests['Test 2'], sub.tests['Test 3']].filter(v => v !== null);
-                const testAvg = tests.length > 0 ? tests.reduce((a: any, b: any) => a + b, 0) / tests.length : null;
-                
-                const finalPercentage = endOfTerm ?? midTerm ?? testAvg ?? 0;
+                 const termScore = sub.tests['Term'];
+                 const endOfTerm = sub.tests['End of Term'];
+                 const midTerm = sub.tests['Mid Term'];
+                 const tests = [sub.tests['Test 1'], sub.tests['Test 2'], sub.tests['Test 3']].filter(v => v !== null);
+                 const testAvg = tests.length > 0 ? tests.reduce((a: any, b: any) => a + b, 0) / tests.length : null;
+                 
+                 const finalPercentage = termScore ?? endOfTerm ?? midTerm ?? testAvg ?? 0;
                 const color = getGradeColor(finalPercentage);
                 
                 return (
