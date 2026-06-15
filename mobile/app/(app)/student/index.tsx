@@ -36,7 +36,10 @@ import {
   Clock,
   ChevronRight,
   ShieldAlert,
-  Megaphone
+  Megaphone,
+  Building,
+  Bed,
+  Users
 } from 'lucide-react-native';
 
 // Interfaces matching backend returns
@@ -51,6 +54,7 @@ interface StudentProfile {
   guardian_name?: string;
   guardian_phone?: string;
   is_temp_password?: boolean;
+  gender?: string;
 }
 
 interface School {
@@ -58,6 +62,7 @@ interface School {
   name: string;
   current_term?: string;
   academic_year?: string;
+  boarding_status?: string;
 }
 
 interface GradingScale {
@@ -133,7 +138,7 @@ export default function StudentPortal() {
   const { signOut, user, session } = useAuth();
   
   // Navigation tab state
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'subjects' | 'results' | 'attendance' | 'fees' | 'profile'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'subjects' | 'results' | 'attendance' | 'fees' | 'profile' | 'accommodation'>('dashboard');
   
   // Data states
   const [loading, setLoading] = useState(true);
@@ -146,6 +151,16 @@ export default function StudentPortal() {
   const [assignedSubjects, setAssignedSubjects] = useState<AssignedSubject[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  
+  // Accommodation States
+  const [allocation, setAllocation] = useState<any>(null);
+  const [roommates, setRoommates] = useState<any[]>([]);
+  const [blocks, setBlocks] = useState<any[]>([]);
+  const [pendingApp, setPendingApp] = useState<any>(null);
+  const [preferredBlockId, setPreferredBlockId] = useState<string>('');
+  const [notes, setNotes] = useState<string>('');
+  const [submittingApp, setSubmittingApp] = useState(false);
+  const [loadingAccommodation, setLoadingAccommodation] = useState(false);
   
   // Results select term
   const [selectedTermResult, setSelectedTermResult] = useState<TermResult | null>(null);
@@ -232,6 +247,118 @@ export default function StudentPortal() {
   useEffect(() => {
     loadAllData();
   }, [user]);
+
+  const fetchAccommodationInfo = async () => {
+    if (!user?.id) return;
+    setLoadingAccommodation(true);
+    try {
+      const { data: allocData, error: allocErr } = await supabase
+        .from('accommodation_allocations')
+        .select(`
+          *,
+          room:accommodation_rooms(
+            id,
+            room_number,
+            capacity,
+            block:accommodation_blocks(id, name, gender_policy)
+          )
+        `)
+        .eq('student_id', user.id)
+        .eq('status', 'Active')
+        .maybeSingle();
+
+      if (allocErr) throw allocErr;
+
+      if (allocData) {
+        setAllocation(allocData);
+        const { data: roommatesData, error: roommatesErr } = await supabase
+          .from('accommodation_allocations')
+          .select('*, student:profiles(id, full_name, email, phone)')
+          .eq('room_id', allocData.room_id)
+          .eq('status', 'Active');
+        
+        if (roommatesErr) throw roommatesErr;
+        setRoommates(roommatesData?.filter(r => r.student_id !== user.id) || []);
+      } else {
+        setAllocation(null);
+        setRoommates([]);
+      }
+
+      const schoolId = profile?.school_id || school?.id;
+      if (schoolId) {
+        const { data: blocksData, error: blocksErr } = await supabase
+          .from('accommodation_blocks')
+          .select('*')
+          .eq('school_id', schoolId);
+        
+        if (blocksErr) throw blocksErr;
+
+        const studentGender = profile?.gender;
+        const filteredBlocks = blocksData?.filter(b => 
+          b.gender_policy === 'Mixed' || 
+          !studentGender ||
+          b.gender_policy === studentGender
+        ) || [];
+        setBlocks(filteredBlocks);
+
+        const { data: appData, error: appErr } = await supabase
+          .from('accommodation_applications')
+          .select('*, preferred_block:accommodation_blocks(name)')
+          .eq('student_id', user.id)
+          .in('status', ['Pending', 'Waitlisted', 'Rejected'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (appErr) throw appErr;
+        setPendingApp(appData);
+      }
+    } catch (err: any) {
+      console.error('Error fetching accommodation:', err);
+      Alert.alert('Error', 'Failed to fetch accommodation data.');
+    } finally {
+      setLoadingAccommodation(false);
+    }
+  };
+
+  const handleApplyAccommodation = async () => {
+    const schoolId = profile?.school_id || school?.id;
+    if (!schoolId || !user?.id) return;
+
+    setSubmittingApp(true);
+    try {
+      const academicYear = school?.academic_year || new Date().getFullYear().toString();
+      
+      const { error } = await supabase
+        .from('accommodation_applications')
+        .insert({
+          student_id: user.id,
+          school_id: schoolId,
+          academic_year: academicYear,
+          preferred_block_id: (preferredBlockId && preferredBlockId !== 'none') ? preferredBlockId : null,
+          notes: notes || '',
+          status: 'Pending'
+        });
+
+      if (error) throw error;
+
+      Alert.alert("Application Submitted", "Your boarding application has been successfully submitted.");
+      setPreferredBlockId('');
+      setNotes('');
+      fetchAccommodationInfo();
+    } catch (err: any) {
+      console.error(err);
+      Alert.alert("Application Failed", err.message || "Failed to submit accommodation application.");
+    } finally {
+      setSubmittingApp(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'accommodation') {
+      fetchAccommodationInfo();
+    }
+  }, [activeTab, profile, school]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -948,6 +1075,208 @@ export default function StudentPortal() {
             </TouchableOpacity>
           </View>
         )}
+
+        {/* ==================== TAB 7: ACCOMMODATION ==================== */}
+        {activeTab === 'accommodation' && (
+          <View className="space-y-6 mb-10">
+            <View>
+              <Text className="text-base font-extrabold text-slate-800">Accommodation & Boarding</Text>
+              <Text className="text-xs text-slate-400 mt-0.5">View room assignment or submit a boarding application</Text>
+            </View>
+
+            {loadingAccommodation ? (
+              <View className="py-12 justify-center items-center">
+                <ActivityIndicator size="large" color="#4f46e5" />
+              </View>
+            ) : allocation ? (
+              <View className="space-y-4">
+                {/* Active Allocation Card */}
+                <Card className="bg-white border-slate-100 shadow-sm">
+                  <CardHeader className="pb-2 flex-row items-center gap-2">
+                    <Building size={20} color="#4f46e5" />
+                    <CardTitle className="text-sm font-extrabold text-slate-800">Active Room Allocation</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4">
+                    <View className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
+                      <View>
+                        <Text className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Hostel Block</Text>
+                        <View className="flex-row items-center gap-2 mt-0.5">
+                          <Text className="font-extrabold text-slate-800 text-sm">{allocation.room?.block?.name}</Text>
+                          <View className="bg-indigo-50 px-2 py-0.5 rounded">
+                            <Text className="text-[9px] font-black text-indigo-700 uppercase">
+                              {allocation.room?.block?.gender_policy}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                      <View className="h-px bg-slate-200" />
+                      <View>
+                        <Text className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Room Number</Text>
+                        <Text className="font-extrabold text-slate-800 text-sm mt-0.5">{allocation.room?.room_number}</Text>
+                      </View>
+                      <View className="h-px bg-slate-200" />
+                      <View>
+                        <Text className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Room Capacity</Text>
+                        <Text className="font-extrabold text-slate-800 text-sm mt-0.5">{allocation.room?.capacity} Beds</Text>
+                      </View>
+                      <View className="h-px bg-slate-200" />
+                      <View>
+                        <Text className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Check-in Date</Text>
+                        <Text className="font-extrabold text-slate-700 text-sm mt-0.5">
+                          {allocation.check_in_date ? new Date(allocation.check_in_date).toLocaleDateString() : 'N/A'}
+                        </Text>
+                      </View>
+                    </View>
+                  </CardContent>
+                </Card>
+
+                {/* Roommates Card */}
+                <Card className="bg-white border-slate-100 shadow-sm">
+                  <CardHeader className="pb-2 flex-row items-center gap-2">
+                    <Users size={20} color="#10b981" />
+                    <CardTitle className="text-sm font-extrabold text-slate-800">My Roommates</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4">
+                    {roommates.length > 0 ? (
+                      <View className="divide-y divide-slate-100">
+                        {roommates.map((rm) => (
+                          <View key={rm.id} className="py-3 flex-row justify-between items-center first:pt-0 last:pb-0">
+                            <View>
+                              <Text className="font-extrabold text-slate-800 text-sm">{rm.student?.full_name}</Text>
+                              <Text className="text-xs text-slate-400 mt-0.5">{rm.student?.email || 'No email'}</Text>
+                            </View>
+                            {rm.student?.phone && (
+                              <View className="bg-slate-100 px-2.5 py-1 rounded-full">
+                                <Text className="text-[10px] font-bold text-slate-600">{rm.student.phone}</Text>
+                              </View>
+                            )}
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <View className="py-6 items-center">
+                        <Text className="text-slate-400 italic text-xs">No roommates allocated yet.</Text>
+                      </View>
+                    )}
+                  </CardContent>
+                </Card>
+              </View>
+            ) : (
+              <View className="space-y-4">
+                {/* Info Alert */}
+                <Card className="bg-indigo-50 border-indigo-100 shadow-sm">
+                  <CardContent className="p-4 flex-row items-start gap-3">
+                    <Bed size={20} color="#4f46e5" className="mt-0.5" />
+                    <View className="flex-1">
+                      <Text className="font-extrabold text-indigo-900 text-sm">No Room Assigned</Text>
+                      <Text className="text-xs text-indigo-700 mt-1 leading-relaxed">
+                        You do not currently have a hostel assignment. Submit a boarding request below.
+                      </Text>
+                    </View>
+                  </CardContent>
+                </Card>
+
+                {/* Application status if any */}
+                {pendingApp && (
+                  <Card className={`bg-white border-slate-100 shadow-sm border-l-4 ${
+                    pendingApp.status === 'Pending' ? 'border-l-amber-500' :
+                    pendingApp.status === 'Waitlisted' ? 'border-l-indigo-500' :
+                    'border-l-rose-500'
+                  }`}>
+                    <CardHeader className="pb-2 flex-row justify-between items-center">
+                      <CardTitle className="text-sm font-extrabold text-slate-800">Hostel Request Status</CardTitle>
+                      <View className={`px-2 py-0.5 rounded ${
+                        pendingApp.status === 'Pending' ? 'bg-amber-100 text-amber-800' :
+                        pendingApp.status === 'Waitlisted' ? 'bg-indigo-100 text-indigo-800' :
+                        'bg-rose-100 text-rose-800'
+                      }`}>
+                        <Text className="text-[10px] font-bold uppercase">{pendingApp.status}</Text>
+                      </View>
+                    </CardHeader>
+                    <CardContent className="p-4 space-y-3">
+                      <View>
+                        <Text className="text-[10px] text-slate-400 font-bold uppercase font-black">Preferred Block</Text>
+                        <Text className="font-extrabold text-slate-800 text-sm mt-0.5">
+                          {pendingApp.preferred_block?.name || 'Any Block'}
+                        </Text>
+                      </View>
+                      {pendingApp.notes ? (
+                        <View>
+                          <Text className="text-[10px] text-slate-400 font-bold uppercase font-black">Application Notes</Text>
+                          <View className="bg-slate-50 p-3 rounded-xl border border-slate-100 mt-1">
+                            <Text className="text-xs text-slate-500 italic">"{pendingApp.notes}"</Text>
+                          </View>
+                        </View>
+                      ) : null}
+                      <Text className="text-[9px] font-bold text-slate-400 uppercase mt-2">
+                        Submitted: {new Date(pendingApp.created_at).toLocaleDateString()}
+                      </Text>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Submit Form */}
+                {(!pendingApp || pendingApp.status === 'Rejected') && (
+                  <Card className="bg-white border-slate-100 shadow-sm">
+                    <CardHeader>
+                      <CardTitle className="text-sm font-extrabold text-slate-800">Request Boarding Status</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 space-y-4">
+                      {/* Preferred block list */}
+                      <View className="space-y-1">
+                        <Text className="text-xs font-bold text-slate-500">Hostel Preference</Text>
+                        <View className="bg-slate-50 border border-slate-100 rounded-xl overflow-hidden p-1">
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row py-1 gap-2">
+                            <TouchableOpacity 
+                              onPress={() => setPreferredBlockId('none')}
+                              className={`px-4 py-2 rounded-full border ${preferredBlockId === 'none' || preferredBlockId === '' ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-200'}`}
+                            >
+                              <Text className={`text-xs font-extrabold ${preferredBlockId === 'none' || preferredBlockId === '' ? 'text-white' : 'text-slate-600'}`}>
+                                No Preference
+                              </Text>
+                            </TouchableOpacity>
+                            {blocks.map(b => (
+                              <TouchableOpacity 
+                                key={b.id}
+                                onPress={() => setPreferredBlockId(b.id)}
+                                className={`px-4 py-2 rounded-full border ${preferredBlockId === b.id ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-200'}`}
+                              >
+                                <Text className={`text-xs font-extrabold ${preferredBlockId === b.id ? 'text-white' : 'text-slate-600'}`}>
+                                  {b.name} ({b.gender_policy})
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      </View>
+
+                      {/* Notes input */}
+                      <View className="space-y-1">
+                        <Text className="text-xs font-bold text-slate-500">Application Notes / Details</Text>
+                        <TextInput 
+                          multiline
+                          numberOfLines={4}
+                          value={notes}
+                          onChangeText={setNotes}
+                          placeholder="Describe any special reasons or details for your accommodation request (e.g. distance to school, medical requirements, etc.)"
+                          placeholderTextColor="#94a3b8"
+                          className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm text-slate-800 min-h-[80px]"
+                        />
+                      </View>
+
+                      <Button 
+                        title="Submit Boarding Request"
+                        onPress={handleApplyAccommodation}
+                        loading={submittingApp}
+                        className="bg-indigo-600 h-11"
+                      />
+                    </CardContent>
+                  </Card>
+                )}
+              </View>
+            )}
+          </View>
+        )}
       </ScrollView>
 
       {/* ==================== INLINE BOTTOM TAB BAR ==================== */}
@@ -976,6 +1305,14 @@ export default function StudentPortal() {
           active={activeTab === 'attendance'}
           onPress={() => setActiveTab('attendance')}
         />
+        {school?.boarding_status && school.boarding_status !== 'Day' && (
+          <TabButton 
+            icon={<Building size={20} color={activeTab === 'accommodation' ? '#4f46e5' : '#94a3b8'} />}
+            label="Hostel"
+            active={activeTab === 'accommodation'}
+            onPress={() => setActiveTab('accommodation')}
+          />
+        )}
         <TabButton 
           icon={<CreditCard size={20} color={activeTab === 'fees' ? '#4f46e5' : '#94a3b8'} />}
           label="Fees"

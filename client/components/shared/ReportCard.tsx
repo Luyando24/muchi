@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from '@/components/ui/badge';
+import { resolveClassSection, filterScalesForSection } from '@shared/gradingScale';
 
 interface ReportCardProps {
   data: {
@@ -428,13 +429,17 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
     const score = Number(percentage);
     
     if (gradingScale && gradingScale.length > 0) {
-      const sortedScale = [...gradingScale].sort((a: any, b: any) => b.min_percentage - a.min_percentage);
-      for (const scale of sortedScale) {
-        if (score >= scale.min_percentage) {
-          return { grade: scale.grade, standard: scale.description.toUpperCase() };
+      const section = resolveClassSection(student.class || '', school?.school_type || '');
+      const filteredScales = filterScalesForSection(gradingScale, section);
+      if (filteredScales.length > 0) {
+        const sortedScale = [...filteredScales].sort((a: any, b: any) => b.min_percentage - a.min_percentage);
+        for (const scale of sortedScale) {
+          if (score >= scale.min_percentage) {
+            return { grade: scale.grade, standard: (scale.description || scale.grade).toUpperCase() };
+          }
         }
+        return { grade: 'F', standard: 'FAIL' };
       }
-      return { grade: 'F', standard: 'FAIL' };
     }
 
     // Fallback — choose the correct built-in scale based on class level

@@ -1,14 +1,19 @@
 import React from 'react';
 import { View, Text, SafeAreaView, ScrollView, TouchableOpacity } from 'react-native';
 import { User, Mail, LogOut, ChevronRight, Settings, Bell, Shield } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import { useAuth } from '../../../../hooks/useAuth';
 import { Card, CardContent } from '../../../../components/ui/Card';
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
+  const router = useRouter();
 
-  const MenuItem = ({ icon, label, last = false }: { icon: any, label: string, last?: boolean }) => (
-    <TouchableOpacity className={`flex-row items-center justify-between py-4 ${!last ? 'border-b border-slate-50' : ''}`}>
+  const MenuItem = ({ icon, label, onPress, last = false }: { icon: any, label: string, onPress?: () => void, last?: boolean }) => (
+    <TouchableOpacity 
+      onPress={onPress}
+      className={`flex-row items-center justify-between py-4 ${!last ? 'border-b border-slate-50' : ''}`}
+    >
       <View className="flex-row items-center gap-3">
         <View className="bg-slate-50 p-2 rounded-lg">{icon}</View>
         <Text className="font-bold text-slate-700">{label}</Text>
@@ -41,9 +46,22 @@ export default function ProfileScreen() {
         <View className="p-5 space-y-6">
            <Card className="bg-white border-slate-100 shadow-sm overflow-hidden">
               <CardContent className="p-0 px-4">
-                 <MenuItem icon={<Settings size={18} color="#64748b" />} label="Account Settings" />
-                 <MenuItem icon={<Bell size={18} color="#64748b" />} label="Notifications" />
-                 <MenuItem icon={<Shield size={18} color="#64748b" />} label="Security" last />
+                 <MenuItem 
+                   icon={<Settings size={18} color="#64748b" />} 
+                   label="Account Settings" 
+                   onPress={() => router.push('/teacher/settings')}
+                 />
+                 <MenuItem 
+                   icon={<Bell size={18} color="#64748b" />} 
+                   label="Notifications" 
+                   onPress={() => router.push('/teacher/settings')}
+                 />
+                 <MenuItem 
+                   icon={<Shield size={18} color="#64748b" />} 
+                   label="Security" 
+                   onPress={() => router.push('/teacher/settings')}
+                   last 
+                 />
               </CardContent>
            </Card>
 

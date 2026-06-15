@@ -4,7 +4,7 @@ import { Button } from '../../../components/ui/Button';
 import { useAuth } from '../../../hooks/useAuth';
 import { supabase } from '../../../lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card';
-import { Users, GraduationCap, School, BookOpen, LogOut } from 'lucide-react-native';
+import { Users, GraduationCap, School, BookOpen, LogOut, CreditCard, Building, Store, Utensils } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
 interface DashboardStats {
@@ -17,12 +17,22 @@ interface DashboardStats {
 interface AdminProfile {
   full_name: string;
   email: string;
+  school_id: string;
+}
+
+interface SchoolSettings {
+  id: string;
+  name: string;
+  boarding_status?: string;
+  enable_tuckshop?: boolean;
+  academic_year?: string;
 }
 
 export default function SchoolAdminDashboard() {
   const { signOut, user } = useAuth();
   const router = useRouter();
   const [profile, setProfile] = useState<AdminProfile | null>(null);
+  const [school, setSchool] = useState<SchoolSettings | null>(null);
   const [stats, setStats] = useState<DashboardStats>({
     students: 0,
     teachers: 0,
@@ -39,11 +49,23 @@ export default function SchoolAdminDashboard() {
       // 1. Fetch Admin Profile
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('full_name, email')
+        .select('full_name, email, school_id')
         .eq('id', user.id)
         .single();
       
-      if (profileData) setProfile(profileData);
+      if (profileData) {
+        setProfile(profileData);
+        
+        // Fetch school details
+        const { data: schoolData } = await supabase
+          .from('schools')
+          .select('id, name, boarding_status, enable_tuckshop, academic_year')
+          .eq('id', profileData.school_id)
+          .single();
+        if (schoolData) {
+          setSchool(schoolData);
+        }
+      }
 
       // 2. Fetch Stats (Parallel)
       const [
@@ -147,27 +169,71 @@ export default function SchoolAdminDashboard() {
           </View>
 
           {/* Quick Actions */}
-          <Card>
+          <Card className="bg-white border-slate-100 shadow-sm">
             <CardHeader>
-              <CardTitle>Management</CardTitle>
+              <CardTitle className="text-base font-extrabold text-slate-800">Administrative Services</CardTitle>
             </CardHeader>
-            <CardContent>
-              <View className="space-y-3">
-                <Button 
-                  title="Manage Students" 
-                  variant="outline"
-                  onPress={() => router.push('/(app)/school-admin/students')} 
-                />
-                <Button 
-                  title="Manage Teachers" 
-                  variant="outline"
-                  onPress={() => router.push('/(app)/school-admin/teachers')} 
-                />
-                <Button 
-                  title="Class Schedule" 
-                  variant="outline"
-                  onPress={() => router.push('/(app)/school-admin/timetable')} 
-                />
+            <CardContent className="p-4 pt-0">
+              <View className="flex-row flex-wrap gap-4 justify-between">
+                <TouchableOpacity 
+                  onPress={() => router.push('/(app)/school-admin/students')}
+                  className="w-[47%] bg-slate-50 border border-slate-100 rounded-2xl p-4 items-center"
+                >
+                  <GraduationCap size={24} color="#4f46e5" className="mb-2" />
+                  <Text className="font-extrabold text-slate-700 text-xs text-center">Manage Students</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  onPress={() => router.push('/(app)/school-admin/teachers')}
+                  className="w-[47%] bg-slate-50 border border-slate-100 rounded-2xl p-4 items-center"
+                >
+                  <Users size={24} color="#10b981" className="mb-2" />
+                  <Text className="font-extrabold text-slate-700 text-xs text-center">Manage Teachers</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  onPress={() => router.push('/(app)/school-admin/timetable')}
+                  className="w-[47%] bg-slate-50 border border-slate-100 rounded-2xl p-4 items-center"
+                >
+                  <BookOpen size={24} color="#f59e0b" className="mb-2" />
+                  <Text className="font-extrabold text-slate-700 text-xs text-center">Class Schedule</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  onPress={() => router.push('/school-admin/finance')}
+                  className="w-[47%] bg-slate-50 border border-slate-100 rounded-2xl p-4 items-center"
+                >
+                  <CreditCard size={24} color="#4f46e5" className="mb-2" />
+                  <Text className="font-extrabold text-slate-700 text-xs text-center">Finance & Fees</Text>
+                </TouchableOpacity>
+
+                {school?.boarding_status && school.boarding_status !== 'Day' && (
+                  <TouchableOpacity 
+                    onPress={() => router.push('/school-admin/accommodation')}
+                    className="w-[47%] bg-slate-50 border border-slate-100 rounded-2xl p-4 items-center"
+                  >
+                    <Building size={24} color="#ec4899" className="mb-2" />
+                    <Text className="font-extrabold text-slate-700 text-xs text-center">Accommodation</Text>
+                  </TouchableOpacity>
+                )}
+
+                {school?.enable_tuckshop && (
+                  <TouchableOpacity 
+                    onPress={() => router.push('/school-admin/tuckshop')}
+                    className="w-[47%] bg-slate-50 border border-slate-100 rounded-2xl p-4 items-center"
+                  >
+                    <Store size={24} color="#10b981" className="mb-2" />
+                    <Text className="font-extrabold text-slate-700 text-xs text-center">Tuckshop POS</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity 
+                  onPress={() => router.push('/school-admin/feeding-program')}
+                  className="w-[47%] bg-slate-50 border border-slate-100 rounded-2xl p-4 items-center"
+                >
+                  <Utensils size={24} color="#ef4444" className="mb-2" />
+                  <Text className="font-extrabold text-slate-700 text-xs text-center">Feeding Program</Text>
+                </TouchableOpacity>
               </View>
             </CardContent>
           </Card>

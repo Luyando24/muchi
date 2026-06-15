@@ -65,6 +65,7 @@ import { syncFetch, offlineQuery } from '@/lib/syncService';
 import StudentFees from '@/components/student/StudentFees';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { resolveClassSection, filterScalesForSection } from '@shared/gradingScale';
 
 export default function StudentPortal() {
   const { id } = useParams();
@@ -394,13 +395,20 @@ export default function StudentPortal() {
   const getStandardFromScale = (percentage: number) => {
     // If we have access to the grading scale from props/state, use it
     if (gradesData?.gradingScale && gradesData.gradingScale.length > 0) {
-      const sortedScale = [...gradesData.gradingScale].sort((a: any, b: any) => b.min_percentage - a.min_percentage);
-      for (const scale of sortedScale) {
-        if (percentage >= scale.min_percentage) {
-          return scale.description.toUpperCase();
+      const classStr = (gradesData?.student?.class || student?.class || '').toLowerCase();
+      const schoolType = gradesData?.school?.school_type || '';
+      const section = resolveClassSection(classStr, schoolType);
+      const filteredScales = filterScalesForSection(gradesData.gradingScale, section);
+      
+      if (filteredScales.length > 0) {
+        const sortedScale = [...filteredScales].sort((a: any, b: any) => b.min_percentage - a.min_percentage);
+        for (const scale of sortedScale) {
+          if (percentage >= scale.min_percentage) {
+            return (scale.description || scale.grade).toUpperCase();
+          }
         }
+        return 'FAIL';
       }
-      return 'FAIL';
     }
     
     // Fallback if percentage is 0 and no grades exist

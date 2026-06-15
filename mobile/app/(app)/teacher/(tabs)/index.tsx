@@ -5,12 +5,27 @@ import { Input } from '../../../../components/ui/Input';
 import { useAuth } from '../../../../hooks/useAuth';
 import { supabase } from '../../../../lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../../components/ui/Card';
-import { Search, User, BookOpen, GraduationCap, ClipboardList } from 'lucide-react-native';
+import { Search, User, BookOpen, GraduationCap, ClipboardList, AlertCircle } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
 interface TeacherProfile {
+  id: string;
   full_name: string;
   email: string;
+  phone_number?: string;
+  gender?: string;
+  date_of_birth?: string;
+  marital_status?: string;
+  address?: string;
+  disability_status?: string;
+  employment_date?: string;
+  department?: string;
+  current_role?: string;
+  housing_status?: string;
+  highest_qualification?: string;
+  institution_name?: string;
+  field_of_study?: string;
+  completion_year?: string | number;
 }
 
 interface StudentResult {
@@ -45,6 +60,23 @@ export default function TeacherDashboard() {
   const [searchResults, setSearchResults] = useState<StudentResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const isProfileIncomplete = !!(profile && (
+    !profile.phone_number?.trim() ||
+    !profile.gender?.trim() ||
+    !profile.date_of_birth ||
+    !profile.marital_status?.trim() ||
+    !profile.address?.trim() ||
+    !profile.disability_status?.trim() ||
+    !profile.employment_date ||
+    !profile.department?.trim() ||
+    !profile.current_role?.trim() ||
+    !profile.housing_status?.trim() ||
+    !profile.highest_qualification?.trim() ||
+    !profile.institution_name?.trim() ||
+    !profile.field_of_study?.trim() ||
+    !profile.completion_year
+  ));
 
   useEffect(() => {
     if (user) {
@@ -160,6 +192,23 @@ export default function TeacherDashboard() {
           <Text className="text-2xl font-extrabold text-slate-900">Good Morning, {profile?.full_name || 'Teacher'}!</Text>
           <Text className="text-sm text-slate-500 mt-1">Here's what's happening in your classes today.</Text>
         </View>
+
+        {isProfileIncomplete && (
+          <Card className="bg-amber-50 border-amber-200 mb-6">
+            <CardContent className="p-4 flex-row items-start gap-3">
+              <AlertCircle size={20} color="#d97706" className="mt-0.5" />
+              <View className="flex-1">
+                <Text className="font-extrabold text-amber-900 text-sm">Profile Incomplete</Text>
+                <Text className="text-xs text-amber-700 mt-1 leading-relaxed">
+                  Your profile is missing mandatory demographic fields required for government/MoE reporting. Please complete your settings setup.
+                </Text>
+                <TouchableOpacity onPress={() => router.push('/teacher/settings')} className="mt-2">
+                  <Text className="text-xs font-black text-amber-900 underline">Complete Settings Now</Text>
+                </TouchableOpacity>
+              </View>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Primary Action */}
         <TouchableOpacity 

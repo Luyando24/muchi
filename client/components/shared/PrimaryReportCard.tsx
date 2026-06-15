@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { filterScalesForSection } from '@shared/gradingScale';
 
 interface PrimaryReportCardProps {
   data: any;
@@ -73,7 +74,8 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
 
   const getScaleMatch = (percentage: number) => {
     if (gradingScale && gradingScale.length > 0) {
-      return gradingScale.find((s: any) => percentage >= s.min_percentage && percentage <= s.max_percentage);
+      const filteredScales = filterScalesForSection(gradingScale, 'upper_primary');
+      return filteredScales.find((s: any) => percentage >= s.min_percentage && percentage <= s.max_percentage);
     }
     return null;
   };
@@ -111,7 +113,7 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
 
   const getGradeDescription = (percentage: number) => {
     const scale = getScaleMatch(percentage);
-    if (scale) return scale.description || scale.remark || "Satisfactory";
+    if (scale) return scale.description || "Satisfactory";
 
     // Fallback — percentage is already 0-100
     if (percentage >= 76) return "Distinction";

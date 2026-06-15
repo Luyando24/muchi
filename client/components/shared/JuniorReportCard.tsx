@@ -2,6 +2,7 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from "@/lib/utils";
+import { filterScalesForSection } from '@shared/gradingScale';
 
 interface JuniorReportCardProps {
   data: {
@@ -56,7 +57,8 @@ export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({ data }) => {
     
     // Priority 1: Use provided grading scales from DB
     if (data.gradingScale && data.gradingScale.length > 0) {
-      const match = data.gradingScale.find(s => p >= s.min_percentage && p <= s.max_percentage);
+      const filteredScales = filterScalesForSection(data.gradingScale, 'lower_primary');
+      const match = filteredScales.find(s => p >= s.min_percentage && p <= s.max_percentage);
       if (match) {
         // Map common labels to color standard if they match or use the grade name
         const grade = match.grade.toUpperCase();

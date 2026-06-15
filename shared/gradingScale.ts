@@ -279,7 +279,7 @@ export function resolveGradingScaleForStudent(
   options: { rawMark?: number; storedPercentage?: number },
 ): GradingScaleEntry {
   const type = (schoolType || "").toLowerCase();
-  const isCombined = type === "combined primary" || type === "primary school";
+  const isCombined = type === "combined primary" || type === "primary school" || type === "combined school" || type === "basic school";
   const isUpper = type === "upper primary" || (isCombined && isG57Class(studentGradeOrClass));
   const isLower = type === "lower primary" || (isCombined && isG14Class(studentGradeOrClass));
 
