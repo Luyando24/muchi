@@ -687,7 +687,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                 <Table>
                   <TableHeader className="border-b border-slate-900">
                     <TableRow className="hover:bg-transparent border-none h-12">
-                      <TableHead className={`${showTest1 || showTest2 || showTest3 ? 'w-[30%]' : 'w-[40%]'} text-xs font-bold text-slate-900 uppercase tracking-widest pl-0`}>Subject</TableHead>
+                      <TableHead className={`${showTest1 || showTest2 || showTest3 ? (school?.show_teacher_on_report_card ? 'w-[20%]' : 'w-[30%]') : (school?.show_teacher_on_report_card ? 'w-[30%]' : 'w-[40%]')} text-xs font-bold text-slate-900 uppercase tracking-widest pl-0`}>Subject</TableHead>
                       {showTest1 && (
                         <TableHead className="w-[10%] text-xs font-bold text-slate-900 uppercase tracking-widest text-center">Test 1</TableHead>
                       )}
@@ -701,7 +701,10 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                         {showTest1 || showTest2 || showTest3 ? 'Final %' : 'Score %'}
                       </TableHead>
                       <TableHead className={`${showTest1 || showTest2 || showTest3 ? 'w-[15%]' : 'w-[20%]'} text-xs font-bold text-slate-900 uppercase tracking-widest text-center`}>Grade</TableHead>
-                      <TableHead className={`${showTest1 || showTest2 || showTest3 ? 'w-[20%]' : 'w-[20%]'} text-xs font-bold text-slate-900 uppercase tracking-widest text-right pr-0`}>Standard</TableHead>
+                      <TableHead className={`${showTest1 || showTest2 || showTest3 ? 'w-[20%]' : 'w-[20%]'} text-xs font-bold text-slate-900 uppercase tracking-widest ${school?.show_teacher_on_report_card ? 'text-center' : 'text-right pr-0'}`}>Standard</TableHead>
+                      {school?.show_teacher_on_report_card && (
+                        <TableHead className="w-[15%] text-xs font-bold text-slate-900 uppercase tracking-widest text-right pr-0">Teacher</TableHead>
+                      )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -888,11 +891,6 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                                         ({row.combinedNote})
                                       </span>
                                     )}
-                                    {school?.show_teacher_on_report_card && row.teacherName && (
-                                      <span className="text-sm print:text-[11px] text-slate-500 font-normal italic capitalize">
-                                        - {row.teacherName}
-                                      </span>
-                                    )}
                                   </div>
                                 </TableCell>
                                 {showTest1 && (
@@ -916,7 +914,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                                 <TableCell className="py-1 px-4 text-center font-black text-slate-900 text-lg print:text-sm">
                                   {row.gradeStr}
                                 </TableCell>
-                                <TableCell className="py-1 pr-0 text-right font-bold text-slate-500 text-[10px] print:text-[9px] uppercase tracking-widest">
+                                <TableCell className={`py-1 ${school?.show_teacher_on_report_card ? 'text-center' : 'text-right pr-0'} font-bold text-slate-500 text-[10px] print:text-[9px] uppercase tracking-widest`}>
                                   {row.isAbsent ? (
                                     <span className="text-slate-300 italic font-medium">
                                       {row.gradeStr === 'WAITING' ? 'WAITING' : 'NOT RECORDED'}
@@ -925,11 +923,16 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                                     getStandardFromScale(row.percentage).standard
                                   )}
                                 </TableCell>
+                                {school?.show_teacher_on_report_card && (
+                                  <TableCell className="py-1 pr-0 text-right font-normal text-slate-500 text-sm print:text-[11px] capitalize italic">
+                                    {row.teacherName || '-'}
+                                  </TableCell>
+                                )}
                               </TableRow>
                             ))
                           ) : (
                             <TableRow>
-                              <TableCell colSpan={5 + (showTest1 ? 1 : 0) + (showTest2 ? 1 : 0) + (showTest3 ? 1 : 0)} className="text-center py-16">
+                              <TableCell colSpan={5 + (showTest1 ? 1 : 0) + (showTest2 ? 1 : 0) + (showTest3 ? 1 : 0) + (school?.show_teacher_on_report_card ? 1 : 0)} className="text-center py-16">
                                 <div className="flex flex-col items-center gap-2 text-slate-400">
                                   <p className="text-sm font-medium">No academic records found</p>
                                   <p className="text-xs opacity-70">Grades for this term have not been published yet.</p>
@@ -939,7 +942,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                           )}
                           {displayRows.length > 0 && (
                             <TableRow className="border-t border-slate-900 mt-8 print:mt-4 block">
-                              <TableCell colSpan={4 + (showTest1 ? 1 : 0) + (showTest2 ? 1 : 0) + (showTest3 ? 1 : 0)} className="p-4 print:p-2 pl-0">
+                              <TableCell colSpan={4 + (showTest1 ? 1 : 0) + (showTest2 ? 1 : 0) + (showTest3 ? 1 : 0) + (school?.show_teacher_on_report_card ? 1 : 0)} className="p-4 print:p-2 pl-0">
                                 <div className="flex justify-between items-center text-xs font-bold text-slate-900 uppercase tracking-widest gap-4">
                                   <div>RECORDED: {subjectsRecorded}</div>
                                   {school?.school_type === 'Basic' && (

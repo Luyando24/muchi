@@ -159,7 +159,10 @@ export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({ data }) => {
               <th className="border-r border-black p-2 text-center text-xs font-black uppercase w-16">AV Marks</th>
               <th className="border-r border-black p-2 text-center text-xs font-black uppercase w-16 whitespace-pre-wrap">Marks Scored</th>
               <th className="border-r border-black p-2 text-center text-xs font-black uppercase w-16">Out Of</th>
-              <th className="p-2 text-center text-xs font-black uppercase w-20">Colour</th>
+              <th className={cn("text-center text-xs font-black uppercase w-20", school?.show_teacher_on_report_card ? "border-r border-black p-2" : "p-2")}>Colour</th>
+              {school?.show_teacher_on_report_card && (
+                <th className="p-2 text-center text-xs font-black uppercase w-28">Teacher</th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -171,11 +174,6 @@ export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({ data }) => {
                   <td className="border-r border-black p-2 text-xs font-bold uppercase">
                     <div className="flex flex-row items-baseline gap-1.5 flex-wrap">
                       <span>{subject.name}</span>
-                      {school?.show_teacher_on_report_card && subject.teacherName && (
-                        <span className="text-xs text-slate-500 font-normal italic capitalize">
-                          - {subject.teacherName}
-                        </span>
-                      )}
                     </div>
                   </td>
                   <td className="border-r border-black p-2 text-center text-sm">{subject.test1 || '-'}</td>
@@ -185,17 +183,23 @@ export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({ data }) => {
                   <td className="border-r border-black p-2 text-center text-sm font-bold">{subject.marksScored || subject.percentage}</td>
                   <td className="border-r border-black p-2 text-center text-sm">{subject.outOf || '100'}</td>
                   <td className={cn(
-                    "p-2 text-center text-[10px] font-black tracking-tight",
+                    "text-center text-[10px] font-black tracking-tight",
+                    school?.show_teacher_on_report_card ? "border-r border-black p-2" : "p-2",
                     getPerformanceColor(scaleInfo.label)
                   )}>
                     {scaleInfo.label}
                   </td>
+                  {school?.show_teacher_on_report_card && (
+                    <td className="p-2 text-center text-xs font-semibold capitalize italic">
+                      {subject.teacherName || '-'}
+                    </td>
+                  )}
                 </tr>
               );
             })}
             {subjectsList.length === 0 && (
               <tr>
-                <td colSpan={9} className="p-12 text-center text-slate-400 italic">No academic data found for this term.</td>
+                <td colSpan={school?.show_teacher_on_report_card ? 10 : 9} className="p-12 text-center text-slate-400 italic">No academic data found for this term.</td>
               </tr>
             )}
           </tbody>

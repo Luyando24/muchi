@@ -52,10 +52,22 @@ export const syncFetch = async (url: string, options: SyncOptions = {}) => {
   const method = options.method || 'GET';
   const headers = (options.headers as Record<string, string>) || {};
 
+  // Resolve school-scoped cache key if applicable
+  let cacheKey = options.cacheKey || url;
+  if (cacheKey.startsWith('school-') || url.includes('/api/school/')) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const schoolId = session?.user?.user_metadata?.school_id;
+      if (schoolId && !cacheKey.endsWith(schoolId)) {
+        cacheKey = `${cacheKey}--${schoolId}`;
+      }
+    } catch (err) {
+      console.warn('Failed to auto-scope cacheKey:', err);
+    }
+  }
+
   // GET Requests: Cache and fallback
   if (method === 'GET') {
-    const cacheKey = options.cacheKey || url;
-
     // Check if online and cached data is fresh (within 30 minutes)
     if (isOnline() && !options.forceSync) {
       const cached = await db.cache.get(cacheKey);
@@ -134,7 +146,7 @@ export const syncFetch = async (url: string, options: SyncOptions = {}) => {
   }
 
   // Invalidate related cache entries after a successful mutation
-  await invalidateCache(url, options.cacheKey);
+  await invalidateCache(url, cacheKey);
 
   // If we just came online, trigger a sync of all pending items
   if (isOnline()) {

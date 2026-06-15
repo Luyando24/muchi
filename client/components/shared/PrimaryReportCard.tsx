@@ -220,7 +220,7 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
           <Table className="primary-report-table border-collapse">
             <TableHeader className="bg-slate-100">
               <TableRow className="h-12 text-[10px] sm:text-xs font-black uppercase text-slate-700">
-                <TableHead className="w-[30%] border border-slate-300">SUBJECT</TableHead>
+                <TableHead className={`${school?.show_teacher_on_report_card ? 'w-[20%]' : 'w-[30%]'} border border-slate-300`}>SUBJECT</TableHead>
                 <TableHead className="w-[10%] border border-slate-300 text-center">TEST 1 %</TableHead>
                 <TableHead className="w-[10%] border border-slate-300 text-center">TEST 2 %</TableHead>
                 <TableHead className="w-[10%] border border-slate-300 text-center">TEST 3 %</TableHead>
@@ -228,6 +228,9 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
                 <TableHead className="w-[10%] border border-slate-300 text-center">MARKS SCORED</TableHead>
                 <TableHead className="w-[10%] border border-slate-300 text-center">OUT OF</TableHead>
                 <TableHead className="w-[10%] border border-slate-300 text-center">COLOUR</TableHead>
+                {school?.show_teacher_on_report_card && (
+                  <TableHead className="w-[10%] border border-slate-300 text-center">TEACHER</TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -248,11 +251,6 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
                     <TableCell className="border border-slate-300 font-bold text-slate-800 py-1 pl-4 uppercase">
                       <div className="flex flex-row items-baseline gap-1.5 flex-wrap">
                         <span>{sub.name}</span>
-                        {school?.show_teacher_on_report_card && sub.teacherName && (
-                          <span className="text-xs text-slate-500 font-normal italic capitalize">
-                            - {sub.teacherName}
-                          </span>
-                        )}
                       </div>
                     </TableCell>
                     <TableCell className="border border-slate-300 text-center py-1">{sub.tests['Test 1'] ?? '-'}</TableCell>
@@ -266,6 +264,11 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
                     <TableCell className={`border border-slate-300 text-center py-1 ${color.class}`}>
                       {color.name}
                     </TableCell>
+                    {school?.show_teacher_on_report_card && (
+                      <TableCell className="border border-slate-300 text-center py-1 font-medium capitalize italic text-slate-600">
+                        {sub.teacherName ?? '-'}
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })}
@@ -280,6 +283,9 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
                   <TableCell className="border border-slate-300 py-1"></TableCell>
                   <TableCell className="border border-slate-300 py-1"></TableCell>
                   <TableCell className="border border-slate-300 py-1"></TableCell>
+                  {school?.show_teacher_on_report_card && (
+                    <TableCell className="border border-slate-300 py-1"></TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>

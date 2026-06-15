@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import Dexie from 'dexie';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -142,6 +143,24 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     // Custom no-op lock to completely bypass navigator.locks issues
     lock: async (name, acquireTimeout, fn) => {
       return await fn();
+    }
+  }
+});
+
+// Clear local Dexie cache on sign out to prevent cross-school cache contamination
+supabase.auth.onAuthStateChange(async (event) => {
+  if (event === 'SIGNED_OUT') {
+    try {
+      if (typeof window !== 'undefined') {
+        const db = new Dexie('OfflineDB');
+        db.version(1).stores({
+          cache: 'url, timestamp'
+        });
+        await db.table('cache').clear();
+        console.log('[Auth] Local Dexie cache cleared on sign out.');
+      }
+    } catch (err) {
+      console.error('[Auth] Failed to clear local cache on sign out:', err);
     }
   }
 });
