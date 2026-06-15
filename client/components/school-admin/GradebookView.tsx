@@ -371,7 +371,7 @@ export default function GradebookView() {
             subjectId: selectedSubject,
             term: selectedTerm,
             examType: selectedExamType,
-            testType: selectedTestType === 'none' ? '' : selectedTestType,
+            testType: (testTypesEnabled || simplifiedAssessmentMode) ? (selectedTestType === 'none' ? '' : selectedTestType) : '',
             academicYear: selectedYear,
             percentage: pctVal,
             comments: g.comments || (g.percentage === '' ? 'Absent' : ''),
@@ -493,7 +493,7 @@ export default function GradebookView() {
 
       // 2. Fetch Existing Grades via new API endpoint for better offline support
       const studentIdsStr = loadedStudents.map((s: any) => s.id).join(',');
-      const finalTestType = selectedTestType === 'none' ? '' : selectedTestType;
+      const finalTestType = (testTypesEnabled || simplifiedAssessmentMode) ? (selectedTestType === 'none' ? '' : selectedTestType) : '';
       const gradesData = await syncFetch(`/api/school/grades/batch?subjectId=${selectedSubject}&term=${encodeURIComponent(selectedTerm)}&examType=${encodeURIComponent(selectedExamType)}&testType=${encodeURIComponent(finalTestType)}&academicYear=${selectedYear}&studentIds=${studentIdsStr}`, {
         headers,
         cacheKey: `school-gradebook-${selectedClass}-${selectedSubject}-${selectedTerm}-${selectedExamType}-${finalTestType}-${selectedYear}`
@@ -829,7 +829,7 @@ export default function GradebookView() {
           </div>
         </CardHeader>
         <CardContent className="p-3 sm:p-6">
-          <div className={cn("grid grid-cols-2 gap-2 sm:gap-4", validTestTypes.length > 0 && testTypesEnabled && (selectedExamType === 'Mid Term' || selectedExamType === 'End of Term') ? "md:grid-cols-3 lg:grid-cols-6" : "md:grid-cols-5")}>
+          <div className={cn("grid grid-cols-2 gap-2 sm:gap-4", validTestTypes.length > 0 && (testTypesEnabled || simplifiedAssessmentMode) && (selectedExamType === 'Mid Term' || selectedExamType === 'End of Term' || selectedExamType === 'Term') ? "md:grid-cols-3 lg:grid-cols-6" : "md:grid-cols-5")}>
             <div className="space-y-1">
               <Label className="hidden sm:block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Year</Label>
               <Select value={selectedYear} onValueChange={setSelectedYear}>

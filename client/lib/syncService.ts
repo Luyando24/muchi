@@ -58,7 +58,7 @@ export const syncFetch = async (url: string, options: SyncOptions = {}) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const schoolId = session?.user?.user_metadata?.school_id;
-      if (schoolId && !cacheKey.endsWith(schoolId)) {
+      if (schoolId && !cacheKey.includes(schoolId)) {
         cacheKey = `${cacheKey}--${schoolId}`;
       }
     } catch (err) {
