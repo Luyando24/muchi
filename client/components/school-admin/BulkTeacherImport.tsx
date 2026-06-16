@@ -18,8 +18,10 @@ interface ImportedTeacher {
   phone: string;
   department?: string;
   subjects?: string[];
-  status: 'Pending' | 'Success' | 'Error';
+  classes?: string[];
+  status: 'Pending' | 'Success' | 'Error' | 'Duplicate';
   message?: string;
+  forceCreate?: boolean;
 }
 
 export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess: () => void }) {
@@ -32,10 +34,10 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
 
   const downloadTemplate = () => {
     const template = [
-      { 'Full Name': 'John Smith', 'Email': 'john.smith@school.com', 'Phone': '0971234567', 'Department': 'Science', 'Subjects': 'Biology, Chemistry' },
-      { 'Full Name': 'Jane Doe', 'Email': 'jane.doe@school.com', 'Phone': '0967654321', 'Department': 'Mathematics', 'Subjects': 'Algebra, Geometry' },
-      { 'Full Name': 'Robert Brown', 'Email': 'robert.b@school.com', 'Phone': '0955123456', 'Department': '', 'Subjects': '' },
-      { 'Full Name': 'Alice White', 'Email': 'alice.w@school.com', 'Phone': '0944987654', 'Department': 'Humanities', 'Subjects': 'History, Geography' },
+      { 'Full Name': 'John Smith', 'Email': 'john.smith@school.com', 'Phone': '0971234567', 'Department': 'Science', 'Classes': 'Grade 10A, Grade 11B', 'Subjects': 'Biology, Chemistry' },
+      { 'Full Name': 'Jane Doe', 'Email': 'jane.doe@school.com', 'Phone': '0967654321', 'Department': 'Mathematics', 'Classes': 'Grade 8A, Grade 9B', 'Subjects': 'Algebra, Geometry' },
+      { 'Full Name': 'Robert Brown', 'Email': 'robert.b@school.com', 'Phone': '0955123456', 'Department': '', 'Classes': '', 'Subjects': '' },
+      { 'Full Name': 'Alice White', 'Email': 'alice.w@school.com', 'Phone': '0944987654', 'Department': 'Humanities', 'Classes': 'Grade 10A', 'Subjects': 'History, Geography' },
     ];
     
     const ws = XLSX.utils.json_to_sheet(template);
@@ -89,12 +91,18 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
             ? rawSubjects.split(',').map(s => s.trim()).filter(Boolean)
             : [];
 
+          const rawClasses = findValue(['Classes', 'Class', 'Class List', 'Teaching Classes']);
+          const classes = typeof rawClasses === 'string'
+            ? rawClasses.split(',').map(c => c.trim()).filter(Boolean)
+            : [];
+
           return {
             name: String(findValue(['Name', 'Teacher Name', 'Full Name']) || '').trim(),
             email: String(findValue(['Email', 'Email Address', 'Mail']) || '').trim(),
             phone: String(findValue(['Phone', 'Phone Number', 'Telephone', 'Contact']) || '').trim(),
             department: String(findValue(['Department', 'Dept', 'Faculty']) || '').trim() || undefined,
             subjects: subjects.length > 0 ? subjects : undefined,
+            classes: classes.length > 0 ? classes : undefined,
             status: 'Pending' as const
           };
         }).filter((t: ImportedTeacher) => t.name && String(t.name).trim() !== '');
@@ -129,10 +137,23 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
     let successCount = 0;
     let errorCount = 0;
 
+    let duplicateCount = 0;
     const updatedData = [...previewData];
 
-    for (let i = 0; i < totalTeachers; i += BATCH_SIZE) {
-        const batch = updatedData.slice(i, i + BATCH_SIZE);
+    // Filter down to rows we want to send (Pending or ones with forceCreate set)
+    const teachersToSend = updatedData.map((t, idx) => ({ ...t, originalIndex: idx }))
+      .filter(t => t.status === 'Pending' || (t.status === 'Duplicate' && t.forceCreate));
+
+    if (teachersToSend.length === 0) {
+      setIsImporting(false);
+      return;
+    }
+
+    const totalToSend = teachersToSend.length;
+
+    for (let i = 0; i < totalToSend; i += BATCH_SIZE) {
+        const batch = teachersToSend.slice(i, i + BATCH_SIZE);
+        const batchPayload = batch.map(({ originalIndex, ...rest }) => rest);
         
         try {
             const result = await syncFetch('/api/school/teachers/bulk', {
@@ -141,53 +162,54 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${session.access_token}`
                 },
-                body: JSON.stringify({ teachers: batch })
+                body: JSON.stringify({ teachers: batchPayload })
             });
 
             if (result.offline) {
                 successCount += batch.length;
-                for (let j = 0; j < batch.length; j++) {
-                    updatedData[i + j].status = 'Success';
-                    updatedData[i + j].message = 'Queued offline';
-                }
+                batch.forEach((b) => {
+                    updatedData[b.originalIndex].status = 'Success';
+                    updatedData[b.originalIndex].message = 'Queued offline';
+                });
             } else {
                 successCount += result.importedCount;
                 
-                // Map results back to the original rows
                 if (result.results && Array.isArray(result.results)) {
                     result.results.forEach((res: any, resIndex: number) => {
-                        const targetIndex = i + resIndex;
-                        if (updatedData[targetIndex]) {
-                            updatedData[targetIndex].status = res.status;
-                            updatedData[targetIndex].message = res.message;
+                        const originalIndex = batch[resIndex]?.originalIndex;
+                        if (originalIndex !== undefined && updatedData[originalIndex]) {
+                            updatedData[originalIndex].status = res.status;
+                            updatedData[originalIndex].message = res.message;
                             if (res.status === 'Error') {
                                 errorCount++;
+                            } else if (res.status === 'Duplicate') {
+                                duplicateCount++;
                             }
                         }
                     });
                 } else {
-                    // Fallback for unexpected response format
-                    for (let j = 0; j < batch.length; j++) {
-                        updatedData[i + j].status = 'Success';
-                    }
+                    batch.forEach((b) => {
+                        updatedData[b.originalIndex].status = 'Success';
+                    });
                 }
             }
         } catch (error: any) {
             console.error(`Batch import error:`, error);
             errorCount += batch.length;
-            for (let j = 0; j < batch.length; j++) {
-                updatedData[i + j].status = 'Error';
-                updatedData[i + j].message = error.message;
-            }
+            batch.forEach((b) => {
+                updatedData[b.originalIndex].status = 'Error';
+                updatedData[b.originalIndex].message = error.message;
+            });
         }
 
-        const currentProgress = Math.min(Math.round(((i + batch.length) / totalTeachers) * 100), 100);
+        const currentProgress = Math.min(Math.round(((i + batch.length) / totalToSend) * 100), 100);
         setImportProgress(currentProgress);
     }
 
     setIsImporting(false);
+    setPreviewData(updatedData);
 
-    if (errorCount === 0) {
+    if (errorCount === 0 && duplicateCount === 0) {
         toast({
             title: "Import Successful",
             description: `Successfully imported ${successCount} teachers.`,
@@ -197,11 +219,10 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
         setPreviewData([]);
     } else {
         toast({
-            title: "Import Completed with Errors",
-            description: `Imported ${successCount} teachers. ${errorCount} failed.`,
-            variant: 'destructive'
+            title: "Import Finished with Remarks",
+            description: `Imported ${successCount} teachers. ${errorCount} failed. ${duplicateCount} potential duplicates found requiring review.`,
+            variant: duplicateCount > 0 ? 'default' : 'destructive'
         });
-        setPreviewData(updatedData);
     }
   };
 
@@ -289,6 +310,7 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
                             <TableHead className="font-bold">Email</TableHead>
                             <TableHead className="font-bold">Phone</TableHead>
                             <TableHead className="font-bold">Department</TableHead>
+                            <TableHead className="font-bold">Classes</TableHead>
                             <TableHead className="font-bold">Subjects</TableHead>
                             <TableHead className="font-bold">Status</TableHead>
                         </TableRow>
@@ -304,21 +326,58 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
                                 <TableCell>{teacher.department || '-'}</TableCell>
                                 <TableCell>
                                     <div className="flex flex-wrap gap-1">
-                                        {teacher.subjects && teacher.subjects.map((s, i) => (
-                                            <Badge key={i} variant="secondary" className="text-[10px]">{s}</Badge>
+                                        {teacher.classes && teacher.classes.map((c, i) => (
+                                            <Badge key={i} variant="outline" className="text-[10px] border-blue-200 text-blue-700 bg-blue-50/50">{c}</Badge>
                                         ))}
+                                        {!teacher.classes && '-'}
                                     </div>
                                 </TableCell>
                                 <TableCell>
-                                    {teacher.status === 'Success' && <Check className="h-4 w-4 text-green-500" />}
-                                    {teacher.status === 'Error' && (
-                                        <div className="flex items-center gap-1 text-red-500">
-                                            <AlertCircle className="h-4 w-4" />
-                                            <span className="text-[10px] truncate max-w-[100px]">{teacher.message}</span>
-                                        </div>
-                                    )}
-                                    {teacher.status === 'Pending' && <span className="text-slate-400 text-xs">Pending</span>}
+                                    <div className="flex flex-wrap gap-1">
+                                        {teacher.subjects && teacher.subjects.map((s, i) => (
+                                            <Badge key={i} variant="secondary" className="text-[10px]">{s}</Badge>
+                                        ))}
+                                        {!teacher.subjects && '-'}
+                                    </div>
                                 </TableCell>
+                                <TableCell>
+                                     {teacher.status === 'Success' && <Check className="h-4 w-4 text-green-500" />}
+                                     {teacher.status === 'Duplicate' && (
+                                         <div className="flex flex-col gap-1.5 items-start">
+                                             <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                                                 <AlertCircle className="h-4 w-4 shrink-0" />
+                                                 <span className="text-[10px] font-semibold">Potential Duplicate</span>
+                                             </div>
+                                             <span className="text-[10px] text-slate-500 max-w-[180px] leading-tight block">{teacher.message}</span>
+                                             <Button 
+                                                 size="sm" 
+                                                 variant="outline" 
+                                                 className="h-6 text-[10px] py-1 px-2 border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 hover:text-amber-800"
+                                                 onClick={() => {
+                                                     const updated = [...previewData];
+                                                     const indexInPreview = previewData.indexOf(teacher);
+                                                     if (indexInPreview !== -1) {
+                                                         updated[indexInPreview] = {
+                                                             ...updated[indexInPreview],
+                                                             forceCreate: true,
+                                                             status: 'Pending'
+                                                         };
+                                                         setPreviewData(updated);
+                                                     }
+                                                 }}
+                                             >
+                                                 Approve & Import
+                                             </Button>
+                                         </div>
+                                     )}
+                                     {teacher.status === 'Error' && (
+                                         <div className="flex items-center gap-1 text-red-500">
+                                             <AlertCircle className="h-4 w-4" />
+                                             <span className="text-[10px] truncate max-w-[100px]">{teacher.message}</span>
+                                         </div>
+                                     )}
+                                     {teacher.status === 'Pending' && <span className="text-slate-400 text-xs">Pending</span>}
+                                 </TableCell>
                             </TableRow>
                         ))}
                     </TableBody>

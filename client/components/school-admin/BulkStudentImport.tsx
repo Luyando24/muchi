@@ -16,8 +16,9 @@ interface ImportedStudent {
   grade: string;
   gender: string;
   guardian?: string;
-  status: 'Pending' | 'Success' | 'Error';
+  status: 'Pending' | 'Success' | 'Error' | 'Duplicate';
   message?: string;
+  forceCreate?: boolean;
 }
 
 export default function BulkStudentImport({ onImportSuccess }: { onImportSuccess: () => void }) {
@@ -131,14 +132,25 @@ export default function BulkStudentImport({ onImportSuccess }: { onImportSuccess
         }
 
         const BATCH_SIZE = 50;
-        const totalStudents = previewData.length;
         let successCount = 0;
         let errorCount = 0;
-
+        let duplicateCount = 0;
         const updatedData = [...previewData];
 
-        for (let i = 0; i < totalStudents; i += BATCH_SIZE) {
-            const batch = updatedData.slice(i, i + BATCH_SIZE);
+        // Filter down to rows we want to send (Pending or ones with forceCreate set)
+        const studentsToSend = updatedData.map((s, idx) => ({ ...s, originalIndex: idx }))
+          .filter(s => s.status === 'Pending' || (s.status === 'Duplicate' && s.forceCreate));
+
+        if (studentsToSend.length === 0) {
+          setIsImporting(false);
+          return;
+        }
+
+        const totalToSend = studentsToSend.length;
+
+        for (let i = 0; i < totalToSend; i += BATCH_SIZE) {
+            const batch = studentsToSend.slice(i, i + BATCH_SIZE);
+            const batchPayload = batch.map(({ originalIndex, ...rest }) => rest);
             
             try {
                 const result = await syncFetch('/api/school/students/bulk', {
@@ -147,37 +159,54 @@ export default function BulkStudentImport({ onImportSuccess }: { onImportSuccess
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${session.access_token}`
                     },
-                    body: JSON.stringify({ students: batch })
+                    body: JSON.stringify({ students: batchPayload })
                 });
 
                 if (result.offline) {
                     successCount += batch.length;
-                    for (let j = 0; j < batch.length; j++) {
-                        updatedData[i + j].status = 'Success';
-                        updatedData[i + j].message = 'Queued offline';
-                    }
+                    batch.forEach((b) => {
+                        updatedData[b.originalIndex].status = 'Success';
+                        updatedData[b.originalIndex].message = 'Queued offline';
+                    });
                 } else {
-                    successCount += result.importedCount || batch.length;
-                    for (let j = 0; j < batch.length; j++) {
-                        updatedData[i + j].status = 'Success';
+                    successCount += result.importedCount;
+                    
+                    if (result.results && Array.isArray(result.results)) {
+                        result.results.forEach((res: any, resIndex: number) => {
+                            const originalIndex = batch[resIndex]?.originalIndex;
+                            if (originalIndex !== undefined && updatedData[originalIndex]) {
+                                updatedData[originalIndex].status = res.status;
+                                updatedData[originalIndex].message = res.message;
+                                if (res.status === 'Error') {
+                                    errorCount++;
+                                } else if (res.status === 'Duplicate') {
+                                    duplicateCount++;
+                                }
+                            }
+                        });
+                    } else {
+                        batch.forEach((b) => {
+                            updatedData[b.originalIndex].status = 'Success';
+                        });
                     }
                 }
             } catch (error: any) {
                 console.error(`Batch import error:`, error);
                 errorCount += batch.length;
-                for (let j = 0; j < batch.length; j++) {
-                    updatedData[i + j].status = 'Error';
-                    updatedData[i + j].message = error.message;
-                }
+                batch.forEach((b) => {
+                    updatedData[b.originalIndex].status = 'Error';
+                    updatedData[b.originalIndex].message = error.message;
+                });
             }
 
-            const currentProgress = Math.min(Math.round(((i + batch.length) / totalStudents) * 100), 100);
+            const currentProgress = Math.min(Math.round(((i + batch.length) / totalToSend) * 100), 100);
             setImportProgress(currentProgress);
         }
 
         setIsImporting(false);
+        setPreviewData(updatedData);
 
-        if (errorCount === 0) {
+        if (errorCount === 0 && duplicateCount === 0) {
             toast({
                 title: "Import Successful",
                 description: `Successfully imported ${successCount} students.`
@@ -187,11 +216,10 @@ export default function BulkStudentImport({ onImportSuccess }: { onImportSuccess
             setPreviewData([]);
         } else {
             toast({
-                title: "Import Completed with Errors",
-                description: `Imported ${successCount} students. ${errorCount} failed.`,
-                variant: 'destructive'
+                title: "Import Finished with Remarks",
+                description: `Imported ${successCount} students. ${errorCount} failed. ${duplicateCount} potential duplicates found requiring review.`,
+                variant: duplicateCount > 0 ? 'default' : 'destructive'
             });
-            setPreviewData(updatedData);
         }
     };
 
@@ -295,6 +323,34 @@ export default function BulkStudentImport({ onImportSuccess }: { onImportSuccess
                                             <TableCell>{student.guardian}</TableCell>
                                             <TableCell>
                                                 {student.status === 'Success' && <Check className="h-4 w-4 text-green-500" />}
+                                                {student.status === 'Duplicate' && (
+                                                    <div className="flex flex-col gap-1.5 items-start">
+                                                        <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                                                            <AlertCircle className="h-4 w-4 shrink-0" />
+                                                            <span className="text-[10px] font-semibold">Potential Duplicate</span>
+                                                        </div>
+                                                        <span className="text-[10px] text-slate-500 max-w-[180px] leading-tight block">{student.message}</span>
+                                                        <Button 
+                                                            size="sm" 
+                                                            variant="outline" 
+                                                            className="h-6 text-[10px] py-1 px-2 border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 hover:text-amber-800"
+                                                            onClick={() => {
+                                                                const updated = [...previewData];
+                                                                const indexInPreview = previewData.indexOf(student);
+                                                                if (indexInPreview !== -1) {
+                                                                    updated[indexInPreview] = {
+                                                                        ...updated[indexInPreview],
+                                                                        forceCreate: true,
+                                                                        status: 'Pending'
+                                                                    };
+                                                                    setPreviewData(updated);
+                                                                }
+                                                            }}
+                                                        >
+                                                            Approve & Import
+                                                        </Button>
+                                                    </div>
+                                                )}
                                                 {student.status === 'Error' && (
                                                     <div className="flex items-center gap-1 text-red-500">
                                                         <AlertCircle className="h-4 w-4" />

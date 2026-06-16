@@ -1545,9 +1545,56 @@ router.post(
       const schoolClasses = allClassData || [];
 
       // Process sequentially to avoid rate limits and ensure uniqueness
+      const results: any[] = [];
       for (const student of students) {
       try {
-        const studentNumber = await generateUniqueStudentNumber();
+        let existingId = null;
+        let studentNumber = null;
+
+        // Check if profile already exists by email if email is provided
+        const emailCheck = student.email && student.email.trim() !== "" ? student.email.trim().toLowerCase() : null;
+        if (emailCheck) {
+          const { data: existingProfile } = await supabaseAdmin
+            .from("profiles")
+            .select("id, student_number")
+            .ilike("email", emailCheck)
+            .maybeSingle();
+          if (existingProfile) {
+            existingId = existingProfile.id;
+            studentNumber = existingProfile.student_number;
+          }
+        }
+
+        // Check by exact name if not matched by email and not forced
+        let isPotentialDuplicate = false;
+        let duplicateMessage = "";
+        if (!existingId && student.name && student.name.trim() && !student.forceCreate) {
+          const { data: existingProfileByName } = await supabaseAdmin
+            .from("profiles")
+            .select("id, student_number, email")
+            .eq("school_id", schoolId)
+            .eq("role", "student")
+            .ilike("full_name", student.name.trim())
+            .maybeSingle();
+
+          if (existingProfileByName) {
+            isPotentialDuplicate = true;
+            duplicateMessage = `A student named '${student.name}' already exists with student number '${existingProfileByName.student_number || "N/A"}'.`;
+          }
+        }
+
+        if (isPotentialDuplicate) {
+          results.push({
+            name: student.name,
+            status: "Duplicate",
+            message: duplicateMessage
+          });
+          continue;
+        }
+
+        if (!studentNumber) {
+          studentNumber = await generateUniqueStudentNumber();
+        }
         const emailToUse =
           student.email && student.email.trim() !== ""
             ? student.email
@@ -1645,10 +1692,12 @@ router.post(
             }
 
           importedCount++;
+          results.push({ name: student.name, status: "Success" });
         }
       } catch (error: any) {
         console.error(`Error importing student ${student.name}:`, error);
         errors.push({ name: student.name, error: error.message });
+        results.push({ name: student.name, status: "Error", message: error.message });
       }
     }
 
@@ -1657,6 +1706,7 @@ router.post(
         importedCount,
         total: students.length,
         errors,
+        results,
         success: errors.length === 0,
       });
 
@@ -1837,6 +1887,17 @@ router.post(
     const errors: any[] = [];
     const results: any[] = [];
 
+    // Pre-fetch all classes and subjects for the school to optimize matching
+    const { data: schoolClasses } = await supabaseAdmin
+      .from("classes")
+      .select("id, name")
+      .eq("school_id", schoolId);
+
+    const { data: schoolSubjects } = await supabaseAdmin
+      .from("subjects")
+      .select("id, name, code")
+      .eq("school_id", schoolId);
+
     for (const teacher of teachers) {
       try {
         // 1. Validate mandatory fields
@@ -1851,7 +1912,7 @@ router.post(
           ? teacher.email.trim().toLowerCase()
           : null;
 
-        // 2. Check if a profile with this email already exists
+        // 2. Check if a profile already exists
         if (emailToUse) {
           const { data: existingProfile } = await supabaseAdmin
             .from("profiles")
@@ -1863,6 +1924,34 @@ router.post(
             existingId = existingProfile.id;
             staffNumber = existingProfile.staff_number;
           }
+        }
+
+        let isPotentialDuplicate = false;
+        let duplicateMessage = "";
+
+        // If not matched by email, match by exact name and school_id (only if we are not bypassing it)
+        if (!existingId && teacher.name && teacher.name.trim() && !teacher.forceCreate) {
+          const { data: existingProfileByName } = await supabaseAdmin
+            .from("profiles")
+            .select("id, staff_number, email")
+            .eq("school_id", schoolId)
+            .eq("role", "teacher")
+            .ilike("full_name", teacher.name.trim())
+            .maybeSingle();
+
+          if (existingProfileByName) {
+            isPotentialDuplicate = true;
+            duplicateMessage = `A teacher named '${teacher.name}' already exists with email '${existingProfileByName.email || "N/A"}'.`;
+          }
+        }
+
+        if (isPotentialDuplicate) {
+          results.push({
+            name: teacher.name,
+            status: "Duplicate",
+            message: duplicateMessage
+          });
+          continue;
         }
 
         // 4. Generate Staff Number if missing (for new or existing but migrated users)
@@ -1930,7 +2019,63 @@ router.post(
         }
         
         importedCount++;
-        results.push({ name: teacher.name, status: "Success" });
+        
+        let warningMsg = "";
+        // 6. Handle Class/Subject Assignments automatically if classes and subjects are provided
+        if (teacher.classes && Array.isArray(teacher.classes) && teacher.subjects && Array.isArray(teacher.subjects)) {
+          const warnings: string[] = [];
+          for (const className of teacher.classes) {
+            // Find class ID by name (case-insensitive, trimmed)
+            const matchedClass = schoolClasses?.find(
+              (c) => c.name.trim().toLowerCase() === className.trim().toLowerCase()
+            );
+
+            if (!matchedClass) {
+              warnings.push(`Class '${className}' not found.`);
+              continue;
+            }
+
+            for (const subjectName of teacher.subjects) {
+              // Find subject ID by name or code (case-insensitive, trimmed)
+              const matchedSubject = schoolSubjects?.find(
+                (s) =>
+                  s.name.trim().toLowerCase() === subjectName.trim().toLowerCase() ||
+                  s.code.trim().toLowerCase() === subjectName.trim().toLowerCase()
+              );
+
+              if (!matchedSubject) {
+                warnings.push(`Subject '${subjectName}' not found.`);
+                continue;
+              }
+
+              // Create or update class_subjects mapping
+              const { error: assignError } = await supabaseAdmin
+                .from("class_subjects")
+                .upsert(
+                  {
+                    class_id: matchedClass.id,
+                    subject_id: matchedSubject.id,
+                    teacher_id: existingId,
+                  },
+                  { onConflict: "class_id, subject_id" }
+                );
+
+              if (assignError) {
+                console.error(`Failed to assign teacher to ${className} - ${subjectName}:`, assignError);
+                warnings.push(`Failed to assign to ${className} - ${subjectName}.`);
+              }
+            }
+          }
+          if (warnings.length > 0) {
+            warningMsg = warnings.join(" ");
+          }
+        }
+
+        results.push({ 
+          name: teacher.name, 
+          status: "Success", 
+          message: warningMsg || undefined 
+        });
         
       } catch (error: any) {
         console.error(`Error importing teacher ${teacher.name}:`, error);
