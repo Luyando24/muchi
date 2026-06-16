@@ -2019,6 +2019,50 @@ router.post(
         }
         
         importedCount++;
+
+        // Send email to Gmail or Yahoo users if new auth user
+        const finalEmailStr = emailToUse || `${staffNumber}@teacher.muchi.app`;
+        const emailLower = finalEmailStr.toLowerCase().trim();
+        const isGmailOrYahoo = emailLower.endsWith('@gmail.com') || emailLower.endsWith('@yahoo.com');
+
+        if (isNewAuthUser && isGmailOrYahoo) {
+          const host = req.headers.host || "muchiapp.com";
+          let loginUrl = "https://teacher.muchiapp.com/login";
+          if (host.includes("localhost") || host.includes("127.0.0.1")) {
+            loginUrl = "http://teacher.localhost:8080/login";
+          }
+          
+          sendEmail({
+            to: emailLower,
+            subject: `Welcome to MUCHI, ${teacher.name}!`,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; color: #1e293b;">
+                <h2 style="color: #2563eb; margin-bottom: 20px;">Welcome to MUCHI, ${teacher.name}!</h2>
+                <p>Dear ${teacher.name},</p>
+                <p>We are absolutely thrilled to welcome you to the teaching team! Your MUCHI Portal account has been successfully created. You can now log in to manage your classes, student attendance, assignments, and grades.</p>
+                
+                <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin: 20px 0;">
+                  <h3 style="margin-top: 0; color: #475569;">Your Account Credentials:</h3>
+                  <p style="margin: 8px 0;"><strong>Staff Number:</strong> <code>${staffNumber}</code></p>
+                  <p style="margin: 8px 0;"><strong>Email / Username:</strong> <code>${emailLower}</code></p>
+                  <p style="margin: 8px 0;"><strong>Temporary Password:</strong> <code>${teacher.password || "12345678"}</code></p>
+                </div>
+
+                <p style="margin-bottom: 25px;">Please click the button below to open the portal and sign in. You will be prompted to complete your profile registration upon your first login.</p>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${loginUrl}" target="_blank" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Log In to Teacher Portal</a>
+                </div>
+                
+                <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 25px 0;" />
+                <p style="font-size: 12px; color: #64748b; text-align: center;">If you have any questions or require support setting up your account, please contact your school's ICT support contact.</p>
+              </div>
+            `,
+            text: `Welcome to MUCHI, ${teacher.name}!\n\nStaff Number: ${staffNumber}\nEmail: ${emailLower}\nTemporary Password: ${teacher.password || "12345678"}\n\nLogin here: ${loginUrl}`
+          }).catch(err => {
+            console.error(`[BulkTeacher] Failed to send email to ${emailLower}:`, err);
+          });
+        }
         
         let warningMsg = "";
         // 6. Handle Class/Subject Assignments automatically if classes and subjects are provided
