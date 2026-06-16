@@ -1898,6 +1898,17 @@ router.post(
       .select("id, name, code")
       .eq("school_id", schoolId);
 
+    // Fetch school details for ICT contact
+    const { data: schoolDetails } = await supabaseAdmin
+      .from("schools")
+      .select("ict_name, ict_email, ict_phone")
+      .eq("id", schoolId)
+      .maybeSingle();
+
+    const ictName = schoolDetails?.ict_name || "Not Configured";
+    const ictEmail = schoolDetails?.ict_email || "Not Configured";
+    const ictPhone = schoolDetails?.ict_phone || "Not Configured";
+
     for (const teacher of teachers) {
       try {
         // 1. Validate mandatory fields
@@ -2054,11 +2065,18 @@ router.post(
                   <a href="${loginUrl}" target="_blank" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Log In to Teacher Portal</a>
                 </div>
                 
+                <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin: 20px 0;">
+                  <h4 style="margin-top: 0; color: #475569; font-size: 13px;">School ICT Support Contact:</h4>
+                  <p style="margin: 4px 0; font-size: 13px;"><strong>Name:</strong> ${ictName}</p>
+                  <p style="margin: 4px 0; font-size: 13px;"><strong>Email:</strong> ${ictEmail}</p>
+                  <p style="margin: 4px 0; font-size: 13px;"><strong>Phone:</strong> ${ictPhone}</p>
+                </div>
+                
                 <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 25px 0;" />
-                <p style="font-size: 12px; color: #64748b; text-align: center;">If you have any questions or require support setting up your account, please contact your school's ICT support contact.</p>
+                <p style="font-size: 12px; color: #64748b; text-align: center;">If you have any questions or require support setting up your account, please contact your school's ICT support contact listed above.</p>
               </div>
             `,
-            text: `Welcome to MUCHI, ${teacher.name}!\n\nStaff Number: ${staffNumber}\nEmail: ${emailLower}\nTemporary Password: ${teacher.password || "12345678"}\n\nLogin here: ${loginUrl}`
+            text: `Welcome to MUCHI, ${teacher.name}!\n\nStaff Number: ${staffNumber}\nEmail: ${emailLower}\nTemporary Password: ${teacher.password || "12345678"}\n\nLogin here: ${loginUrl}\n\nICT Support Contact Details:\nName: ${ictName}\nEmail: ${ictEmail}\nPhone: ${ictPhone}`
           }).catch(err => {
             console.error(`[BulkTeacher] Failed to send email to ${emailLower}:`, err);
           });

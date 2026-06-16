@@ -28,6 +28,7 @@ import { CONFIG } from '../shared/config.js';
 import { trackActiveUser } from './lib/activeUsers.js';
 import { startOnboardingCheckScheduler } from './services/onboardingReminderService.js';
 import { startSchoolReminderScheduler } from './services/schoolReminderService.js';
+import { startLoginReminderScheduler } from './services/loginReminderService.js';
 
 const app = express();
 const port = CONFIG.server.port;
@@ -110,6 +111,7 @@ if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
 if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
   startOnboardingCheckScheduler();
   startSchoolReminderScheduler();
+  startLoginReminderScheduler();
 }
 
 export default app;
