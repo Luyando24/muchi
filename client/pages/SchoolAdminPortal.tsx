@@ -21,6 +21,7 @@ import {
   Store,
   CalendarDays,
   Loader2,
+  Clock,
   Share2,
   CheckCircle
 } from 'lucide-react';
@@ -32,6 +33,8 @@ import { Button } from '@/components/ui/button';
 import { SubmitButton } from '@/components/ui/submit-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
 import SchoolDashboard from '@/components/school-admin/SchoolDashboard';
 import StudentManagement from '@/components/school-admin/StudentManagement';
 import TeacherManagement from '@/components/school-admin/TeacherManagement';
@@ -64,6 +67,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -586,6 +590,7 @@ export default function SchoolAdminPortal() {
         { id: "applications", label: "Applications", icon: UserPlus, roles: ["school_admin", "registrar", "academic_auditor"] },
         { id: "students", label: "Students", icon: Users, roles: ["school_admin", "registrar", "academic_auditor"] },
         { id: "teachers", label: "Teachers", icon: GraduationCap, roles: ["school_admin", "registrar", "academic_auditor"] },
+        { id: "leaves", label: "Leave Requests", icon: Clock, roles: ["school_admin", "registrar", "academic_auditor"] },
       ]
     },
     {
@@ -825,6 +830,12 @@ export default function SchoolAdminPortal() {
             <Route path="data-audit" element={
               <div className="space-y-6">
                 <GradeAnomalies />
+              </div>
+            } />
+
+            <Route path="leaves" element={
+              <div className="space-y-6">
+                <AdminLeavesManagement />
               </div>
             } />
           </Routes>
@@ -1223,6 +1234,243 @@ const AdminMinistryCalendar = () => {
           )}
         </div>
       </div>
+    </div>
+  );
+};
+
+const AdminLeavesManagement = () => {
+  const [leaves, setLeaves] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'All' | 'Pending' | 'Approved' | 'Rejected'>('All');
+  const [selectedLeave, setSelectedLeave] = useState<any | null>(null);
+  const [adminNotes, setAdminNotes] = useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewAction, setReviewAction] = useState<'Approved' | 'Rejected'>('Approved');
+  const { toast } = useToast();
+
+  const fetchLeaves = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const data = await syncFetch('/api/school/leaves', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      setLeaves(data || []);
+    } catch (err) {
+      console.error('Failed to load leaves', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLeaves();
+  }, []);
+
+  const handleReviewLeave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLeave) return;
+
+    setIsSubmittingReview(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      await syncFetch(`/api/school/leaves/${selectedLeave.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          status: reviewAction,
+          admin_notes: adminNotes
+        })
+      });
+
+      toast({
+        title: `Request ${reviewAction}`,
+        description: `Successfully reviewed leave request.`
+      });
+
+      setSelectedLeave(null);
+      setAdminNotes('');
+      fetchLeaves();
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to update leave request.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
+  const filteredLeaves = leaves.filter(leave => {
+    if (filter === 'All') return true;
+    return leave.status === filter;
+  });
+
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Leave Requests Management</h2>
+          <p className="text-slate-600 dark:text-slate-400">Review and manage teacher leave applications.</p>
+        </div>
+        <div className="flex gap-2">
+          <Select value={filter} onValueChange={(val: any) => setFilter(val)}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All Statuses</SelectItem>
+              <SelectItem value="Pending">Pending</SelectItem>
+              <SelectItem value="Approved">Approved</SelectItem>
+              <SelectItem value="Rejected">Rejected</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Applications List</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {filteredLeaves.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Teacher</TableHead>
+                  <TableHead>Leave Type</TableHead>
+                  <TableHead>Duration</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredLeaves.map((leave) => (
+                  <TableRow key={leave.id}>
+                    <TableCell className="font-semibold">{leave.profiles?.full_name || 'Unknown Teacher'}</TableCell>
+                    <TableCell>{leave.leave_type}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-col text-xs">
+                        <span>{new Date(leave.start_date).toLocaleDateString()} to {new Date(leave.end_date).toLocaleDateString()}</span>
+                        <span className="text-slate-400">
+                          {Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1} days
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-xs truncate" title={leave.reason}>{leave.reason}</TableCell>
+                    <TableCell>
+                      <Badge
+                        className={cn(
+                          "font-bold text-[10px] uppercase tracking-wider py-0.5 px-2",
+                          leave.status === 'Approved' ? "bg-green-100 text-green-700 hover:bg-green-100 border-green-200" :
+                          leave.status === 'Rejected' ? "bg-red-100 text-red-700 hover:bg-red-100 border-red-200" :
+                          "bg-amber-100 text-amber-700 hover:bg-amber-100 border-amber-200"
+                        )}
+                        variant="outline"
+                      >
+                        {leave.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {leave.status === 'Pending' ? (
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700 text-white font-bold"
+                            onClick={() => {
+                              setSelectedLeave(leave);
+                              setReviewAction('Approved');
+                            }}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="font-bold"
+                            onClick={() => {
+                              setSelectedLeave(leave);
+                              setReviewAction('Rejected');
+                            }}
+                          >
+                            Reject
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400">Reviewed</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+              No leave requests found matching this filter.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={!!selectedLeave} onOpenChange={(open) => !open && setSelectedLeave(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>{reviewAction} Leave Request</DialogTitle>
+            <DialogDescription>
+              Review leave request for {selectedLeave?.profiles?.full_name} ({selectedLeave?.leave_type}).
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleReviewLeave} className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="admin_notes">Admin Notes</Label>
+              <Textarea
+                id="admin_notes"
+                placeholder="Optional notes or reasons for approval/rejection..."
+                value={adminNotes}
+                onChange={(e) => setAdminNotes(e.target.value)}
+                rows={4}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setSelectedLeave(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSubmittingReview}
+                className={cn(
+                  reviewAction === 'Approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700',
+                  'text-white font-bold'
+                )}
+              >
+                {isSubmittingReview ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  `Confirm ${reviewAction}`
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

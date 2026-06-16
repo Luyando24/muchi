@@ -1073,5 +1073,57 @@ router.get('/career', requireTeacher, async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/teacher/leaves
+// Fetch own leave requests
+router.get('/leaves', requireTeacher, async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const teacherId = profile.id;
+
+  try {
+    const { data: leaves, error } = await supabaseAdmin
+      .from('teacher_leaves')
+      .select('*')
+      .eq('teacher_id', teacherId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json(leaves || []);
+  } catch (error: any) {
+    console.error('Fetch Leaves Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/teacher/leaves
+// Request a new leave
+router.post('/leaves', requireTeacher, async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const teacherId = profile.id;
+  const schoolId = profile.school_id;
+  const { start_date, end_date, leave_type, reason } = req.body;
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('teacher_leaves')
+      .insert({
+        teacher_id: teacherId,
+        school_id: schoolId,
+        start_date,
+        end_date,
+        leave_type,
+        reason,
+        status: 'Pending'
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(201).json({ message: 'Leave request submitted successfully', data });
+  } catch (error: any) {
+    console.error('Submit Leave Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 export const teacherRouter = router;
 export default router;

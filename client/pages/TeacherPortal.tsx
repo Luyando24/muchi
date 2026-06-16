@@ -210,6 +210,7 @@ export default function TeacherPortal() {
     if (path.includes('/ministry-calendar')) return 'ministry-calendar';
     if (path.includes('/profile')) return 'profile';
     if (path.includes('/settings')) return 'settings';
+    if (path.includes('/leaves')) return 'leaves';
     
     return "dashboard";
   })();
@@ -259,7 +260,8 @@ export default function TeacherPortal() {
       'attendance': `${portalBase}/attendance`,
       'timetable': `${portalBase}/timetable`,
       'profile': `${portalBase}/profile`,
-      'settings': `${portalBase}/settings`
+      'settings': `${portalBase}/settings`,
+      'leaves': `${portalBase}/leaves`
     };
 
     if (routeMap[value]) {
@@ -341,6 +343,17 @@ export default function TeacherPortal() {
   // CPD and Career History State
   const [cpdRecords, setCpdRecords] = useState<any[]>([]);
   const [careerHistory, setCareerHistory] = useState<any[]>([]);
+
+  // Leave Request State
+  const [leaves, setLeaves] = useState<any[]>([]);
+  const [isApplyLeaveOpen, setIsApplyLeaveOpen] = useState(false);
+  const [isSubmittingLeave, setIsSubmittingLeave] = useState(false);
+  const [leaveForm, setLeaveForm] = useState({
+    start_date: new Date().toISOString().split('T')[0],
+    end_date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+    leave_type: 'Annual Leave',
+    reason: ''
+  });
   const [isAddCpdOpen, setIsAddCpdOpen] = useState(false);
   const [cpdForm, setCpdForm] = useState({
     course_name: '',
@@ -735,6 +748,14 @@ export default function TeacherPortal() {
         console.error('Failed to fetch career history', e);
       }
 
+      // Fetch Leaves
+      try {
+        const leavesData = await fetchWithAuth('/api/teacher/leaves');
+        setLeaves(leavesData || []);
+      } catch (e) {
+        console.error('Failed to fetch leaves', e);
+      }
+
       // PRE-FETCH: Students and current attendance for all classes to ensure offline attendance works
       if (classesData && classesData.length > 0) {
         console.log(`[Offline] Pre-fetching roster & attendance for ${classesData.length} classes...`);
@@ -1123,6 +1144,7 @@ export default function TeacherPortal() {
       label: "Account",
       items: [
         { id: "profile", label: "Profile", icon: User, external: false, path: "" },
+        { id: "leaves", label: "Leaves", icon: Clock, external: false, path: "" },
         { id: "settings", label: "Settings", icon: Settings, external: false, path: "" }
       ]
     }
@@ -2905,6 +2927,210 @@ export default function TeacherPortal() {
                   </Button>
                 </CardContent>
               </Card>
+              </div>
+            } />
+
+            <Route path="leaves" element={
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Leave Requests</h2>
+                    <p className="text-slate-600 dark:text-slate-400">Apply for leaves and check your request status.</p>
+                  </div>
+                  <Dialog open={isApplyLeaveOpen} onOpenChange={setIsApplyLeaveOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Apply for Leave
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[425px]">
+                      <DialogHeader>
+                        <DialogTitle>Apply for Leave</DialogTitle>
+                        <DialogDescription>
+                          Submit a new leave request to the school administration.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <form onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!leaveForm.start_date || !leaveForm.end_date || !leaveForm.leave_type || !leaveForm.reason) {
+                          toast({
+                            title: "Validation Error",
+                            description: "Please fill in all fields.",
+                            variant: "destructive"
+                          });
+                          return;
+                        }
+                        setIsSubmittingLeave(true);
+                        try {
+                          await fetchWithAuth('/api/teacher/leaves', {
+                            method: 'POST',
+                            body: JSON.stringify(leaveForm)
+                          });
+                          toast({
+                            title: "Success",
+                            description: "Leave request submitted successfully."
+                          });
+                          setIsApplyLeaveOpen(false);
+                          setLeaveForm({
+                            start_date: new Date().toISOString().split('T')[0],
+                            end_date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+                            leave_type: 'Annual Leave',
+                            reason: ''
+                          });
+                          // Refresh leaves
+                          const leavesData = await fetchWithAuth('/api/teacher/leaves');
+                          setLeaves(leavesData || []);
+                        } catch (error: any) {
+                          toast({
+                            title: "Error",
+                            description: error.message || "Failed to submit leave request.",
+                            variant: "destructive"
+                          });
+                        } finally {
+                          setIsSubmittingLeave(false);
+                        }
+                      }} className="space-y-4 pt-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="leave_type">Leave Type</Label>
+                          <Select
+                            value={leaveForm.leave_type}
+                            onValueChange={(val) => setLeaveForm({ ...leaveForm, leave_type: val })}
+                          >
+                            <SelectTrigger id="leave_type">
+                              <SelectValue placeholder="Select Leave Type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Sick Leave">Sick Leave</SelectItem>
+                              <SelectItem value="Maternity Leave">Maternity Leave</SelectItem>
+                              <SelectItem value="Paternity Leave">Paternity Leave</SelectItem>
+                              <SelectItem value="Annual Leave">Annual Leave</SelectItem>
+                              <SelectItem value="Compassionate Leave">Compassionate Leave</SelectItem>
+                              <SelectItem value="Study Leave">Study Leave</SelectItem>
+                              <SelectItem value="Other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="start_date">Start Date</Label>
+                            <Input
+                              id="start_date"
+                              type="date"
+                              required
+                              value={leaveForm.start_date}
+                              onChange={(e) => setLeaveForm({ ...leaveForm, start_date: e.target.value })}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="end_date">End Date</Label>
+                            <Input
+                              id="end_date"
+                              type="date"
+                              required
+                              value={leaveForm.end_date}
+                              onChange={(e) => setLeaveForm({ ...leaveForm, end_date: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="reason">Reason</Label>
+                          <Textarea
+                            id="reason"
+                            required
+                            placeholder="Explain the reason for your leave request..."
+                            value={leaveForm.reason}
+                            onChange={(e) => setLeaveForm({ ...leaveForm, reason: e.target.value })}
+                            rows={4}
+                          />
+                        </div>
+                        <DialogFooter>
+                          <Button type="button" variant="outline" onClick={() => setIsApplyLeaveOpen(false)}>
+                            Cancel
+                          </Button>
+                          <Button type="submit" disabled={isSubmittingLeave} className="bg-blue-600 hover:bg-blue-700 text-white font-semibold">
+                            {isSubmittingLeave ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Submitting...
+                              </>
+                            ) : (
+                              'Submit Request'
+                            )}
+                          </Button>
+                        </DialogFooter>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>My Leave History</CardTitle>
+                    <CardDescription>Track the status of your submitted leave applications</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {leaves && leaves.length > 0 ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Leave Type</TableHead>
+                            <TableHead>Duration</TableHead>
+                            <TableHead>Reason</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Admin Notes / Reviewed At</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {leaves.map((leave) => (
+                            <TableRow key={leave.id}>
+                              <TableCell className="font-semibold">{leave.leave_type}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-col text-xs">
+                                  <span className="font-medium">
+                                    {new Date(leave.start_date).toLocaleDateString()} to {new Date(leave.end_date).toLocaleDateString()}
+                                  </span>
+                                  <span className="text-slate-400">
+                                    {Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1} days
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="max-w-xs truncate" title={leave.reason}>{leave.reason}</TableCell>
+                              <TableCell>
+                                <Badge
+                                  className={cn(
+                                    "font-bold text-[10px] uppercase tracking-wider py-0.5 px-2",
+                                    leave.status === 'Approved' ? "bg-green-100 text-green-700 hover:bg-green-100 border-green-200" :
+                                    leave.status === 'Rejected' ? "bg-red-100 text-red-700 hover:bg-red-100 border-red-200" :
+                                    "bg-amber-100 text-amber-700 hover:bg-amber-100 border-amber-200"
+                                  )}
+                                  variant="outline"
+                                >
+                                  {leave.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="text-xs">
+                                  {leave.admin_notes && <p className="font-medium italic">"{leave.admin_notes}"</p>}
+                                  {leave.reviewed_at && (
+                                    <span className="text-slate-400">
+                                      Reviewed on {new Date(leave.reviewed_at).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                  {!leave.reviewed_at && <span className="text-slate-400 italic">Awaiting review</span>}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <div className="text-center py-8 text-slate-500 dark:text-slate-400 border-2 border-dashed rounded-lg bg-slate-50 dark:bg-slate-900/50">
+                        No leave requests submitted yet. Click "Apply for Leave" to create one.
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             } />
           </Routes>

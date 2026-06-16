@@ -2057,7 +2057,7 @@ router.post(
                     subject_id: matchedSubject.id,
                     teacher_id: existingId,
                   },
-                  { onConflict: "class_id, subject_id" }
+                  { onConflict: "class_id, subject_id, teacher_id" }
                 );
 
               if (assignError) {
@@ -11021,6 +11021,69 @@ router.get(
       res.json(data || []);
     } catch (error: any) {
       console.error("Get Accommodation Students Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// GET /api/school/leaves
+// Fetch all leaves requested by teachers for the school
+router.get(
+  "/leaves",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("teacher_leaves")
+        .select(`
+          *,
+          teacher:profiles!teacher_leaves_teacher_id_fkey(full_name, email, staff_number)
+        `)
+        .eq("school_id", schoolId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      res.json(data || []);
+    } catch (error: any) {
+      console.error("Get Leaves Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// PUT /api/school/leaves/:id
+// Approve or Reject a teacher's leave request
+router.put(
+  "/leaves/:id",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const adminId = profile.id;
+    const { id } = req.params;
+    const { status, admin_notes } = req.body;
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("teacher_leaves")
+        .update({
+          status,
+          admin_notes,
+          reviewed_by: adminId,
+          reviewed_at: new Date().toISOString()
+        })
+        .eq("id", id)
+        .eq("school_id", schoolId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.json({ message: `Leave request status updated to ${status}`, data });
+    } catch (error: any) {
+      console.error("Update Leave Status Error:", error);
       res.status(500).json({ message: error.message });
     }
   }
