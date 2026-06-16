@@ -53,6 +53,25 @@ export const invalidateCache = async (mutationUrl: string, cacheKey?: string) =>
   }
 };
 
+// Helper to extract userId from Authorization header JWT payload
+const getUserIdFromHeaders = (headers: Record<string, string>): string | null => {
+  try {
+    const auth = headers['Authorization'] || headers['authorization'];
+    if (auth && auth.startsWith('Bearer ')) {
+      const token = auth.substring(7);
+      const parts = token.split('.');
+      if (parts.length === 3) {
+        const rawPayload = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
+        const payload = JSON.parse(rawPayload);
+        return payload.sub || null;
+      }
+    }
+  } catch (err) {
+    // Ignore decoding issues
+  }
+  return null;
+};
+
 /**
  * Enhanced fetch that supports offline caching and queued mutations
  */
@@ -63,8 +82,22 @@ export const syncFetch = async (url: string, options: SyncOptions = {}) => {
   // Resolve user-scoped cache key if applicable
   let cacheKey = options.cacheKey || url;
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    const userId = session?.user?.id;
+    let userId: string | null = null;
+    
+    // 1. Try resolving from headers first (instant & reliable)
+    userId = getUserIdFromHeaders(headers);
+    
+    // 2. Try supabase session
+    if (!userId) {
+      const { data: { session } } = await supabase.auth.getSession();
+      userId = session?.user?.id || null;
+    }
+
+    // 3. Fall back to localStorage last logged-in user ID to bypass session resolution races
+    if (!userId && typeof window !== 'undefined') {
+      userId = window.localStorage.getItem('muchi_last_user_id');
+    }
+
     if (userId && !cacheKey.includes(userId)) {
       cacheKey = `${cacheKey}--usr-${userId}`;
     }
@@ -169,7 +202,10 @@ export const offlineQuery = async (query: any, cacheKey: string, forceSync = fal
   let scopedCacheKey = cacheKey;
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    const userId = session?.user?.id;
+    let userId = session?.user?.id;
+    if (!userId && typeof window !== 'undefined') {
+      userId = window.localStorage.getItem('muchi_last_user_id') || undefined;
+    }
     if (userId && !scopedCacheKey.includes(userId)) {
       scopedCacheKey = `${scopedCacheKey}--usr-${userId}`;
     }

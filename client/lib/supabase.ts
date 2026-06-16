@@ -147,20 +147,29 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
   }
 });
 
-// Clear local Dexie cache on sign out to prevent cross-school cache contamination
-supabase.auth.onAuthStateChange(async (event) => {
-  if (event === 'SIGNED_OUT') {
-    try {
-      if (typeof window !== 'undefined') {
+// Clear local Dexie cache on sign out or user change to prevent cross-school cache contamination
+supabase.auth.onAuthStateChange(async (event, session) => {
+  if (typeof window !== 'undefined') {
+    const currentUserId = session?.user?.id || null;
+    const lastUserId = window.localStorage.getItem('muchi_last_user_id');
+
+    if (event === 'SIGNED_OUT' || (currentUserId && lastUserId && currentUserId !== lastUserId)) {
+      try {
         const db = new Dexie('OfflineDB');
         db.version(1).stores({
           cache: 'url, timestamp'
         });
         await db.table('cache').clear();
-        console.log('[Auth] Local Dexie cache cleared on sign out.');
+        console.log(`[Auth] Local Dexie cache cleared on ${event} to prevent cross-school contamination.`);
+      } catch (err) {
+        console.error('[Auth] Failed to clear local cache:', err);
       }
-    } catch (err) {
-      console.error('[Auth] Failed to clear local cache on sign out:', err);
+    }
+
+    if (currentUserId) {
+      window.localStorage.setItem('muchi_last_user_id', currentUserId);
+    } else {
+      window.localStorage.removeItem('muchi_last_user_id');
     }
   }
 });
