@@ -185,8 +185,16 @@ export const syncFetch = async (url: string, options: SyncOptions = {}) => {
   
   // If request failed but it was a mutation, we could also queue it if it was a network error
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(errorData.message || 'Request failed');
+    let errorMessage = `Server error (HTTP ${response.status})`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.message || errorData.error || errorMessage;
+    } catch {
+      // Response body was not JSON (e.g. HTML error page); keep the HTTP status message
+      const statusText = response.statusText || 'Unknown error';
+      errorMessage = `HTTP ${response.status}: ${statusText}`;
+    }
+    throw new Error(errorMessage);
   }
 
   // Invalidate related cache entries after a successful mutation

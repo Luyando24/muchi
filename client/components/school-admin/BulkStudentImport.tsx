@@ -358,9 +358,9 @@ export default function BulkStudentImport({ onImportSuccess }: { onImportSuccess
                                                     </div>
                                                 )}
                                                 {student.status === 'Error' && (
-                                                    <div className="flex items-center gap-1 text-red-500">
-                                                        <AlertCircle className="h-4 w-4" />
-                                                        <span className="text-[10px] truncate max-w-[100px]">{student.message}</span>
+                                                    <div className="flex items-start gap-1 text-red-500">
+                                                        <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                                                        <span className="text-[10px] leading-tight break-words max-w-[160px]" title={student.message}>{student.message || 'Request failed'}</span>
                                                     </div>
                                                 )}
                                                 {student.status === 'Pending' && <span className="text-slate-400 text-xs">Pending</span>}
