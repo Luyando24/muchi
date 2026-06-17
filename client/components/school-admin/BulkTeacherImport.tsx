@@ -158,6 +158,7 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
         try {
             const result = await syncFetch('/api/school/teachers/bulk', {
                 method: 'POST',
+                forceSync: true, // Always send directly — never queue bulk imports offline
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${session.access_token}`
@@ -165,33 +166,25 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
                 body: JSON.stringify({ teachers: batchPayload })
             });
 
-            if (result.offline) {
-                successCount += batch.length;
-                batch.forEach((b) => {
-                    updatedData[b.originalIndex].status = 'Success';
-                    updatedData[b.originalIndex].message = 'Queued offline';
+            successCount += result.importedCount || 0;
+            
+            if (result.results && Array.isArray(result.results)) {
+                result.results.forEach((res: any, resIndex: number) => {
+                    const originalIndex = batch[resIndex]?.originalIndex;
+                    if (originalIndex !== undefined && updatedData[originalIndex]) {
+                        updatedData[originalIndex].status = res.status;
+                        updatedData[originalIndex].message = res.message;
+                        if (res.status === 'Error') {
+                            errorCount++;
+                        } else if (res.status === 'Duplicate') {
+                            duplicateCount++;
+                        }
+                    }
                 });
             } else {
-                successCount += result.importedCount;
-                
-                if (result.results && Array.isArray(result.results)) {
-                    result.results.forEach((res: any, resIndex: number) => {
-                        const originalIndex = batch[resIndex]?.originalIndex;
-                        if (originalIndex !== undefined && updatedData[originalIndex]) {
-                            updatedData[originalIndex].status = res.status;
-                            updatedData[originalIndex].message = res.message;
-                            if (res.status === 'Error') {
-                                errorCount++;
-                            } else if (res.status === 'Duplicate') {
-                                duplicateCount++;
-                            }
-                        }
-                    });
-                } else {
-                    batch.forEach((b) => {
-                        updatedData[b.originalIndex].status = 'Success';
-                    });
-                }
+                batch.forEach((b) => {
+                    updatedData[b.originalIndex].status = 'Success';
+                });
             }
         } catch (error: any) {
             console.error(`Batch import error:`, error);
