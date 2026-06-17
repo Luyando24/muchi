@@ -132,7 +132,7 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
         return;
     }
 
-    const BATCH_SIZE = 50;
+    const BATCH_SIZE = 10;
     const totalTeachers = previewData.length;
     let successCount = 0;
     let errorCount = 0;

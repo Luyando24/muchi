@@ -131,7 +131,7 @@ export default function BulkStudentImport({ onImportSuccess }: { onImportSuccess
             return;
         }
 
-        const BATCH_SIZE = 50;
+        const BATCH_SIZE = 10;
         let successCount = 0;
         let errorCount = 0;
         let duplicateCount = 0;
