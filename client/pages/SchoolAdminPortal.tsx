@@ -23,7 +23,8 @@ import {
   Loader2,
   Clock,
   Share2,
-  CheckCircle
+  CheckCircle,
+  MessageSquare
 } from 'lucide-react';
 import TuckshopManagement from '@/components/school-admin/TuckshopManagement';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -696,14 +697,15 @@ export default function SchoolAdminPortal() {
               ))}
             </nav>
             <div className="p-4 border-t border-slate-200 dark:border-slate-700">
-              <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-                <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">System Status</p>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="h-2 w-2 rounded-full bg-green-500"></span>
-                  <p className="text-xs text-blue-600 dark:text-blue-300">All Systems Operational</p>
-                </div>
-                <Button size="sm" variant="outline" className="w-full text-xs">View Logs</Button>
-              </div>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                className="w-full text-xs flex items-center justify-center gap-2 border-red-200 bg-red-50/50 hover:bg-red-50 text-red-700 hover:text-red-800 dark:border-red-900/30 dark:bg-red-950/10 dark:hover:bg-red-950/20 dark:text-red-400"
+                onClick={() => window.open('https://wa.me/260570260374', '_blank')}
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                Report a Problem
+              </Button>
             </div>
           </div>
         </aside>
