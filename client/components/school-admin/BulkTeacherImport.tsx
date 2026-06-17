@@ -217,12 +217,18 @@ export default function BulkTeacherImport({ onImportSuccess }: { onImportSuccess
         onImportSuccess();
         setFile(null);
         setPreviewData([]);
+        // Auto refresh page to show fresh data
+        setTimeout(() => {
+            window.location.reload();
+        }, 1000);
     } else {
         toast({
             title: "Import Finished with Remarks",
             description: `Imported ${successCount} teachers. ${errorCount} failed. ${duplicateCount} potential duplicates found requiring review.`,
             variant: duplicateCount > 0 ? 'default' : 'destructive'
         });
+        // Update lists in background for successfully imported rows
+        onImportSuccess();
     }
   };
 

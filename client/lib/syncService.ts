@@ -36,7 +36,12 @@ export const invalidateCache = async (mutationUrl: string, cacheKey?: string) =>
 
     // 3. Extract the last segment to find other related caches (e.g. settings, students, etc.)
     const segments = cleanUrl.split('/');
-    const lastSegment = segments[segments.length - 1];
+    let lastSegment = segments[segments.length - 1];
+    
+    // Resolve parent collection for bulk operations to invalidate collection lists
+    if (lastSegment === 'bulk' || lastSegment === 'bulk-complete') {
+      lastSegment = segments[segments.length - 2];
+    }
     
     if (lastSegment && lastSegment.length > 2) {
       const allEntries = await db.cache.toArray();
