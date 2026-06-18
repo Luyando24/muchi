@@ -782,23 +782,18 @@ router.get('/dashboard', requireSystemAdmin, async (req: Request, res: Response)
       onlineUsers = Math.max(1, Math.min(usersCount || 0, Math.floor((usersCount || 0) * 0.12)));
     }
 
-    // 5. Fetch all profiles to count students/teachers per school in memory
-    const { data: allProfiles, error: allProfilesError } = await supabaseAdmin
-      .from('profiles')
-      .select('school_id, role')
-      .in('role', ['student', 'teacher']);
+    // 5. Fetch school profile counts from the view to prevent the 1000-row PostgREST limit on profiles table
+    const { data: profileCounts, error: profileCountsError } = await supabaseAdmin
+      .from('school_profile_counts')
+      .select('*');
 
     const schoolStudentCount: Record<string, number> = {};
     const schoolTeacherCount: Record<string, number> = {};
 
-    if (allProfiles) {
-      allProfiles.forEach((p: any) => {
-        if (!p.school_id) return;
-        if (p.role === 'student') {
-          schoolStudentCount[p.school_id] = (schoolStudentCount[p.school_id] || 0) + 1;
-        } else if (p.role === 'teacher') {
-          schoolTeacherCount[p.school_id] = (schoolTeacherCount[p.school_id] || 0) + 1;
-        }
+    if (profileCounts) {
+      profileCounts.forEach((row: any) => {
+        schoolStudentCount[row.school_id] = row.student_count || 0;
+        schoolTeacherCount[row.school_id] = row.teacher_count || 0;
       });
     }
 
