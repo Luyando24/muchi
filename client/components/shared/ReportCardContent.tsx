@@ -1,6 +1,8 @@
 import { ReportCard } from "./ReportCard";
 import { PrimaryReportCard } from "./PrimaryReportCard";
 import { JuniorReportCard } from "./JuniorReportCard";
+import { PreschoolReportCard } from "./PreschoolReportCard";
+import { isPreschoolClass } from "@shared/gradingScale";
 
 interface ReportCardContentProps {
   data: any;
@@ -16,7 +18,20 @@ export const ReportCardContent: React.FC<ReportCardContentProps> = ({ data, term
   // Auto-detect if we should use the specialized formats
   const gradeStr = (student.grade || student.className || student.class || "").toString().toLowerCase();
   const schoolType = (school?.school_type || "").toLowerCase();
-  
+
+  // ── Pre-school detection (highest priority) ────────────────────────────────
+  const isPreschoolSchool =
+    schoolType === "preschool" ||
+    schoolType === "pre-school" ||
+    schoolType === "early childhood" ||
+    schoolType === "ecd" ||
+    schoolType === "nursery school";
+
+  if (isPreschoolSchool || isPreschoolClass(gradeStr)) {
+    return <PreschoolReportCard data={data} />;
+  }
+
+  // ── Primary / Secondary detection ─────────────────────────────────────────
   // Specific School Types
   const isLowerPrimarySchool = schoolType === "lower primary";
   const isUpperPrimarySchool = schoolType === "upper primary";

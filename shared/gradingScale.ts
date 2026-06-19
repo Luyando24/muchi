@@ -1,10 +1,11 @@
 /**
- * Shared grading-scale resolution for primary (G1–7) and secondary classes.
+ * Shared grading-scale resolution for primary (G1–7), secondary, and pre-school classes.
  * G5–7 schools often configure scales on a 0–150 mark basis; the gradebook
  * stores percentages 0–100 in the DB but displays raw marks 0–150.
+ * Pre-school uses a 4-band developmental scale (0–100 %).
  */
 
-export type ClassSection = "lower_primary" | "upper_primary" | "secondary";
+export type ClassSection = "lower_primary" | "upper_primary" | "secondary" | "preschool";
 
 export interface GradingScaleEntry {
   id?: string;
@@ -19,6 +20,24 @@ export interface GradingScaleEntry {
 export const UPPER_PRIMARY_MAX_MARKS = 150;
 
 const SECTION_ALIASES: Record<ClassSection, string[]> = {
+  preschool: [
+    "preschool",
+    "pre_school",
+    "pre-school",
+    "early childhood",
+    "early_childhood",
+    "ecd",
+    "ecde",
+    "nursery",
+    "kindergarten",
+    "baby class",
+    "baby_class",
+    "reception",
+    "playgroup",
+    "grade 0",
+    "grade r",
+    "kg",
+  ],
   lower_primary: [
     "lower_primary",
     "lower primary",
@@ -63,6 +82,22 @@ function normalizeSection(value: string): string {
   return value.toLowerCase().replace(/\s+/g, "_");
 }
 
+/**
+ * Returns true when the class name indicates a pre-school / ECD class.
+ * Matches: baby, nursery, kindergarten, kg, reception, preschool, pre-school,
+ *          playgroup, ecd, ecde, grade 0, grade r (case-insensitive).
+ */
+export function isPreschoolClass(gradeOrClassName: string): boolean {
+  const raw = (gradeOrClassName || "").toLowerCase().trim();
+  const preKeywords = [
+    "baby", "nursery", "kindergarten", "kg", "reception",
+    "preschool", "pre-school", "pre_school",
+    "playgroup", "ecd", "ecde", "grade 0", "grade r",
+    "early childhood",
+  ];
+  return preKeywords.some((kw) => raw.includes(kw));
+}
+
 export function isG57Class(gradeOrClassName: string): boolean {
   const raw = (gradeOrClassName || "").toLowerCase().trim();
   if (raw.includes("form")) return false;
@@ -87,11 +122,16 @@ export function isG14Class(gradeOrClassName: string): boolean {
 
 export function detectClassSection(className: string): ClassSection {
   const raw = (className || "").toLowerCase().trim();
+
+  // Pre-school check first (before digit extraction to avoid false positives)
+  if (isPreschoolClass(raw)) return "preschool";
+
   if (raw.includes("form")) return "secondary";
 
   const match = raw.match(/(\d{1,2})/);
   if (match) {
     const level = parseInt(match[1], 10);
+    if (level === 0) return "preschool";  // Grade 0
     if (level >= 8) return "secondary";
     if (level >= 5) return "upper_primary";
     if (level >= 1) return "lower_primary";
@@ -112,6 +152,7 @@ export function resolveClassSection(
   schoolType?: string,
 ): ClassSection {
   const type = (schoolType || "").toLowerCase();
+  if (type === "preschool" || type === "pre-school" || type === "early childhood" || type === "ecd" || type === "nursery school") return "preschool";
   if (type === "lower primary") return "lower_primary";
   if (type === "upper primary") return "upper_primary";
   if (type === "secondary school" || type === "secondary") return "secondary";
@@ -136,6 +177,16 @@ export function filterScalesForSection(
       ),
     );
     if (sectionScales.length > 0) return sectionScales;
+  }
+
+  if (classSection === "preschool") {
+    const preKeywords = ["emerging", "developing", "achieving", "excelling"];
+    const preScales = allScales.filter((s) =>
+      preKeywords.some((kw) => s.grade.trim().toLowerCase().includes(kw)),
+    );
+    if (preScales.length > 0) return preScales;
+    // No custom preschool scales configured — return empty so fallback is used
+    return [];
   }
 
   if (classSection === "upper_primary") {
@@ -231,6 +282,13 @@ function builtinUpperPrimaryFallbackPercent(percentage: number): GradingScaleEnt
   return { grade: "F", min_percentage: 0, max_percentage: 39, description: "Fail" };
 }
 
+function builtinPreschoolFallback(percentage: number): GradingScaleEntry {
+  if (percentage >= 75) return { grade: "Excelling",  min_percentage: 75, max_percentage: 100, description: "Outstanding developmental progress" };
+  if (percentage >= 50) return { grade: "Achieving",  min_percentage: 50, max_percentage: 74,  description: "Meeting developmental expectations" };
+  if (percentage >= 25) return { grade: "Developing", min_percentage: 25, max_percentage: 49,  description: "Working towards developmental goals" };
+  return               { grade: "Emerging",   min_percentage: 0,  max_percentage: 24,  description: "Beginning to show awareness" };
+}
+
 function builtinLowerPrimaryFallback(percentage: number): GradingScaleEntry {
   if (percentage >= 75) return { grade: "A Red", min_percentage: 75, max_percentage: 100, description: "Excellent" };
   if (percentage >= 60) return { grade: "B Orange", min_percentage: 60, max_percentage: 74, description: "Very Good" };
@@ -260,6 +318,9 @@ export function resolveGradingScale(
   const match = findScaleMatch(sectionScales, lookupScore);
   if (match) return match;
 
+  if (classSection === "preschool") {
+    return builtinPreschoolFallback(lookupScore);
+  }
   if (classSection === "upper_primary") {
     if (usesOutOf150Scale(sectionScales)) {
       return builtinUpperPrimaryFallback(lookupScore);
@@ -279,12 +340,14 @@ export function resolveGradingScaleForStudent(
   options: { rawMark?: number; storedPercentage?: number },
 ): GradingScaleEntry {
   const type = (schoolType || "").toLowerCase();
+  const isPreschool = type === "preschool" || type === "pre-school" || type === "early childhood" || type === "ecd" || type === "nursery school" || isPreschoolClass(studentGradeOrClass);
   const isCombined = type === "combined primary" || type === "primary school" || type === "combined school" || type === "basic school";
   const isUpper = type === "upper primary" || (isCombined && isG57Class(studentGradeOrClass));
   const isLower = type === "lower primary" || (isCombined && isG14Class(studentGradeOrClass));
 
   let classSection: ClassSection = "secondary";
-  if (isUpper) classSection = "upper_primary";
+  if (isPreschool) classSection = "preschool";
+  else if (isUpper) classSection = "upper_primary";
   else if (isLower) classSection = "lower_primary";
   else classSection = resolveClassSection(studentGradeOrClass, schoolType);
 

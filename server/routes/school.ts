@@ -1641,17 +1641,14 @@ router.post(
               school_id: schoolId,
             },
           });
-
         if (userError) {
-          // email_exists (code 422): auth user was already created in a previous
-          // import attempt (e.g. the Vercel function timed out mid-import and the
-          // client showed all rows as "Error" even though some were actually saved).
-          // Recover gracefully: find the existing user, fix their profile if needed,
-          // and count them as successfully imported rather than failing the row.
+          // email_exists (code 422): the auth user already exists — this happens
+          // when a previous import attempt timed out on Vercel/Cloudflare and the
+          // client showed rows as "Error" even though the auth user was created.
           if (userError.code === 'email_exists' || userError.message?.includes('already registered') || userError.message?.includes('already exists')) {
-            console.warn(`[BulkStudent] Email ${emailToUse} already exists — attempting recovery for ${student.name}`);
+            console.warn(`[BulkStudent] Email ${emailToUse} already exists — checking profile for ${student.name}`);
 
-            // Look up the existing profile by email
+            // Fast path: check if a profile with this email already exists
             const { data: existingByEmail } = await supabaseAdmin
               .from('profiles')
               .select('id, school_id, role, student_number, full_name')
@@ -1659,29 +1656,24 @@ router.post(
               .maybeSingle();
 
             if (existingByEmail) {
-              // Profile already exists — student was successfully imported before
-              console.info(`[BulkStudent] Recovered: ${student.name} already has profile ${existingByEmail.id}`);
+              // Profile exists — student was fully imported in a previous run
+              console.info(`[BulkStudent] Already imported: ${student.name} (profile ${existingByEmail.id})`);
               importedCount++;
               results.push({ name: student.name, status: 'Success' });
-              continue; // Skip to next student
+              continue;
             }
 
-            // Auth user exists but profile is missing (orphaned auth user from a
-            // failed/rolled-back previous attempt). Find the auth user by email
-            // and create the missing profile.
-            const { data: { users: authUsers } } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-            const orphanedAuthUser = authUsers?.find((u: any) =>
-              u.email?.toLowerCase() === emailToUse.toLowerCase()
-            );
-
-            if (orphanedAuthUser) {
-              createdUserId = orphanedAuthUser.id;
-              console.warn(`[BulkStudent] Found orphaned auth user ${createdUserId} — creating missing profile for ${student.name}`);
-              // Fall through to profile upsert below using the recovered ID
-            } else {
-              // Cannot recover — treat as a real error
-              throw new Error(`Email ${emailToUse} is already in use and could not be recovered.`);
-            }
+            // Profile is missing but auth user exists (orphaned record from a
+            // timed-out import). Flag as duplicate with a human-readable message
+            // so the admin knows to check — do NOT call listUsers (it's too slow
+            // and causes HTTP 524 timeouts on Cloudflare).
+            console.warn(`[BulkStudent] Orphaned auth user for ${student.name} — flagging for manual review`);
+            results.push({
+              name: student.name,
+              status: 'Duplicate',
+              message: `${student.name} is already registered in the system. If this is unexpected, please contact support.`,
+            });
+            continue;
           } else {
             throw userError;
           }
@@ -1756,9 +1748,24 @@ router.post(
         }
       } catch (error: any) {
         console.error(`Error importing student ${student.name}:`, error);
-        errors.push({ name: student.name, error: error.message });
-        results.push({ name: student.name, status: "Error", message: error.message });
+        // Translate internal errors into user-friendly messages
+        const rawMsg: string = error.message || '';
+        let friendlyMsg: string;
+        if (rawMsg.includes('duplicate') || rawMsg.includes('already') || rawMsg.includes('email_exists')) {
+          friendlyMsg = `${student.name} could not be imported — a student with this email already exists. Please verify manually.`;
+        } else if (rawMsg.includes('password') || rawMsg.includes('auth')) {
+          friendlyMsg = `${student.name} could not be imported due to an account setup issue. Please try again or contact support.`;
+        } else if (rawMsg.includes('network') || rawMsg.includes('timeout') || rawMsg.includes('fetch')) {
+          friendlyMsg = `${student.name} could not be imported — network timeout. Please retry the import.`;
+        } else if (rawMsg.includes('invalid') || rawMsg.includes('validation')) {
+          friendlyMsg = `${student.name} has invalid data. Please check the name, email, grade or gender and try again.`;
+        } else {
+          friendlyMsg = `${student.name} could not be imported. Please try again or contact support if the problem persists.`;
+        }
+        errors.push({ name: student.name, error: rawMsg });
+        results.push({ name: student.name, status: 'Error', message: friendlyMsg });
       }
+
     }
 
       res.json({

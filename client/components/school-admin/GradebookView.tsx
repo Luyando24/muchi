@@ -49,6 +49,7 @@ import {
   resolveGradingScale,
   rawMarkToStoredPercentage,
   storedPercentageToRawMark,
+  isPreschoolClass,
   type GradingScaleEntry,
 } from '@shared/gradingScale';
 
@@ -81,12 +82,14 @@ interface Subject {
 type GradingScale = GradingScaleEntry;
 
 // ─── Class-Level Detection Utility ────────────────────────────────────────────
-// Returns 'lower_primary' (Grades 1-4), 'upper_primary' (Grades 5-7), or
-// 'secondary' (Form / Grades 8-12) from any class name a school may use.
-// Handles: "Form 1", "FORM ONE", "form one", "Grade 9", "grade9", "G9",
-//          "Std 5", "Standard 4", "Class 3", "Year 2", etc.
-function detectClassSection(className: string): 'lower_primary' | 'upper_primary' | 'secondary' {
+// Returns 'preschool', 'lower_primary' (Grades 1-4), 'upper_primary' (Grades 5-7),
+// or 'secondary' (Form / Grades 8-12) from any class name a school may use.
+// Handles: "Baby Class", "Nursery", "Form 1", "FORM ONE", "Grade 9", "G9", etc.
+function detectClassSection(className: string): 'preschool' | 'lower_primary' | 'upper_primary' | 'secondary' {
   const raw = className.toLowerCase().trim();
+
+  // ── Pre-school first (before digit extraction) ──
+  if (isPreschoolClass(raw)) return 'preschool';
 
   // Word-number map for written-out ordinals/cardinals
   const wordToNum: Record<string, number> = {
@@ -119,9 +122,10 @@ function detectClassSection(className: string): 'lower_primary' | 'upper_primary
 
   // ----- Step 3: map level to section -----
   if (level !== null) {
-    if (level >= 8) return 'secondary';        // Grades 8-12
-    if (level >= 5) return 'upper_primary';    // Grades 5-7
-    if (level >= 1) return 'lower_primary';    // Grades 1-4
+    if (level === 0) return 'preschool';        // Grade 0
+    if (level >= 8) return 'secondary';         // Grades 8-12
+    if (level >= 5) return 'upper_primary';     // Grades 5-7
+    if (level >= 1) return 'lower_primary';     // Grades 1-4
   }
 
   // Default: treat as secondary if we can't determine
@@ -192,6 +196,7 @@ export default function GradebookView() {
   const type = (schoolType || "").toLowerCase();
 
   // School-type overrides: if explicitly set to a single-level type, trust it
+  const isExplicitlyPreschool    = type === "preschool" || type === "pre-school" || type === "early childhood" || type === "ecd" || type === "nursery school";
   const isExplicitlyLowerPrimary = type === "lower primary";
   const isExplicitlyUpperPrimary = type === "upper primary";
   const isExplicitlySecondary    = type === "secondary school" || type === "secondary";
@@ -203,7 +208,8 @@ export default function GradebookView() {
   // 1. Explicit school-type overrides win outright (single-section schools)
   // 2. For multi-section schools (combined/basic), use per-class detection
   // 3. Default: class-name detection
-  const classSection: 'lower_primary' | 'upper_primary' | 'secondary' =
+  const classSection: 'preschool' | 'lower_primary' | 'upper_primary' | 'secondary' =
+    isExplicitlyPreschool    ? 'preschool' :
     isExplicitlyLowerPrimary ? 'lower_primary' :
     isExplicitlyUpperPrimary ? 'upper_primary' :
     isExplicitlySecondary    ? 'secondary' :
