@@ -26,6 +26,8 @@ export default function BulkStudentImport({ onImportSuccess }: { onImportSuccess
     const [previewData, setPreviewData] = useState<ImportedStudent[]>([]);
     const [isImporting, setIsImporting] = useState(false);
     const [importProgress, setImportProgress] = useState(0);
+    const [currentBatch, setCurrentBatch] = useState(0);
+    const [totalBatches, setTotalBatches] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
 
@@ -131,7 +133,9 @@ export default function BulkStudentImport({ onImportSuccess }: { onImportSuccess
             return;
         }
 
-        const BATCH_SIZE = 10;
+        // 5 students per batch keeps each server call to ~20s, safely under
+        // Vercel's 300s function timeout (75 students = 15 small calls instead of 1 giant one).
+        const BATCH_SIZE = 5;
         let successCount = 0;
         let errorCount = 0;
         let duplicateCount = 0;
@@ -147,10 +151,15 @@ export default function BulkStudentImport({ onImportSuccess }: { onImportSuccess
         }
 
         const totalToSend = studentsToSend.length;
+        const numBatches = Math.ceil(totalToSend / BATCH_SIZE);
+        setCurrentBatch(0);
+        setTotalBatches(numBatches);
 
         for (let i = 0; i < totalToSend; i += BATCH_SIZE) {
+            const batchIndex = Math.floor(i / BATCH_SIZE) + 1;
             const batch = studentsToSend.slice(i, i + BATCH_SIZE);
             const batchPayload = batch.map(({ originalIndex, ...rest }) => rest);
+            setCurrentBatch(batchIndex);
             
             try {
                 const result = await syncFetch('/api/school/students/bulk', {
@@ -184,16 +193,23 @@ export default function BulkStudentImport({ onImportSuccess }: { onImportSuccess
                     });
                 }
             } catch (error: any) {
-                console.error(`Batch import error:`, error);
+                console.error(`[BulkImport] Batch ${batchIndex} error:`, error);
                 errorCount += batch.length;
                 batch.forEach((b) => {
                     updatedData[b.originalIndex].status = 'Error';
-                    updatedData[b.originalIndex].message = error.message;
+                    updatedData[b.originalIndex].message = error.message || 'Request failed';
                 });
             }
 
             const currentProgress = Math.min(Math.round(((i + batch.length) / totalToSend) * 100), 100);
             setImportProgress(currentProgress);
+            // Update the table live so the user sees rows turning green/red as they complete
+            setPreviewData([...updatedData]);
+
+            // Brief pause between batches to avoid overwhelming Supabase Auth rate limits
+            if (i + BATCH_SIZE < totalToSend) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
         }
 
         setIsImporting(false);
@@ -292,7 +308,7 @@ export default function BulkStudentImport({ onImportSuccess }: { onImportSuccess
                             </div>
                             <Progress value={importProgress} className="h-2.5 bg-blue-100 dark:bg-blue-900/40" />
                             <p className="text-[10px] text-center text-slate-500 font-medium">
-                                Processing batch... please stay on this page until completion.
+                                {totalBatches > 0 ? `Batch ${currentBatch} of ${totalBatches} — ` : ''}Processing... please stay on this page until completion.
                             </p>
                         </div>
                     )}

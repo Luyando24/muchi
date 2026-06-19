@@ -1565,17 +1565,39 @@ router.post(
           }
         }
 
-        // Check by exact name if not matched by email and not forced
+        // Check by name if not matched by email and not forced.
+        // Normalise the name before matching: strip trailing punctuation (e.g.
+        // "PHIRI MISHEAL J." → "PHIRI MISHEAL J") so that re-imports of lists
+        // with abbreviated middle-name initials don't slip past the duplicate guard.
         let isPotentialDuplicate = false;
         let duplicateMessage = "";
         if (!existingId && student.name && student.name.trim() && !student.forceCreate) {
-          const { data: existingProfileByName } = await supabaseAdmin
+          const normalisedName = student.name.trim().replace(/[.\s]+$/, '').trim();
+
+          // Primary check: exact normalised name (case-insensitive)
+          let existingProfileByName: any = null;
+          const { data: exactMatch } = await supabaseAdmin
             .from("profiles")
-            .select("id, student_number, email")
+            .select("id, student_number, email, full_name")
             .eq("school_id", schoolId)
             .eq("role", "student")
-            .ilike("full_name", student.name.trim())
+            .ilike("full_name", normalisedName)
             .maybeSingle();
+
+          if (exactMatch) {
+            existingProfileByName = exactMatch;
+          } else if (normalisedName !== student.name.trim()) {
+            // Fallback: also try the original name (with punctuation) in case it
+            // was stored with the trailing dot in the DB
+            const { data: originalMatch } = await supabaseAdmin
+              .from("profiles")
+              .select("id, student_number, email, full_name")
+              .eq("school_id", schoolId)
+              .eq("role", "student")
+              .ilike("full_name", student.name.trim())
+              .maybeSingle();
+            if (originalMatch) existingProfileByName = originalMatch;
+          }
 
           if (existingProfileByName) {
             isPotentialDuplicate = true;
@@ -1621,14 +1643,52 @@ router.post(
           });
 
         if (userError) {
-          if (userError.message.includes("already exists")) {
-            throw new Error(`Email ${emailToUse} is already in use by another user.`);
+          // email_exists (code 422): auth user was already created in a previous
+          // import attempt (e.g. the Vercel function timed out mid-import and the
+          // client showed all rows as "Error" even though some were actually saved).
+          // Recover gracefully: find the existing user, fix their profile if needed,
+          // and count them as successfully imported rather than failing the row.
+          if (userError.code === 'email_exists' || userError.message?.includes('already registered') || userError.message?.includes('already exists')) {
+            console.warn(`[BulkStudent] Email ${emailToUse} already exists — attempting recovery for ${student.name}`);
+
+            // Look up the existing profile by email
+            const { data: existingByEmail } = await supabaseAdmin
+              .from('profiles')
+              .select('id, school_id, role, student_number, full_name')
+              .ilike('email', emailToUse)
+              .maybeSingle();
+
+            if (existingByEmail) {
+              // Profile already exists — student was successfully imported before
+              console.info(`[BulkStudent] Recovered: ${student.name} already has profile ${existingByEmail.id}`);
+              importedCount++;
+              results.push({ name: student.name, status: 'Success' });
+              continue; // Skip to next student
+            }
+
+            // Auth user exists but profile is missing (orphaned auth user from a
+            // failed/rolled-back previous attempt). Find the auth user by email
+            // and create the missing profile.
+            const { data: { users: authUsers } } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+            const orphanedAuthUser = authUsers?.find((u: any) =>
+              u.email?.toLowerCase() === emailToUse.toLowerCase()
+            );
+
+            if (orphanedAuthUser) {
+              createdUserId = orphanedAuthUser.id;
+              console.warn(`[BulkStudent] Found orphaned auth user ${createdUserId} — creating missing profile for ${student.name}`);
+              // Fall through to profile upsert below using the recovered ID
+            } else {
+              // Cannot recover — treat as a real error
+              throw new Error(`Email ${emailToUse} is already in use and could not be recovered.`);
+            }
+          } else {
+            throw userError;
           }
-          throw userError;
+        } else {
+          isNewAuthUser = true;
+          createdUserId = user.user.id;
         }
-        
-        isNewAuthUser = true;
-        createdUserId = user.user.id;
 
         // 3. Update Profile with extra details (Use UPSERT with onConflict)
         if (createdUserId) {
