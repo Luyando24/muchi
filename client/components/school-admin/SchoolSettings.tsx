@@ -503,7 +503,7 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
                       <Label htmlFor="school_type" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">School Type <span className="text-rose-500">*</span></Label>
                       <Select
                         value={formData.school_type}
-                        onValueChange={(value: 'Primary School' | 'Secondary School' | 'Basic School' | 'Combined School') =>
+                        onValueChange={(value: 'Primary School' | 'Secondary School' | 'Basic School' | 'Combined School' | 'Preschool' | 'Lower Primary' | 'Upper Primary' | 'Combined Primary' | 'Combined Primary & Preschool') =>
                           setFormData(prev => ({ ...prev, school_type: value }))
                         }
                       >
@@ -511,9 +511,11 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
                           <SelectValue placeholder="Select type" />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="Preschool">Preschool / ECD (Baby Class – KG)</SelectItem>
                           <SelectItem value="Lower Primary">Lower Primary (Grades 1-4)</SelectItem>
                           <SelectItem value="Upper Primary">Upper Primary (Grades 5-7)</SelectItem>
                           <SelectItem value="Combined Primary">Combined Primary (Grades 1-7)</SelectItem>
+                          <SelectItem value="Combined Primary & Preschool">Combined Primary & Preschool (ECD - Grade 7)</SelectItem>
                           <SelectItem value="Primary School">Primary School (Legacy 1-7)</SelectItem>
                           <SelectItem value="Secondary School">Secondary School (Grades 8-12)</SelectItem>
                           <SelectItem value="Basic School">Basic School (Grades 1-9)</SelectItem>

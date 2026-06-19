@@ -2002,20 +2002,21 @@ export default function AcademicManagement() {
                           <Input value={scaleForm.description} onChange={e => setScaleForm({ ...scaleForm, description: e.target.value })} />
                         </div>
                         <div className="space-y-2">
-                          <Label>Section</Label>
-                          <Select 
-                            value={scaleForm.section || 'secondary'} 
-                            onValueChange={v => setScaleForm({ ...scaleForm, section: v })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select section" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="primary-junior">Grade 1 - 4 (Primary Junior)</SelectItem>
-                              <SelectItem value="primary-senior">Grade 5 - 7 (Primary Senior)</SelectItem>
-                              <SelectItem value="standard">Secondary (Form 1 - Grade 12)</SelectItem>
-                            </SelectContent>
-                          </Select>
+                           <Label>Section</Label>
+                           <Select 
+                             value={scaleForm.section || 'secondary'} 
+                             onValueChange={v => setScaleForm({ ...scaleForm, section: v })}
+                           >
+                             <SelectTrigger>
+                               <SelectValue placeholder="Select section" />
+                             </SelectTrigger>
+                             <SelectContent>
+                               <SelectItem value="preschool">Pre-School (Baby Class – KG)</SelectItem>
+                               <SelectItem value="primary-junior">Grade 1 - 4 (Primary Junior)</SelectItem>
+                               <SelectItem value="primary-senior">Grade 5 - 7 (Primary Senior)</SelectItem>
+                               <SelectItem value="standard">Secondary (Form 1 - Grade 12)</SelectItem>
+                             </SelectContent>
+                           </Select>
                         </div>
                       </div>
                       <DialogFooter>
@@ -2028,13 +2029,14 @@ export default function AcademicManagement() {
             </CardHeader>
             <CardContent>
               <Tabs value={activeGradingTab} onValueChange={setActiveGradingTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-3 mb-6">
+                <TabsList className="grid w-full grid-cols-4 mb-6">
+                  <TabsTrigger value="preschool" className="text-xs font-bold">Pre-School</TabsTrigger>
                   <TabsTrigger value="primary-junior" className="text-xs font-bold">Grade 1 - 4</TabsTrigger>
                   <TabsTrigger value="primary-senior" className="text-xs font-bold">Grade 5 - 7</TabsTrigger>
                   <TabsTrigger value="standard" className="text-xs font-bold">Secondary (Form 1 - Grade 12)</TabsTrigger>
                 </TabsList>
 
-                {['primary-junior', 'primary-senior', 'standard'].map((group) => {
+                {['preschool', 'primary-junior', 'primary-senior', 'standard'].map((group) => {
                   const filteredScales = gradingScales.filter(scale => {
                     // Use explicit section if available
                     if (scale.section) return scale.section === group;
@@ -2048,6 +2050,12 @@ export default function AcademicManagement() {
                   });
 
                   const getGroupDefaults = (group: string) => {
+                    if (group === 'preschool') return [
+                      { grade: "Excelling", min_percentage: 75, max_percentage: 100, description: "Consistently exceeds expectations" },
+                      { grade: "Achieving", min_percentage: 50, max_percentage: 74, description: "Meets expectations" },
+                      { grade: "Developing", min_percentage: 25, max_percentage: 49, description: "Working towards expectations" },
+                      { grade: "Emerging", min_percentage: 0, max_percentage: 24, description: "Beginning to show understanding" },
+                    ];
                     if (group === 'primary-senior') return [
                       { grade: "A+", min_percentage: 86, max_percentage: 100, description: "Distinction" },
                       { grade: "A", min_percentage: 76, max_percentage: 85, description: "Distinction" },

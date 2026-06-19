@@ -26,7 +26,8 @@ async function run() {
     INSERT INTO public.school_types (name, description) VALUES 
     ('Lower Primary', '(Grades 1-4)'),
     ('Upper Primary', '(Grades 5-7)'),
-    ('Combined Primary', '(Grades 1-7) - Auto-selects format based on grade')
+    ('Combined Primary', '(Grades 1-7) - Auto-selects format based on grade'),
+    ('Combined Primary & Preschool', '(ECD - Grade 7) - Auto-selects format based on grade')
     ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description;
   `;
 
@@ -39,7 +40,8 @@ async function run() {
     const { data, error } = await supabase.from('school_types').upsert([
       { name: 'Lower Primary', description: '(Grades 1-4)' },
       { name: 'Upper Primary', description: '(Grades 5-7)' },
-      { name: 'Combined Primary', description: '(Grades 1-7) - Auto-selects format based on grade' }
+      { name: 'Combined Primary', description: '(Grades 1-7) - Auto-selects format based on grade' },
+      { name: 'Combined Primary & Preschool', description: '(ECD - Grade 7) - Auto-selects format based on grade' }
     ], { onConflict: 'name' });
 
     if (error) {

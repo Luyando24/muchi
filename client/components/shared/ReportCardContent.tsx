@@ -39,7 +39,8 @@ export const ReportCardContent: React.FC<ReportCardContentProps> = ({ data, term
     schoolType === "combined primary" ||
     schoolType === "primary school" ||
     schoolType === "combined school" ||
-    schoolType === "basic school";
+    schoolType === "basic school" ||
+    schoolType === "combined primary & preschool";
   
   // Grade-based detection for Combined schools
   // Prioritize digit-based level and explicitly exclude "Form" (Secondary)

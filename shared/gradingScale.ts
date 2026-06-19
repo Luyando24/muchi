@@ -341,7 +341,7 @@ export function resolveGradingScaleForStudent(
 ): GradingScaleEntry {
   const type = (schoolType || "").toLowerCase();
   const isPreschool = type === "preschool" || type === "pre-school" || type === "early childhood" || type === "ecd" || type === "nursery school" || isPreschoolClass(studentGradeOrClass);
-  const isCombined = type === "combined primary" || type === "primary school" || type === "combined school" || type === "basic school";
+  const isCombined = type === "combined primary" || type === "primary school" || type === "combined school" || type === "basic school" || type === "combined primary & preschool";
   const isUpper = type === "upper primary" || (isCombined && isG57Class(studentGradeOrClass));
   const isLower = type === "lower primary" || (isCombined && isG14Class(studentGradeOrClass));
 
