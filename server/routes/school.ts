@@ -1296,24 +1296,53 @@ router.get(
 async function generateUniqueStudentNumber(): Promise<string> {
   let isUnique = false;
   let studentNumber = "";
+  let attempts = 0;
+  const MAX_ATTEMPTS = 10;
+  
+  const now = new Date();
+  const year = now.getFullYear().toString(); // 4 digits
 
-  while (!isUnique) {
-    // Generate format: YYYY + Random 4 digits (e.g., 20241234) for a total of 8 chars
-    const now = new Date();
-    const year = now.getFullYear().toString(); // 4 digits
-    const random = Math.floor(1000 + Math.random() * 9000).toString(); // 4 digits
+  while (!isUnique && attempts < MAX_ATTEMPTS) {
+    attempts++;
+    
+    // Start with 4 digits, scale to 5 digits after 3 failed attempts, and 6 digits after 6 failed attempts
+    let digits = 4;
+    if (attempts > 6) {
+      digits = 6;
+    } else if (attempts > 3) {
+      digits = 5;
+    }
+
+    const min = Math.pow(10, digits - 1);
+    const max = Math.pow(10, digits) - 1;
+    const random = Math.floor(min + Math.random() * (max - min + 1)).toString();
     studentNumber = `${year}${random}`;
 
     // Check uniqueness
-    const { count } = await supabaseAdmin
+    const { count, error } = await supabaseAdmin
       .from("profiles")
       .select("*", { count: "exact", head: true })
       .eq("student_number", studentNumber);
+
+    if (error) {
+      console.error(`[StudentNumber] Error checking uniqueness:`, error);
+      throw new Error(`Database error verifying student number uniqueness: ${error.message}`);
+    }
 
     if (count === 0) {
       isUnique = true;
     }
   }
+
+  if (!isUnique) {
+    // Ultimate fallback if all attempts fail (e.g. extreme concurrency / lockups)
+    // Generate a timestamp-based number to guarantee uniqueness
+    console.warn(`[StudentNumber] Failed to generate a unique random student number after ${MAX_ATTEMPTS} attempts. Using fallback timestamp.`);
+    const timestampPart = Date.now().toString().slice(-6); // last 6 digits of timestamp
+    const randomPart = Math.floor(100 + Math.random() * 900).toString(); // 3 random digits
+    studentNumber = `${year}${timestampPart}${randomPart}`;
+  }
+
   return studentNumber;
 }
 
