@@ -905,6 +905,7 @@ export default function GradebookView() {
                     <TabsTrigger value="pending" className="text-sm sm:text-sm font-bold">
                       Pending ({students.filter(s => !grades[s.id] || grades[s.id].percentage === '').length})
                     </TabsTrigger>
+                  </TabsList>
                 </Tabs>
               </div>
               <div className="relative w-full md:w-64">
