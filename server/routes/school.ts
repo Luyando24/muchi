@@ -2361,16 +2361,95 @@ router.put(
 
       // 4. Update Enrollment if classId is a UUID
       if (isUuid) {
-        // Upsert enrollment for current year
-        await supabaseAdmin.from("enrollments").upsert(
-          {
-            student_id: id,
-            class_id: classId,
-            academic_year: new Date().getFullYear().toString(),
-            status: "Active",
-          },
-          { onConflict: "student_id, academic_year" },
-        );
+        // Retrieve the current academic year from school settings
+        const settings = await ensureSchoolSettings(schoolId);
+        const academicYear =
+          settings?.academic_year || new Date().getFullYear().toString();
+
+        // Check for existing enrollment in this academic year
+        const { data: existingEnrollment } = await supabaseAdmin
+          .from("enrollments")
+          .select("id")
+          .eq("student_id", id)
+          .eq("academic_year", academicYear)
+          .maybeSingle();
+
+        let enrollmentId = existingEnrollment?.id;
+
+        if (existingEnrollment) {
+          // Update existing enrollment
+          const { error: enrollUpdateError } = await supabaseAdmin
+            .from("enrollments")
+            .update({
+              class_id: classId,
+              status: "Active",
+            })
+            .eq("id", existingEnrollment.id);
+
+          if (enrollUpdateError) throw enrollUpdateError;
+        } else {
+          // Create new enrollment
+          const { data: newEnrollment, error: enrollInsertError } =
+            await supabaseAdmin
+              .from("enrollments")
+              .insert({
+                school_id: schoolId,
+                student_id: id,
+                class_id: classId,
+                academic_year: academicYear,
+                status: "Active",
+              })
+              .select()
+              .single();
+
+          if (enrollInsertError) throw enrollInsertError;
+          enrollmentId = newEnrollment.id;
+        }
+
+        // Auto-subscribe to class subjects
+        try {
+          // Fetch subjects for the new class
+          const { data: classSubjects, error: subjectsError } =
+            await supabaseAdmin
+              .from("class_subjects")
+              .select("subject_id")
+              .eq("class_id", classId);
+
+          if (subjectsError) {
+            console.error("Error fetching class subjects:", subjectsError);
+          } else if (classSubjects && classSubjects.length > 0 && enrollmentId) {
+            // Clear existing subjects for this enrollment (if any)
+            const { error: deleteError } = await supabaseAdmin
+              .from("student_subjects")
+              .delete()
+              .eq("enrollment_id", enrollmentId);
+
+            if (deleteError) {
+              if (deleteError.code !== "42P01") {
+                console.error("Error clearing student subjects:", deleteError);
+              }
+            } else {
+              // Insert new subjects matching the new class's subjects
+              const studentSubjects = classSubjects.map((cs: any) => ({
+                student_id: id,
+                subject_id: cs.subject_id,
+                class_id: classId,
+                academic_year: academicYear,
+                enrollment_id: enrollmentId,
+              }));
+
+              const { error: insertError } = await supabaseAdmin
+                .from("student_subjects")
+                .insert(studentSubjects);
+
+              if (insertError) {
+                console.error("Error auto-subscribing subjects:", insertError);
+              }
+            }
+          }
+        } catch (subError) {
+          console.error("Auto-subscription failed (non-critical):", subError);
+        }
       }
 
       // 5. Update Email if provided (requires auth admin)
