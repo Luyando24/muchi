@@ -12,7 +12,8 @@ import {
   Eye,
   Users,
   ArrowRightLeft,
-  Trash2
+  Trash2,
+  Sparkles
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -149,6 +150,12 @@ export default function GradebookView() {
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const lastRoundingToastTime = useRef<number>(0);
 
+  const [pendingStudentIds, setPendingStudentIds] = useState<Set<string>>(new Set());
+  const [showTestTypeWarning, setShowTestTypeWarning] = useState(false);
+  const [isMissingStudentModalOpen, setIsMissingStudentModalOpen] = useState(false);
+  const [ictContact, setIctContact] = useState<{ name: string; phone: string; email: string } | null>(null);
+  const hasShownTestTypeWarning = useRef(false);
+
   const defaultState = location.state as {
     defaultClassId?: string;
     defaultSubjectId?: string;
@@ -246,6 +253,11 @@ export default function GradebookView() {
         
         if (settings) {
           setSchoolType(settings.school_type || '');
+          setIctContact({
+            name: settings.ict_name || 'the ICT Department',
+            phone: settings.ict_phone || '',
+            email: settings.ict_email || ''
+          });
           const testTypes = sanitizeSelectStrings(settings.test_types || []);
           setSchoolTestTypes(testTypes);
           setTestTypesEnabled(!!settings.test_types_enabled);
@@ -286,6 +298,7 @@ export default function GradebookView() {
           setSchoolType('');
           setSchoolTestTypes([]);
           setTestTypesEnabled(false);
+          setIctContact(null);
           if (!defaultState.defaultTerm) setSelectedTerm('Term 1');
           if (!defaultState.defaultYear) setSelectedYear(new Date().getFullYear().toString());
         }
@@ -308,7 +321,7 @@ export default function GradebookView() {
     loadMetadata();
   }, []);
 
-  // Intelligent month-based auto-selection of test type
+  // Intelligent month-based auto-selection of test type + warning popup
   useEffect(() => {
     if (!simplifiedAssessmentMode && !testTypesEnabled) return;
     
@@ -326,7 +339,26 @@ export default function GradebookView() {
     if (targetTest && selectedTestType !== targetTest) {
       setSelectedTestType(targetTest);
     }
+
+    if (targetTest && !hasShownTestTypeWarning.current && schoolTestTypes.length > 0) {
+      hasShownTestTypeWarning.current = true;
+      setShowTestTypeWarning(true);
+    }
   }, [simplifiedAssessmentMode, testTypesEnabled, schoolTestTypes]);
+
+  // Update pendingStudentIds when switching to the pending tab
+  useEffect(() => {
+    if (activeTab === 'pending') {
+      const pending = new Set<string>();
+      students.forEach(s => {
+        const entry = grades[s.id];
+        if (!entry || entry.percentage === '') {
+          pending.add(s.id);
+        }
+      });
+      setPendingStudentIds(pending);
+    }
+  }, [activeTab]);
 
   // Load students and existing grades when selection changes
   useEffect(() => {
@@ -519,7 +551,8 @@ export default function GradebookView() {
       const finalTestType = (testTypesEnabled || simplifiedAssessmentMode) ? (selectedTestType === 'none' ? '' : selectedTestType) : '';
       const gradesData = await syncFetch(`/api/school/grades/batch?subjectId=${selectedSubject}&term=${encodeURIComponent(selectedTerm)}&examType=${encodeURIComponent(selectedExamType)}&testType=${encodeURIComponent(finalTestType)}&academicYear=${selectedYear}&studentIds=${studentIdsStr}`, {
         headers,
-        cacheKey: `school-gradebook-${selectedClass}-${selectedSubject}-${selectedTerm}-${selectedExamType}-${finalTestType}-${selectedYear}`
+        cacheKey: `school-gradebook-${selectedClass}-${selectedSubject}-${selectedTerm}-${selectedExamType}-${finalTestType}-${selectedYear}`,
+        forceSync: true
       });
 
       const gradesMap: Record<string, GradeEntry> = {};
@@ -556,6 +589,17 @@ export default function GradebookView() {
       }
       
       setGrades(gradesMap);
+
+      if (activeTab === 'pending') {
+        const pending = new Set<string>();
+        loadedStudents.forEach((s: any) => {
+          const entry = gradesMap[s.id];
+          if (!entry || entry.percentage === '') {
+            pending.add(s.id);
+          }
+        });
+        setPendingStudentIds(pending);
+      }
 
     } catch (error: any) {
       console.error('Error loading gradebook data:', error);
@@ -828,16 +872,27 @@ export default function GradebookView() {
           {/* Sticky Tabs and Search */}
           {selectedClass && selectedSubject && (
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800">
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
-                <TabsList className="grid w-full grid-cols-2 max-w-[400px] h-11 sm:h-9">
-                  <TabsTrigger value="all" className="text-sm sm:text-sm font-bold">
-                    All ({students.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="pending" className="text-sm sm:text-sm font-bold">
-                    Pending ({students.filter(s => !grades[s.id] || grades[s.id].percentage === '').length})
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full md:w-auto">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full sm:w-auto">
+                  <TabsList className="grid w-full grid-cols-2 max-w-[400px] sm:w-[220px] h-11 sm:h-9">
+                    <TabsTrigger value="all" className="text-sm sm:text-sm font-bold">
+                      All ({students.length})
+                    </TabsTrigger>
+                    <TabsTrigger value="pending" className="text-sm sm:text-sm font-bold">
+                      Pending ({students.filter(s => !grades[s.id] || grades[s.id].percentage === '').length})
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsMissingStudentModalOpen(true)}
+                  className="text-xs text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1.5 h-11 sm:h-9 px-3"
+                >
+                  <Users className="h-4 w-4" />
+                  Missing a student?
+                </Button>
+              </div>
               <div className="relative w-full md:w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
@@ -1047,6 +1102,69 @@ export default function GradebookView() {
         </DialogContent>
       </Dialog>
 
+      {/* Test Type Warning Dialog */}
+      <Dialog open={showTestTypeWarning} onOpenChange={setShowTestTypeWarning}>
+        <DialogContent className="sm:max-w-[450px]">
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 text-blue-600">
+              <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-full">
+                <Sparkles className="h-6 w-6 text-blue-600" />
+              </div>
+              <h3 className="font-bold text-lg text-slate-900 dark:text-white">Default Assessment Type</h3>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                The gradebook has automatically selected <strong className="text-blue-600 font-bold">{selectedTestType}</strong> as the active test type based on the current term and month.
+              </p>
+              <p className="text-xs text-amber-600 font-bold bg-amber-50 dark:bg-amber-950/20 p-3 rounded-lg border border-amber-200">
+                ⚠️ Advice: Please leave this setting as is unless explicitly advised by {ictContact?.name || 'the ICT personnel'}.
+              </p>
+            </div>
+            <div className="flex justify-end pt-2">
+              <Button onClick={() => setShowTestTypeWarning(false)} className="bg-blue-600 hover:bg-blue-700 font-bold text-white">
+                Understood
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Missing Student Dialog */}
+      <Dialog open={isMissingStudentModalOpen} onOpenChange={setIsMissingStudentModalOpen}>
+        <DialogContent className="sm:max-w-[450px]">
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 text-indigo-600">
+              <div className="bg-indigo-100 dark:bg-indigo-900/30 p-2 rounded-full">
+                <Users className="h-6 w-6 text-indigo-600" />
+              </div>
+              <h3 className="font-bold text-lg text-slate-900 dark:text-white">Missing Student?</h3>
+            </div>
+            <div className="space-y-3">
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                If a student is enrolled in your class but is missing from this gradebook roster, please notify the school's ICT personnel. Only the ICT administrator can register and enroll new students.
+              </p>
+              <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 space-y-2">
+                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">ICT contact details</div>
+                {ictContact ? (
+                  <div className="space-y-1 text-sm font-medium text-slate-700 dark:text-slate-300">
+                    <div><span className="text-slate-400">Name:</span> {ictContact.name}</div>
+                    {ictContact.phone && <div><span className="text-slate-400">Phone:</span> {ictContact.phone}</div>}
+                    {ictContact.email && <div><span className="text-slate-400">Email:</span> {ictContact.email}</div>}
+                  </div>
+                ) : (
+                  <div className="text-sm text-slate-500 italic">No contact details loaded. Please contact school admin.</div>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end pt-2">
+              <Button onClick={() => setIsMissingStudentModalOpen(false)} className="bg-blue-600 hover:bg-blue-700 font-bold text-white">
+                Close
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {selectedClass && selectedSubject ? (
         <Card className="shadow-sm overflow-hidden border-slate-200 dark:border-slate-800">
           <CardContent className="p-0">
@@ -1079,8 +1197,7 @@ export default function GradebookView() {
                           if (!matchesSearch) return false;
 
                           if (activeTab === 'pending') {
-                            const entry = grades[student.id];
-                            return !entry || entry.percentage === '';
+                            return pendingStudentIds.has(student.id);
                           }
                           return true;
                         })
@@ -1208,8 +1325,7 @@ export default function GradebookView() {
                       if (!matchesSearch) return false;
 
                       if (activeTab === 'pending') {
-                        const entry = grades[student.id];
-                        return !entry || entry.percentage === '';
+                        return pendingStudentIds.has(student.id);
                       }
                       return true;
                     })
@@ -1322,7 +1438,14 @@ export default function GradebookView() {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white">Empty Roster</h3>
-                  <p className="text-sm text-slate-500">No students are currently enrolled in this class for the selected year.</p>
+                  <p className="text-sm text-slate-500 mb-4">No students are currently enrolled in this class for the selected year.</p>
+                  <Button 
+                    variant="outline"
+                    onClick={() => setIsMissingStudentModalOpen(true)}
+                    className="border-dashed border-blue-200 text-blue-600 hover:bg-blue-50 font-bold"
+                  >
+                    What to do if students are missing?
+                  </Button>
                 </div>
               </div>
             )}
