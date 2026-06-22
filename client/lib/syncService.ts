@@ -34,13 +34,15 @@ export const invalidateCache = async (mutationUrl: string, cacheKey?: string) =>
       await db.cache.delete(`supabase:${scopedKey}`);
     }
 
-    // 3. Special check for grade/results updates to clear gradebook and report card related caches
+    // 3. Special check for grade/results/student updates to clear related caches
     const isGradeOrResultMutation = cleanUrl.includes('/grades') || cleanUrl.includes('/results');
-    if (isGradeOrResultMutation) {
+    const isStudentMutation = cleanUrl.includes('/students') || cleanUrl.includes('/enroll') || cleanUrl.includes('/create-student');
+    if (isGradeOrResultMutation || isStudentMutation) {
       const allEntries = await db.cache.toArray();
       for (const entry of allEntries) {
         const key = entry.url;
         if (
+          key.includes('students') ||
           key.includes('gradebook') || 
           key.includes('verify-status') || 
           key.includes('report-card') ||
