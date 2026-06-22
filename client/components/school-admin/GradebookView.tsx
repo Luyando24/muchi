@@ -236,6 +236,30 @@ export default function GradebookView() {
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
+  // Automated popup warning once a day
+  useEffect(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const key = `missing_student_warning_shown_${todayStr}`;
+    const wasShownToday = localStorage.getItem(key);
+    
+    if (!wasShownToday) {
+      setIsMissingStudentModalOpen(true);
+      localStorage.setItem(key, 'true');
+      
+      // Clean up older daily keys to keep localStorage clean
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('missing_student_warning_shown_') && k !== key) {
+            localStorage.removeItem(k);
+          }
+        }
+      } catch (e) {
+        console.error('Error cleaning up localStorage keys:', e);
+      }
+    }
+  }, []);
+
   // Load initial metadata
   useEffect(() => {
     const loadMetadata = async () => {
@@ -881,17 +905,7 @@ export default function GradebookView() {
                     <TabsTrigger value="pending" className="text-sm sm:text-sm font-bold">
                       Pending ({students.filter(s => !grades[s.id] || grades[s.id].percentage === '').length})
                     </TabsTrigger>
-                  </TabsList>
                 </Tabs>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsMissingStudentModalOpen(true)}
-                  className="text-xs text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1.5 h-11 sm:h-9 px-3"
-                >
-                  <Users className="h-4 w-4" />
-                  Missing a student?
-                </Button>
               </div>
               <div className="relative w-full md:w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
