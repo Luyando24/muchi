@@ -34,12 +34,30 @@ export const invalidateCache = async (mutationUrl: string, cacheKey?: string) =>
       await db.cache.delete(`supabase:${scopedKey}`);
     }
 
-    // 3. Extract the last segment to find other related caches (e.g. settings, students, etc.)
+    // 3. Special check for grade/results updates to clear gradebook and report card related caches
+    const isGradeOrResultMutation = cleanUrl.includes('/grades') || cleanUrl.includes('/results');
+    if (isGradeOrResultMutation) {
+      const allEntries = await db.cache.toArray();
+      for (const entry of allEntries) {
+        const key = entry.url;
+        if (
+          key.includes('gradebook') || 
+          key.includes('verify-status') || 
+          key.includes('report-card') ||
+          key.includes('grades') ||
+          key.includes('results')
+        ) {
+          await db.cache.delete(key);
+        }
+      }
+    }
+
+    // 4. Extract the last segment to find other related caches (e.g. settings, students, etc.)
     const segments = cleanUrl.split('/');
     let lastSegment = segments[segments.length - 1];
     
-    // Resolve parent collection for bulk operations to invalidate collection lists
-    if (lastSegment === 'bulk' || lastSegment === 'bulk-complete') {
+    // Resolve parent collection for action verbs in mutations
+    if (['bulk', 'bulk-complete', 'batch', 'clear', 'migrate', 'submit', 'publish'].includes(lastSegment)) {
       lastSegment = segments[segments.length - 2];
     }
     

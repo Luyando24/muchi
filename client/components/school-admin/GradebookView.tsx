@@ -440,6 +440,23 @@ export default function GradebookView() {
     return () => clearTimeout(timeoutId);
   }, [grades, handleSaveAll]);
 
+  // Warn user of unsaved changes before page reload
+  useEffect(() => {
+    const hasUnsavedChanges = Object.values(grades).some(g => g.isDirty);
+    if (!hasUnsavedChanges) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [grades]);
+
   const handleClearGrades = async () => {
     if (!selectedClass || !selectedSubject || !selectedTerm || !selectedExamType || !selectedYear) return;
     
