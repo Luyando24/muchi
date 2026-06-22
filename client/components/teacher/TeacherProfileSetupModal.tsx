@@ -34,6 +34,7 @@ interface TeacherProfileSetupModalProps {
   profile: any;
   onComplete: () => void;
   isEmailOnly?: boolean;
+  onDismiss?: () => void;
 }
 
 const STEPS = [
@@ -52,6 +53,7 @@ export default function TeacherProfileSetupModal({
   profile,
   onComplete,
   isEmailOnly = false,
+  onDismiss,
 }: TeacherProfileSetupModalProps) {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
@@ -137,15 +139,35 @@ export default function TeacherProfileSetupModal({
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!isEmailOnly && !isStep5Valid) {
-      toast({ title: 'Required fields missing', description: 'Please fill in all required qualification details.', variant: 'destructive' });
-      return;
-    }
 
-    // Prevent saving if first and last names are the same (unless last name is empty)
-    if (personal.first_name && personal.last_name && personal.first_name === personal.last_name) {
-      toast({ title: 'Invalid Name', description: 'First name and last name cannot be the same. Please enter a different last name.', variant: 'destructive' });
-      return;
+    if (isEmailOnly) {
+      if (needsEmailUpdate) {
+        toast({
+          title: 'Invalid Email',
+          description: 'Please enter a valid Yahoo or Gmail address.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    } else {
+      if (!isStep5Valid) {
+        toast({
+          title: 'Required fields missing',
+          description: 'Please fill in all required qualification details.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Prevent saving if first and last names are the same (unless last name is empty)
+      if (personal.first_name && personal.last_name && personal.first_name === personal.last_name) {
+        toast({
+          title: 'Invalid Name',
+          description: 'First name and last name cannot be the same. Please enter a different last name.',
+          variant: 'destructive',
+        });
+        return;
+      }
     }
 
     setIsSaving(true);
@@ -171,13 +193,19 @@ export default function TeacherProfileSetupModal({
         completion_year: qualifications.completion_year ? parseInt(qualifications.completion_year) : null,
       };
 
-      const result = await syncFetch('/api/teacher/profile/setup', {
+      const url = isEmailOnly ? '/api/teacher/profile' : '/api/teacher/profile/setup';
+      const body = isEmailOnly ? {
+        email: personal.email.trim(),
+        phone_number: personal.phone_number || profile?.phone_number || null,
+      } : payload;
+
+      const result = await syncFetch(url, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       });
 
       // Invalidate offline query cache
@@ -188,7 +216,7 @@ export default function TeacherProfileSetupModal({
         setLocalOpen(false);
         onComplete();
       } else {
-        toast({ title: 'Profile Complete!', description: 'Your profile has been saved. Refreshing the portal...' });
+        toast({ title: 'Success!', description: 'Profile updated successfully. Refreshing...' });
         setLocalOpen(false);
         setTimeout(() => {
           onComplete();
@@ -206,12 +234,16 @@ export default function TeacherProfileSetupModal({
       <DialogContent
         className="sm:max-w-[560px] p-0 overflow-hidden bg-white dark:bg-slate-900 border border-indigo-100 dark:border-indigo-900/40 shadow-2xl [&>button.absolute]:hidden"
         onInteractOutside={(e) => {
-          if (!isEmailOnly || !emailDismissed) {
+          if (isEmailOnly) {
+            onDismiss?.();
+          } else {
             e.preventDefault();
           }
         }}
         onEscapeKeyDown={(e) => {
-          if (!isEmailOnly || !emailDismissed) {
+          if (isEmailOnly) {
+            onDismiss?.();
+          } else {
             e.preventDefault();
           }
         }}
@@ -276,42 +308,46 @@ export default function TeacherProfileSetupModal({
               </DialogHeader>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5 col-span-2 sm:col-span-1">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    First Name <span className="text-rose-500">*</span>
-                  </Label>
-                  <Input
-                    value={personal.first_name}
-                    onChange={e => setPersonal(p => ({ ...p, first_name: e.target.value }))}
-                    placeholder="First Name"
-                  />
-                </div>
+                {!isEmailOnly && (
+                  <>
+                    <div className="space-y-1.5 col-span-2 sm:col-span-1">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        First Name <span className="text-rose-500">*</span>
+                      </Label>
+                      <Input
+                        value={personal.first_name}
+                        onChange={e => setPersonal(p => ({ ...p, first_name: e.target.value }))}
+                        placeholder="First Name"
+                      />
+                    </div>
 
-                <div className="space-y-1.5 col-span-2 sm:col-span-1">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Last Name <span className="text-rose-500">*</span>
-                  </Label>
-                  <Input
-                    value={personal.last_name}
-                    onChange={e => setPersonal(p => ({ ...p, last_name: e.target.value }))}
-                    placeholder="Last Name"
-                  />
-                </div>
+                    <div className="space-y-1.5 col-span-2 sm:col-span-1">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Last Name <span className="text-rose-500">*</span>
+                      </Label>
+                      <Input
+                        value={personal.last_name}
+                        onChange={e => setPersonal(p => ({ ...p, last_name: e.target.value }))}
+                        placeholder="Last Name"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5 col-span-2">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Phone Number <span className="text-rose-500">*</span>
+                      </Label>
+                      <Input
+                        value={personal.phone_number}
+                        onChange={e => setPersonal(p => ({ ...p, phone_number: e.target.value }))}
+                        placeholder="+260..."
+                      />
+                    </div>
+                  </>
+                )}
 
                 <div className="space-y-1.5 col-span-2">
                   <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Phone Number <span className="text-rose-500">*</span>
-                  </Label>
-                  <Input
-                    value={personal.phone_number}
-                    onChange={e => setPersonal(p => ({ ...p, phone_number: e.target.value }))}
-                    placeholder="+260..."
-                  />
-                </div>
-
-                <div className="space-y-1.5 col-span-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Email Address <span className="text-slate-400">(Optional)</span>
+                    Email Address {isEmailOnly ? <span className="text-rose-500">*</span> : <span className="text-slate-400">(Optional)</span>}
                   </Label>
                   <Input
                     type="email"
@@ -611,15 +647,14 @@ export default function TeacherProfileSetupModal({
                   size="sm"
                   onClick={() => {
                     if (isEmailOnly) {
-                      setEmailDismissed(true);
-                      onComplete();
+                      onDismiss?.();
                     } else {
                       setEmailDismissed(true);
                     }
                   }}
                   className="text-slate-500 hover:text-slate-700"
                 >
-                  Skip Email
+                  {isEmailOnly ? 'Remind me in 24hrs' : 'Skip Email'}
                 </Button>
               )}
               {isEmailOnly ? (

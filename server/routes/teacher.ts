@@ -773,9 +773,21 @@ router.put('/profile/setup', requireTeacher, async (req: Request, res: Response)
     housing_status, accommodation_provided,
     highest_qualification, institution_name, field_of_study, completion_year,
     full_name,
+    email,
   } = req.body;
 
   try {
+    // 1. If email is provided and differs, update Auth user first
+    if (email && email.trim() !== '' && email.trim().toLowerCase() !== (profile.email || '').toLowerCase()) {
+      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(profile.id, { 
+        email: email.trim(),
+        email_confirm: true 
+      });
+      if (authError) {
+        return res.status(400).json({ message: authError.message || "Failed to update email in authentication service" });
+      }
+    }
+
     const updateData: any = {
       phone_number: phone_number || null,
       full_name: full_name || profile.full_name,
@@ -796,6 +808,9 @@ router.put('/profile/setup', requireTeacher, async (req: Request, res: Response)
       completion_year: completion_year ? parseInt(completion_year) : null,
       updated_at: new Date().toISOString(),
     };
+    if (email && email.trim() !== '') {
+      updateData.email = email.trim();
+    }
 
     const { data, error } = await supabaseAdmin
       .from('profiles')
@@ -856,7 +871,10 @@ router.put('/profile', requireTeacher, async (req: Request, res: Response) => {
   try {
     // 1. If email is provided and differs, update Auth user first
     if (email && email.trim() !== '' && email.trim().toLowerCase() !== (profile.email || '').toLowerCase()) {
-      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(profile.id, { email: email.trim() });
+      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(profile.id, { 
+        email: email.trim(),
+        email_confirm: true
+      });
       if (authError) {
         return res.status(400).json({ message: authError.message || "Failed to update email in authentication service" });
       }

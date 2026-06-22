@@ -424,12 +424,22 @@ export default function TeacherPortal() {
     return lowerEmail.endsWith('@yahoo.com') || lowerEmail.endsWith('@gmail.com');
   };
 
+  // Email warning reminder state - allow dismissing for 24 hours
+  const [emailReminderTime, setEmailReminderTime] = useState<number>(() => {
+    const raw = localStorage.getItem('teacher_email_warning_remind_at');
+    return raw ? parseInt(raw, 10) : 0;
+  });
+
+  const isEmailReminderActive = Date.now() >= emailReminderTime;
   const isEmailInvalid = profile?.email && !isValidEmail(profile.email);
   const hasNoEmail = !profile?.email?.trim();
-  const needsEmailUpdate = hasNoEmail || isEmailInvalid;
+  const needsEmailUpdate = (hasNoEmail || isEmailInvalid) && isEmailReminderActive;
+
+  // Flag to temporarily disable profile completeness checks (disabled for now per user request)
+  const ENABLE_PROFILE_COMPLETION_MODAL = false;
 
   // Determine if teacher profile is incomplete (mandatory fields for government reporting)
-  const isProfileIncomplete = profile && (
+  const isProfileIncomplete = ENABLE_PROFILE_COMPLETION_MODAL && profile && (
     !profile.phone_number?.trim() ||
     !profile.gender?.trim() ||
     !profile.date_of_birth ||
@@ -484,7 +494,7 @@ export default function TeacherPortal() {
   };
 
   useEffect(() => {
-    const hasActiveProfileSetup = isProfileIncomplete || (needsEmailUpdate && !emailWarningDismissed);
+    const hasActiveProfileSetup = isProfileIncomplete || needsEmailUpdate;
     if (!hasActiveProfileSetup && announcements && announcements.length > 0) {
       try {
         const readIds = JSON.parse(localStorage.getItem('read_announcement_ids') || '[]');
@@ -497,7 +507,7 @@ export default function TeacherPortal() {
         console.error('Error parsing read announcement IDs:', e);
       }
     }
-  }, [announcements, isProfileIncomplete, needsEmailUpdate, emailWarningDismissed]);
+  }, [announcements, isProfileIncomplete, needsEmailUpdate]);
 
   const handleUpdatePassword = async () => {
     if (!newPassword || !confirmPassword) {
@@ -3227,17 +3237,18 @@ export default function TeacherPortal() {
 
 
       {/* Mandatory Teacher Profile Setup Modal - blocks portal until complete */}
-      {(isProfileIncomplete || (needsEmailUpdate && !emailWarningDismissed)) && profile && (
+      {(isProfileIncomplete || needsEmailUpdate) && profile && (
         <TeacherProfileSetupModal
-          isOpen={isProfileIncomplete || (needsEmailUpdate && !emailWarningDismissed)}
+          isOpen={isProfileIncomplete || needsEmailUpdate}
           profile={profile}
-          isEmailOnly={!isProfileIncomplete && needsEmailUpdate && !emailWarningDismissed}
+          isEmailOnly={!isProfileIncomplete && needsEmailUpdate}
           onComplete={() => {
-            if (needsEmailUpdate && !emailWarningDismissed) {
-              setEmailWarningDismissed(true);
-              sessionStorage.setItem('teacher_email_warning_dismissed', 'true');
-            }
             window.location.reload();
+          }}
+          onDismiss={() => {
+            const remindAt = Date.now() + 24 * 60 * 60 * 1000;
+            localStorage.setItem('teacher_email_warning_remind_at', String(remindAt));
+            setEmailReminderTime(remindAt);
           }}
         />
       )}
