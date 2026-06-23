@@ -65,7 +65,9 @@ router.get('/verify-status', requireTeacher, async (req: Request, res: Response)
     const settings = await ensureSchoolSettings(schoolId);
     const term = settings?.current_term || 'Term 1';
     const academicYear = settings?.academic_year || new Date().getFullYear().toString();
-    const examTypes = settings?.exam_types || ['Mid Term', 'End of Term'];
+    const isTestTypesEnabled = !!settings?.test_types_enabled;
+    const activeTestTypes = isTestTypesEnabled ? (settings?.test_types || []) : [];
+    const examTypes = isTestTypesEnabled ? activeTestTypes : (settings?.exam_types || ['Mid Term', 'End of Term']);
 
     // 1. Get all subjects assigned to this teacher (or all for admin)
     let assignmentsQuery = supabaseAdmin
@@ -138,7 +140,7 @@ router.get('/verify-status', requireTeacher, async (req: Request, res: Response)
     if (studentIds.length > 0) {
       const { data: fetchedGrades } = await supabaseAdmin
         .from('student_grades')
-        .select('student_id, subject_id, exam_type, status')
+        .select('student_id, subject_id, exam_type, test_type, status')
         .eq('school_id', schoolId)
         .eq('term', term)
         .eq('academic_year', academicYear)
@@ -160,7 +162,9 @@ router.get('/verify-status', requireTeacher, async (req: Request, res: Response)
         // Find grades for this class, subject, and examType
         const relevantGrades = grades.filter(g => 
           g.subject_id === sId && 
-          g.exam_type === examType && 
+          (isTestTypesEnabled 
+            ? (g.test_type === examType || g.exam_type === examType) 
+            : g.exam_type === examType) && 
           studentClassMap.get(g.student_id) === cId
         );
 

@@ -31,6 +31,7 @@ export default function TeacherVerifyGrades() {
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>(new Date().getFullYear().toString());
   const [availableExamTypes, setAvailableExamTypes] = useState<string[]>(['Mid Term', 'End of Term']);
   const [availableYears, setAvailableYears] = useState<string[]>([]);
+  const [schoolSettings, setSchoolSettings] = useState<any>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -59,11 +60,16 @@ export default function TeacherVerifyGrades() {
       try {
         const settings = await syncFetch('/api/school/settings', { headers });
         if (settings) {
-          if (settings.exam_types && settings.exam_types.length > 0) {
-            setAvailableExamTypes(settings.exam_types);
-            if (!settings.exam_types.includes(selectedExamType)) {
-              setSelectedExamType(settings.exam_types.includes('End of Term') ? 'End of Term' : settings.exam_types[0]);
-            }
+          setSchoolSettings(settings);
+          let examTypes = ['Mid Term', 'End of Term'];
+          if (settings.test_types_enabled && settings.test_types && settings.test_types.length > 0) {
+            examTypes = settings.test_types;
+          } else if (settings.exam_types && settings.exam_types.length > 0) {
+            examTypes = settings.exam_types;
+          }
+          setAvailableExamTypes(examTypes);
+          if (!examTypes.includes(selectedExamType)) {
+            setSelectedExamType(examTypes.includes('End of Term') ? 'End of Term' : examTypes[0]);
           }
           if (settings.academic_year) {
              // Only update if it hasn't been manually changed by the user yet
@@ -139,10 +145,10 @@ export default function TeacherVerifyGrades() {
             
             <div className="flex-1 w-full flex flex-col sm:flex-row gap-4">
               <div className="space-y-1.5 flex-1">
-                <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Assessment Type</Label>
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{schoolSettings?.test_types_enabled ? "Test Type" : "Assessment Type"}</Label>
                 <Select value={selectedExamType} onValueChange={setSelectedExamType}>
                   <SelectTrigger className="h-11">
-                    <SelectValue placeholder="Select Assessment" />
+                    <SelectValue placeholder={schoolSettings?.test_types_enabled ? "Select Test Type" : "Select Assessment"} />
                   </SelectTrigger>
                   <SelectContent>
                     {availableExamTypes.map(type => (

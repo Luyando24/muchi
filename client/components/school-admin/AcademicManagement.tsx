@@ -334,7 +334,9 @@ export default function AcademicManagement() {
         setSchoolSettings(settingsData);
         if (settingsData.id) setCurrentSchoolId(settingsData.id);
         let examTypes = ['Mid Term', 'End of Term'];
-        if (settingsData.exam_types && settingsData.exam_types.length > 0) {
+        if (settingsData.test_types_enabled && settingsData.test_types && settingsData.test_types.length > 0) {
+          examTypes = settingsData.test_types;
+        } else if (settingsData.exam_types && settingsData.exam_types.length > 0) {
           examTypes = settingsData.exam_types;
         }
         setAvailableExamTypes(examTypes);
@@ -942,7 +944,7 @@ export default function AcademicManagement() {
 
       const data = await syncFetch(`/api/school/grades/readiness?${params}`, {
         headers: { 'Authorization': `Bearer ${session.access_token}` },
-        cacheKey: `grades-readiness-${calcForm.classId}-${calcForm.term}-${calcForm.examType}-${calcForm.academicYear}`
+        cacheKey: `grades-readiness-${calcForm.classId}-${calcForm.subjectId || 'all'}-${calcForm.term}-${calcForm.examType}-${calcForm.academicYear}`
       });
 
       setUnpublishedGrades(data || []);
@@ -965,11 +967,12 @@ export default function AcademicManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const data = await syncFetch(`/api/school/grades/status?classId=${calcForm.classId === 'all' ? '' : calcForm.classId}&term=${encodeURIComponent(calcForm.term)}&examType=${encodeURIComponent(calcForm.examType)}&academicYear=${encodeURIComponent(calcForm.academicYear)}`, {
+      const subjectParam = calcForm.subjectId && calcForm.subjectId !== 'all' ? `&subjectId=${calcForm.subjectId}` : '';
+      const data = await syncFetch(`/api/school/grades/status?classId=${calcForm.classId === 'all' ? '' : calcForm.classId}&term=${encodeURIComponent(calcForm.term)}&examType=${encodeURIComponent(calcForm.examType)}&academicYear=${encodeURIComponent(calcForm.academicYear)}${subjectParam}`, {
         headers: {
           'Authorization': `Bearer ${session.access_token}`
         },
-        cacheKey: `grades-status-${calcForm.classId}-${calcForm.term}-${calcForm.examType}-${calcForm.academicYear}`
+        cacheKey: `grades-status-${calcForm.classId}-${calcForm.subjectId || 'all'}-${calcForm.term}-${calcForm.examType}-${calcForm.academicYear}`
       });
 
       setGradeStatus(data || []);
@@ -2286,7 +2289,7 @@ export default function AcademicManagement() {
                       <Input value={calcForm.term} onChange={e => setCalcForm({ ...calcForm, term: e.target.value })} placeholder="e.g. Term 1" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Assessment Type</Label>
+                      <Label>Test Type</Label>
                       <Select value={calcForm.examType} onValueChange={v => setCalcForm({ ...calcForm, examType: v })}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select Type" />

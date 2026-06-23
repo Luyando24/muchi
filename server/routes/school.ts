@@ -546,9 +546,7 @@ const isAuthorizedForPromotions = (profile: any) => {
     return true;
   }
   const isSchoolAdmin = profile.role === 'school_admin' || profile.secondary_role === 'school_admin';
-  const currentRole = (profile.current_role || '').toLowerCase();
-  const isHeadOrDeputy = currentRole === 'headteacher' || currentRole === 'deputy headteacher';
-  return isSchoolAdmin && isHeadOrDeputy;
+  return isSchoolAdmin;
 };
 
 export const requireSchoolRole = (allowedRoles: string[]) => {
@@ -3410,17 +3408,30 @@ router.post(
             "Term, Exam Type, Academic Year, Class and Subject are required",
         });
     }
-
     try {
+      // Get school settings for test types configuration
+      const { data: school } = await supabaseAdmin
+        .from("schools")
+        .select("test_types_enabled, test_types")
+        .eq("id", schoolId)
+        .single();
+      const isTestTypesEnabled = !!school?.test_types_enabled;
+      const activeTestTypes = isTestTypesEnabled ? (school?.test_types || []) : [];
+
       let query = supabaseAdmin
         .from("student_grades")
         .update({ status: "Submitted" })
         .eq("school_id", schoolId)
         .eq("term", term)
-        .eq("exam_type", examType)
         .eq("academic_year", academicYear)
         .eq("subject_id", subjectId)
-        .select("id", { count: "exact" }); // Get count of updated records
+        .select("id", { count: "exact" });
+
+      if (isTestTypesEnabled && activeTestTypes.includes(examType)) {
+        query = query.eq("test_type", examType).eq("exam_type", "Term");
+      } else {
+        query = query.eq("exam_type", examType);
+      }
 
       if (classId && classId !== "all") {
         const { data: enrollments } = await supabaseAdmin
@@ -3434,15 +3445,22 @@ router.post(
           const studentIds = enrollments.map((e) => e.student_id);
           
           // Find existing records
-          const { data: existingGrades } = await supabaseAdmin
+          let existingGradesQuery = supabaseAdmin
             .from("student_grades")
             .select("student_id")
             .eq("school_id", schoolId)
             .eq("term", term)
-            .eq("exam_type", examType)
             .eq("academic_year", academicYear)
             .eq("subject_id", subjectId)
             .in("student_id", studentIds);
+
+          if (isTestTypesEnabled && activeTestTypes.includes(examType)) {
+            existingGradesQuery = existingGradesQuery.eq("test_type", examType).eq("exam_type", "Term");
+          } else {
+            existingGradesQuery = existingGradesQuery.eq("exam_type", examType);
+          }
+
+          const { data: existingGrades } = await existingGradesQuery;
             
           const existingStudentIds = new Set(existingGrades?.map(g => g.student_id) || []);
           
@@ -3455,7 +3473,8 @@ router.post(
               student_id: id,
               subject_id: subjectId,
               term: term,
-              exam_type: examType,
+              exam_type: (isTestTypesEnabled && activeTestTypes.includes(examType)) ? "Term" : examType,
+              test_type: (isTestTypesEnabled && activeTestTypes.includes(examType)) ? examType : "",
               academic_year: academicYear,
               percentage: null,
               grade: "ABSENT",
@@ -3519,13 +3538,28 @@ router.post(
       // OR we fail here if not ready.
 
       // Let's implement the update logic:
+      // Get school settings for test types configuration
+      const { data: school } = await supabaseAdmin
+        .from("schools")
+        .select("test_types_enabled, test_types")
+        .eq("id", schoolId)
+        .single();
+      const isTestTypesEnabled = !!school?.test_types_enabled;
+      const activeTestTypes = isTestTypesEnabled ? (school?.test_types || []) : [];
+
+      // Let's implement the update logic:
       let query = supabaseAdmin
         .from("student_grades")
         .update({ status: targetStatus })
         .eq("school_id", schoolId)
         .eq("term", term)
-        .eq("exam_type", examType)
         .eq("academic_year", academicYear);
+
+      if (isTestTypesEnabled && activeTestTypes.includes(examType)) {
+        query = query.eq("test_type", examType).eq("exam_type", "Term");
+      } else {
+        query = query.eq("exam_type", examType);
+      }
 
       // Filter by subject if provided
       if (subjectId) {
@@ -3547,15 +3581,22 @@ router.post(
           const studentIds = enrollments.map((e) => e.student_id);
           
           // Find existing records
-          const { data: existingGrades } = await supabaseAdmin
+          let existingGradesQuery = supabaseAdmin
             .from("student_grades")
             .select("student_id")
             .eq("school_id", schoolId)
             .eq("term", term)
-            .eq("exam_type", examType)
             .eq("academic_year", academicYear)
             .eq("subject_id", subjectId)
             .in("student_id", studentIds);
+
+          if (isTestTypesEnabled && activeTestTypes.includes(examType)) {
+            existingGradesQuery = existingGradesQuery.eq("test_type", examType).eq("exam_type", "Term");
+          } else {
+            existingGradesQuery = existingGradesQuery.eq("exam_type", examType);
+          }
+
+          const { data: existingGrades } = await existingGradesQuery;
             
           const existingStudentIds = new Set(existingGrades?.map(g => g.student_id) || []);
           
@@ -3568,7 +3609,8 @@ router.post(
               student_id: id,
               subject_id: subjectId,
               term: term,
-              exam_type: examType,
+              exam_type: (isTestTypesEnabled && activeTestTypes.includes(examType)) ? "Term" : examType,
+              test_type: (isTestTypesEnabled && activeTestTypes.includes(examType)) ? examType : "",
               academic_year: academicYear,
               percentage: null,
               grade: "ABSENT",
@@ -3693,12 +3735,20 @@ router.get(
       // 2. Check grade status for each subject
       const statusReport = [];
 
+      // 1. Fetch school settings to check test types
+      const { data: school } = await supabaseAdmin
+        .from("schools")
+        .select("test_types_enabled, test_types")
+        .eq("id", schoolId)
+        .single();
+      const isTestTypesEnabled = !!school?.test_types_enabled;
+      const activeTestTypes = isTestTypesEnabled ? (school?.test_types || []) : [];
+
       let gradesQuery = supabaseAdmin
         .from("student_grades")
-        .select("student_id, subject_id, status")
+        .select("student_id, subject_id, status, exam_type, test_type")
         .eq("school_id", schoolId)
         .eq("term", term)
-        .eq("exam_type", examType)
         .eq("academic_year", academicYear);
 
       if (!isAllClasses) {
@@ -3734,26 +3784,30 @@ router.get(
       
       const studentClassMap = new Map<string, string>();
       const classNameMap = new Map<string, string>();
+      const classStudentsMap = new Map<string, string[]>();
       
       allEnrollments?.forEach(e => {
         studentClassMap.set(e.student_id, e.class_id);
         if (e.classes && (e.classes as any).name) {
           classNameMap.set(e.class_id, (e.classes as any).name);
         }
+        if (!classStudentsMap.has(e.class_id)) {
+          classStudentsMap.set(e.class_id, []);
+        }
+        classStudentsMap.get(e.class_id)!.push(e.student_id);
       });
 
-      // Analyze status per subject per class
-      const classSubjectStatusMap = new Map<string, Set<string>>();
-
+      // Group grades by classId_subjectId
+      const classSubjectGradesMap = new Map<string, any[]>();
       grades?.forEach((g) => {
         const classIdForStudent = studentClassMap.get(g.student_id);
         if (!classIdForStudent) return; // Skip if we can't find the class
 
         const key = `${classIdForStudent}_${g.subject_id}`;
-        if (!classSubjectStatusMap.has(key)) {
-          classSubjectStatusMap.set(key, new Set());
+        if (!classSubjectGradesMap.has(key)) {
+          classSubjectGradesMap.set(key, []);
         }
-        classSubjectStatusMap.get(key)?.add(g.status);
+        classSubjectGradesMap.get(key)!.push(g);
       });
 
       // Let's fetch all subjects to map IDs to names
@@ -3785,10 +3839,8 @@ router.get(
         const targetClassIds = (schoolClasses || []).map((c: any) => c.id);
         
         if (targetClassIds.length > 0) {
-          // If there are many classes, .in() might still be too large, but usually a school has < 100 classes.
           classAssignedTeachersQuery = classAssignedTeachersQuery.in("class_id", targetClassIds);
         } else {
-          // No classes in school, return empty
           return res.json([]);
         }
       }
@@ -3825,27 +3877,70 @@ router.get(
       // Iterate over all assigned subjects + any subjects that have grades
       const allClassSubjects = new Set([
         ...Array.from(assignedClassSubjects),
-        ...Array.from(classSubjectStatusMap.keys())
+        ...Array.from(classSubjectGradesMap.keys())
       ]);
 
       for (const key of allClassSubjects) {
         const [cId, subjId] = key.split('_');
-        const statuses = classSubjectStatusMap.get(key);
+        const subjectGrades = classSubjectGradesMap.get(key) || [];
+        const studentIdsInClass = classStudentsMap.get(cId) || [];
+        const studentCount = studentIdsInClass.length;
+
         let overallStatus = "Not Entered";
 
-        if (statuses && statuses.size > 0) {
-          if (statuses.has("Draft")) {
-            overallStatus = "Draft";
-          } else if (Array.from(statuses).every((s) => s === "Published")) {
-            overallStatus = "Published";
-          } else if (
-            Array.from(statuses).every(
-              (s) => s === "Submitted" || s === "Published",
-            )
-          ) {
-            overallStatus = "Submitted";
+        if (studentCount > 0) {
+          if (isTestTypesEnabled && activeTestTypes.length > 0) {
+            const isSpecificTest = activeTestTypes.includes(examType as string);
+            const expectedCount = isSpecificTest ? studentCount : (studentCount * activeTestTypes.length);
+
+            const relevantGrades = subjectGrades.filter(
+              (g) =>
+                isSpecificTest
+                  ? ((g.test_type || "").trim() === (examType as string).trim() || (g.exam_type || "").trim() === (examType as string).trim())
+                  : (activeTestTypes.includes(g.test_type) || activeTestTypes.includes(g.exam_type) || g.exam_type === 'Term')
+            );
+
+            const submittedOrPublishedGrades = relevantGrades.filter(
+              (g) => g.status === "Submitted" || g.status === "Published"
+            );
+
+            if (submittedOrPublishedGrades.length >= expectedCount * 0.5) {
+              const statuses = new Set(submittedOrPublishedGrades.map((g) => g.status));
+              if (Array.from(statuses).every((s) => s === "Published")) {
+                overallStatus = "Published";
+              } else {
+                overallStatus = "Submitted";
+              }
+            } else if (relevantGrades.length > 0) {
+              overallStatus = "Draft";
+            } else {
+              overallStatus = "Not Entered";
+            }
           } else {
-            overallStatus = "Draft";
+            const expectedCount = studentCount;
+
+            const relevantGrades = subjectGrades.filter(
+              (g) =>
+                g.exam_type === examType &&
+                (!g.test_type || g.test_type === "" || g.test_type === "none")
+            );
+
+            const submittedOrPublishedGrades = relevantGrades.filter(
+              (g) => g.status === "Submitted" || g.status === "Published"
+            );
+
+            if (submittedOrPublishedGrades.length >= expectedCount * 0.5) {
+              const statuses = new Set(submittedOrPublishedGrades.map((g) => g.status));
+              if (Array.from(statuses).every((s) => s === "Published")) {
+                overallStatus = "Published";
+              } else {
+                overallStatus = "Submitted";
+              }
+            } else if (relevantGrades.length > 0) {
+              overallStatus = "Draft";
+            } else {
+              overallStatus = "Not Entered";
+            }
           }
         }
 
@@ -5004,7 +5099,7 @@ router.post(
     const { id } = req.params;
 
     if (!isAuthorizedForPromotions(profile)) {
-      return res.status(403).json({ message: "Forbidden: Only Headteachers or Deputy Headteachers can promote teachers." });
+      return res.status(403).json({ message: "Forbidden: Only School Admins can promote teachers." });
     }
 
     try {
@@ -5137,7 +5232,7 @@ router.post(
     const { previous_role, new_role, type, change_date, notes } = req.body;
 
     if (!isAuthorizedForPromotions(profile)) {
-      return res.status(403).json({ message: "Forbidden: Only Headteachers or Deputy Headteachers can log career events." });
+      return res.status(403).json({ message: "Forbidden: Only School Admins can log career events." });
     }
 
     try {
@@ -5197,7 +5292,7 @@ router.delete(
     const { id, careerId } = req.params;
 
     if (!isAuthorizedForPromotions(profile)) {
-      return res.status(403).json({ message: "Forbidden: Only Headteachers or Deputy Headteachers can delete career events." });
+      return res.status(403).json({ message: "Forbidden: Only School Admins can delete career events." });
     }
 
     try {
@@ -9086,54 +9181,42 @@ router.get(
         (teachers || []).forEach((t: any) => teacherMap.set(t.id, t.full_name));
       }
 
-      // 4. Fetch all Published grades for these students in the term
+      // Get school settings for test types configuration
+      const { data: school } = await supabaseAdmin
+        .from("schools")
+        .select("test_types_enabled, test_types")
+        .eq("id", schoolId)
+        .single();
+      const isTestTypesEnabled = !!school?.test_types_enabled;
+      const activeTestTypes = isTestTypesEnabled ? (school?.test_types || []) : [];
+
+      // 4. Fetch all grades for these students in the term
       const studentIds = [
         ...new Set(enrollments.map((e: any) => e.student_id)),
       ];
-      let publishedGradesQuery = supabaseAdmin
+      let gradesQuery = supabaseAdmin
         .from("student_grades")
-        .select("student_id, subject_id, status")
+        .select("student_id, subject_id, status, exam_type, test_type")
         .in("student_id", studentIds)
         .eq("term", term)
-        .eq("exam_type", examType)
-        .eq("academic_year", academicYear)
-        .in("status", ["Published", "Submitted"]);
+        .eq("academic_year", academicYear);
 
       if (subjectId && subjectId !== "all") {
-        publishedGradesQuery = publishedGradesQuery.eq("subject_id", subjectId);
+        gradesQuery = gradesQuery.eq("subject_id", subjectId);
       }
-      const { data: publishedGrades } = await publishedGradesQuery;
+      const allGrades = await fetchAll(gradesQuery);
 
-      // Build a Set of "studentId-subjectId" pairs that are already Published
-      const publishedSet = new Set(
-        (publishedGrades || []).map(
-          (g: any) => `${g.student_id}-${g.subject_id}`,
-        ),
-      );
-
-      // 5. Also fetch any grades that exist but are NOT Published (Draft / Submitted)
-      let draftGradesQuery = supabaseAdmin
-        .from("student_grades")
-        .select("student_id, subject_id, status")
-        .in("student_id", studentIds)
-        .eq("term", term)
-        .eq("exam_type", examType)
-        .eq("academic_year", academicYear)
-        .not("status", "in", '("Published","Submitted")');
-
-      if (subjectId && subjectId !== "all") {
-        draftGradesQuery = draftGradesQuery.eq("subject_id", subjectId);
+      // Build a map of existing grades: studentId-subjectId -> array of grades
+      const studentSubjectGradesMap = new Map<string, any[]>();
+      for (const g of allGrades || []) {
+        const key = `${g.student_id}-${g.subject_id}`;
+        if (!studentSubjectGradesMap.has(key)) {
+          studentSubjectGradesMap.set(key, []);
+        }
+        studentSubjectGradesMap.get(key)!.push(g);
       }
-      const { data: draftGrades } = await draftGradesQuery;
 
-      const draftMap = new Map(
-        (draftGrades || []).map((g: any) => [
-          `${g.student_id}-${g.subject_id}`,
-          g.status,
-        ]),
-      );
-
-      // 6. Build a lookup of class → subject rows
+      // 5. Build a lookup of class → subject rows
       const classSubjectMap = new Map<string, any[]>();
       for (const cs of classSubjectRows) {
         if (!classSubjectMap.has(cs.class_id))
@@ -9141,37 +9224,89 @@ router.get(
         classSubjectMap.get(cs.class_id)!.push(cs);
       }
 
-      // 7. For each enrollment × subject, check if Published grade exists
+      // 6. For each enrollment × subject, check if Published grade exists
       const missing: any[] = [];
       for (const enrollment of enrollments) {
         const subjects = classSubjectMap.get(enrollment.class_id) || [];
         for (const cs of subjects) {
           const key = `${enrollment.student_id}-${cs.subject_id}`;
-          if (!publishedSet.has(key)) {
-            const existingStatus = draftMap.get(key) || "Not Entered";
-            const subject = Array.isArray(cs.subjects)
-              ? cs.subjects[0]
-              : cs.subjects;
+          const existingGrades = studentSubjectGradesMap.get(key) || [];
+          const subject = Array.isArray(cs.subjects)
+            ? cs.subjects[0]
+            : cs.subjects;
 
-            missing.push({
-              studentId: enrollment.student_id,
-              studentName:
-                (enrollment as any).profiles?.full_name || "Unknown Student",
-              className: (enrollment as any).classes?.name || "Unknown Class",
-              subjectId: cs.subject_id,
-              subjectName: subject?.name || "Unknown Subject",
-              subjectCode: subject?.code || "",
-              teacherName:
-                teacherMap.get(cs.teacher_id) ||
-                teacherMap.get(
-                  assignmentTeacherMap.get(
-                    `${enrollment.class_id}-${cs.subject_id}`,
-                  ) || "",
-                ) ||
-                teacherMap.get(subject?.head_teacher_id) ||
-                "Unassigned",
-              status: existingStatus,
-            });
+          const getTeacherName = () => {
+            return (
+              teacherMap.get(cs.teacher_id) ||
+              teacherMap.get(
+                assignmentTeacherMap.get(
+                  `${enrollment.class_id}-${cs.subject_id}`,
+                ) || "",
+              ) ||
+              teacherMap.get(subject?.head_teacher_id) ||
+              "Unassigned"
+            );
+          };
+
+          if (isTestTypesEnabled && activeTestTypes.length > 0) {
+            const testsToCheck = activeTestTypes.includes(examType)
+              ? [examType]
+              : activeTestTypes;
+
+            // Check for each target test type
+            const missingTests: string[] = [];
+            let hasDraft = false;
+
+            for (const testType of testsToCheck) {
+              const gradeForTest = existingGrades.find(
+                (g) =>
+                  (g.test_type || "").trim() === testType.trim() ||
+                  (g.exam_type || "").trim() === testType.trim()
+              );
+
+              if (!gradeForTest || !["Published", "Submitted"].includes(gradeForTest.status)) {
+                missingTests.push(testType);
+                if (gradeForTest?.status === "Draft") {
+                  hasDraft = true;
+                }
+              }
+            }
+
+            if (missingTests.length > 0) {
+              missing.push({
+                studentId: enrollment.student_id,
+                studentName:
+                  (enrollment as any).profiles?.full_name || "Unknown Student",
+                className: (enrollment as any).classes?.name || "Unknown Class",
+                subjectId: cs.subject_id,
+                subjectName: `${subject?.name || "Unknown Subject"} (${missingTests.join(", ")})`,
+                subjectCode: subject?.code || "",
+                teacherName: getTeacherName(),
+                status: hasDraft ? "Draft" : "Not Entered",
+              });
+            }
+          } else {
+            // Standard/no test types configuration:
+            // Check for matching examType (e.g. End of Term) with no test type
+            const gradeForExam = existingGrades.find(
+              (g) =>
+                g.exam_type === examType &&
+                (!g.test_type || g.test_type === "" || g.test_type === "none")
+            );
+
+            if (!gradeForExam || !["Published", "Submitted"].includes(gradeForExam.status)) {
+              missing.push({
+                studentId: enrollment.student_id,
+                studentName:
+                  (enrollment as any).profiles?.full_name || "Unknown Student",
+                className: (enrollment as any).classes?.name || "Unknown Class",
+                subjectId: cs.subject_id,
+                subjectName: subject?.name || "Unknown Subject",
+                subjectCode: subject?.code || "",
+                teacherName: getTeacherName(),
+                status: gradeForExam ? (gradeForExam.status || "Draft") : "Not Entered",
+              });
+            }
           }
         }
       }
@@ -9209,6 +9344,15 @@ router.post(
     }
 
     try {
+      // Get school settings for test types configuration
+      const { data: school } = await supabaseAdmin
+        .from("schools")
+        .select("test_types_enabled, test_types")
+        .eq("id", schoolId)
+        .single();
+      const isTestTypesEnabled = !!school?.test_types_enabled;
+      const activeTestTypes = isTestTypesEnabled ? (school?.test_types || []) : [];
+
       // PRE-CHECK: Block calculation if any grades are not yet published
       // We run the identical checking logic as the /grades/readiness endpoint
       let targetClassIds: string[] = [];
@@ -9309,56 +9453,32 @@ router.post(
               );
             }
 
-            // 4. Fetch Published & Draft grades
-            let publishedGradesQuery = supabaseAdmin
+            // 4. Fetch all Published & Draft grades
+            let gradesQuery = supabaseAdmin
               .from("student_grades")
-              .select("student_id, subject_id")
+              .select("student_id, subject_id, status, exam_type, test_type")
               .eq("school_id", schoolId)
               .eq("term", term)
-              .eq("academic_year", academicYear)
-              .in("status", ["Published", "Submitted"]);
+              .eq("academic_year", academicYear);
 
             if (classId && classId !== "all") {
-              publishedGradesQuery = publishedGradesQuery.in("student_id", studentIds);
+              gradesQuery = gradesQuery.in("student_id", studentIds);
             }
 
             if (subjectId && subjectId !== "all") {
-              publishedGradesQuery = publishedGradesQuery.eq(
-                "subject_id",
-                subjectId,
-              );
+              gradesQuery = gradesQuery.eq("subject_id", subjectId);
             }
-            const publishedGrades = await fetchAll(publishedGradesQuery);
+            const allGrades = await fetchAll(gradesQuery);
 
-            const publishedSet = new Set(
-              (publishedGrades || []).map(
-                (g: any) => `${g.student_id}-${g.subject_id}`,
-              ),
-            );
-
-            let draftGradesQuery = supabaseAdmin
-              .from("student_grades")
-              .select("student_id, subject_id, status")
-              .eq("school_id", schoolId)
-              .eq("term", term)
-              .eq("academic_year", academicYear)
-              .not("status", "in", '("Published","Submitted")');
-
-            if (classId && classId !== "all") {
-              draftGradesQuery = draftGradesQuery.in("student_id", studentIds);
+            // Build a map of existing grades: studentId-subjectId -> array of grades
+            const studentSubjectGradesMap = new Map<string, any[]>();
+            for (const g of allGrades || []) {
+              const key = `${g.student_id}-${g.subject_id}`;
+              if (!studentSubjectGradesMap.has(key)) {
+                studentSubjectGradesMap.set(key, []);
+              }
+              studentSubjectGradesMap.get(key)!.push(g);
             }
-
-            if (subjectId && subjectId !== "all") {
-              draftGradesQuery = draftGradesQuery.eq("subject_id", subjectId);
-            }
-            const draftGrades = await fetchAll(draftGradesQuery);
-
-            const draftMap = new Map(
-              (draftGrades || []).map((g: any) => [
-                `${g.student_id}-${g.subject_id}`,
-                g.status,
-              ]),
-            );
 
             // 5. Find missing grades
             const classSubjectMap = new Map<string, any[]>();
@@ -9373,31 +9493,83 @@ router.post(
               const subjects = classSubjectMap.get(enrollment.class_id) || [];
               for (const cs of subjects) {
                 const key = `${enrollment.student_id}-${cs.subject_id}`;
-                if (!publishedSet.has(key)) {
-                  const subject = Array.isArray(cs.subjects)
-                    ? cs.subjects[0]
-                    : cs.subjects;
-                  missing.push({
-                    studentId: enrollment.student_id,
-                    studentName:
-                      (enrollment as any).profiles?.full_name ||
-                      "Unknown Student",
-                    className:
-                      (enrollment as any).classes?.name || "Unknown Class",
-                    subjectId: cs.subject_id,
-                    subjectName: subject?.name || "Unknown Subject",
-                    subjectCode: subject?.code || "",
-                    teacherName:
-                      teacherMap.get(cs.teacher_id) ||
-                      teacherMap.get(
-                        assignmentTeacherMap.get(
-                          `${enrollment.class_id}-${cs.subject_id}`,
-                        ) || "",
-                      ) ||
-                      teacherMap.get(subject?.head_teacher_id) ||
-                      "Unassigned",
-                    status: draftMap.get(key) || "Not Entered",
-                  });
+                const existingGrades = studentSubjectGradesMap.get(key) || [];
+                const subject = Array.isArray(cs.subjects)
+                  ? cs.subjects[0]
+                  : cs.subjects;
+
+                const getTeacherName = () => {
+                  return (
+                    teacherMap.get(cs.teacher_id) ||
+                    teacherMap.get(
+                      assignmentTeacherMap.get(
+                        `${enrollment.class_id}-${cs.subject_id}`,
+                      ) || "",
+                    ) ||
+                    teacherMap.get(subject?.head_teacher_id) ||
+                    "Unassigned"
+                  );
+                };
+
+                if (isTestTypesEnabled && activeTestTypes.length > 0) {
+                  const testsToCheck = activeTestTypes.includes(examType)
+                    ? [examType]
+                    : activeTestTypes;
+
+                  // Check for each active test type
+                  const missingTests: string[] = [];
+                  let hasDraft = false;
+
+                  for (const testType of testsToCheck) {
+                    const gradeForTest = existingGrades.find(
+                      (g) =>
+                        (g.test_type || "").trim() === testType.trim() ||
+                        (g.exam_type || "").trim() === testType.trim()
+                    );
+
+                    if (!gradeForTest || !["Published", "Submitted"].includes(gradeForTest.status)) {
+                      missingTests.push(testType);
+                      if (gradeForTest?.status === "Draft") {
+                        hasDraft = true;
+                      }
+                    }
+                  }
+
+                  if (missingTests.length > 0) {
+                    missing.push({
+                      studentId: enrollment.student_id,
+                      studentName:
+                        (enrollment as any).profiles?.full_name || "Unknown Student",
+                      className: (enrollment as any).classes?.name || "Unknown Class",
+                      subjectId: cs.subject_id,
+                      subjectName: `${subject?.name || "Unknown Subject"} (${missingTests.join(", ")})`,
+                      subjectCode: subject?.code || "",
+                      teacherName: getTeacherName(),
+                      status: hasDraft ? "Draft" : "Not Entered",
+                    });
+                  }
+                } else {
+                  // Standard/no test types configuration:
+                  // Check for matching examType (e.g. End of Term) with no test type
+                  const gradeForExam = existingGrades.find(
+                    (g) =>
+                      g.exam_type === examType &&
+                      (!g.test_type || g.test_type === "" || g.test_type === "none")
+                  );
+
+                  if (!gradeForExam || !["Published", "Submitted"].includes(gradeForExam.status)) {
+                    missing.push({
+                      studentId: enrollment.student_id,
+                      studentName:
+                        (enrollment as any).profiles?.full_name || "Unknown Student",
+                      className: (enrollment as any).classes?.name || "Unknown Class",
+                      subjectId: cs.subject_id,
+                      subjectName: subject?.name || "Unknown Subject",
+                      subjectCode: subject?.code || "",
+                      teacherName: getTeacherName(),
+                      status: gradeForExam ? (gradeForExam.status || "Draft") : "Not Entered",
+                    });
+                  }
                 }
               }
             }
@@ -9439,9 +9611,14 @@ router.post(
           .select("*")
           .eq("school_id", schoolId)
           .eq("term", term)
-          .eq("exam_type", examType)
           .eq("academic_year", academicYear)
           .limit(100000);
+
+        if (isTestTypesEnabled && activeTestTypes.includes(examType)) {
+          gradesQuery = gradesQuery.eq("test_type", examType).eq("exam_type", "Term");
+        } else {
+          gradesQuery = gradesQuery.eq("exam_type", examType);
+        }
 
         if (subjectId && subjectId !== "all") {
           gradesQuery = gradesQuery.eq("subject_id", subjectId);
@@ -9675,7 +9852,8 @@ router.post(
               student_id: studentId,
               subject_id: subjId,
               term,
-              exam_type: examType,
+              exam_type: (isTestTypesEnabled && activeTestTypes.includes(examType)) ? "Term" : examType,
+              test_type: (isTestTypesEnabled && activeTestTypes.includes(examType)) ? examType : "",
               academic_year: academicYear,
               grade: letterGrade,
               percentage: roundedPercentage,
@@ -9691,7 +9869,7 @@ router.post(
           .from("student_grades")
           .upsert(gradesToUpsert, {
             onConflict:
-              "student_id, subject_id, term, academic_year, exam_type",
+              "student_id, subject_id, term, academic_year, exam_type, test_type",
           });
 
         if (upsertError) throw upsertError;
