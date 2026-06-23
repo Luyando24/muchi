@@ -3904,7 +3904,7 @@ router.get(
               (g) => g.status === "Submitted" || g.status === "Published"
             );
 
-            if (submittedOrPublishedGrades.length >= expectedCount * 0.5) {
+            if (submittedOrPublishedGrades.length >= expectedCount * 0.6) {
               const statuses = new Set(submittedOrPublishedGrades.map((g) => g.status));
               if (Array.from(statuses).every((s) => s === "Published")) {
                 overallStatus = "Published";
@@ -3929,7 +3929,7 @@ router.get(
               (g) => g.status === "Submitted" || g.status === "Published"
             );
 
-            if (submittedOrPublishedGrades.length >= expectedCount * 0.5) {
+            if (submittedOrPublishedGrades.length >= expectedCount * 0.6) {
               const statuses = new Set(submittedOrPublishedGrades.map((g) => g.status));
               if (Array.from(statuses).every((s) => s === "Published")) {
                 overallStatus = "Published";
