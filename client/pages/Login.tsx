@@ -251,7 +251,7 @@ export default function Login() {
             const expiresAt = new Date(profile.temp_password_expires_at);
             const now = new Date();
 
-            if (now > expiresAt && profile.role !== 'teacher') {
+            if (now > expiresAt && profile.role !== 'teacher' && profile.role !== 'student') {
               await supabase.auth.signOut();
               throw new Error("Your temporary password has expired (72h limit). Please contact your administrator to reset it.");
             }

@@ -1467,9 +1467,7 @@ router.post(
             fees_status: "Pending",
             is_temp_password: true,
             temp_password_set_at: new Date().toISOString(),
-            temp_password_expires_at: new Date(
-              Date.now() + 72 * 60 * 60 * 1000,
-            ).toISOString(),
+            temp_password_expires_at: new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000).toISOString(),
             updated_at: new Date().toISOString(),
           }, { onConflict: 'id' });
 
@@ -1651,8 +1649,7 @@ router.post(
 
         // Generate simple random password
         const simplePassword = generateSimplePassword();
-        const tempExpiresAt = new Date();
-        tempExpiresAt.setHours(tempExpiresAt.getHours() + 72);
+        const tempExpiresAt = new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000);
         
         let isNewAuthUser = false;
         let createdUserId = null;
