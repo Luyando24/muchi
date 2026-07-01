@@ -310,14 +310,14 @@ export default function AcademicManagement() {
       setCurrentSchoolId(schoolId);
 
       const [subjectsData, classesData, teachersData, scalesData, weightsData, settingsData, departmentsData, recsData] = await Promise.all([
-        syncFetch('/api/school/subjects', { headers, cacheKey: schoolCacheKey('school-subjects-list', schoolId) }),
-        syncFetch('/api/school/classes?limit=500', { headers, cacheKey: schoolCacheKey('school-classes-list-max', schoolId) }),
-        syncFetch('/api/school/teachers?limit=500', { headers, cacheKey: schoolCacheKey('school-teachers-list-max', schoolId) }),
-        syncFetch('/api/school/grading-scales', { headers, cacheKey: schoolCacheKey('school-grading-scales', schoolId) }),
-        syncFetch('/api/school/grading-weights', { headers, cacheKey: schoolCacheKey('school-grading-weights', schoolId) }),
-        syncFetch('/api/school/settings', { headers, cacheKey: schoolCacheKey('school-settings', schoolId) }),
-        syncFetch('/api/school/departments', { headers, cacheKey: schoolCacheKey('school-departments', schoolId) }),
-        syncFetch('/api/school/recommendations/academic', { headers })
+        syncFetch('/api/school/subjects', { headers, cacheTTL: 60000, cacheKey: schoolCacheKey('school-subjects-list', schoolId) }),
+        syncFetch('/api/school/classes?limit=500', { headers, cacheTTL: 60000, cacheKey: schoolCacheKey('school-classes-list-max', schoolId) }),
+        syncFetch('/api/school/teachers?limit=500', { headers, cacheTTL: 60000, cacheKey: schoolCacheKey('school-teachers-list-max', schoolId) }),
+        syncFetch('/api/school/grading-scales', { headers, cacheTTL: 60000, cacheKey: schoolCacheKey('school-grading-scales', schoolId) }),
+        syncFetch('/api/school/grading-weights', { headers, cacheTTL: 60000, cacheKey: schoolCacheKey('school-grading-weights', schoolId) }),
+        syncFetch('/api/school/settings', { headers, cacheTTL: 60000, cacheKey: schoolCacheKey('school-settings', schoolId) }),
+        syncFetch('/api/school/departments', { headers, cacheTTL: 60000, cacheKey: schoolCacheKey('school-departments', schoolId) }),
+        syncFetch('/api/school/recommendations/academic', { headers, cacheTTL: 60000 })
       ]);
 
       setSubjects(subjectsData);

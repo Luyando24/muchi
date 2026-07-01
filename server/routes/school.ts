@@ -115,22 +115,16 @@ async function getClassRankings(classId: string, term: string, examType: string,
         const test2Grade = subjectGrades.find(g => (g.test_type === 'Test 2' || g.exam_type === 'Test 2'));
         const test3Grade = subjectGrades.find(g => (g.test_type === 'Test 3' || g.exam_type === 'Test 3'));
         
-        const missingTest1 = hasActiveTest1 && (!test1Grade || test1Grade.percentage === null || test1Grade.percentage === undefined || test1Grade.percentage === '');
-        const missingTest2 = hasActiveTest2 && (!test2Grade || test2Grade.percentage === null || test2Grade.percentage === undefined || test2Grade.percentage === '');
-        const missingTest3 = hasActiveTest3 && (!test3Grade || test3Grade.percentage === null || test3Grade.percentage === undefined || test3Grade.percentage === '');
+        const scores = [
+          hasActiveTest1 ? test1Grade?.percentage : null,
+          hasActiveTest2 ? test2Grade?.percentage : null,
+          hasActiveTest3 ? test3Grade?.percentage : null
+        ].filter(t => t !== null && t !== undefined && t !== '') as number[];
         
-        if (missingTest1 || missingTest2 || missingTest3) {
-          percentage = null;
+        if (scores.length > 0) {
+          percentage = scores.reduce((sum, s) => sum + Number(s), 0) / scores.length;
         } else {
-          const scores = [
-            hasActiveTest1 ? test1Grade?.percentage : null,
-            hasActiveTest2 ? test2Grade?.percentage : null,
-            hasActiveTest3 ? test3Grade?.percentage : null
-          ].filter(t => t !== null && t !== undefined && t !== '') as number[];
-          
-          if (scores.length > 0) {
-            percentage = scores.reduce((sum, s) => sum + Number(s), 0) / scores.length;
-          }
+          percentage = null;
         }
       } else {
         // Standard/no test types configuration:
@@ -7682,24 +7676,18 @@ router.get(
           const test2Grade = subjectGrades.find(g => (g.test_type === 'Test 2' || g.exam_type === 'Test 2'));
           const test3Grade = subjectGrades.find(g => (g.test_type === 'Test 3' || g.exam_type === 'Test 3'));
 
-          const missingTest1 = hasActiveTest1 && (!test1Grade || test1Grade.percentage === null || test1Grade.percentage === undefined || test1Grade.percentage === '');
-          const missingTest2 = hasActiveTest2 && (!test2Grade || test2Grade.percentage === null || test2Grade.percentage === undefined || test2Grade.percentage === '');
-          const missingTest3 = hasActiveTest3 && (!test3Grade || test3Grade.percentage === null || test3Grade.percentage === undefined || test3Grade.percentage === '');
+          const scores = [
+            hasActiveTest1 ? test1Grade?.percentage : null,
+            hasActiveTest2 ? test2Grade?.percentage : null,
+            hasActiveTest3 ? test3Grade?.percentage : null
+          ].filter(t => t !== null && t !== undefined && t !== '') as number[];
 
-          if (missingTest1 || missingTest2 || missingTest3) {
+          if (scores.length > 0) {
+            percentage = scores.reduce((sum, s) => sum + Number(s), 0) / scores.length;
+            gradeStr = 'PASSED';
+          } else {
             percentage = null;
             gradeStr = 'ABSENT';
-          } else {
-            const scores = [
-              hasActiveTest1 ? test1Grade?.percentage : null,
-              hasActiveTest2 ? test2Grade?.percentage : null,
-              hasActiveTest3 ? test3Grade?.percentage : null
-            ].filter(t => t !== null && t !== undefined && t !== '') as number[];
-
-            if (scores.length > 0) {
-              percentage = scores.reduce((sum, s) => sum + Number(s), 0) / scores.length;
-              gradeStr = 'PASSED';
-            }
           }
         } else {
           // Standard / no test types:

@@ -4,6 +4,7 @@ import { supabase } from './supabase';
 export interface SyncOptions extends RequestInit {
   cacheKey?: string;
   forceSync?: boolean;
+  cacheTTL?: number;
 }
 
 // 30 minutes in milliseconds (30 * 60 * 1000)
@@ -132,10 +133,11 @@ export const syncFetch = async (url: string, options: SyncOptions = {}) => {
 
   // GET Requests: Cache and fallback
   if (method === 'GET') {
-    // Check if online and cached data is fresh (within 30 minutes)
+    // Check if online and cached data is fresh (default 30 minutes, or options.cacheTTL)
     if (isOnline() && !options.forceSync) {
       const cached = await db.cache.get(cacheKey);
-      if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+      const ttl = options.cacheTTL !== undefined ? options.cacheTTL : CACHE_TTL;
+      if (cached && (Date.now() - cached.timestamp < ttl)) {
         console.log('ONLINE: Serving fresh cached data:', cacheKey);
         return cached.data;
       }
