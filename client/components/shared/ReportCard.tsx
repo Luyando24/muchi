@@ -619,7 +619,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
           <div className="flex-1 flex flex-col items-center text-center px-4 space-y-2">
             <h1 className="text-3xl font-black tracking-tight text-slate-900">{school?.name || 'MUCHI ACADEMY'}</h1>
             <div className="flex items-center justify-center gap-2 text-sm font-bold text-slate-900">
-              <span>{school?.simplified_assessment_mode ? term : `${term} - ${examType}`}</span>
+              <span>{school?.simplified_assessment_mode || examType?.toLowerCase() === 'term' ? term : `${term} - ${examType}`}</span>
               <span className="text-slate-300">&bull;</span>
               <span>Academic Year {academicYear}</span>
             </div>
@@ -969,7 +969,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                 Class Insights
               </h4>
               <p className="text-sm leading-relaxed text-slate-600 font-medium italic border-l-2 border-slate-300 pl-4">
-                 Position {student.position || '-'} out of {student.totalStudents || '-'} students. Class Average: {student.classAverage ? student.classAverage.toFixed(1) : '-'}%.
+                 Position {student.position || '-'} out of {student.totalStudents || '-'} students. Class Average: {student.classAverage != null ? student.classAverage.toFixed(1) : '-'}%.
               </p>
               {/* Best-5 Points — Senior Secondary only */}
               {isSeniorSec && pointsData && pointsData.bestFive.length > 0 && (() => {
