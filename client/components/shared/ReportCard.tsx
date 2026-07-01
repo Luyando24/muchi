@@ -338,9 +338,10 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
       const blockingMissing2 = hasActiveTest2 && classHasAnyTest2 && (item.test2 === null || item.test2 === undefined);
       const blockingMissing3 = hasActiveTest3 && classHasAnyTest3 && (item.test3 === null || item.test3 === undefined);
 
-      if (blockingMissing1 || blockingMissing2 || blockingMissing3) {
-        return null;
-      }
+      // Disable strict requirement: we no longer block grades if a test is missing
+      // if (blockingMissing1 || blockingMissing2 || blockingMissing3) {
+      //   return null;
+      // }
 
       // Average over whichever published tests this student has a score for.
       const scores = [
@@ -486,31 +487,27 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
       const hasActiveTest2 = activeTestTypes.includes('Test 2');
       const hasActiveTest3 = activeTestTypes.includes('Test 3');
       
-      const missingTest1 = hasActiveTest1 && (item.test1 === null || item.test1 === undefined);
-      const missingTest2 = hasActiveTest2 && (item.test2 === null || item.test2 === undefined);
-      const missingTest3 = hasActiveTest3 && (item.test3 === null || item.test3 === undefined);
-      
-      if (missingTest1 || missingTest2 || missingTest3) {
-        // A test is only truly WAITING if the school HAS published results for that
-        // test type for other subjects in this class (classGradesKeys contains at
-        // least one entry for that test type) but this specific student's score is
-        // missing.  If the school hasn't published ANY results under that test type
-        // at all, we treat the missing score as ABSENT so the report card can still
-        // compute a grade from the tests that were actually recorded.
-        const classHasAnyTest1 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 1`)) ?? false;
-        const classHasAnyTest2 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 2`)) ?? false;
-        const classHasAnyTest3 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 3`)) ?? false;
-
-        const isTest1Waiting = hasActiveTest1 && missingTest1 && classHasAnyTest1;
-        const isTest2Waiting = hasActiveTest2 && missingTest2 && classHasAnyTest2;
-        const isTest3Waiting = hasActiveTest3 && missingTest3 && classHasAnyTest3;
-
-        if (isTest1Waiting || isTest2Waiting || isTest3Waiting) {
-          return 'WAITING';
-        }
-        return 'ABSENT';
+      // Disable strict requirement: we no longer enforce that ALL active tests must be present.
+      // If the student has at least one recorded test score, their state is RECORDED.
+      const hasAnyScore = [item.test1, item.test2, item.test3].some(t => t !== null && t !== undefined && t !== '');
+      if (hasAnyScore) {
+        return 'RECORDED';
       }
-      return 'RECORDED';
+
+      // If the student has no scores, they are WAITING if the school has published
+      // at least one active test type for this class, otherwise ABSENT.
+      const classHasAnyTest1 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 1`)) ?? false;
+      const classHasAnyTest2 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 2`)) ?? false;
+      const classHasAnyTest3 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 3`)) ?? false;
+
+      const isTest1Waiting = hasActiveTest1 && classHasAnyTest1;
+      const isTest2Waiting = hasActiveTest2 && classHasAnyTest2;
+      const isTest3Waiting = hasActiveTest3 && classHasAnyTest3;
+
+      if (isTest1Waiting || isTest2Waiting || isTest3Waiting) {
+        return 'WAITING';
+      }
+      return 'ABSENT';
     } else {
       if (item.exam !== null && item.exam !== undefined && item.exam !== '') return 'RECORDED';
       const tests = [item.test1, item.test2, item.test3].filter(t => t !== null && t !== undefined && t !== '');
@@ -700,8 +697,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                       <TableHead className={`${showTest1 || showTest2 || showTest3 ? 'w-[15%]' : 'w-[20%]'} text-xs font-bold text-slate-900 uppercase tracking-widest text-center`}>
                         {showTest1 || showTest2 || showTest3 ? 'Final %' : 'Score %'}
                       </TableHead>
-                      <TableHead className={`${showTest1 || showTest2 || showTest3 ? 'w-[15%]' : 'w-[20%]'} text-xs font-bold text-slate-900 uppercase tracking-widest text-center`}>Grade</TableHead>
-                      <TableHead className={`${showTest1 || showTest2 || showTest3 ? 'w-[20%]' : 'w-[20%]'} text-xs font-bold text-slate-900 uppercase tracking-widest ${school?.show_teacher_on_report_card ? 'text-center' : 'text-right pr-0'}`}>Standard</TableHead>
+                      <TableHead className={`${showTest1 || showTest2 || showTest3 ? 'w-[35%]' : 'w-[40%]'} text-xs font-bold text-slate-900 uppercase tracking-widest ${school?.show_teacher_on_report_card ? 'text-center' : 'text-right pr-0'}`}>Standard</TableHead>
                       {school?.show_teacher_on_report_card && (
                         <TableHead className="w-[15%] text-xs font-bold text-slate-900 uppercase tracking-widest text-right pr-0">Teacher</TableHead>
                       )}
@@ -768,17 +764,17 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                           const pts = sciAbsent ? null : gradeToPoints(sciGradeStr);
 
                           const sciTest1 = physItem || chemItem ? (
-                            (physItem?.test1 !== null && chemItem?.test1 !== null) ? (physItem.test1! + chemItem.test1!) / 2 :
+                            (physItem?.test1 != null && chemItem?.test1 != null) ? (physItem.test1! + chemItem.test1!) / 2 :
                             (physItem?.test1 ?? chemItem?.test1 ?? null)
                           ) : null;
                           
                           const sciTest2 = physItem || chemItem ? (
-                            (physItem?.test2 !== null && chemItem?.test2 !== null) ? (physItem.test2! + chemItem.test2!) / 2 :
+                            (physItem?.test2 != null && chemItem?.test2 != null) ? (physItem.test2! + chemItem.test2!) / 2 :
                             (physItem?.test2 ?? chemItem?.test2 ?? null)
                           ) : null;
 
                           const sciTest3 = physItem || chemItem ? (
-                            (physItem?.test3 !== null && chemItem?.test3 !== null) ? (physItem.test3! + chemItem.test3!) / 2 :
+                            (physItem?.test3 != null && chemItem?.test3 != null) ? (physItem.test3! + chemItem.test3!) / 2 :
                             (physItem?.test3 ?? chemItem?.test3 ?? null)
                           ) : null;
 
@@ -911,16 +907,16 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                                 <TableCell className="py-1 px-4 text-center font-bold text-slate-700 text-sm print:text-[11px]">
                                   {row.isAbsent ? '-' : `${row.percentage}%`}
                                 </TableCell>
-                                <TableCell className="py-1 px-4 text-center font-black text-slate-900 text-lg print:text-sm">
-                                  {row.gradeStr}
-                                </TableCell>
-                                <TableCell className={`py-1 ${school?.show_teacher_on_report_card ? 'text-center' : 'text-right pr-0'} font-bold text-slate-500 text-[10px] print:text-[9px] uppercase tracking-widest`}>
+                                <TableCell className={`py-1 ${school?.show_teacher_on_report_card ? 'text-center' : 'text-right pr-0'} font-bold text-[10px] print:text-[9px] uppercase tracking-widest`}>
                                   {row.isAbsent ? (
                                     <span className="text-slate-300 italic font-medium">
                                       {row.gradeStr === 'WAITING' ? 'WAITING' : 'NOT RECORDED'}
                                     </span>
                                   ) : (
-                                    getStandardFromScale(row.percentage).standard
+                                    <span>
+                                      <span className="text-slate-500">{getStandardFromScale(row.percentage).standard}</span>
+                                      <span className="text-slate-900 font-black ml-1.5">({row.gradeStr})</span>
+                                    </span>
                                   )}
                                 </TableCell>
                                 {school?.show_teacher_on_report_card && (
