@@ -4273,7 +4273,7 @@ router.get(
         .order("min_percentage", { ascending: false });
 
       // 2. Fetch all students in the class
-      const { data: enrollments, error: enrollmentError } = await supabaseAdmin
+      const enrollmentsQuery = supabaseAdmin
         .from("enrollments")
         .select(
           "student_id, profiles!enrollments_student_id_fkey(full_name, student_number, gender), classes(name, class_teacher_id, class_teacher_name, teacher:class_teacher_id(full_name))",
@@ -4281,17 +4281,20 @@ router.get(
         .eq("class_id", classId)
         .eq("academic_year", academicYear);
 
-      if (enrollmentError) throw enrollmentError;
+      const enrollments = await fetchAll(enrollmentsQuery);
+
       if (!enrollments || enrollments.length === 0) {
         return res.json([]);
       }
 
       const studentIds = enrollments.map((e) => e.student_id);
 
-      const { data: classSubjects } = await supabaseAdmin
+      const classSubjectsQuery = supabaseAdmin
         .from("class_subjects")
         .select("subject_id, teacher_name, subjects(id, name, code, department), profiles(id, full_name)")
         .eq("class_id", classId);
+
+      const classSubjects = await fetchAll(classSubjectsQuery);
 
       const allClassSubjects = (classSubjects || [])
         .map((cs: any) => {
@@ -4318,14 +4321,14 @@ router.get(
 
 
       // 3. Fetch all grades for these students for this term & year (without database exam_type filter)
-      const { data: allGrades, error: gradesError } = await supabaseAdmin
+      const allGradesQuery = supabaseAdmin
         .from("student_grades")
         .select("*, subjects(id, name, code, department)")
         .in("student_id", studentIds)
         .eq("term", term)
         .eq("academic_year", academicYear);
 
-      if (gradesError) throw gradesError;
+      const allGrades = await fetchAll(allGradesQuery);
 
       const classGradesKeysSet = new Set<string>(
         (allGrades || [])
@@ -9596,8 +9599,7 @@ router.post(
           .select("*")
           .eq("school_id", schoolId)
           .eq("term", term)
-          .eq("academic_year", academicYear)
-          .limit(100000);
+          .eq("academic_year", academicYear);
 
         if (isTestTypesEnabled && activeTestTypes.includes(examType)) {
           gradesQuery = gradesQuery.eq("test_type", examType).eq("exam_type", "Term");
@@ -9612,9 +9614,7 @@ router.post(
           gradesQuery = gradesQuery.in("student_id", studentIds);
         }
 
-        const { data: existingGrades, error: fetchError } = await gradesQuery;
-        if (fetchError) throw fetchError;
-
+        const existingGrades = await fetchAll(gradesQuery);
         if (!existingGrades || existingGrades.length === 0) {
           return res
             .status(400)
@@ -9678,21 +9678,20 @@ router.post(
 
         // 3. Get Students in Class(es)
         if (studentIds.length === 0) {
-          let enrollmentsQuery = supabaseAdmin
+          const enrollmentsQuery2 = supabaseAdmin
             .from("enrollments")
             .select("student_id")
             .eq("status", "Active");
 
+          let eq2 = enrollmentsQuery2;
           if (classId && classId !== "all") {
-            enrollmentsQuery = enrollmentsQuery.eq("class_id", classId);
+            eq2 = eq2.eq("class_id", classId);
           } else if (targetClassIds.length > 0) {
-            enrollmentsQuery = enrollmentsQuery.in("class_id", targetClassIds);
+            eq2 = eq2.in("class_id", targetClassIds);
           }
 
-          const { data: enrollments, error: enrollError } =
-            await enrollmentsQuery;
-          if (enrollError) throw enrollError;
-          studentIds = (enrollments || []).map((e: any) => e.student_id);
+          const enrollments2 = await fetchAll(eq2);
+          studentIds = (enrollments2 || []).map((e: any) => e.student_id);
         }
 
         if (studentIds.length === 0) {

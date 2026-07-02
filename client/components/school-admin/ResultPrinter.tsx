@@ -95,6 +95,45 @@ export default function ResultPrinter() {
         fetchInitialData();
     }, []);
 
+    /**
+     * Converts an image URL to a base64 data URI.
+     * Returns null on failure so missing images degrade gracefully.
+     */
+    const urlToBase64 = async (url: string): Promise<string | null> => {
+        try {
+            const res = await fetch(url);
+            if (!res.ok) return null;
+            const blob = await res.blob();
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = () => resolve(null);
+                reader.readAsDataURL(blob);
+            });
+        } catch {
+            return null;
+        }
+    };
+
+    /**
+     * Given a school object, fetches all its image URLs in parallel and
+     * returns a copy of the school with URLs replaced by base64 data URIs.
+     * Already-embedded data URIs and missing fields are left untouched.
+     */
+    const preloadSchoolImages = async (school: any): Promise<any> => {
+        if (!school) return school;
+        const IMAGE_FIELDS = ['logo_url', 'seal_url', 'signature_url', 'coat_of_arms_url'] as const;
+        const entries = await Promise.all(
+            IMAGE_FIELDS.map(async (field) => {
+                const url: string | undefined = school[field];
+                if (!url || url.startsWith('data:')) return [field, url];
+                const b64 = await urlToBase64(url);
+                return [field, b64 ?? url];
+            })
+        );
+        return { ...school, ...Object.fromEntries(entries) };
+    };
+
     useEffect(() => {
         if (filters.classId && filters.academicYear) {
             fetchStudents();
@@ -215,19 +254,27 @@ export default function ResultPrinter() {
                 return;
             }
 
-            setBatchData(data);
+            // Preload school images as base64 once (shared across all cards)
+            // This eliminates N×M network requests during print layout.
+            const schoolWithImages = await preloadSchoolImages(data[0]?.school);
+            const dataWithImages = data.map((card: any) => ({ ...card, school: schoolWithImages }));
+
+            setBatchData(dataWithImages);
 
             // Set document title for PDF filename
             const originalTitle = document.title;
             const safeTerm = filters.term.replace(/\s+/g, '_');
             document.title = `${selectedClassName}_${safeTerm}_${filters.academicYear}_Reports`;
 
+            // Scale delay with batch size: base 800ms + 15ms per card (max 5s)
+            const printDelay = Math.min(800 + data.length * 15, 5000);
+
             // Allow DOM to update before printing
             setTimeout(() => {
                 window.print();
                 document.title = originalTitle;
                 setIsPrinting(false);
-            }, 500);
+            }, printDelay);
 
         } catch (error: any) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -262,7 +309,11 @@ export default function ResultPrinter() {
 
             if (!data) throw new Error('Failed to load report card');
 
-            setBatchData([data]);
+            // Preload school images for single student print too
+            const schoolWithImages = await preloadSchoolImages(data.school);
+            const dataWithImages = { ...data, school: schoolWithImages };
+
+            setBatchData([dataWithImages]);
 
             // Set document title for PDF filename
             const originalTitle = document.title;
@@ -275,7 +326,7 @@ export default function ResultPrinter() {
                 window.print();
                 document.title = originalTitle;
                 setIsPrinting(false);
-            }, 2000);
+            }, 1200);
 
         } catch (error: any) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
