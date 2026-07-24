@@ -6480,11 +6480,13 @@ router.post(
           subject_id: subjectId,
         }));
 
-        // Use upsert to avoid duplicate key errors if there's a race condition
-        // or leftover data that wasn't properly deleted
+        // Plain insert is safe here: subjectsToAdd already excludes existing assignments.
+        // Note: The old UNIQUE(class_id, subject_id) constraint was dropped in migration
+        // 20260616000002 and replaced with UNIQUE(class_id, subject_id, teacher_id),
+        // so an onConflict on just (class_id, subject_id) would fail.
         const { error: insertError } = await supabaseAdmin
           .from("class_subjects")
-          .upsert(newAssignments, { onConflict: 'class_id, subject_id' });
+          .insert(newAssignments);
 
         if (insertError) {
           console.error("Insert Error:", insertError);
