@@ -404,6 +404,7 @@ export default function AcademicManagement() {
         },
         body: JSON.stringify({
           subjectId: allocationForm.subjectId,
+          classSubjectId: allocationForm.classSubjectId || null,
           teacherId: allocationForm.teacherId || null
         })
       });
@@ -1926,6 +1927,7 @@ export default function AcademicManagement() {
                                      },
                                      body: JSON.stringify({
                                        subjectId: cs.id,
+                                       classSubjectId: cs.classSubjectId,
                                        teacherId: newTeacherId === "unassigned" ? null : newTeacherId
                                      })
                                   });

@@ -6359,34 +6359,43 @@ router.post(
   requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { subjectId, teacherId } = req.body;
+    // classSubjectId: the specific class_subjects row to update (preferred)
+    // subjectId: the subject's UUID (fallback — finds first matching row)
+    const { subjectId, teacherId, classSubjectId } = req.body;
 
-    if (!subjectId) {
+    if (!subjectId && !classSubjectId) {
       return res.status(400).json({ message: "Subject ID is required" });
     }
 
     try {
-      // Check if the assignment already exists
-      const { data: existing } = await supabaseAdmin
-        .from("class_subjects")
-        .select("id")
-        .eq("class_id", id)
-        .eq("subject_id", subjectId)
-        .single();
+      let rowId: string | null = classSubjectId || null;
+
+      if (!rowId) {
+        // Fallback: find first matching row by class_id + subject_id
+        // Use maybeSingle() so it doesn't throw when multiple rows exist
+        const { data: existing } = await supabaseAdmin
+          .from("class_subjects")
+          .select("id")
+          .eq("class_id", id)
+          .eq("subject_id", subjectId)
+          .limit(1)
+          .maybeSingle();
+        rowId = existing?.id || null;
+      }
 
       let result;
-      if (existing) {
-        // Update existing assignment
+      if (rowId) {
+        // Update the specific class_subjects row by its primary key
         const { data, error } = await supabaseAdmin
           .from("class_subjects")
           .update({ teacher_id: teacherId || null })
-          .eq("id", existing.id)
+          .eq("id", rowId)
           .select()
           .single();
         if (error) throw error;
         result = data;
       } else {
-        // Create new assignment
+        // Create new assignment (subject not yet added to this class)
         const { data, error } = await supabaseAdmin
           .from("class_subjects")
           .insert({
