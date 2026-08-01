@@ -8,14 +8,17 @@ export const rateLimiter = (options: { windowMs: number; max: number; message?: 
     const ip = req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
     const now = Date.now();
 
-    let requestRecord = ipRequests.get(ip);
+    // Use the declared route pattern so changing a path parameter cannot bypass the limit.
+    const routePattern = req.route?.path || req.baseUrl || req.path;
+    const key = `${req.method}:${req.baseUrl}${routePattern}:${ip}`;
+    let requestRecord = ipRequests.get(key);
 
     if (!requestRecord || now > requestRecord.resetTime) {
       requestRecord = {
         count: 1,
         resetTime: now + options.windowMs
       };
-      ipRequests.set(ip, requestRecord);
+      ipRequests.set(key, requestRecord);
       return next();
     }
 

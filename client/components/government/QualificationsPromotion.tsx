@@ -168,8 +168,8 @@ export default function QualificationsPromotion() {
       {/* Top Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Qualifications & Promotion Registry</h2>
-          <p className="text-slate-600 dark:text-slate-400">Track qualifications, map upgrade rates, review secondary degree mandates, and evaluate promotion eligibility.</p>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Qualifications & Career Readiness Registry</h2>
+          <p className="text-slate-600 dark:text-slate-400">Track qualifications, map upgrade rates, and review tenure-based readiness. Final performance-led promotion decisions are managed in Training & Performance.</p>
         </div>
         <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm shrink-0">
           <Filter className="h-4 w-4 text-slate-400" />

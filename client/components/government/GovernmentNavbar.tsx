@@ -40,6 +40,7 @@ export default function GovernmentNavbar({
     switch (tab) {
       case 'overview': return 'National Overview';
       case 'performance': return 'Academic Performance';
+      case 'workforce-development': return 'Training & Performance';
       case 'feeding': return 'National Feeding';
       case 'settings': return 'Portal Settings';
       default: return 'Overview';

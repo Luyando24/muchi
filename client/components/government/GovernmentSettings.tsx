@@ -20,6 +20,10 @@ interface SettingsForm {
   gov_promotion_min_tenure: number;
   gov_promotion_min_qualification: string;
   gov_diploma_upgrade_years_threshold: number;
+  gov_performance_weakness_score: number;
+  gov_promotion_min_performance_score: number;
+  gov_promotion_min_cpd_hours: number;
+  gov_promotion_review_period_months: number;
 }
 
 const defaultForm: SettingsForm = {
@@ -29,7 +33,11 @@ const defaultForm: SettingsForm = {
   gov_attendance_threshold: 75,
   gov_promotion_min_tenure: 3,
   gov_promotion_min_qualification: "Bachelor's Degree",
-  gov_diploma_upgrade_years_threshold: 5
+  gov_diploma_upgrade_years_threshold: 5,
+  gov_performance_weakness_score: 60,
+  gov_promotion_min_performance_score: 70,
+  gov_promotion_min_cpd_hours: 40,
+  gov_promotion_review_period_months: 24
 };
 
 export default function GovernmentSettings() {
@@ -66,7 +74,11 @@ export default function GovernmentSettings() {
           gov_attendance_threshold: parseInt(data.gov_attendance_threshold) || defaultForm.gov_attendance_threshold,
           gov_promotion_min_tenure: parseInt(data.gov_promotion_min_tenure) || defaultForm.gov_promotion_min_tenure,
           gov_promotion_min_qualification: data.gov_promotion_min_qualification || defaultForm.gov_promotion_min_qualification,
-          gov_diploma_upgrade_years_threshold: parseInt(data.gov_diploma_upgrade_years_threshold) || defaultForm.gov_diploma_upgrade_years_threshold
+          gov_diploma_upgrade_years_threshold: parseInt(data.gov_diploma_upgrade_years_threshold) || defaultForm.gov_diploma_upgrade_years_threshold,
+          gov_performance_weakness_score: parseInt(data.gov_performance_weakness_score) || defaultForm.gov_performance_weakness_score,
+          gov_promotion_min_performance_score: parseInt(data.gov_promotion_min_performance_score) || defaultForm.gov_promotion_min_performance_score,
+          gov_promotion_min_cpd_hours: parseInt(data.gov_promotion_min_cpd_hours) || defaultForm.gov_promotion_min_cpd_hours,
+          gov_promotion_review_period_months: parseInt(data.gov_promotion_review_period_months) || defaultForm.gov_promotion_review_period_months
         });
       }
     } catch (err: any) {
@@ -353,6 +365,67 @@ export default function GovernmentSettings() {
                   className="rounded-xl border-slate-200 dark:border-slate-700"
                 />
                 <p className="text-[10px] text-slate-400">Trigger warnings for secondary school teachers holding a Diploma who have served for this number of years or more without upgrading to a Bachelor's Degree.</p>
+              </div>
+
+              <div className="pt-6 border-t border-slate-100 dark:border-slate-700/60 space-y-5">
+                <div>
+                  <h4 className="text-sm font-black text-slate-900 dark:text-white">Performance evidence criteria</h4>
+                  <p className="text-[10px] text-slate-400 mt-1">These thresholds are applied to the Teaching Workforce module when weaknesses and promotion readiness are calculated.</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="gov_performance_weakness_score" className="text-sm font-bold text-slate-700 dark:text-slate-300">Weakness Flag Threshold (%)</Label>
+                    <Input
+                      id="gov_performance_weakness_score"
+                      type="number"
+                      min="20"
+                      max="100"
+                      value={form.gov_performance_weakness_score}
+                      onChange={(e) => setForm({ ...form, gov_performance_weakness_score: parseInt(e.target.value) || 60 })}
+                      className="rounded-xl border-slate-200 dark:border-slate-700"
+                    />
+                    <p className="text-[10px] text-slate-400">A review competency below this mark is automatically identified as a development need.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="gov_promotion_min_performance_score" className="text-sm font-bold text-slate-700 dark:text-slate-300">Minimum Performance Score (%)</Label>
+                    <Input
+                      id="gov_promotion_min_performance_score"
+                      type="number"
+                      min="20"
+                      max="100"
+                      value={form.gov_promotion_min_performance_score}
+                      onChange={(e) => setForm({ ...form, gov_promotion_min_performance_score: parseInt(e.target.value) || 70 })}
+                      className="rounded-xl border-slate-200 dark:border-slate-700"
+                    />
+                    <p className="text-[10px] text-slate-400">The latest finalised review must meet this score before promotion can be approved.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="gov_promotion_min_cpd_hours" className="text-sm font-bold text-slate-700 dark:text-slate-300">Minimum Development Hours</Label>
+                    <Input
+                      id="gov_promotion_min_cpd_hours"
+                      type="number"
+                      min="0"
+                      max="1000"
+                      value={form.gov_promotion_min_cpd_hours}
+                      onChange={(e) => setForm({ ...form, gov_promotion_min_cpd_hours: parseInt(e.target.value) || 40 })}
+                      className="rounded-xl border-slate-200 dark:border-slate-700"
+                    />
+                    <p className="text-[10px] text-slate-400">Completed CPD and ministry training hours count toward this requirement.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="gov_promotion_review_period_months" className="text-sm font-bold text-slate-700 dark:text-slate-300">Evidence Lookback (Months)</Label>
+                    <Input
+                      id="gov_promotion_review_period_months"
+                      type="number"
+                      min="3"
+                      max="120"
+                      value={form.gov_promotion_review_period_months}
+                      onChange={(e) => setForm({ ...form, gov_promotion_review_period_months: parseInt(e.target.value) || 24 })}
+                      className="rounded-xl border-slate-200 dark:border-slate-700"
+                    />
+                    <p className="text-[10px] text-slate-400">Only reviews and completed development within this window support promotion readiness.</p>
+                  </div>
+                </div>
               </div>
 
             </CardContent>

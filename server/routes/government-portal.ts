@@ -3,6 +3,7 @@ import { Router, Request, Response } from 'express';
 import { supabaseAdmin } from '../lib/supabase.js';
 import XLSX from 'xlsx';
 import path from 'path';
+import { z } from 'zod';
 
 const router = Router();
 
@@ -225,7 +226,11 @@ const getSettings = async () => {
     whatsapp_number: '260570260374',
     gov_promotion_min_tenure: '3',
     gov_promotion_min_qualification: "Bachelor's Degree",
-    gov_diploma_upgrade_years_threshold: '5'
+    gov_diploma_upgrade_years_threshold: '5',
+    gov_performance_weakness_score: '60',
+    gov_promotion_min_performance_score: '70',
+    gov_promotion_min_cpd_hours: '40',
+    gov_promotion_review_period_months: '24'
   };
 
   try {
@@ -245,6 +250,280 @@ const getSettings = async () => {
     console.warn("Failed to fetch system settings, using defaults:", err);
     return defaults;
   }
+};
+
+const QUALIFICATION_ORDER = ['Certificate', 'Diploma', "Bachelor's Degree", "Master's Degree", 'PhD'];
+
+const normaliseQualification = (qualification?: string | null) => {
+  const value = (qualification || '').trim().toLowerCase();
+  if (value.includes('phd') || value.includes('doctor')) return 'PhD';
+  if (value.includes('master')) return "Master's Degree";
+  if (value.includes('bachelor') || value === 'degree') return "Bachelor's Degree";
+  if (value.includes('diploma')) return 'Diploma';
+  if (value.includes('certificate')) return 'Certificate';
+  return qualification || 'Not recorded';
+};
+
+const yearsOfService = (teacher: any) => {
+  const serviceStart = teacher.employment_date || teacher.join_date || teacher.created_at;
+  if (!serviceStart) return 0;
+  const start = new Date(serviceStart);
+  if (Number.isNaN(start.getTime())) return 0;
+  const now = new Date();
+  let years = now.getFullYear() - start.getFullYear();
+  const anniversaryPassed = now.getMonth() > start.getMonth()
+    || (now.getMonth() === start.getMonth() && now.getDate() >= start.getDate());
+  if (!anniversaryPassed) years -= 1;
+  return Math.max(0, years);
+};
+
+const getWorkforceSnapshot = async ({
+  province,
+  district,
+  teacherId
+}: {
+  province?: string | null;
+  district?: string | null;
+  teacherId?: string | null;
+}) => {
+  const settings = await getSettings();
+  const reviewPeriodMonths = Number(settings.gov_promotion_review_period_months) || 24;
+  const evidenceCutoff = new Date();
+  evidenceCutoff.setMonth(evidenceCutoff.getMonth() - reviewPeriodMonths);
+  const evidenceCutoffDate = evidenceCutoff.toISOString().split('T')[0];
+
+  let permittedSchoolIds: string[] | null = null;
+  if ((province && province !== 'All') || (district && district !== 'All')) {
+    let schoolQuery = supabaseAdmin.from('schools').select('id');
+    if (province && province !== 'All') schoolQuery = schoolQuery.eq('province', province);
+    if (district && district !== 'All') schoolQuery = schoolQuery.eq('district', district);
+    const { data: schools, error: schoolError } = await schoolQuery;
+    if (schoolError) throw schoolError;
+    permittedSchoolIds = (schools || []).map((school: any) => school.id);
+  }
+
+  let teacherQuery = supabaseAdmin
+    .from('profiles')
+    .select('id, full_name, staff_number, school_id, current_role, highest_qualification, employment_date, join_date, created_at, schools(name, province, district, school_type)')
+    .or('role.eq.teacher,secondary_role.eq.teacher')
+    .order('full_name', { ascending: true });
+
+  if (teacherId) teacherQuery = teacherQuery.eq('id', teacherId);
+  if (permittedSchoolIds) {
+    if (permittedSchoolIds.length === 0) {
+      return {
+        summary: { totalTeachers: 0, reviewedTeachers: 0, teachersNeedingSupport: 0, activeTrainings: 0, promotionReady: 0 },
+        weaknessDistribution: [], teachers: [], trainingPrograms: [], recentReviews: [], promotionCases: [], settings
+      };
+    }
+    teacherQuery = teacherQuery.in('school_id', permittedSchoolIds);
+  }
+
+  const { data: teacherRows, error: teacherError } = await teacherQuery;
+  if (teacherError) throw teacherError;
+  const teachers = teacherRows || [];
+  const teacherIds = teachers.map((teacher: any) => teacher.id);
+
+  if (teacherIds.length === 0) {
+    return {
+      summary: { totalTeachers: 0, reviewedTeachers: 0, teachersNeedingSupport: 0, activeTrainings: 0, promotionReady: 0 },
+      weaknessDistribution: [], teachers: [], trainingPrograms: [], recentReviews: [], promotionCases: [], settings
+    };
+  }
+
+  const [reviewResult, cpdResult, assignmentResult, programResult, promotionResult] = await Promise.all([
+    supabaseAdmin
+      .from('teacher_performance_reviews')
+      .select('*')
+      .in('teacher_id', teacherIds)
+      .order('review_date', { ascending: false }),
+    supabaseAdmin
+      .from('teacher_cpd')
+      .select('id, teacher_id, course_name, category, hours, completion_date')
+      .in('teacher_id', teacherIds)
+      .gte('completion_date', evidenceCutoffDate),
+    supabaseAdmin
+      .from('teacher_training_assignments')
+      .select('id, training_id, teacher_id, status, attendance_percent, assessment_score, completion_date, notes, training:teacher_training_programs(id, title, category, hours, start_date, end_date)')
+      .in('teacher_id', teacherIds),
+    supabaseAdmin
+      .from('teacher_training_programs')
+      .select('*')
+      .order('start_date', { ascending: false }),
+    supabaseAdmin
+      .from('teacher_promotion_cases')
+      .select('*')
+      .in('teacher_id', teacherIds)
+      .order('created_at', { ascending: false })
+  ]);
+
+  const firstError = reviewResult.error || cpdResult.error || assignmentResult.error || programResult.error || promotionResult.error;
+  if (firstError) throw firstError;
+
+  const reviews = reviewResult.data || [];
+  const cpdRecords = cpdResult.data || [];
+  const assignments = assignmentResult.data || [];
+  const programs = programResult.data || [];
+  const promotionCases = promotionResult.data || [];
+
+  const latestReviewByTeacher = new Map<string, any>();
+  reviews.forEach((review: any) => {
+    if (review.status === 'Finalised' && !latestReviewByTeacher.has(review.teacher_id)) {
+      latestReviewByTeacher.set(review.teacher_id, review);
+    }
+  });
+
+  const cpdHoursByTeacher = new Map<string, number>();
+  cpdRecords.forEach((record: any) => {
+    cpdHoursByTeacher.set(record.teacher_id, (cpdHoursByTeacher.get(record.teacher_id) || 0) + Number(record.hours || 0));
+  });
+
+  assignments.forEach((assignment: any) => {
+    const training = Array.isArray(assignment.training) ? assignment.training[0] : assignment.training;
+    if (
+      assignment.status === 'Completed'
+      && assignment.completion_date
+      && assignment.completion_date >= evidenceCutoffDate
+    ) {
+      cpdHoursByTeacher.set(
+        assignment.teacher_id,
+        (cpdHoursByTeacher.get(assignment.teacher_id) || 0) + Number(training?.hours || 0)
+      );
+    }
+  });
+
+  const minTenure = Number(settings.gov_promotion_min_tenure) || 3;
+  const minQualification = normaliseQualification(settings.gov_promotion_min_qualification);
+  const minPerformance = Number(settings.gov_promotion_min_performance_score) || 70;
+  const minCpdHours = Number(settings.gov_promotion_min_cpd_hours) || 40;
+
+  const workforceTeachers = teachers.map((teacher: any) => {
+    const school = Array.isArray(teacher.schools) ? teacher.schools[0] : teacher.schools;
+    const latestReview = latestReviewByTeacher.get(teacher.id) || null;
+    const teacherAssignments = assignments.filter((assignment: any) => assignment.teacher_id === teacher.id);
+    const cpdHours = cpdHoursByTeacher.get(teacher.id) || 0;
+    const tenure = yearsOfService(teacher);
+    const qualification = normaliseQualification(teacher.highest_qualification);
+    const performanceIsRecent = Boolean(latestReview && latestReview.review_date >= evidenceCutoffDate);
+    const activeImprovementPlan = Boolean(
+      latestReview?.improvement_plan_required
+      && !['Not Required', 'Completed'].includes(latestReview.improvement_status)
+    );
+
+    const criteria = {
+      tenure: {
+        label: 'Years in service',
+        actual: tenure,
+        required: minTenure,
+        unit: 'years',
+        met: tenure >= minTenure
+      },
+      qualification: {
+        label: 'Qualification',
+        actual: qualification,
+        required: minQualification,
+        met: QUALIFICATION_ORDER.indexOf(qualification) >= QUALIFICATION_ORDER.indexOf(minQualification)
+      },
+      performance: {
+        label: 'Latest performance',
+        actual: latestReview ? Number(latestReview.overall_score) : null,
+        required: minPerformance,
+        unit: '%',
+        recent: performanceIsRecent,
+        met: performanceIsRecent && Number(latestReview?.overall_score || 0) >= minPerformance
+      },
+      development: {
+        label: 'Professional development',
+        actual: cpdHours,
+        required: minCpdHours,
+        unit: 'hours',
+        periodMonths: reviewPeriodMonths,
+        met: cpdHours >= minCpdHours
+      },
+      improvementPlan: {
+        label: 'Improvement plan',
+        actual: activeImprovementPlan ? 'Active' : 'Clear',
+        required: 'No active plan',
+        met: !activeImprovementPlan
+      }
+    };
+
+    const criteriaValues = Object.values(criteria);
+    const criteriaMetCount = criteriaValues.filter((criterion: any) => criterion.met).length;
+    const readinessScore = Number(((criteriaMetCount / criteriaValues.length) * 100).toFixed(1));
+
+    return {
+      id: teacher.id,
+      fullName: teacher.full_name || 'Unnamed teacher',
+      staffNumber: teacher.staff_number || null,
+      schoolId: teacher.school_id,
+      schoolName: school?.name || 'Unassigned',
+      province: school?.province || 'Unknown',
+      district: school?.district || 'Unknown',
+      schoolType: school?.school_type || 'Unknown',
+      currentRole: teacher.current_role || 'Teacher',
+      highestQualification: qualification,
+      tenureYears: tenure,
+      latestReview,
+      weaknessAreas: latestReview?.weakness_areas || [],
+      activeImprovementPlan,
+      cpdHours,
+      trainingsAssigned: teacherAssignments.length,
+      trainingsCompleted: teacherAssignments.filter((assignment: any) => assignment.status === 'Completed').length,
+      criteria,
+      readinessScore,
+      promotionEligible: criteriaValues.every((criterion: any) => criterion.met)
+    };
+  });
+
+  const teacherNameMap = new Map(workforceTeachers.map((teacher: any) => [teacher.id, teacher.fullName]));
+  const weaknessCounts = new Map<string, number>();
+  workforceTeachers.forEach((teacher: any) => {
+    teacher.weaknessAreas.forEach((weakness: string) => {
+      weaknessCounts.set(weakness, (weaknessCounts.get(weakness) || 0) + 1);
+    });
+  });
+
+  const trainingPrograms = programs.map((program: any) => {
+    const programmeAssignments = assignments.filter((assignment: any) => assignment.training_id === program.id);
+    const completed = programmeAssignments.filter((assignment: any) => assignment.status === 'Completed').length;
+    return {
+      ...program,
+      assignedCount: programmeAssignments.length,
+      completedCount: completed,
+      completionRate: programmeAssignments.length > 0
+        ? Number(((completed / programmeAssignments.length) * 100).toFixed(1))
+        : 0,
+      assignments: programmeAssignments.map((assignment: any) => ({
+        ...assignment,
+        teacherName: teacherNameMap.get(assignment.teacher_id) || 'Unknown teacher'
+      }))
+    };
+  });
+
+  return {
+    summary: {
+      totalTeachers: workforceTeachers.length,
+      reviewedTeachers: workforceTeachers.filter((teacher: any) => teacher.latestReview).length,
+      teachersNeedingSupport: workforceTeachers.filter((teacher: any) => teacher.weaknessAreas.length > 0 || teacher.activeImprovementPlan).length,
+      activeTrainings: trainingPrograms.filter((program: any) => ['Open', 'In Progress'].includes(program.status)).length,
+      promotionReady: workforceTeachers.filter((teacher: any) => teacher.promotionEligible).length
+    },
+    weaknessDistribution: Array.from(weaknessCounts.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count),
+    teachers: workforceTeachers,
+    trainingPrograms,
+    recentReviews: reviews.slice(0, 20).map((review: any) => ({
+      ...review,
+      teacherName: teacherNameMap.get(review.teacher_id) || 'Unknown teacher'
+    })),
+    promotionCases: promotionCases.map((promotionCase: any) => ({
+      ...promotionCase,
+      teacherName: teacherNameMap.get(promotionCase.teacher_id) || 'Unknown teacher'
+    })),
+    settings
+  };
 };
 
 // GET /api/government/overview
@@ -831,7 +1110,7 @@ router.get('/regional-stats', requireGovernmentAccess, async (req: Request, res:
 
 
 // GET /api/government/feeding-program/stats
-router.get('/stats', requireGovernmentAccess, async (req: Request, res: Response) => {
+router.get('/feeding-program/stats', requireGovernmentAccess, async (req: Request, res: Response) => {
   try {
     // Aggregated stats across the country
     const { data: inventory, error: invError } = await supabaseAdmin
@@ -866,7 +1145,7 @@ router.get('/stats', requireGovernmentAccess, async (req: Request, res: Response
 });
 
 // GET /api/government/feeding-program/schools
-router.get('/schools', requireGovernmentAccess, async (req: Request, res: Response) => {
+router.get('/feeding-program/schools', requireGovernmentAccess, async (req: Request, res: Response) => {
   const { province, district } = req.query;
   try {
     let query = supabaseAdmin
@@ -881,6 +1160,135 @@ router.get('/schools', requireGovernmentAccess, async (req: Request, res: Respon
     res.json(data);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
+  }
+});
+
+const feedingFeedbackReviewSchema = z.object({
+  status: z.enum(['New', 'Under Review', 'Resolved', 'Dismissed']),
+  reviewNotes: z.string().trim().max(2000).optional().default('')
+});
+
+// GET /api/government/feeding-program/feedback
+router.get('/feeding-program/feedback', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const province = typeof req.query.province === 'string' ? req.query.province : '';
+  const district = typeof req.query.district === 'string' ? req.query.district : '';
+  const status = typeof req.query.status === 'string' ? req.query.status : '';
+
+  try {
+    let feedbackQuery = supabaseAdmin
+      .from('feeding_program_feedback')
+      .select(`
+        id,
+        reference_code,
+        school_id,
+        service_date,
+        reporter_type,
+        meal_served,
+        overall_rating,
+        portion_rating,
+        quality_rating,
+        issue_categories,
+        comments,
+        status,
+        priority,
+        review_notes,
+        reviewed_at,
+        created_at,
+        school:schools!inner(name, province, district)
+      `)
+      .order('created_at', { ascending: false })
+      .limit(5000);
+
+    if (province && province !== 'All') feedbackQuery = feedbackQuery.eq('school.province', province);
+    if (district && district !== 'All') feedbackQuery = feedbackQuery.eq('school.district', district);
+    if (status && status !== 'All') feedbackQuery = feedbackQuery.eq('status', status);
+
+    const { data, error } = await feedbackQuery;
+    if (error) throw error;
+
+    const reports = data || [];
+    const servedReports = reports.filter((report: any) => report.meal_served);
+    const ratedReports = servedReports.filter((report: any) => report.overall_rating != null);
+    const ratingDistribution = [1, 2, 3, 4, 5].map(rating => ({
+      rating,
+      count: ratedReports.filter((report: any) => Number(report.overall_rating) === rating).length
+    }));
+    const issueCounts = new Map<string, number>();
+    reports.forEach((report: any) => {
+      (report.issue_categories || []).forEach((issue: string) => {
+        issueCounts.set(issue, (issueCounts.get(issue) || 0) + 1);
+      });
+    });
+
+    const averageRating = ratedReports.length
+      ? ratedReports.reduce((sum: number, report: any) => sum + Number(report.overall_rating), 0) / ratedReports.length
+      : 0;
+
+    return res.json({
+      summary: {
+        totalReports: reports.length,
+        mealConfirmations: servedReports.length,
+        missedMealSignals: reports.length - servedReports.length,
+        averageRating: Number(averageRating.toFixed(1)),
+        unresolvedReports: reports.filter((report: any) => ['New', 'Under Review'].includes(report.status)).length,
+        criticalReports: reports.filter((report: any) => report.priority === 'Critical').length,
+        servedRate: reports.length ? Number(((servedReports.length / reports.length) * 100).toFixed(1)) : 0
+      },
+      ratingDistribution,
+      issueDistribution: [...issueCounts.entries()]
+        .map(([category, count]) => ({ category, count }))
+        .sort((a, b) => b.count - a.count),
+      reports: reports.slice(0, 200)
+    });
+  } catch (error: any) {
+    console.error('Government feeding feedback load failed:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// PATCH /api/government/feeding-program/feedback/:id
+router.patch('/feeding-program/feedback/:id', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const parsed = feedingFeedbackReviewSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid review update.' });
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('feeding_program_feedback')
+      .update({
+        status: parsed.data.status,
+        review_notes: parsed.data.reviewNotes || null,
+        reviewed_by: (req as any).userId,
+        reviewed_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .select(`
+        id,
+        reference_code,
+        school_id,
+        service_date,
+        reporter_type,
+        meal_served,
+        overall_rating,
+        portion_rating,
+        quality_rating,
+        issue_categories,
+        comments,
+        status,
+        priority,
+        review_notes,
+        reviewed_at,
+        created_at,
+        school:schools(name, province, district)
+      `)
+      .single();
+
+    if (error) throw error;
+    return res.json(data);
+  } catch (error: any) {
+    console.error('Government feeding feedback review failed:', error);
+    return res.status(500).json({ message: error.message });
   }
 });
 
@@ -1275,6 +1683,388 @@ router.get('/qualifications', requireGovernmentAccess, async (req: Request, res:
 
     res.json({ qualifications, distribution, upgradesRate, schoolStats, alerts, settings });
   } catch (error: any) { res.status(500).json({ message: error.message }); }
+});
+
+const reviewScoreSchema = z.object({
+  lessonPlanning: z.coerce.number().int().min(1).max(5),
+  pedagogy: z.coerce.number().int().min(1).max(5),
+  subjectKnowledge: z.coerce.number().int().min(1).max(5),
+  assessment: z.coerce.number().int().min(1).max(5),
+  classroomManagement: z.coerce.number().int().min(1).max(5),
+  learnerSupport: z.coerce.number().int().min(1).max(5),
+  professionalism: z.coerce.number().int().min(1).max(5)
+});
+
+const performanceReviewSchema = z.object({
+  teacherId: z.string().uuid(),
+  reviewCycle: z.string().trim().min(2).max(80),
+  reviewDate: z.string().date(),
+  status: z.enum(['Draft', 'Finalised']).default('Finalised'),
+  scores: reviewScoreSchema,
+  strengths: z.string().trim().max(2000).optional().default(''),
+  developmentNotes: z.string().trim().max(3000).optional().default(''),
+  improvementPlanRequired: z.boolean().optional().default(false),
+  improvementDeadline: z.string().date().nullable().optional(),
+  recommendation: z.string().trim().max(2000).optional().default('')
+});
+
+const trainingProgramSchema = z.object({
+  title: z.string().trim().min(3).max(180),
+  provider: z.string().trim().min(2).max(180),
+  category: z.enum(['Pedagogy', 'Subject Matter', 'Assessment', 'Classroom Management', 'Learner Support', 'Professionalism', 'Leadership', 'ICT', 'Special Needs', 'Other']),
+  deliveryMode: z.enum(['In-person', 'Online', 'Blended']).default('In-person'),
+  startDate: z.string().date(),
+  endDate: z.string().date(),
+  hours: z.coerce.number().int().min(1).max(1000),
+  capacity: z.coerce.number().int().min(1).max(100000).nullable().optional(),
+  status: z.enum(['Planned', 'Open', 'In Progress', 'Completed', 'Cancelled']).default('Planned'),
+  targetWeaknesses: z.array(z.string().trim().min(1).max(100)).max(20).optional().default([]),
+  description: z.string().trim().max(3000).optional().default('')
+}).refine((value) => value.endDate >= value.startDate, {
+  message: 'Training end date must be on or after the start date',
+  path: ['endDate']
+});
+
+// GET /api/government/workforce-development
+router.get('/workforce-development', requireGovernmentAccess, async (req: Request, res: Response) => {
+  try {
+    const snapshot = await getWorkforceSnapshot({
+      province: typeof req.query.province === 'string' ? req.query.province : null,
+      district: typeof req.query.district === 'string' ? req.query.district : null
+    });
+    res.json(snapshot);
+  } catch (error: any) {
+    console.error('Government workforce development error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/government/workforce-development/reviews
+router.post('/workforce-development/reviews', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const parsed = performanceReviewSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid performance review' });
+  }
+
+  try {
+    const input = parsed.data;
+    const { data: teacher, error: teacherError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, school_id, role, secondary_role')
+      .eq('id', input.teacherId)
+      .single();
+
+    if (teacherError || !teacher || (teacher.role !== 'teacher' && teacher.secondary_role !== 'teacher')) {
+      return res.status(404).json({ message: 'Teacher record not found' });
+    }
+    if (!teacher.school_id) {
+      return res.status(422).json({ message: 'Teacher must be assigned to a school before a performance review can be recorded' });
+    }
+
+    const settings = await getSettings();
+    const weaknessThreshold = Number(settings.gov_performance_weakness_score) || 60;
+    const scoreEntries = [
+      ['Lesson Planning', input.scores.lessonPlanning],
+      ['Pedagogy', input.scores.pedagogy],
+      ['Subject Knowledge', input.scores.subjectKnowledge],
+      ['Assessment', input.scores.assessment],
+      ['Classroom Management', input.scores.classroomManagement],
+      ['Learner Support', input.scores.learnerSupport],
+      ['Professionalism', input.scores.professionalism]
+    ] as const;
+    const scoreTotal = scoreEntries.reduce((total, [, score]) => total + score, 0);
+    const overallScore = Number(((scoreTotal / (scoreEntries.length * 5)) * 100).toFixed(2));
+    const weaknessAreas = scoreEntries
+      .filter(([, score]) => score * 20 < weaknessThreshold)
+      .map(([label]) => label);
+    const improvementPlanRequired = input.improvementPlanRequired || weaknessAreas.length > 0;
+
+    if (improvementPlanRequired && !input.improvementDeadline) {
+      return res.status(400).json({ message: 'An improvement deadline is required when a development plan is opened' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('teacher_performance_reviews')
+      .upsert({
+        teacher_id: input.teacherId,
+        school_id: teacher.school_id,
+        reviewer_id: (req as any).userId,
+        review_cycle: input.reviewCycle,
+        review_date: input.reviewDate,
+        status: input.status,
+        lesson_planning_score: input.scores.lessonPlanning,
+        pedagogy_score: input.scores.pedagogy,
+        subject_knowledge_score: input.scores.subjectKnowledge,
+        assessment_score: input.scores.assessment,
+        classroom_management_score: input.scores.classroomManagement,
+        learner_support_score: input.scores.learnerSupport,
+        professionalism_score: input.scores.professionalism,
+        overall_score: overallScore,
+        strengths: input.strengths || null,
+        development_notes: input.developmentNotes || null,
+        weakness_areas: weaknessAreas,
+        improvement_plan_required: improvementPlanRequired,
+        improvement_deadline: improvementPlanRequired ? input.improvementDeadline : null,
+        improvement_status: improvementPlanRequired ? 'Open' : 'Not Required',
+        recommendation: input.recommendation || null
+      }, { onConflict: 'teacher_id,review_cycle' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(201).json({ review: data, weaknessAreas, overallScore });
+  } catch (error: any) {
+    console.error('Record workforce review error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// PATCH /api/government/workforce-development/reviews/:id
+router.patch('/workforce-development/reviews/:id', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const parsed = z.object({
+    improvementStatus: z.enum(['Not Required', 'Open', 'In Progress', 'Completed', 'Overdue']).optional(),
+    improvementDeadline: z.string().date().nullable().optional(),
+    developmentNotes: z.string().trim().max(3000).optional()
+  }).refine((value) => Object.keys(value).length > 0, { message: 'No review changes supplied' }).safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid review update' });
+  }
+
+  try {
+    const update: Record<string, any> = {};
+    if (parsed.data.improvementStatus !== undefined) update.improvement_status = parsed.data.improvementStatus;
+    if (parsed.data.improvementDeadline !== undefined) update.improvement_deadline = parsed.data.improvementDeadline;
+    if (parsed.data.developmentNotes !== undefined) update.development_notes = parsed.data.developmentNotes;
+
+    const { data, error } = await supabaseAdmin
+      .from('teacher_performance_reviews')
+      .update(update)
+      .eq('id', req.params.id)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/government/workforce-development/training-programs
+router.post('/workforce-development/training-programs', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const parsed = trainingProgramSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid training programme' });
+  }
+
+  try {
+    const input = parsed.data;
+    const { data, error } = await supabaseAdmin
+      .from('teacher_training_programs')
+      .insert({
+        title: input.title,
+        provider: input.provider,
+        category: input.category,
+        delivery_mode: input.deliveryMode,
+        start_date: input.startDate,
+        end_date: input.endDate,
+        hours: input.hours,
+        capacity: input.capacity ?? null,
+        status: input.status,
+        target_weaknesses: input.targetWeaknesses,
+        description: input.description || null,
+        created_by: (req as any).userId
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (error: any) {
+    console.error('Create teacher training programme error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// PATCH /api/government/workforce-development/training-programs/:id
+router.patch('/workforce-development/training-programs/:id', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const parsed = z.object({
+    status: z.enum(['Planned', 'Open', 'In Progress', 'Completed', 'Cancelled'])
+  }).safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid programme status' });
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('teacher_training_programs')
+      .update({ status: parsed.data.status })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/government/workforce-development/training-programs/:id/assignments
+router.post('/workforce-development/training-programs/:id/assignments', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const parsed = z.object({ teacherIds: z.array(z.string().uuid()).min(1).max(1000) }).safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Select at least one teacher' });
+  }
+
+  try {
+    const teacherIds = Array.from(new Set(parsed.data.teacherIds));
+    const [{ data: program, error: programError }, { data: validTeachers, error: teacherError }, { data: existingAssignments, error: assignmentError }] = await Promise.all([
+      supabaseAdmin.from('teacher_training_programs').select('id, capacity, status').eq('id', req.params.id).single(),
+      supabaseAdmin.from('profiles').select('id').in('id', teacherIds).or('role.eq.teacher,secondary_role.eq.teacher'),
+      supabaseAdmin.from('teacher_training_assignments').select('teacher_id').eq('training_id', req.params.id)
+    ]);
+
+    if (programError || !program) return res.status(404).json({ message: 'Training programme not found' });
+    if (teacherError || assignmentError) throw teacherError || assignmentError;
+    if (program.status === 'Cancelled' || program.status === 'Completed') {
+      return res.status(409).json({ message: 'Teachers cannot be assigned to a completed or cancelled programme' });
+    }
+
+    const validTeacherIds = new Set((validTeachers || []).map((teacher: any) => teacher.id));
+    const invalidTeacherCount = teacherIds.filter((id) => !validTeacherIds.has(id)).length;
+    if (invalidTeacherCount > 0) {
+      return res.status(400).json({ message: `${invalidTeacherCount} selected record(s) are not valid teachers` });
+    }
+
+    const existingTeacherIds = new Set((existingAssignments || []).map((assignment: any) => assignment.teacher_id));
+    const newTeacherIds = teacherIds.filter((id) => !existingTeacherIds.has(id));
+    if (program.capacity && (existingTeacherIds.size + newTeacherIds.length) > Number(program.capacity)) {
+      return res.status(409).json({ message: `Assignment exceeds the programme capacity of ${program.capacity}` });
+    }
+
+    if (newTeacherIds.length === 0) {
+      return res.json({ assigned: 0, message: 'All selected teachers are already assigned' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('teacher_training_assignments')
+      .insert(newTeacherIds.map((teacherId) => ({
+        training_id: req.params.id,
+        teacher_id: teacherId,
+        assigned_by: (req as any).userId,
+        status: 'Assigned'
+      })))
+      .select();
+    if (error) throw error;
+    res.status(201).json({ assigned: data?.length || 0, assignments: data || [] });
+  } catch (error: any) {
+    console.error('Assign teacher training error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// PATCH /api/government/workforce-development/training-assignments/:id
+router.patch('/workforce-development/training-assignments/:id', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const parsed = z.object({
+    status: z.enum(['Assigned', 'Enrolled', 'In Progress', 'Completed', 'Withdrawn', 'No Show']).optional(),
+    attendancePercent: z.coerce.number().min(0).max(100).nullable().optional(),
+    assessmentScore: z.coerce.number().min(0).max(100).nullable().optional(),
+    completionDate: z.string().date().nullable().optional(),
+    notes: z.string().trim().max(2000).optional()
+  }).refine((value) => Object.keys(value).length > 0, { message: 'No assignment changes supplied' }).safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid training update' });
+  }
+
+  try {
+    const input = parsed.data;
+    const update: Record<string, any> = {};
+    if (input.status !== undefined) update.status = input.status;
+    if (input.attendancePercent !== undefined) update.attendance_percent = input.attendancePercent;
+    if (input.assessmentScore !== undefined) update.assessment_score = input.assessmentScore;
+    if (input.completionDate !== undefined) update.completion_date = input.completionDate;
+    if (input.notes !== undefined) update.notes = input.notes;
+    if (input.status === 'Completed' && input.completionDate === undefined) {
+      update.completion_date = new Date().toISOString().split('T')[0];
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('teacher_training_assignments')
+      .update(update)
+      .eq('id', req.params.id)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/government/workforce-development/promotions
+router.post('/workforce-development/promotions', requireGovernmentAccess, async (req: Request, res: Response) => {
+  const parsed = z.object({
+    teacherId: z.string().uuid(),
+    targetRole: z.string().trim().min(2).max(160),
+    decision: z.enum(['Approved', 'Declined']).default('Approved'),
+    effectiveDate: z.string().date(),
+    decisionNotes: z.string().trim().max(3000).optional().default('')
+  }).safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid promotion decision' });
+  }
+
+  try {
+    const input = parsed.data;
+    const snapshot = await getWorkforceSnapshot({ teacherId: input.teacherId });
+    const teacher = snapshot.teachers[0];
+    if (!teacher) return res.status(404).json({ message: 'Teacher record not found' });
+
+    if (input.decision === 'Approved' && !teacher.promotionEligible) {
+      const unmetCriteria = Object.values(teacher.criteria)
+        .filter((criterion: any) => !criterion.met)
+        .map((criterion: any) => criterion.label);
+      return res.status(422).json({
+        message: `Promotion cannot be approved. Unmet criteria: ${unmetCriteria.join(', ')}`,
+        criteria: teacher.criteria
+      });
+    }
+
+    const { data: promotionCase, error: caseError } = await supabaseAdmin
+      .from('teacher_promotion_cases')
+      .insert({
+        teacher_id: teacher.id,
+        school_id: teacher.schoolId,
+        previous_role: teacher.currentRole,
+        target_role: input.targetRole,
+        status: 'Recommended',
+        readiness_score: teacher.readinessScore,
+        criteria_met: teacher.promotionEligible,
+        criteria_snapshot: teacher.criteria
+      })
+      .select()
+      .single();
+    if (caseError) throw caseError;
+
+    const { data: decision, error: decisionError } = await supabaseAdmin.rpc('finalise_teacher_promotion', {
+      p_case_id: promotionCase.id,
+      p_decision: input.decision,
+      p_decision_notes: input.decisionNotes,
+      p_effective_date: input.effectiveDate,
+      p_decided_by: (req as any).userId
+    });
+
+    if (decisionError) {
+      await supabaseAdmin.from('teacher_promotion_cases').delete().eq('id', promotionCase.id);
+      throw decisionError;
+    }
+
+    res.status(201).json(decision);
+  } catch (error: any) {
+    console.error('Teacher promotion decision error:', error);
+    res.status(500).json({ message: error.message });
+  }
 });
 
 // GET /api/government/teacher-disabilities

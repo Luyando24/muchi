@@ -30,6 +30,7 @@ import VerifyReport from "./pages/VerifyReport";
 import DataAuditPage from "./pages/DataAuditPage";
 import CheckResults from "./pages/CheckResults";
 import SchoolCalendar from "./pages/SchoolCalendar";
+import FeedingFeedback from "./pages/FeedingFeedback";
 import EnterResults from "./pages/results/EnterResults";
 import ResultsAnalysis from "./pages/results/ResultsAnalysis";
 import MasterSheet from "./pages/results/MasterSheet";
@@ -55,6 +56,7 @@ const CommonRoutes = () => (
     <Route path="/force-password-reset" element={<ForcePasswordReset />} />
     <Route path="/verify/:hash" element={<VerifyReport />} />
     <Route path="/school-calendar" element={<SchoolCalendar />} />
+    <Route path="/feeding-feedback" element={<FeedingFeedback />} />
   </>
 );
 
@@ -263,6 +265,7 @@ const RootApp = () => (
       <Route path="/verify/:hash" element={<VerifyReport />} />
       <Route path="/check-results" element={<CheckResults />} />
       <Route path="/school-calendar" element={<SchoolCalendar />} />
+      <Route path="/feeding-feedback" element={<FeedingFeedback />} />
       <Route path="/:slug/*" element={<SchoolWebsite />} />
       <Route path="*" element={<NotFound />} />
     </Routes>

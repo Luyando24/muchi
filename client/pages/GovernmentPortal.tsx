@@ -48,7 +48,7 @@ import {
   Pie
 } from 'recharts';
 
-import { Award, ArrowRightLeft, Heart, Activity, Calendar, CalendarCheck } from 'lucide-react';
+import { Award, ArrowRightLeft, Heart, Activity, Calendar, CalendarCheck, BookOpenCheck } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -83,6 +83,8 @@ import StudentVulnerability from '@/components/government/StudentVulnerability';
 import GovernmentSettings from '@/components/government/GovernmentSettings';
 import BoardingAnalytics from '@/components/government/BoardingAnalytics';
 import GovernmentSchoolCalendar from '@/components/government/GovernmentSchoolCalendar';
+import TeachingWorkforceDevelopment from '@/components/government/TeachingWorkforceDevelopment';
+import FeedingFeedbackInsights from '@/components/government/FeedingFeedbackInsights';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#71717a'];
 const getColor = (index: number): string => COLORS[index % COLORS.length];
@@ -975,6 +977,8 @@ function FeedingDashboard({
         </Card>
       </div>
 
+      <FeedingFeedbackInsights filters={filters} />
+
       {/* Main Monitoring Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-4">
          {/* Filter Card */}
@@ -1542,8 +1546,9 @@ export default function GovernmentPortal() {
       items: [
         { id: 'enrollment', label: 'Enrollment Intelligence', icon: Users },
         { id: 'teachers', label: 'Teacher Workforce', icon: Users2 },
+        { id: 'workforce-development', label: 'Training & Performance', icon: BookOpenCheck },
         { id: 'staffing-overview', label: 'Staffing Overview', icon: Users },
-        { id: 'qualifications-promotion', label: 'Qualifications & Promotion', icon: Award },
+        { id: 'qualifications-promotion', label: 'Qualifications Registry', icon: Award },
         { id: 'transfers-housing', label: 'Transfers & Housing', icon: ArrowRightLeft },
         { id: 'teacher-disabilities', label: 'Teacher Disabilities', icon: Heart },
       ]
@@ -1680,6 +1685,9 @@ export default function GovernmentPortal() {
              </TabsContent>
              <TabsContent value="teachers">
                <TeacherDashboard filters={filters} setFilters={setFilters} onLoadingChange={setIsFilterLoading} />
+             </TabsContent>
+             <TabsContent value="workforce-development">
+               <TeachingWorkforceDevelopment filters={filters} setFilters={setFilters} regions={regions} />
              </TabsContent>
              <TabsContent value="infrastructure">
                <InfrastructureDashboard />

@@ -22,6 +22,7 @@ import { governmentPortalRouter } from './routes/government-portal.js';
 import { financeRouter } from './routes/finance.js';
 import { tuckshopRouter } from './routes/tuckshop.js';
 import { contactRouter } from './routes/contact.js';
+import { feedingFeedbackRouter } from './routes/feeding-feedback.js';
 import { Logger } from './lib/logger.js';
 import { requestLogger, errorLogger } from './middleware/logging.js';
 import { CONFIG } from '../shared/config.js';
@@ -35,11 +36,16 @@ const port = CONFIG.server.port;
 
 app.use(cors());
 app.use(requestLogger);
+app.use('/api/public/feeding-feedback', express.json({ limit: '16kb' }), feedingFeedbackRouter);
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Track active web traffic sessions
 app.use((req, res, next) => {
+  if ((req.originalUrl || req.url).startsWith('/api/public/feeding-feedback')) {
+    return next();
+  }
+
   // Use authorization header token snippet or IP as identifier
   const authHeader = req.headers.authorization;
   const ip = req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
