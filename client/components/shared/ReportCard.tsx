@@ -181,9 +181,8 @@ function computePrimaryMarks(grades: any[], className: string, compulsorySubject
 // ─── Best-5 Points Calculator ─────────────────────────────────────────────────
 interface SubjectPoints {
   displayName: string;
-  subjectNames: string[]; // original subject name(s) involved
+  subjectNames: string[];
   points: number;
-  isCombined?: boolean;   // true for Science (Phy+Chem)
 }
 
 function computeBestFivePoints(grades: any[], gradingScale: any[], compulsorySubjects?: string[]): {
@@ -210,44 +209,9 @@ function computeBestFivePoints(grades: any[], gradingScale: any[], compulsorySub
     }
   }
 
-  // Identify Physics and Chemistry entries
-  const physicsEntry = [...nameMap.entries()].find(([k]) => k.includes('physics'))?.[1];
-  const chemEntry = [...nameMap.entries()].find(([k]) => k.includes('chem'))?.[1];
-
-  // Build the final list of SubjectPoints
+  // Keep every subject independent when calculating Best-5 points.
   const subjectPointsList: SubjectPoints[] = [];
-  const handledKeys = new Set<string>();
-
-  // --- Science: combine Physics + Chemistry ---
-  if (physicsEntry || chemEntry) {
-    const phyPoints = physicsEntry ? gradeToPoints(getGradeStr(physicsEntry)) : null;
-    const chePoints = chemEntry ? gradeToPoints(getGradeStr(chemEntry)) : null;
-    let sciPoints: number | null = null;
-    if (phyPoints !== null && chePoints !== null) {
-      sciPoints = (phyPoints + chePoints) / 2;
-    } else if (phyPoints !== null) {
-      sciPoints = phyPoints;
-    } else if (chePoints !== null) {
-      sciPoints = chePoints;
-    }
-    if (sciPoints !== null) {
-      subjectPointsList.push({
-        displayName: 'Science',
-        subjectNames: [
-          physicsEntry?.subjects?.name,
-          chemEntry?.subjects?.name,
-        ].filter(Boolean),
-        points: sciPoints,
-        isCombined: true,
-      });
-    }
-    if (physicsEntry) handledKeys.add((physicsEntry.subjects?.name || '').toLowerCase());
-    if (chemEntry) handledKeys.add((chemEntry.subjects?.name || '').toLowerCase());
-  }
-
-  // --- All other subjects ---
   for (const [key, g] of nameMap.entries()) {
-    if (handledKeys.has(key)) continue;
     const pts = gradeToPoints(getGradeStr(g));
     if (pts !== null) {
       subjectPointsList.push({
@@ -565,18 +529,6 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
   // Compute marks for G5-7 using synthetic grades
   const primaryMarksData = isG57 ? computePrimaryMarks(syntheticGrades, student.class || '', school?.compulsory_subjects_primary) : null;
 
-  // Build a display name map for Physics/Chemistry → Science
-  // Maps original subject id → display name override
-  const subjectDisplayOverride = new Map<string, string>();
-  if (isSeniorSec) {
-    for (const item of groupedGradesBySubject) {
-      const name = (item.subject?.name || '').toLowerCase();
-      if (name.includes('physics') || name.includes('chem')) {
-        subjectDisplayOverride.set(item.subject?.id, 'Science');
-      }
-    }
-  }
-
   return (
     <div className={`relative flex flex-col bg-white overflow-hidden print:overflow-hidden print:w-[210mm] print:h-[297mm] mx-auto my-8 print:my-0 shadow-2xl print:shadow-none rounded-3xl print:rounded-none ${className}`}>
       <style type="text/css" media="print">
@@ -705,7 +657,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                   </TableHeader>
                   <TableBody>
                     {(() => {
-                      // Build display rows — merge Physics+Chemistry into one Science row
+                      // Build one display row per subject.
                       type DisplayRow = {
                         key: string;
                         displayName: string;
@@ -719,105 +671,13 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                         gradeStr: string;
                         points: number | null;
                         isAbsent: boolean;
-                        isCombined?: boolean;
-                        combinedNote?: string;
                         teacherName?: string | null;
                       };
 
                       const displayRows: DisplayRow[] = [];
-                      const scienceHandled = new Set<string>();
-
-                      if (isSeniorSec) {
-                        const physItem = groupedGradesBySubject.find(item =>
-                          (item.subject?.name || '').toLowerCase().includes('physics')
-                        );
-                        const chemItem = groupedGradesBySubject.find(item =>
-                          (item.subject?.name || '').toLowerCase().includes('chem')
-                        );
-
-                        if (physItem || chemItem) {
-                          if (physItem) scienceHandled.add(physItem.subject?.id || physItem.subject?.code);
-                          if (chemItem) scienceHandled.add(chemItem.subject?.id || chemItem.subject?.code);
-
-                          const physId = physItem?.subject?.id;
-                          const chemId = chemItem?.subject?.id;
-
-                          const phyPct = physItem ? getFinalPercentage(physItem) : null;
-                          const chemPct = chemItem ? getFinalPercentage(chemItem) : null;
-                          const combinedPct = phyPct !== null && chemPct !== null
-                            ? ((Number(phyPct) + Number(chemPct)) / 2)
-                            : (phyPct ?? chemPct);
-
-                          const phyState = physItem ? getSubjectAssessmentState(physItem) : 'WAITING';
-                          const chemState = chemItem ? getSubjectAssessmentState(chemItem) : 'WAITING';
-
-                          let sciGradeStr = 'ABSENT';
-                          let sciAbsent = true;
-                          if (phyState === 'RECORDED' || chemState === 'RECORDED') {
-                            sciAbsent = combinedPct === null;
-                            sciGradeStr = sciAbsent ? 'ABSENT' : getStandardFromScale(combinedPct).grade;
-                          } else if (phyState === 'WAITING' || chemState === 'WAITING') {
-                            sciGradeStr = 'WAITING';
-                            sciAbsent = true;
-                          }
-
-                          const pts = sciAbsent ? null : gradeToPoints(sciGradeStr);
-
-                          const sciTest1 = physItem || chemItem ? (
-                            (physItem?.test1 != null && chemItem?.test1 != null) ? (physItem.test1! + chemItem.test1!) / 2 :
-                            (physItem?.test1 ?? chemItem?.test1 ?? null)
-                          ) : null;
-                          
-                          const sciTest2 = physItem || chemItem ? (
-                            (physItem?.test2 != null && chemItem?.test2 != null) ? (physItem.test2! + chemItem.test2!) / 2 :
-                            (physItem?.test2 ?? chemItem?.test2 ?? null)
-                          ) : null;
-
-                          const sciTest3 = physItem || chemItem ? (
-                            (physItem?.test3 != null && chemItem?.test3 != null) ? (physItem.test3! + chemItem.test3!) / 2 :
-                            (physItem?.test3 ?? chemItem?.test3 ?? null)
-                          ) : null;
-
-                          const hasClassTest1 = (physId && classGradesKeys?.includes(`${physId}-${examType}-Test 1`)) ||
-                                                (chemId && classGradesKeys?.includes(`${chemId}-${examType}-Test 1`));
-                          const hasClassTest2 = (physId && classGradesKeys?.includes(`${physId}-${examType}-Test 2`)) ||
-                                                (chemId && classGradesKeys?.includes(`${chemId}-${examType}-Test 2`));
-                          const hasClassTest3 = (physId && classGradesKeys?.includes(`${physId}-${examType}-Test 3`)) ||
-                                                (chemId && classGradesKeys?.includes(`${chemId}-${examType}-Test 3`));
-
-                          // Determine whether each test type was published at the class level at all.
-                          const classPublishedTest1 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 1`)) ?? false;
-                          const classPublishedTest2 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 2`)) ?? false;
-                          const classPublishedTest3 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 3`)) ?? false;
-
-                          const test1Display = sciTest1 !== null ? `${parseFloat(sciTest1.toFixed(1))}%` : (classPublishedTest1 ? 'ABSENT' : '-');
-                          const test2Display = sciTest2 !== null ? `${parseFloat(sciTest2.toFixed(1))}%` : (classPublishedTest2 ? 'ABSENT' : '-');
-                          const test3Display = sciTest3 !== null ? `${parseFloat(sciTest3.toFixed(1))}%` : (classPublishedTest3 ? 'ABSENT' : '-');
-
-                          displayRows.push({
-                            key: 'science-combined',
-                            displayName: 'Science',
-                            test1: sciTest1 !== null ? parseFloat(sciTest1.toFixed(1)) : null,
-                            test2: sciTest2 !== null ? parseFloat(sciTest2.toFixed(1)) : null,
-                            test3: sciTest3 !== null ? parseFloat(sciTest3.toFixed(1)) : null,
-                            test1Display,
-                            test2Display,
-                            test3Display,
-                            percentage: combinedPct !== null ? parseFloat(combinedPct.toFixed(1)) : null,
-                            gradeStr: sciGradeStr,
-                            points: pts !== null ? parseFloat(pts.toFixed(1)) : null,
-                            isAbsent: sciAbsent,
-                            isCombined: true,
-                            combinedNote: [physItem?.subject?.name, chemItem?.subject?.name].filter(Boolean).join(' + '),
-                            teacherName: physItem?.mainGrade?.subjects?.teacherName || chemItem?.mainGrade?.subjects?.teacherName || null,
-                          });
-                        }
-                      }
-
-                      // All other subjects
+                      // One row per subject
                       for (const item of groupedGradesBySubject) {
                         const gKey = item.subject?.id || item.subject?.code;
-                        if (isSeniorSec && scienceHandled.has(gKey)) continue;
 
                         const finalPct = getFinalPercentage(item);
                         const state = getSubjectAssessmentState(item);
@@ -882,11 +742,6 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                                     <span className="uppercase tracking-tight text-sm print:text-[11px]">
                                       {row.displayName}
                                     </span>
-                                    {row.isCombined && row.combinedNote && (
-                                      <span className="text-[9px] print:text-[8px] text-slate-400 font-normal italic">
-                                        ({row.combinedNote})
-                                      </span>
-                                    )}
                                   </div>
                                 </TableCell>
                                 {showTest1 && (
@@ -984,7 +839,6 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                     {pointsData.bestFive.map((s, idx) => (
                       <span key={idx} className="text-[10px] font-bold text-slate-700">
                         {s.displayName}
-                        {s.isCombined ? <span className="font-normal text-slate-400"> (avg)</span> : null}
                         {' '}<span className="font-black text-slate-900">{Number.isInteger(s.points) ? s.points : s.points.toFixed(1)}</span>
                         {compulsoryConfig.some(comp => s.subjectNames.some(n => n.toLowerCase().includes(comp.toLowerCase()))) ? <span className="text-indigo-500">★</span> : null}
                         {idx < pointsData.bestFive.length - 1 ? <span className="text-slate-300 mx-1">|</span> : null}
