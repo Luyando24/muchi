@@ -78,10 +78,10 @@ export async function ensureSchoolSettings(schoolId: string) {
         .eq('key', 'gov_active_term')
         .maybeSingle();
 
-      if (activeYearSetting?.value && !expectedYear) {
+      if (activeYearSetting?.value) {
         expectedYear = activeYearSetting.value;
       }
-      if (activeTermSetting?.value && !expectedTerm) {
+      if (activeTermSetting?.value) {
         expectedTerm = activeTermSetting.value;
       }
     } catch (err) {}

@@ -2172,6 +2172,19 @@ router.put('/settings', requireGovernmentAccess, async (req: Request, res: Respo
       .select();
 
     if (error) throw error;
+
+    // Apply academic year and term to ALL schools if updated by government
+    if (settings.gov_active_academic_year || settings.gov_active_term) {
+      const schoolUpdates: any = {};
+      if (settings.gov_active_academic_year) schoolUpdates.academic_year = String(settings.gov_active_academic_year);
+      if (settings.gov_active_term) schoolUpdates.current_term = String(settings.gov_active_term);
+      
+      await supabaseAdmin
+        .from('schools')
+        .update(schoolUpdates)
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+    }
+
     res.json({ message: 'Settings updated successfully', data });
   } catch (error: any) {
     res.status(500).json({ message: error.message });

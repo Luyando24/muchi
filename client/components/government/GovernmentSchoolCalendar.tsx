@@ -184,8 +184,8 @@ export default function GovernmentSchoolCalendar() {
         })
       });
       toast({
-        title: 'Default Academic Period Saved',
-        description: `Set system default to Academic Year ${govActiveAcademicYear}, ${govActiveTerm}.`
+        title: 'Academic Period Applied to All Schools',
+        description: `Set Academic Year ${govActiveAcademicYear}, ${govActiveTerm} across all schools.`
       });
     } catch (err: any) {
       toast({
@@ -480,7 +480,7 @@ export default function GovernmentSchoolCalendar() {
           <div className="pt-4 border-t border-slate-100 dark:border-slate-700/60 grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
             <div className="space-y-1.5">
               <Label htmlFor="gov_active_academic_year" className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                Default Academic Year <span className="text-rose-500">*</span>
+                Academic Year (All Schools) <span className="text-rose-500">*</span>
               </Label>
               <Input
                 id="gov_active_academic_year"
@@ -493,7 +493,7 @@ export default function GovernmentSchoolCalendar() {
 
             <div className="space-y-1.5">
               <Label htmlFor="gov_active_term" className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                Default Active Term <span className="text-rose-500">*</span>
+                Current Term (All Schools) <span className="text-rose-500">*</span>
               </Label>
               <Select value={govActiveTerm} onValueChange={setGovActiveTerm}>
                 <SelectTrigger id="gov_active_term" className="rounded-xl font-semibold">
@@ -512,7 +512,7 @@ export default function GovernmentSchoolCalendar() {
               disabled={isUpdatingSyncSetting}
               className="bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl h-10 shadow-sm"
             >
-              <Save className="h-4 w-4 mr-2" /> Save Default Term & Year
+              <Save className="h-4 w-4 mr-2" /> Apply to All Schools
             </Button>
           </div>
         )}
