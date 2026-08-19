@@ -9,8 +9,10 @@ import {
   Search,
   Filter,
   Info,
-  AlertCircle
+  AlertCircle,
+  Save
 } from 'lucide-react';
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,6 +58,8 @@ export default function GovernmentSchoolCalendar() {
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
   const [typeFilter, setTypeFilter] = useState('All');
   const [applyToSchoolTerms, setApplyToSchoolTerms] = useState(true);
+  const [govActiveAcademicYear, setGovActiveAcademicYear] = useState('2026');
+  const [govActiveTerm, setGovActiveTerm] = useState('Term 1');
   const [isUpdatingSyncSetting, setIsUpdatingSyncSetting] = useState(false);
 
   // Dialog state
@@ -114,8 +118,16 @@ export default function GovernmentSchoolCalendar() {
         forceSync: true,
         cacheKey: 'gov-settings'
       });
-      if (data && data.gov_apply_ministry_calendar_to_school_terms !== undefined) {
-        setApplyToSchoolTerms(data.gov_apply_ministry_calendar_to_school_terms !== 'false' && data.gov_apply_ministry_calendar_to_school_terms !== 'disabled');
+      if (data) {
+        if (data.gov_apply_ministry_calendar_to_school_terms !== undefined) {
+          setApplyToSchoolTerms(data.gov_apply_ministry_calendar_to_school_terms !== 'false' && data.gov_apply_ministry_calendar_to_school_terms !== 'disabled');
+        }
+        if (data.gov_active_academic_year) {
+          setGovActiveAcademicYear(data.gov_active_academic_year);
+        }
+        if (data.gov_active_term) {
+          setGovActiveTerm(data.gov_active_term);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -148,6 +160,37 @@ export default function GovernmentSchoolCalendar() {
       toast({
         title: 'Error updating setting',
         description: err.message || 'Failed to update setting',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsUpdatingSyncSetting(false);
+    }
+  };
+
+  const handleSaveDefaultAcademicPeriod = async () => {
+    setIsUpdatingSyncSetting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      await syncFetch('/api/government/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          gov_active_academic_year: govActiveAcademicYear,
+          gov_active_term: govActiveTerm
+        })
+      });
+      toast({
+        title: 'Default Academic Period Saved',
+        description: `Set system default to Academic Year ${govActiveAcademicYear}, ${govActiveTerm}.`
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Error saving settings',
+        description: err.message || 'Failed to save academic period settings',
         variant: 'destructive'
       });
     } finally {
@@ -401,35 +444,78 @@ export default function GovernmentSchoolCalendar() {
       </div>
 
       {/* Calendar Auto-Sync Toggle Control Card */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 shadow-sm">
-        <div className="flex items-start gap-3">
-          <div className={`p-2.5 rounded-xl ${applyToSchoolTerms ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400' : 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400'}`}>
-            <Calendar className="h-5 w-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h4 className="font-bold text-slate-900 dark:text-white text-sm">Apply Ministry Calendar to School Term</h4>
-              <Badge className={applyToSchoolTerms ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200'}>
-                {applyToSchoolTerms ? 'Active Sync Enabled' : 'Sync Disabled'}
-              </Badge>
+      <div className="flex flex-col gap-4 p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 shadow-sm">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className={`p-2.5 rounded-xl ${applyToSchoolTerms ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400' : 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400'}`}>
+              <Calendar className="h-5 w-5" />
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-              {applyToSchoolTerms
-                ? 'When enabled, official ministry term timelines dynamically set the active term and academic year for all schools in the system.'
-                : 'When disabled, schools can manually select and configure their own academic year and active term in School Settings.'}
-            </p>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-bold text-slate-900 dark:text-white text-sm">Apply Ministry Calendar to School Term</h4>
+                <Badge className={applyToSchoolTerms ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200'}>
+                  {applyToSchoolTerms ? 'Active Sync Enabled' : 'Sync Disabled'}
+                </Badge>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                {applyToSchoolTerms
+                  ? 'When enabled, official ministry term timelines dynamically set the active term and academic year for all schools in the system.'
+                  : 'When disabled, schools can manually select and configure their own academic year and active term in School Settings.'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 shrink-0 self-end md:self-auto">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              {applyToSchoolTerms ? 'Enabled' : 'Disabled'}
+            </span>
+            <Switch
+              checked={applyToSchoolTerms}
+              disabled={isUpdatingSyncSetting}
+              onCheckedChange={handleToggleApplyToTerms}
+            />
           </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0 self-end md:self-auto">
-          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-            {applyToSchoolTerms ? 'Enabled' : 'Disabled'}
-          </span>
-          <Switch
-            checked={applyToSchoolTerms}
-            disabled={isUpdatingSyncSetting}
-            onCheckedChange={handleToggleApplyToTerms}
-          />
-        </div>
+
+        {!applyToSchoolTerms && (
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-700/60 grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div className="space-y-1.5">
+              <Label htmlFor="gov_active_academic_year" className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                Default Academic Year <span className="text-rose-500">*</span>
+              </Label>
+              <Input
+                id="gov_active_academic_year"
+                value={govActiveAcademicYear}
+                onChange={(e) => setGovActiveAcademicYear(e.target.value)}
+                placeholder="e.g. 2026"
+                className="rounded-xl font-semibold"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="gov_active_term" className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                Default Active Term <span className="text-rose-500">*</span>
+              </Label>
+              <Select value={govActiveTerm} onValueChange={setGovActiveTerm}>
+                <SelectTrigger id="gov_active_term" className="rounded-xl font-semibold">
+                  <SelectValue placeholder="Select term" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Term 1">Term 1</SelectItem>
+                  <SelectItem value="Term 2">Term 2</SelectItem>
+                  <SelectItem value="Term 3">Term 3</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Button
+              onClick={handleSaveDefaultAcademicPeriod}
+              disabled={isUpdatingSyncSetting}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl h-10 shadow-sm"
+            >
+              <Save className="h-4 w-4 mr-2" /> Save Default Term & Year
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Info Warning Alert */}

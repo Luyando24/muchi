@@ -65,6 +65,26 @@ export async function ensureSchoolSettings(schoolId: string) {
     } catch (err) {
       console.error('Failed to sync school settings with ministry calendar:', err);
     }
+  } else {
+    try {
+      const { data: activeYearSetting } = await supabaseAdmin
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'gov_active_academic_year')
+        .maybeSingle();
+      const { data: activeTermSetting } = await supabaseAdmin
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'gov_active_term')
+        .maybeSingle();
+
+      if (activeYearSetting?.value && !expectedYear) {
+        expectedYear = activeYearSetting.value;
+      }
+      if (activeTermSetting?.value && !expectedTerm) {
+        expectedTerm = activeTermSetting.value;
+      }
+    } catch (err) {}
   }
 
   if (!expectedYear) {

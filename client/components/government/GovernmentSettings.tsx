@@ -26,6 +26,8 @@ interface SettingsForm {
   gov_promotion_min_cpd_hours: number;
   gov_promotion_review_period_months: number;
   gov_apply_ministry_calendar_to_school_terms: boolean;
+  gov_active_academic_year: string;
+  gov_active_term: string;
 }
 
 const defaultForm: SettingsForm = {
@@ -40,7 +42,9 @@ const defaultForm: SettingsForm = {
   gov_promotion_min_performance_score: 70,
   gov_promotion_min_cpd_hours: 40,
   gov_promotion_review_period_months: 24,
-  gov_apply_ministry_calendar_to_school_terms: true
+  gov_apply_ministry_calendar_to_school_terms: true,
+  gov_active_academic_year: '2026',
+  gov_active_term: 'Term 1'
 };
 
 export default function GovernmentSettings() {
@@ -83,7 +87,9 @@ export default function GovernmentSettings() {
           gov_promotion_min_performance_score: parseInt(data.gov_promotion_min_performance_score) || defaultForm.gov_promotion_min_performance_score,
           gov_promotion_min_cpd_hours: parseInt(data.gov_promotion_min_cpd_hours) || defaultForm.gov_promotion_min_cpd_hours,
           gov_promotion_review_period_months: parseInt(data.gov_promotion_review_period_months) || defaultForm.gov_promotion_review_period_months,
-          gov_apply_ministry_calendar_to_school_terms: data.gov_apply_ministry_calendar_to_school_terms === undefined ? true : (data.gov_apply_ministry_calendar_to_school_terms !== 'false' && data.gov_apply_ministry_calendar_to_school_terms !== 'disabled')
+          gov_apply_ministry_calendar_to_school_terms: data.gov_apply_ministry_calendar_to_school_terms === undefined ? true : (data.gov_apply_ministry_calendar_to_school_terms !== 'false' && data.gov_apply_ministry_calendar_to_school_terms !== 'disabled'),
+          gov_active_academic_year: data.gov_active_academic_year || defaultForm.gov_active_academic_year,
+          gov_active_term: data.gov_active_term || defaultForm.gov_active_term
         });
       }
     } catch (err: any) {
@@ -463,6 +469,41 @@ export default function GovernmentSettings() {
                   onCheckedChange={(checked) => setForm({ ...form, gov_apply_ministry_calendar_to_school_terms: checked })}
                 />
               </div>
+
+              {!form.gov_apply_ministry_calendar_to_school_terms && (
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-700/60 grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="gov_active_academic_year" className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                      Default National Academic Year <span className="text-rose-500">*</span>
+                    </Label>
+                    <Input
+                      id="gov_active_academic_year"
+                      value={form.gov_active_academic_year}
+                      onChange={(e) => setForm({ ...form, gov_active_academic_year: e.target.value })}
+                      placeholder="e.g. 2026"
+                      className="rounded-xl border-slate-200 dark:border-slate-700"
+                    />
+                    <p className="text-[10px] text-slate-400">System default academic year when automatic calendar sync is disabled.</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="gov_active_term" className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                      Default National Active Term <span className="text-rose-500">*</span>
+                    </Label>
+                    <select
+                      id="gov_active_term"
+                      value={form.gov_active_term}
+                      onChange={(e) => setForm({ ...form, gov_active_term: e.target.value })}
+                      className="w-full h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    >
+                      <option value="Term 1">Term 1</option>
+                      <option value="Term 2">Term 2</option>
+                      <option value="Term 3">Term 3</option>
+                    </select>
+                    <p className="text-[10px] text-slate-400">System default active term when automatic calendar sync is disabled.</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 

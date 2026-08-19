@@ -231,7 +231,9 @@ const getSettings = async () => {
     gov_promotion_min_performance_score: '70',
     gov_promotion_min_cpd_hours: '40',
     gov_promotion_review_period_months: '24',
-    gov_apply_ministry_calendar_to_school_terms: 'true'
+    gov_apply_ministry_calendar_to_school_terms: 'true',
+    gov_active_academic_year: '2026',
+    gov_active_term: 'Term 1'
   };
 
   try {
