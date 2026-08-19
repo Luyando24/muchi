@@ -54,6 +54,8 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
   const { toast } = useToast();
   const [ministryCalendar, setMinistryCalendar] = useState<any[]>([]);
 
+  const [isMinistryCalendarSynced, setIsMinistryCalendarSynced] = useState(true);
+
   const [formData, setFormData] = useState({
     name: '',
     academic_year: '',
@@ -161,6 +163,7 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
       });
 
       setSchool(data);
+      setIsMinistryCalendarSynced(data.apply_ministry_calendar_enabled ?? true);
       setFormData({
         name: data.name || '',
         academic_year: data.academic_year || '',
@@ -631,28 +634,58 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
                           id="academic_year"
                           name="academic_year"
                           value={formData.academic_year}
-                          disabled
+                          disabled={isMinistryCalendarSynced}
+                          onChange={handleInputChange}
                           placeholder="e.g. 2026"
-                          className="bg-slate-50 dark:bg-slate-800 text-slate-500 cursor-not-allowed font-medium"
+                          className={isMinistryCalendarSynced ? "bg-slate-50 dark:bg-slate-800 text-slate-500 cursor-not-allowed font-medium" : "font-medium"}
                         />
                       </div>
 
                       <div className="space-y-2">
                         <Label htmlFor="current_term" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Current Term <span className="text-rose-500">*</span></Label>
-                        <Input
-                          id="current_term"
-                          name="current_term"
-                          value={formData.current_term}
-                          disabled
-                          placeholder="e.g. Term 1"
-                          className="bg-slate-50 dark:bg-slate-800 text-slate-500 cursor-not-allowed font-medium"
-                        />
+                        {isMinistryCalendarSynced ? (
+                          <Input
+                            id="current_term"
+                            name="current_term"
+                            value={formData.current_term}
+                            disabled
+                            placeholder="e.g. Term 1"
+                            className="bg-slate-50 dark:bg-slate-800 text-slate-500 cursor-not-allowed font-medium"
+                          />
+                        ) : (
+                          <Select
+                            value={formData.current_term}
+                            onValueChange={(val) => setFormData(prev => ({ ...prev, current_term: val }))}
+                          >
+                            <SelectTrigger id="current_term" className="w-full font-medium">
+                              <SelectValue placeholder="Select term" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Term 1">Term 1</SelectItem>
+                              <SelectItem value="Term 2">Term 2</SelectItem>
+                              <SelectItem value="Term 3">Term 3</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
                       </div>
 
-                      <div className="md:col-span-2 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-950 p-3 rounded-lg flex items-start gap-2.5">
-                        <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5" />
-                        <p className="text-xs text-blue-800 dark:text-blue-300 font-medium">
-                          Active Term and Academic Year are managed automatically by the Ministry of Education School Calendar. School administrators cannot modify these values directly.
+                      <div className={cn(
+                        "md:col-span-2 border p-3 rounded-lg flex items-start gap-2.5",
+                        isMinistryCalendarSynced
+                          ? "bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-950"
+                          : "bg-amber-50/50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-950"
+                      )}>
+                        <AlertCircle className={cn(
+                          "h-4 w-4 mt-0.5 shrink-0",
+                          isMinistryCalendarSynced ? "text-blue-600 dark:text-blue-400" : "text-amber-600 dark:text-amber-400"
+                        )} />
+                        <p className={cn(
+                          "text-xs font-medium",
+                          isMinistryCalendarSynced ? "text-blue-800 dark:text-blue-300" : "text-amber-800 dark:text-amber-300"
+                        )}>
+                          {isMinistryCalendarSynced
+                            ? "Active Term and Academic Year are managed automatically by the Ministry of Education School Calendar. School administrators cannot modify these values directly."
+                            : "Ministry Calendar auto-sync is currently disabled by government policy. You can manually set your school's Academic Year and Active Term above."}
                         </p>
                       </div>
                     </div>

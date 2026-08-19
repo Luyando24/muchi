@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
   Settings, Save, Loader2, Info, Activity, 
-  Users, AlertTriangle, CheckCircle2, RefreshCw 
+  Users, AlertTriangle, CheckCircle2, RefreshCw, Calendar 
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import { syncFetch } from '@/lib/syncService';
@@ -24,6 +25,7 @@ interface SettingsForm {
   gov_promotion_min_performance_score: number;
   gov_promotion_min_cpd_hours: number;
   gov_promotion_review_period_months: number;
+  gov_apply_ministry_calendar_to_school_terms: boolean;
 }
 
 const defaultForm: SettingsForm = {
@@ -37,7 +39,8 @@ const defaultForm: SettingsForm = {
   gov_performance_weakness_score: 60,
   gov_promotion_min_performance_score: 70,
   gov_promotion_min_cpd_hours: 40,
-  gov_promotion_review_period_months: 24
+  gov_promotion_review_period_months: 24,
+  gov_apply_ministry_calendar_to_school_terms: true
 };
 
 export default function GovernmentSettings() {
@@ -78,7 +81,8 @@ export default function GovernmentSettings() {
           gov_performance_weakness_score: parseInt(data.gov_performance_weakness_score) || defaultForm.gov_performance_weakness_score,
           gov_promotion_min_performance_score: parseInt(data.gov_promotion_min_performance_score) || defaultForm.gov_promotion_min_performance_score,
           gov_promotion_min_cpd_hours: parseInt(data.gov_promotion_min_cpd_hours) || defaultForm.gov_promotion_min_cpd_hours,
-          gov_promotion_review_period_months: parseInt(data.gov_promotion_review_period_months) || defaultForm.gov_promotion_review_period_months
+          gov_promotion_review_period_months: parseInt(data.gov_promotion_review_period_months) || defaultForm.gov_promotion_review_period_months,
+          gov_apply_ministry_calendar_to_school_terms: data.gov_apply_ministry_calendar_to_school_terms === undefined ? true : (data.gov_apply_ministry_calendar_to_school_terms !== 'false' && data.gov_apply_ministry_calendar_to_school_terms !== 'disabled')
         });
       }
     } catch (err: any) {
@@ -106,12 +110,15 @@ export default function GovernmentSettings() {
       return;
     }
 
-    // Validation complete
-
     setSaving(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('No active session found.');
+
+      const payload = {
+        ...form,
+        gov_apply_ministry_calendar_to_school_terms: form.gov_apply_ministry_calendar_to_school_terms ? 'true' : 'false'
+      };
 
       const result = await syncFetch('/api/government/settings', {
         method: 'PUT',
@@ -119,7 +126,7 @@ export default function GovernmentSettings() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify(form)
+        body: JSON.stringify(payload)
       });
 
       if (result.offline) {
@@ -428,6 +435,33 @@ export default function GovernmentSettings() {
                 </div>
               </div>
 
+            </CardContent>
+          </Card>
+
+          {/* Card 4: School Calendar Application */}
+          <Card className="border-none shadow-md bg-white dark:bg-slate-800 rounded-2xl overflow-hidden">
+            <CardHeader className="border-b border-slate-50 dark:border-slate-700/50 p-6 bg-gradient-to-r from-cyan-50/50 to-transparent dark:from-cyan-900/10">
+              <CardTitle className="flex items-center gap-2 text-base font-black uppercase tracking-tight text-cyan-600 dark:text-cyan-400">
+                <Calendar className="h-5 w-5" />
+                School Calendar Application
+              </CardTitle>
+              <CardDescription className="text-xs">Control whether the Ministry of Education academic calendar automatically syncs to school terms.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-6 space-y-6">
+              <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
+                <div className="space-y-1">
+                  <Label className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                    Apply Ministry Calendar to School Terms
+                  </Label>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    When enabled, the active term and academic year for all schools are automatically synced with national dates. Disable this to allow school administrators to set custom terms manually in School Settings.
+                  </p>
+                </div>
+                <Switch
+                  checked={form.gov_apply_ministry_calendar_to_school_terms}
+                  onCheckedChange={(checked) => setForm({ ...form, gov_apply_ministry_calendar_to_school_terms: checked })}
+                />
+              </div>
             </CardContent>
           </Card>
 

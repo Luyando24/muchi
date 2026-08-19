@@ -36,6 +36,8 @@ import { supabase } from '@/lib/supabase';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { syncFetch } from '@/lib/syncService';
 
+import { Switch } from "@/components/ui/switch";
+
 interface CalendarEntry {
   id: string;
   year: string;
@@ -53,6 +55,8 @@ export default function GovernmentSchoolCalendar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
   const [typeFilter, setTypeFilter] = useState('All');
+  const [applyToSchoolTerms, setApplyToSchoolTerms] = useState(true);
+  const [isUpdatingSyncSetting, setIsUpdatingSyncSetting] = useState(false);
 
   // Dialog state
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -101,8 +105,58 @@ export default function GovernmentSchoolCalendar() {
     }
   };
 
+  const fetchSyncSetting = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const data = await syncFetch('/api/government/settings', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        cacheKey: 'gov-settings'
+      });
+      if (data && data.gov_apply_ministry_calendar_to_school_terms !== undefined) {
+        setApplyToSchoolTerms(data.gov_apply_ministry_calendar_to_school_terms !== 'false' && data.gov_apply_ministry_calendar_to_school_terms !== 'disabled');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleToggleApplyToTerms = async (enabled: boolean) => {
+    setIsUpdatingSyncSetting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      await syncFetch('/api/government/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          gov_apply_ministry_calendar_to_school_terms: enabled ? 'true' : 'false'
+        })
+      });
+      setApplyToSchoolTerms(enabled);
+      toast({
+        title: enabled ? 'Ministry Calendar Auto-Sync Enabled' : 'Ministry Calendar Auto-Sync Disabled',
+        description: enabled
+          ? 'Ministry calendar timelines will automatically adjust active terms for all schools.'
+          : 'Schools can now manually set their academic year and term in School Settings.'
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Error updating setting',
+        description: err.message || 'Failed to update setting',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsUpdatingSyncSetting(false);
+    }
+  };
+
   useEffect(() => {
     fetchCalendar();
+    fetchSyncSetting();
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -345,13 +399,47 @@ export default function GovernmentSchoolCalendar() {
         </div>
       </div>
 
+      {/* Calendar Auto-Sync Toggle Control Card */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className={`p-2.5 rounded-xl ${applyToSchoolTerms ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400' : 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400'}`}>
+            <Calendar className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="font-bold text-slate-900 dark:text-white text-sm">Apply Ministry Calendar to School Term</h4>
+              <Badge className={applyToSchoolTerms ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200'}>
+                {applyToSchoolTerms ? 'Active Sync Enabled' : 'Sync Disabled'}
+              </Badge>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+              {applyToSchoolTerms
+                ? 'When enabled, official ministry term timelines dynamically set the active term and academic year for all schools in the system.'
+                : 'When disabled, schools can manually select and configure their own academic year and active term in School Settings.'}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 shrink-0 self-end md:self-auto">
+          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+            {applyToSchoolTerms ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={applyToSchoolTerms}
+            disabled={isUpdatingSyncSetting}
+            onCheckedChange={handleToggleApplyToTerms}
+          />
+        </div>
+      </div>
+
       {/* Info Warning Alert */}
       <div className="flex items-start gap-4 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30">
         <Info className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
         <div>
           <h4 className="font-bold text-amber-900 dark:text-amber-300 text-sm">System Synchronization Notice</h4>
           <p className="text-xs text-amber-700 dark:text-amber-400/80 mt-1 font-medium leading-relaxed">
-            Changes to the official term timelines will dynamically adjust the active term and academic year for all schools in the system on their respective start dates. Please verify dates carefully before saving.
+            {applyToSchoolTerms
+              ? 'Changes to the official term timelines will dynamically adjust the active term and academic year for all schools in the system on their respective start dates. Please verify dates carefully before saving.'
+              : 'Ministry calendar auto-sync is currently disabled. Changes saved here will serve as national guidelines, but schools can manage their own terms.'}
           </p>
         </div>
       </div>

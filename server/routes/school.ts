@@ -8461,7 +8461,22 @@ router.get(
         return res.status(404).json({ message: "School settings not found" });
       }
 
-      res.json(school);
+      let applyMinistryCalendar = true;
+      try {
+        const { data: sysSetting } = await supabaseAdmin
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'gov_apply_ministry_calendar_to_school_terms')
+          .single();
+        if (sysSetting && (sysSetting.value === 'false' || sysSetting.value === 'disabled')) {
+          applyMinistryCalendar = false;
+        }
+      } catch (err) {}
+
+      res.json({
+        ...school,
+        apply_ministry_calendar_enabled: applyMinistryCalendar
+      });
     } catch (error: any) {
       console.error("Get School Settings Error:", error);
       res.status(500).json({ message: error.message });
@@ -8545,51 +8560,69 @@ router.put(
         ? compulsory_subjects_secondary.map((s: string) => standardizeSubjectName(s))
         : undefined;
 
+      let applyMinistryCalendar = true;
+      try {
+        const { data: sysSetting } = await supabaseAdmin
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'gov_apply_ministry_calendar_to_school_terms')
+          .single();
+        if (sysSetting && (sysSetting.value === 'false' || sysSetting.value === 'disabled')) {
+          applyMinistryCalendar = false;
+        }
+      } catch (err) {}
+
+      const updatePayload: any = {
+        name,
+        exam_types: ["Mid Term", "End of Term"],
+        test_types,
+        test_types_enabled,
+        compulsory_subjects_primary: stdPrimary,
+        compulsory_subjects_secondary: stdSecondary,
+        email,
+        phone,
+        address,
+        province,
+        district,
+        website,
+        signature_url,
+        seal_url,
+        logo_url,
+        coat_of_arms_url,
+        school_type,
+        headteacher_name,
+        headteacher_title,
+        category,
+        country,
+        location_type,
+        boarding_status: (boarding_status && boarding_status.trim() !== '') ? boarding_status : null,
+        gender_composition: (gender_composition && gender_composition.trim() !== '') ? gender_composition : null,
+        ict_name,
+        ict_email,
+        ict_phone,
+        show_teacher_on_report_card:
+          show_teacher_on_report_card === undefined
+            ? undefined
+            : Boolean(show_teacher_on_report_card),
+        enable_tuckshop:
+          enable_tuckshop === undefined
+            ? undefined
+            : Boolean(enable_tuckshop),
+        simplified_assessment_mode:
+          simplified_assessment_mode === undefined
+            ? undefined
+            : Boolean(simplified_assessment_mode),
+        updated_at: new Date(),
+      };
+
+      if (!applyMinistryCalendar) {
+        if (academic_year !== undefined) updatePayload.academic_year = academic_year;
+        if (current_term !== undefined) updatePayload.current_term = current_term;
+      }
+
       const { data, error } = await supabaseAdmin
         .from("schools")
-        .update({
-          name,
-          // Academic year and current term are automatically synchronized with the ministry calendar
-          exam_types: ["Mid Term", "End of Term"],
-          test_types,
-          test_types_enabled,
-          compulsory_subjects_primary: stdPrimary,
-          compulsory_subjects_secondary: stdSecondary,
-          email,
-          phone,
-          address,
-          province,
-          district,
-          website,
-          signature_url,
-          seal_url,
-          logo_url,
-          coat_of_arms_url,
-          school_type,
-          headteacher_name,
-          headteacher_title,
-          category,
-          country,
-          location_type,
-          boarding_status: (boarding_status && boarding_status.trim() !== '') ? boarding_status : null,
-          gender_composition: (gender_composition && gender_composition.trim() !== '') ? gender_composition : null,
-          ict_name,
-          ict_email,
-          ict_phone,
-          show_teacher_on_report_card:
-            show_teacher_on_report_card === undefined
-              ? undefined
-              : Boolean(show_teacher_on_report_card),
-          enable_tuckshop:
-            enable_tuckshop === undefined
-              ? undefined
-              : Boolean(enable_tuckshop),
-          simplified_assessment_mode:
-            simplified_assessment_mode === undefined
-              ? undefined
-              : Boolean(simplified_assessment_mode),
-          updated_at: new Date(),
-        })
+        .update(updatePayload)
         .eq("id", schoolId)
         .select()
         .single();

@@ -287,7 +287,7 @@ export default function AcademicManagement() {
   const [classSubjects, setClassSubjects] = useState<any[]>([]);
   const [isLoadingAllocations, setIsLoadingAllocations] = useState(false);
   const [isAddAllocationOpen, setIsAddAllocationOpen] = useState(false);
-  const [allocationForm, setAllocationForm] = useState({ subjectId: '', teacherId: '' });
+  const [allocationForm, setAllocationForm] = useState<{ subjectId: string; teacherId: string; classSubjectId?: string }>({ subjectId: '', teacherId: '' });
 
   // Confirmation State
   const [confirmState, setConfirmState] = useState<{

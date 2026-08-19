@@ -230,7 +230,8 @@ const getSettings = async () => {
     gov_performance_weakness_score: '60',
     gov_promotion_min_performance_score: '70',
     gov_promotion_min_cpd_hours: '40',
-    gov_promotion_review_period_months: '24'
+    gov_promotion_review_period_months: '24',
+    gov_apply_ministry_calendar_to_school_terms: 'true'
   };
 
   try {
@@ -239,10 +240,10 @@ const getSettings = async () => {
       console.warn("Failed to fetch system settings, using defaults:", error.message);
       return defaults;
     }
-    const settingsMap = { ...defaults };
+    const settingsMap: Record<string, string> = { ...defaults };
     data?.forEach((item: any) => {
-      if (item.key && Object.prototype.hasOwnProperty.call(defaults, item.key)) {
-        settingsMap[item.key as keyof typeof defaults] = item.value;
+      if (item.key) {
+        settingsMap[item.key] = item.value;
       }
     });
     return settingsMap;
