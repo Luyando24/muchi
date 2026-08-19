@@ -111,6 +111,7 @@ export default function GovernmentSchoolCalendar() {
       if (!session) return;
       const data = await syncFetch('/api/government/settings', {
         headers: { 'Authorization': `Bearer ${session.access_token}` },
+        forceSync: true,
         cacheKey: 'gov-settings'
       });
       if (data && data.gov_apply_ministry_calendar_to_school_terms !== undefined) {

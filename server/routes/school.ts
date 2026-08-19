@@ -8467,7 +8467,7 @@ router.get(
           .from('system_settings')
           .select('value')
           .eq('key', 'gov_apply_ministry_calendar_to_school_terms')
-          .single();
+          .maybeSingle();
         if (sysSetting && (sysSetting.value === 'false' || sysSetting.value === 'disabled')) {
           applyMinistryCalendar = false;
         }
@@ -8566,7 +8566,7 @@ router.put(
           .from('system_settings')
           .select('value')
           .eq('key', 'gov_apply_ministry_calendar_to_school_terms')
-          .single();
+          .maybeSingle();
         if (sysSetting && (sysSetting.value === 'false' || sysSetting.value === 'disabled')) {
           applyMinistryCalendar = false;
         }

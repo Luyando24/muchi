@@ -159,6 +159,7 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
         headers: {
           'Authorization': `Bearer ${session.access_token}`
         },
+        forceSync: true,
         cacheKey: 'school-settings'
       });
 
@@ -311,6 +312,13 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
         });
       } else {
         setSchool(result);
+        if (result.academic_year) {
+          setFormData(prev => ({
+            ...prev,
+            academic_year: result.academic_year,
+            current_term: result.current_term || prev.current_term
+          }));
+        }
         if (onSettingsSaved) {
           onSettingsSaved(result);
         }
