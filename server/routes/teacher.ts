@@ -314,7 +314,9 @@ router.get('/classes/:classId/students', requireTeacher, async (req: Request, re
         profiles:student_id (
           id,
           full_name,
-          student_number
+          student_number,
+          gender,
+          guardian_name
         )
       `)
       .eq('class_id', classId)
@@ -323,11 +325,15 @@ router.get('/classes/:classId/students', requireTeacher, async (req: Request, re
     if (error) throw error;
 
     // Transform to flat list of students
-    const students = enrollments.map((e: any) => ({
-      id: e.profiles.id,
-      name: e.profiles.full_name,
-      studentId: e.profiles.student_number || e.profiles.id // Use student_number, fallback to ID if missing
-    }));
+    const students = enrollments
+      .filter((e: any) => e.profiles)
+      .map((e: any) => ({
+        id: e.profiles.id,
+        name: e.profiles.full_name,
+        studentId: e.profiles.student_number || e.profiles.id,
+        gender: e.profiles.gender || '',
+        guardian: e.profiles.guardian_name || ''
+      }));
 
     res.json(students);
   } catch (error: any) {

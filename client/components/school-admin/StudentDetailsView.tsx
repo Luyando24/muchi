@@ -458,7 +458,7 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
           </div>
         </div>
         <div className="flex items-center space-x-2">
-          {userRole === 'school_admin' && (
+          {userRole !== 'student' && (
             <Button variant="outline" onClick={() => setIsEditProfileOpen(true)}>
               <Edit className="mr-2 h-4 w-4" />
               Edit Profile
@@ -576,7 +576,7 @@ export default function StudentDetailsView({ studentId, onBack, userRole = 'scho
                   <CardHeader className="pb-2">
                     <div className="flex justify-between items-center">
                       <CardTitle className="text-sm font-medium text-muted-foreground">Current Class</CardTitle>
-                      {userRole === 'school_admin' && (
+                      {userRole !== 'student' && (
                         <Button variant="ghost" size="sm" onClick={() => setIsEnrollOpen(true)}><Edit className="h-3 w-3" /></Button>
                       )}
                     </div>

@@ -1390,7 +1390,7 @@ function generateSimplePassword() {
 // POST /api/school/create-student
 router.post(
   "/create-student",
-  requireSchoolRole(ADMIN_ROLES),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -1532,7 +1532,7 @@ router.post(
 // POST /api/school/students/bulk
 router.post(
   "/students/bulk",
-  requireSchoolRole(ADMIN_ROLES),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     try {
       const profile = (req as any).profile;
@@ -2276,7 +2276,7 @@ router.post(
 // Update a student
 router.put(
   "/students/:id",
-  requireSchoolRole(ADMIN_ROLES),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -2661,7 +2661,7 @@ router.post(
 // Enroll a student in a class
 router.post(
   "/students/:id/enroll",
-  requireSchoolRole(ADMIN_ROLES),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
@@ -4517,7 +4517,7 @@ router.post(
 // Delete (soft delete or hard delete) a student
 router.delete(
   "/students/:id",
-  requireSchoolRole(ADMIN_ROLES),
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;

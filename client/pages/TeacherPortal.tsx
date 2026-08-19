@@ -14,6 +14,7 @@ import {
   Clock,
   FileText,
   Download,
+  Edit,
   CheckCircle,
   GraduationCap,
   Users,
@@ -124,6 +125,8 @@ interface Student {
   id: string;
   name: string;
   studentId: string;
+  gender?: string;
+  guardian?: string;
 }
 
 interface Subject {
@@ -310,6 +313,103 @@ export default function TeacherPortal() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
+
+  // Student Management Dialog State
+  const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
+  const [addStudentForm, setAddStudentForm] = useState({ name: '', gender: 'Male', guardian: '', classId: '' });
+  const [isEditStudentOpen, setIsEditStudentOpen] = useState(false);
+  const [editStudentForm, setEditStudentForm] = useState({ id: '', name: '', gender: 'Male', guardian: '', classId: '' });
+  const [deleteStudentTarget, setDeleteStudentTarget] = useState<Student | null>(null);
+  const [isSubmittingStudent, setIsSubmittingStudent] = useState(false);
+  const [isDeletingStudent, setIsDeletingStudent] = useState(false);
+
+  const handleAddStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addStudentForm.name.trim()) return;
+    setIsSubmittingStudent(true);
+    try {
+      await fetchWithAuth('/api/school/create-student', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: addStudentForm.name.trim(),
+          gender: addStudentForm.gender,
+          guardian: addStudentForm.guardian.trim(),
+          grade: addStudentForm.classId || selectedClassId
+        })
+      });
+      toast({
+        title: "Student Added",
+        description: `Successfully added ${addStudentForm.name} to class.`
+      });
+      setIsAddStudentOpen(false);
+      setAddStudentForm({ name: '', gender: 'Male', guardian: '', classId: '' });
+      fetchStudentsAndAttendance();
+    } catch (err: any) {
+      toast({
+        title: "Error adding student",
+        description: err.message || "Failed to add student.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmittingStudent(false);
+    }
+  };
+
+  const handleEditStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editStudentForm.id || !editStudentForm.name.trim()) return;
+    setIsSubmittingStudent(true);
+    try {
+      await fetchWithAuth(`/api/school/students/${editStudentForm.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          firstName: editStudentForm.name.trim(),
+          lastName: '',
+          gender: editStudentForm.gender,
+          guardian: editStudentForm.guardian.trim(),
+          grade: editStudentForm.classId
+        })
+      });
+      toast({
+        title: "Student Updated",
+        description: `Updated profile details for ${editStudentForm.name}.`
+      });
+      setIsEditStudentOpen(false);
+      fetchStudentsAndAttendance();
+    } catch (err: any) {
+      toast({
+        title: "Error updating student",
+        description: err.message || "Failed to update student details.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmittingStudent(false);
+    }
+  };
+
+  const handleDeleteStudent = async () => {
+    if (!deleteStudentTarget) return;
+    setIsDeletingStudent(true);
+    try {
+      await fetchWithAuth(`/api/school/students/${deleteStudentTarget.id}`, {
+        method: 'DELETE'
+      });
+      toast({
+        title: "Student Removed",
+        description: `Student ${deleteStudentTarget.name} has been deleted.`
+      });
+      setDeleteStudentTarget(null);
+      fetchStudentsAndAttendance();
+    } catch (err: any) {
+      toast({
+        title: "Error deleting student",
+        description: err.message || "Failed to delete student.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsDeletingStudent(false);
+    }
+  };
 
   // Search State
   const [searchQuery, setSearchQuery] = useState("");
@@ -1744,20 +1844,39 @@ export default function TeacherPortal() {
                 />
               ) : (
                 <>
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Students Directory</h2>
-                    <div className="flex gap-2 items-center">
-                      <Label>Class:</Label>
-                      <Select value={selectedClassId} onValueChange={setSelectedClassId}>
-                        <SelectTrigger className="w-[180px]">
-                          <SelectValue placeholder="Select Class" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {classes.map((cls) => (
-                            <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Students Directory</h2>
+                      <p className="text-xs text-slate-500">View and manage students in your assigned classes</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex gap-2 items-center">
+                        <Label className="text-xs font-bold text-slate-500">Class:</Label>
+                        <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Select Class" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {classes.map((cls) => (
+                              <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        onClick={() => {
+                          setAddStudentForm({
+                            name: '',
+                            gender: 'Male',
+                            guardian: '',
+                            classId: selectedClassId || (classes[0]?.id || '')
+                          });
+                          setIsAddStudentOpen(true);
+                        }}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-sm"
+                      >
+                        <Plus className="h-4 w-4 mr-2" /> Add Student
+                      </Button>
                     </div>
                   </div>
 
@@ -1793,13 +1912,40 @@ export default function TeacherPortal() {
                                   <Badge className="bg-green-500">Active</Badge>
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm"
-                                    onClick={() => setSelectedStudentId(student.id)}
-                                  >
-                                    View Profile
-                                  </Button>
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm"
+                                      onClick={() => setSelectedStudentId(student.id)}
+                                    >
+                                      View Profile
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                                      onClick={() => {
+                                        setEditStudentForm({
+                                          id: student.id,
+                                          name: student.name,
+                                          gender: student.gender || 'Male',
+                                          guardian: student.guardian || '',
+                                          classId: selectedClassId
+                                        });
+                                        setIsEditStudentOpen(true);
+                                      }}
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                                      onClick={() => setDeleteStudentTarget(student)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
                                 </TableCell>
                               </TableRow>
                             ))
@@ -1814,6 +1960,169 @@ export default function TeacherPortal() {
                       </Table>
                     </CardContent>
                   </Card>
+
+                  {/* Add Student Dialog */}
+                  <Dialog open={isAddStudentOpen} onOpenChange={setIsAddStudentOpen}>
+                    <DialogContent className="sm:max-w-[450px]">
+                      <DialogHeader>
+                        <DialogTitle>Add New Student</DialogTitle>
+                        <DialogDescription>
+                          Add a new student to your class roster.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <form onSubmit={handleAddStudent} className="space-y-4 py-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="add_student_name">Full Name <span className="text-rose-500">*</span></Label>
+                          <Input
+                            id="add_student_name"
+                            required
+                            placeholder="e.g. John Banda"
+                            value={addStudentForm.name}
+                            onChange={(e) => setAddStudentForm({ ...addStudentForm, name: e.target.value })}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="add_student_gender">Gender</Label>
+                            <Select
+                              value={addStudentForm.gender}
+                              onValueChange={(val) => setAddStudentForm({ ...addStudentForm, gender: val })}
+                            >
+                              <SelectTrigger id="add_student_gender">
+                                <SelectValue placeholder="Gender" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Male">Male</SelectItem>
+                                <SelectItem value="Female">Female</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="add_student_class">Assign Class</Label>
+                            <Select
+                              value={addStudentForm.classId || selectedClassId}
+                              onValueChange={(val) => setAddStudentForm({ ...addStudentForm, classId: val })}
+                            >
+                              <SelectTrigger id="add_student_class">
+                                <SelectValue placeholder="Class" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {classes.map((cls) => (
+                                  <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="add_student_guardian">Parent / Guardian Name</Label>
+                          <Input
+                            id="add_student_guardian"
+                            placeholder="e.g. Mary Banda"
+                            value={addStudentForm.guardian}
+                            onChange={(e) => setAddStudentForm({ ...addStudentForm, guardian: e.target.value })}
+                          />
+                        </div>
+                        <DialogFooter className="pt-2">
+                          <Button type="button" variant="outline" onClick={() => setIsAddStudentOpen(false)}>
+                            Cancel
+                          </Button>
+                          <Button type="submit" disabled={isSubmittingStudent} className="bg-blue-600 hover:bg-blue-700 text-white font-bold">
+                            {isSubmittingStudent ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+                            Add Student
+                          </Button>
+                        </DialogFooter>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+
+                  {/* Edit Student Dialog */}
+                  <Dialog open={isEditStudentOpen} onOpenChange={setIsEditStudentOpen}>
+                    <DialogContent className="sm:max-w-[450px]">
+                      <DialogHeader>
+                        <DialogTitle>Edit Student Profile</DialogTitle>
+                        <DialogDescription>
+                          Update student details or reassign class.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <form onSubmit={handleEditStudent} className="space-y-4 py-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="edit_student_name">Full Name <span className="text-rose-500">*</span></Label>
+                          <Input
+                            id="edit_student_name"
+                            required
+                            placeholder="Full Name"
+                            value={editStudentForm.name}
+                            onChange={(e) => setEditStudentForm({ ...editStudentForm, name: e.target.value })}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="edit_student_gender">Gender</Label>
+                            <Select
+                              value={editStudentForm.gender}
+                              onValueChange={(val) => setEditStudentForm({ ...editStudentForm, gender: val })}
+                            >
+                              <SelectTrigger id="edit_student_gender">
+                                <SelectValue placeholder="Gender" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Male">Male</SelectItem>
+                                <SelectItem value="Female">Female</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="edit_student_class">Class</Label>
+                            <Select
+                              value={editStudentForm.classId}
+                              onValueChange={(val) => setEditStudentForm({ ...editStudentForm, classId: val })}
+                            >
+                              <SelectTrigger id="edit_student_class">
+                                <SelectValue placeholder="Class" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {classes.map((cls) => (
+                                  <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit_student_guardian">Parent / Guardian Name</Label>
+                          <Input
+                            id="edit_student_guardian"
+                            placeholder="Guardian Name"
+                            value={editStudentForm.guardian}
+                            onChange={(e) => setEditStudentForm({ ...editStudentForm, guardian: e.target.value })}
+                          />
+                        </div>
+                        <DialogFooter className="pt-2">
+                          <Button type="button" variant="outline" onClick={() => setIsEditStudentOpen(false)}>
+                            Cancel
+                          </Button>
+                          <Button type="submit" disabled={isSubmittingStudent} className="bg-blue-600 hover:bg-blue-700 text-white font-bold">
+                            {isSubmittingStudent ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                            Save Changes
+                          </Button>
+                        </DialogFooter>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+
+                  {/* Delete Student Confirmation Dialog */}
+                  <ConfirmDialog
+                    open={Boolean(deleteStudentTarget)}
+                    onOpenChange={(open) => { if (!open) setDeleteStudentTarget(null); }}
+                    onConfirm={handleDeleteStudent}
+                    title="Delete Student Profile"
+                    description={`Are you sure you want to delete ${deleteStudentTarget?.name || 'this student'}? This will remove their record from the school roster.`}
+                    confirmLabel="Delete Student"
+                    cancelLabel="Cancel"
+                    variant="danger"
+                    loading={isDeletingStudent}
+                  />
                 </>
               )}
               </div>
