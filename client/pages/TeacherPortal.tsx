@@ -282,6 +282,7 @@ export default function TeacherPortal() {
   const [stats, setStats] = useState<Stats>({ totalStudents: 0, classesToday: 0, pendingGrading: 0, averageAttendance: 0 });
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [allClasses, setAllClasses] = useState<ClassData[]>([]);
+  const [allSubjects, setAllSubjects] = useState<Subject[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -767,6 +768,21 @@ export default function TeacherPortal() {
     return result;
   };
 
+  useEffect(() => {
+    if (isSelfAssignOpen) {
+      if (!allClasses || allClasses.length === 0) {
+        fetchWithAuth('/api/teacher/all-school-classes')
+          .then(data => setAllClasses(Array.isArray(data) ? data : (data?.data || [])))
+          .catch(e => console.error('Failed to fetch school classes', e));
+      }
+      if (!allSubjects || allSubjects.length === 0) {
+        fetchWithAuth('/api/teacher/all-school-subjects')
+          .then(data => setAllSubjects(Array.isArray(data) ? data : (data?.data || [])))
+          .catch(e => console.error('Failed to fetch school subjects', e));
+      }
+    }
+  }, [isSelfAssignOpen]);
+
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
@@ -803,9 +819,11 @@ export default function TeacherPortal() {
           
           if (!isSnoozed) {
             setIsSelfAssignOpen(true);
-            // Also fetch all classes for the school
+            // Also fetch all classes and subjects for the school
             const allClassesData = await fetchWithAuth('/api/teacher/all-school-classes');
             setAllClasses(Array.isArray(allClassesData) ? allClassesData : (allClassesData?.data || []));
+            const allSubjectsData = await fetchWithAuth('/api/teacher/all-school-subjects');
+            setAllSubjects(Array.isArray(allSubjectsData) ? allSubjectsData : (allSubjectsData?.data || []));
           }
         }
       } catch (e) {
@@ -3505,8 +3523,8 @@ export default function TeacherPortal() {
             <div className="space-y-2">
               <Label htmlFor="subject">Select Subjects</Label>
               <MultiSelect
-                options={(subjects || []).map((sub) => ({
-                  label: `${sub.name} (${sub.code})`,
+                options={((allSubjects && allSubjects.length > 0 ? allSubjects : subjects) || []).map((sub) => ({
+                  label: sub.code ? `${sub.name} (${sub.code})` : sub.name,
                   value: sub.id,
                 }))}
                 selected={selfAssignForm.subjectIds || []}

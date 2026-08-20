@@ -301,6 +301,28 @@ router.get('/all-school-classes', requireTeacher, async (req: Request, res: Resp
   }
 });
 
+// GET /api/teacher/all-school-subjects
+// Get all subjects in the school (for self-assignment)
+router.get('/all-school-subjects', requireTeacher, async (req: Request, res: Response) => {
+  const profile = (req as any).profile;
+  const schoolId = profile.school_id;
+
+  try {
+    const { data: subjects, error } = await supabaseAdmin
+      .from('subjects')
+      .select('*')
+      .eq('school_id', schoolId)
+      .order('name');
+
+    if (error) throw error;
+    res.json(subjects);
+  } catch (error: any) {
+    console.error('Get All School Subjects Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+
 // GET /api/teacher/classes/:classId/students
 // Get students in a specific class
 router.get('/classes/:classId/students', requireTeacher, async (req: Request, res: Response) => {
