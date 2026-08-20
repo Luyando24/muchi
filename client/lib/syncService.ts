@@ -35,10 +35,11 @@ export const invalidateCache = async (mutationUrl: string, cacheKey?: string) =>
       await db.cache.delete(`supabase:${scopedKey}`);
     }
 
-    // 3. Special check for grade/results/student updates to clear related caches
+    // 3. Special check for grade/results/student/self-assign updates to clear related caches
     const isGradeOrResultMutation = cleanUrl.includes('/grades') || cleanUrl.includes('/results');
     const isStudentMutation = cleanUrl.includes('/students') || cleanUrl.includes('/enroll') || cleanUrl.includes('/create-student');
-    if (isGradeOrResultMutation || isStudentMutation) {
+    const isSelfAssignMutation = cleanUrl.includes('self-assign') || cleanUrl.includes('assign');
+    if (isGradeOrResultMutation || isStudentMutation || isSelfAssignMutation) {
       const allEntries = await db.cache.toArray();
       for (const entry of allEntries) {
         const key = entry.url;
@@ -48,7 +49,11 @@ export const invalidateCache = async (mutationUrl: string, cacheKey?: string) =>
           key.includes('verify-status') || 
           key.includes('report-card') ||
           key.includes('grades') ||
-          key.includes('results')
+          key.includes('results') ||
+          key.includes('classes') ||
+          key.includes('subjects') ||
+          key.includes('dashboard-stats') ||
+          key.includes('timetable')
         ) {
           await db.cache.delete(key);
         }

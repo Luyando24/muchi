@@ -954,34 +954,51 @@ router.post('/self-assign', requireTeacher, async (req: Request, res: Response) 
     const results = [];
     
     for (const sId of ids) {
-      // Check if the assignment already exists
-      const { data: existing } = await supabaseAdmin
+      // 1. Check if assignment already exists for this exact teacher
+      const { data: existingForTeacher } = await supabaseAdmin
         .from('class_subjects')
         .select('id, teacher_id')
         .eq('class_id', classId)
         .eq('subject_id', sId)
+        .eq('teacher_id', teacherId)
         .maybeSingle();
 
-      if (existing) {
-        // If already assigned, update to current teacher (overwrite)
+      if (existingForTeacher) {
+        results.push(existingForTeacher);
+        continue;
+      }
+
+      // 2. Check if there is an unassigned class_subject row (teacher_id is null)
+      const { data: unassignedRow } = await supabaseAdmin
+        .from('class_subjects')
+        .select('id')
+        .eq('class_id', classId)
+        .eq('subject_id', sId)
+        .is('teacher_id', null)
+        .maybeSingle();
+
+      if (unassignedRow) {
         const { data, error } = await supabaseAdmin
           .from('class_subjects')
           .update({ teacher_id: teacherId })
-          .eq('id', existing.id)
+          .eq('id', unassignedRow.id)
           .select()
           .single();
         
         if (error) throw error;
         results.push(data);
       } else {
-        // Create new assignment
+        // 3. Insert or upsert new assignment for this teacher
         const { data, error } = await supabaseAdmin
           .from('class_subjects')
-          .insert({
-            class_id: classId,
-            subject_id: sId,
-            teacher_id: teacherId
-          })
+          .upsert(
+            {
+              class_id: classId,
+              subject_id: sId,
+              teacher_id: teacherId
+            },
+            { onConflict: 'class_id, subject_id, teacher_id' }
+          )
           .select()
           .single();
         
