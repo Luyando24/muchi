@@ -63,6 +63,7 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
     exam_types: [] as string[],
     test_types: [] as string[],
     test_types_enabled: true,
+    active_test_type: '',
     simplified_assessment_mode: true,
     email: '',
     phone: '',
@@ -172,6 +173,7 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
         exam_types: data.exam_types || ['Mid Term', 'End of Term'],
         test_types: data.test_types || [],
         test_types_enabled: data.test_types_enabled ?? false,
+        active_test_type: data.active_test_type || '',
         simplified_assessment_mode: data.simplified_assessment_mode ?? false,
         email: data.email || '',
         phone: data.phone || '',
@@ -280,10 +282,18 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
   };
 
   const removeTestType = (typeToRemove: string) => {
-    setFormData(prev => ({
-      ...prev,
-      test_types: (prev.test_types || []).filter(type => type !== typeToRemove)
-    }));
+    setFormData(prev => {
+      const updated = (prev.test_types || []).filter(type => type !== typeToRemove);
+      let nextActive = prev.active_test_type;
+      if (nextActive === typeToRemove) {
+        nextActive = updated[0] || '';
+      }
+      return {
+        ...prev,
+        test_types: updated,
+        active_test_type: nextActive
+      };
+    });
   };
 
   const handleSave = async (e?: React.FormEvent | React.MouseEvent) => {
@@ -809,6 +819,29 @@ export default function SchoolSettings({ onSettingsSaved }: SchoolSettingsProps 
                             <Button type="button" onClick={addTestType} variant="secondary">Add</Button>
                           </div>
                           <p className="text-[11px] text-slate-500">Configure nested test types. These will appear as sub-selections in the Gradebook and render as columns on Report Cards.</p>
+                          
+                          <div className="pt-3 border-t border-slate-200 dark:border-slate-800/60 flex flex-col gap-1.5">
+                            <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Active Gradebook Test Type</Label>
+                            <Select
+                              value={formData.active_test_type || ((formData.test_types && formData.test_types.length > 0) ? formData.test_types[0] : 'Test 1')}
+                              onValueChange={(value) => setFormData(prev => ({ ...prev, active_test_type: value }))}
+                            >
+                              <SelectTrigger className="max-w-xs bg-white dark:bg-slate-950">
+                                <SelectValue placeholder="Select Active Test Type" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {((formData.test_types && formData.test_types.length > 0) 
+                                  ? formData.test_types 
+                                  : ['Test 1', 'Test 2', 'Test 3']
+                                ).map((testType, i) => (
+                                  <SelectItem key={i} value={testType}>
+                                    {testType}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <p className="text-[11px] text-slate-500">Select which test type is active and default-selected when opening the Gradebook.</p>
+                          </div>
                         </div>
                       </div>
                     )}

@@ -61,6 +61,7 @@ export interface School {
   exam_types?: string[];
   test_types?: string[];
   test_types_enabled?: boolean;
+  active_test_type?: string;
   compulsory_subjects_secondary?: string[];
   compulsory_subjects_primary?: string[];
   email?: string;

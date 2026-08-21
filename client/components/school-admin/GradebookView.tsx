@@ -179,6 +179,7 @@ export default function GradebookView() {
   const [availableExamTypes, setAvailableExamTypes] = useState<string[]>(['Mid Term', 'End of Term']);
   const [schoolTestTypes, setSchoolTestTypes] = useState<string[]>([]);
   const [testTypesEnabled, setTestTypesEnabled] = useState<boolean>(false);
+  const [configuredActiveTestType, setConfiguredActiveTestType] = useState<string>('');
   const [simplifiedAssessmentMode, setSimplifiedAssessmentMode] = useState<boolean>(false);
 
   const validExamTypes = useMemo(
@@ -285,10 +286,14 @@ export default function GradebookView() {
           const testTypes = sanitizeSelectStrings(settings.test_types || []);
           setSchoolTestTypes(testTypes);
           setTestTypesEnabled(!!settings.test_types_enabled);
+          const activeTest = settings.active_test_type || '';
+          setConfiguredActiveTestType(activeTest);
           const isSimplified = !!settings.simplified_assessment_mode;
           setSimplifiedAssessmentMode(isSimplified);
 
-          if (testTypes.length > 0) {
+          if (activeTest && (testTypes.length === 0 || testTypes.includes(activeTest))) {
+            setSelectedTestType(activeTest);
+          } else if (testTypes.length > 0) {
             const month = new Date().getMonth();
             let initialTest = testTypes[0];
             if (month >= 0 && month <= 4) {
@@ -345,19 +350,24 @@ export default function GradebookView() {
     loadMetadata();
   }, []);
 
-  // Intelligent month-based auto-selection of test type + warning popup
+  // Intelligent auto-selection of test type (respecting active_test_type setting) + warning popup
   useEffect(() => {
     if (!simplifiedAssessmentMode && !testTypesEnabled) return;
     
     const testTypesList = schoolTestTypes.length > 0 ? schoolTestTypes : ['Test 1', 'Test 2', 'Test 3'];
-    const month = new Date().getMonth(); // 0 = Jan, 11 = Dec
     let targetTest = testTypesList[0];
-    if (month >= 0 && month <= 4) { // Jan to May
-      targetTest = testTypesList[0];
-    } else if (month >= 5 && month <= 7) { // Jun to Aug
-      targetTest = testTypesList[1] || testTypesList[0];
-    } else { // Sep to Dec
-      targetTest = testTypesList[2] || testTypesList[1] || testTypesList[0];
+
+    if (configuredActiveTestType && (testTypesList.includes(configuredActiveTestType) || schoolTestTypes.length === 0)) {
+      targetTest = configuredActiveTestType;
+    } else {
+      const month = new Date().getMonth(); // 0 = Jan, 11 = Dec
+      if (month >= 0 && month <= 4) { // Jan to May
+        targetTest = testTypesList[0];
+      } else if (month >= 5 && month <= 7) { // Jun to Aug
+        targetTest = testTypesList[1] || testTypesList[0];
+      } else { // Sep to Dec
+        targetTest = testTypesList[2] || testTypesList[1] || testTypesList[0];
+      }
     }
     
     if (targetTest && selectedTestType !== targetTest) {
@@ -368,7 +378,7 @@ export default function GradebookView() {
       hasShownTestTypeWarning.current = true;
       setShowTestTypeWarning(true);
     }
-  }, [simplifiedAssessmentMode, testTypesEnabled, schoolTestTypes]);
+  }, [simplifiedAssessmentMode, testTypesEnabled, schoolTestTypes, configuredActiveTestType]);
 
   // Update pendingStudentIds when switching to the pending tab
   useEffect(() => {
@@ -967,12 +977,16 @@ export default function GradebookView() {
                 <Label className="hidden sm:block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Assessment</Label>
                 <Select value={selectedExamType} onValueChange={(val) => {
                   setSelectedExamType(val);
-                  const month = new Date().getMonth();
                   const list = schoolTestTypes.length > 0 ? schoolTestTypes : ['Test 1', 'Test 2', 'Test 3'];
                   let targetTest = list[0];
-                  if (month >= 0 && month <= 4) targetTest = list[0];
-                  else if (month >= 5 && month <= 7) targetTest = list[1] || list[0];
-                  else targetTest = list[2] || list[1] || list[0];
+                  if (configuredActiveTestType && (list.includes(configuredActiveTestType) || schoolTestTypes.length === 0)) {
+                    targetTest = configuredActiveTestType;
+                  } else {
+                    const month = new Date().getMonth();
+                    if (month >= 0 && month <= 4) targetTest = list[0];
+                    else if (month >= 5 && month <= 7) targetTest = list[1] || list[0];
+                    else targetTest = list[2] || list[1] || list[0];
+                  }
                   setSelectedTestType(targetTest);
                 }}>
                   <SelectTrigger className="h-11 sm:h-9 text-sm sm:text-sm">
