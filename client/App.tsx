@@ -51,6 +51,11 @@ const Providers = ({ children }: { children: React.ReactNode }) => (
 const CommonRoutes = () => (
   <>
     <Route path="/login" element={<Login />} />
+    <Route path="/login/:role" element={<Login />} />
+    <Route path="/student/login" element={<Login defaultAudience="student" />} />
+    <Route path="/teacher/login" element={<Login defaultAudience="teacher" />} />
+    <Route path="/school-admin/login" element={<Login defaultAudience="school_admin" />} />
+    <Route path="/admin/login" element={<Login defaultAudience="school_admin" />} />
     <Route path="/forgot-password" element={<ForgotPassword />} />
     <Route path="/reset-password" element={<ResetPassword />} />
     <Route path="/force-password-reset" element={<ForcePasswordReset />} />
@@ -192,6 +197,11 @@ const RootApp = () => (
     <Routes>
       <Route path="/" element={<Index />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/login/:role" element={<Login />} />
+      <Route path="/student/login" element={<Login defaultAudience="student" />} />
+      <Route path="/teacher/login" element={<Login defaultAudience="teacher" />} />
+      <Route path="/school-admin/login" element={<Login defaultAudience="school_admin" />} />
+      <Route path="/admin/login" element={<Login defaultAudience="school_admin" />} />
       <Route path="/school/register" element={<SchoolRegister />} />
       <Route path="/teacher/register" element={<TeacherRegister />} />
       <Route path="/system-admin/login" element={<SystemAdminLogin />} />

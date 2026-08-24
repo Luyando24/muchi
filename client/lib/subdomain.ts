@@ -160,3 +160,39 @@ export function getRoleSubdomainUrl(role: string, userId?: string): string {
 export function isOnSubdomain(): boolean {
   return getSubdomain() !== null;
 }
+
+/**
+ * Returns the login URL for a given role (student, teacher, or school_admin).
+ * If running on localhost, uses relative path `/login/${routeParam}`.
+ * If running in production with subdomains, uses `https://${subdomain}.${rootDomain}/login`.
+ */
+export function getLoginSubdomainUrl(role: 'student' | 'teacher' | 'school_admin' | 'admin'): string {
+  const normalizedRole = role === 'admin' ? 'school_admin' : role;
+  const subdomain = normalizedRole === 'school_admin' ? 'admin' : normalizedRole;
+  const routeParam = normalizedRole === 'school_admin' ? 'admin' : normalizedRole;
+
+  const isLocalhost = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' || 
+    window.location.hostname.endsWith('.localhost') || 
+    window.location.hostname === '127.0.0.1'
+  );
+
+  if (isLocalhost) {
+    return `/login/${routeParam}`;
+  }
+
+  const appUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_APP_URL) || (typeof window !== 'undefined' ? window.location.origin : '');
+
+  try {
+    const url = new URL(appUrl);
+    let hostname = url.hostname;
+    if (hostname.startsWith('www.')) {
+      hostname = hostname.substring(4);
+    }
+    url.hostname = `${subdomain}.${hostname}`;
+    url.pathname = '/login';
+    return url.toString();
+  } catch {
+    return `/login/${routeParam}`;
+  }
+}
