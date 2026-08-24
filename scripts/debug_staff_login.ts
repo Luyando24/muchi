@@ -19,7 +19,7 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function checkStaff() {
-  const staffNumber = 'T20265998';
+  const staffNumber = 'T20268453';
   console.log(`Checking staff number: ${staffNumber}`);
 
   const { data, error } = await supabase

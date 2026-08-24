@@ -172,32 +172,63 @@ export default function Login() {
     try {
       const identifier = values.identifier.trim();
       let emailToUse = identifier;
+      let accountFound = false;
       
-      // If it doesn't look like an email, try to look it up using the unified RPC
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(identifier)) {
-        let { data: lookedUpEmail, error: lookupError } = await supabase.rpc('get_email_by_identifier', {
+      // 1. Try unified RPC lookup (works for email, staff_number, student_number, username, phone)
+      try {
+        const { data: lookedUpEmail, error: lookupError } = await supabase.rpc('get_email_by_identifier', {
           p_identifier: identifier
         });
-        
-        if (lookupError) {
-           console.error("Lookup error:", lookupError);
+        if (!lookupError && lookedUpEmail) {
+          emailToUse = lookedUpEmail;
+          accountFound = true;
         }
-        
-        // Robust Fallback: If unified lookup fails, try specific staff number lookup
-        // This handles cases where the unified migration might not have been applied yet.
-        if (!lookedUpEmail) {
-          const { data: staffEmail } = await supabase.rpc('get_email_by_staff_number', {
+      } catch (e) {
+        console.warn("Unified lookup error:", e);
+      }
+      
+      // 2. Fallback to specific staff number RPC lookup (for compatibility with older migrations)
+      if (!accountFound) {
+        try {
+          const { data: staffEmail, error: staffError } = await supabase.rpc('get_email_by_staff_number', {
             p_staff_number: identifier
           });
-          lookedUpEmail = staffEmail;
+          if (!staffError && staffEmail) {
+            emailToUse = staffEmail;
+            accountFound = true;
+          }
+        } catch (e) {
+          console.warn("Staff number lookup error:", e);
         }
-        
-        if (!lookedUpEmail) {
-          throw new Error("User account not found for this identifier. Please check your " + 
-            (activeTab === 'student' ? "Student Number" : "Staff Number/Username") + ".");
+      }
+
+      // 3. Fallback to server-side identifier resolver (uses Service Role to bypass RLS securely)
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!accountFound) {
+        try {
+          const res = await fetch('/api/auth/resolve-identifier', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identifier }),
+          });
+          if (res.ok) {
+            const json = await res.json();
+            if (json.found && json.email) {
+              emailToUse = json.email;
+              accountFound = true;
+            }
+          }
+        } catch (e) {
+          console.warn("Server resolver fallback error:", e);
         }
-        emailToUse = lookedUpEmail;
+      }
+      
+      // If it's an ID (not an email format) and was not found anywhere in the system
+      if (!emailRegex.test(identifier) && !accountFound) {
+        throw new Error(
+          "User account not found for this identifier. Please check your " + 
+          (activeTab === 'student' ? "Student Number" : "Staff Number/Username") + "."
+        );
       }
 
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -207,20 +238,12 @@ export default function Login() {
 
       if (error) {
         if (error.message.toLowerCase().includes('invalid login credentials')) {
-          // If it's an email login, try to check if the account exists in profiles to be specific
-          if (emailRegex.test(identifier)) {
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('id')
-            .ilike('email', identifier)
-            .limit(1);
-          
-          if (!profiles || profiles.length === 0) {
+          // If identifier is not found in database at all, inform user account does not exist
+          if (!accountFound && emailRegex.test(identifier)) {
             throw new Error("No account found with this email address. Please check your spelling or register.");
           }
-        }
-        // If profile exists or it was a Staff/Student ID lookup, it's definitely a wrong password
-        throw new Error("Incorrect password. Please try again or reset your password.");
+          // If the account was found or was a valid identifier, then password was incorrect
+          throw new Error("Incorrect password. Please try again or reset your password.");
         }
         throw error;
       }
