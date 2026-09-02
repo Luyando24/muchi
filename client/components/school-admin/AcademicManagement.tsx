@@ -948,7 +948,13 @@ export default function AcademicManagement() {
       });
 
       const data = await syncFetch(`/api/school/grades/readiness?${params}`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        headers: { 
+          'Authorization': `Bearer ${session.access_token}`,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        },
+        forceSync: true,
+        cacheTTL: 0,
         cacheKey: `grades-readiness-${calcForm.classId || 'all'}-${calcForm.subjectId || 'all'}-${term}-${examType}-${academicYear}`
       });
 
@@ -975,8 +981,12 @@ export default function AcademicManagement() {
       const subjectParam = calcForm.subjectId && calcForm.subjectId !== 'all' ? `&subjectId=${calcForm.subjectId}` : '';
       const data = await syncFetch(`/api/school/grades/status?classId=${calcForm.classId === 'all' ? '' : calcForm.classId}&term=${encodeURIComponent(calcForm.term)}&examType=${encodeURIComponent(calcForm.examType)}&academicYear=${encodeURIComponent(calcForm.academicYear)}${subjectParam}`, {
         headers: {
-          'Authorization': `Bearer ${session.access_token}`
+          'Authorization': `Bearer ${session.access_token}`,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
         },
+        forceSync: true,
+        cacheTTL: 0,
         cacheKey: `grades-status-${calcForm.classId}-${calcForm.subjectId || 'all'}-${calcForm.term}-${calcForm.examType}-${calcForm.academicYear}`
       });
 

@@ -9123,6 +9123,10 @@ router.get(
         .json({ message: "Term, Exam Type and Academic Year are required" });
     }
 
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+
     try {
       // 1. Get target class IDs for this school
       let targetClassIds: string[] = [];
