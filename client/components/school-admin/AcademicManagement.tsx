@@ -925,7 +925,11 @@ export default function AcademicManagement() {
 
   // Readiness Report Handler — loads unpublished grades for admin visibility
   const handleReadinessReport = async () => {
-    if (!calcForm.term || !calcForm.academicYear || !calcForm.examType) {
+    const term = calcForm.term?.trim();
+    const academicYear = calcForm.academicYear?.trim();
+    const examType = calcForm.examType?.trim();
+
+    if (!term || !academicYear || !examType) {
       toast({ title: "Error", description: "Please select Term, Exam Type and Year first", variant: "destructive" });
       return;
     }
@@ -936,16 +940,16 @@ export default function AcademicManagement() {
       if (!session) return;
 
       const params = new URLSearchParams({
-        classId: calcForm.classId,
-        subjectId: calcForm.subjectId,
-        term: calcForm.term,
-        examType: calcForm.examType,
-        academicYear: calcForm.academicYear
+        classId: calcForm.classId || 'all',
+        subjectId: calcForm.subjectId || 'all',
+        term,
+        examType,
+        academicYear
       });
 
       const data = await syncFetch(`/api/school/grades/readiness?${params}`, {
         headers: { 'Authorization': `Bearer ${session.access_token}` },
-        cacheKey: `grades-readiness-${calcForm.classId}-${calcForm.subjectId || 'all'}-${calcForm.term}-${calcForm.examType}-${calcForm.academicYear}`
+        cacheKey: `grades-readiness-${calcForm.classId || 'all'}-${calcForm.subjectId || 'all'}-${term}-${examType}-${academicYear}`
       });
 
       setUnpublishedGrades(data || []);
@@ -2348,7 +2352,7 @@ export default function AcademicManagement() {
                     variant="outline"
                     className="w-full border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950"
                     onClick={handleReadinessReport}
-                    disabled={isLoadingReadiness || !calcForm.term || !calcForm.academicYear}
+                    disabled={isLoadingReadiness || !calcForm.term || !calcForm.academicYear || !calcForm.examType}
                   >
                     {isLoadingReadiness ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -9129,23 +9129,26 @@ router.get(
       if (classId && classId !== "all") {
         targetClassIds = [classId];
       } else {
-        const { data: schoolClasses } = await supabaseAdmin
+        const schoolClassesQuery = supabaseAdmin
           .from("classes")
           .select("id")
           .eq("school_id", schoolId);
+        const schoolClasses = await fetchAll(schoolClassesQuery);
         targetClassIds = (schoolClasses || []).map((c: any) => c.id);
       }
 
       if (targetClassIds.length === 0) return res.json([]);
 
       // 2. Get enrolled students per class
-      const { data: enrollments } = await supabaseAdmin
+      const enrollmentsQuery = supabaseAdmin
         .from("enrollments")
         .select(
           "student_id, class_id, profiles!enrollments_student_id_fkey(full_name), classes(name)",
         )
         .in("class_id", targetClassIds)
         .eq("status", "Active");
+
+      const enrollments = await fetchAll(enrollmentsQuery);
 
       if (!enrollments || enrollments.length === 0) return res.json([]);
 
@@ -9166,7 +9169,7 @@ router.get(
         classSubjectsQuery = classSubjectsQuery.eq("subject_id", subjectId);
       }
 
-      const { data: classSubjectRows } = await classSubjectsQuery;
+      const classSubjectRows = await fetchAll(classSubjectsQuery);
 
       if (!classSubjectRows || classSubjectRows.length === 0) {
         // No subjects assigned to classes — nothing to check
@@ -9175,11 +9178,13 @@ router.get(
 
       // Collect all teacher IDs from class_subjects.teacher_id AND subjects.head_teacher_id as fallback
       // Also look up from assignments table which teacher made assignments for this class+subject
-      const { data: assignmentTeacherRows } = await supabaseAdmin
+      const assignmentTeacherRowsQuery = supabaseAdmin
         .from("assignments")
         .select("class_id, subject_id, teacher_id")
         .in("class_id", targetClassIds)
         .not("teacher_id", "is", null);
+
+      const assignmentTeacherRows = await fetchAll(assignmentTeacherRowsQuery);
 
       // Build a map: "classId-subjectId" -> teacher_id, from assignments
       const assignmentTeacherMap = new Map<string, string>();
@@ -9208,10 +9213,11 @@ router.get(
 
       const teacherMap = new Map<string, string>();
       if (allTeacherIds.length > 0) {
-        const { data: teachers } = await supabaseAdmin
+        const teachersQuery = supabaseAdmin
           .from("profiles")
           .select("id, full_name")
           .in("id", allTeacherIds);
+        const teachers = await fetchAll(teachersQuery);
         (teachers || []).forEach((t: any) => teacherMap.set(t.id, t.full_name));
       }
 
@@ -9231,9 +9237,13 @@ router.get(
       let gradesQuery = supabaseAdmin
         .from("student_grades")
         .select("student_id, subject_id, status, exam_type, test_type")
-        .in("student_id", studentIds)
+        .eq("school_id", schoolId)
         .eq("term", term)
         .eq("academic_year", academicYear);
+
+      if (classId && classId !== "all") {
+        gradesQuery = gradesQuery.in("student_id", studentIds);
+      }
 
       if (subjectId && subjectId !== "all") {
         gradesQuery = gradesQuery.eq("subject_id", subjectId);

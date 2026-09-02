@@ -166,7 +166,7 @@ export const syncFetch = async (url: string, options: SyncOptions = {}) => {
         await db.cache.put({ url: cacheKey, data, timestamp: Date.now() });
         return data;
       } else {
-        // Server responded with an error (e.g. 403, 500)
+        // Server responded with an error (e.g. 400, 403, 500)
         console.warn(`Server responded with ${response.status} for ${url}`);
         
         // Try to get from cache as a fallback even for non-network errors
@@ -176,11 +176,21 @@ export const syncFetch = async (url: string, options: SyncOptions = {}) => {
           return cached.data;
         }
 
-        const errorData = await response.json().catch(() => ({ message: `HTTP Error ${response.status}` }));
-        throw new Error(errorData.message || `Server error: ${response.status}`);
+        let errorMessage = `Server error: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch {
+          const statusText = response.statusText || 'Unknown error';
+          errorMessage = `HTTP ${response.status}: ${statusText}`;
+        }
+        const serverError: any = new Error(errorMessage);
+        serverError.isServerError = true;
+        serverError.status = response.status;
+        throw serverError;
       }
     } catch (error: any) {
-      if (error.message.includes('Server error') || error.message.includes('HTTP Error')) {
+      if (error.isServerError || error.message?.includes('Server error') || error.message?.includes('HTTP Error')) {
         throw error;
       }
       console.warn('Network error, falling back to cache...', error);
