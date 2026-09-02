@@ -152,7 +152,6 @@ export default function AcademicManagement() {
 
   // Grade Calculation State
   const [calcForm, setCalcForm] = useState({ classId: 'all', subjectId: 'all', term: '', examType: 'End of Term', academicYear: new Date().getFullYear().toString(), skipCalculation: true });
-  const [isCalculating, setIsCalculating] = useState(false);
   const [availableExamTypes, setAvailableExamTypes] = useState<string[]>(['Mid Term', 'End of Term']);
   const [gradeStatus, setGradeStatus] = useState<{ id: string, name: string, status: string, teacher: string }[]>([]);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
@@ -161,11 +160,6 @@ export default function AcademicManagement() {
   const [isMigrateModalOpen, setIsMigrateModalOpen] = useState(false);
   const [targetExamType, setTargetExamType] = useState('');
   const [isMigrating, setIsMigrating] = useState(false);
-
-  // Unpublished Grades / Readiness Report State
-  const [unpublishedGrades, setUnpublishedGrades] = useState<any[]>([]);
-  const [isReadinessReportOpen, setIsReadinessReportOpen] = useState(false);
-  const [isLoadingReadiness, setIsLoadingReadiness] = useState(false);
 
   // Promotions & Repetitions State
   const [promotionsSourceClassId, setPromotionsSourceClassId] = useState('');
@@ -868,102 +862,6 @@ export default function AcademicManagement() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
       setIsActionLoading(false);
-    }
-  };
-
-  // Grade Calculation Handler
-  const handleCalculateGrades = async (force: boolean = false) => {
-    if (!calcForm.classId || !calcForm.term || !calcForm.academicYear || !calcForm.examType) {
-      toast({ title: "Error", description: "Please fill in all required fields", variant: "destructive" });
-      return;
-    }
-
-    setIsCalculating(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const data = await syncFetch('/api/school/grades/calculate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({
-          classId: calcForm.classId === 'all' ? null : calcForm.classId,
-          subjectId: calcForm.subjectId === 'all' ? null : calcForm.subjectId,
-          term: calcForm.term,
-          examType: calcForm.examType,
-          academicYear: calcForm.academicYear,
-          skipCalculation: calcForm.skipCalculation,
-          force
-        })
-      });
-
-      if (data.unpublished && data.unpublished.length > 0) {
-        setUnpublishedGrades(data.unpublished);
-        setIsReadinessReportOpen(true);
-        toast({ title: "Calculation Blocked", description: data.message || "Unpublished grades exist.", variant: "destructive" });
-        return;
-      }
-
-      toast({
-        title: data.count > 0 ? "Calculation Complete" : "Nothing to Calculate",
-        description: data.count > 0
-          ? `Successfully calculated grades for ${data.count} students.`
-          : `No grade changes were necessary for the selected criteria.`
-      });
-
-      // Auto-check status after calculation
-      handleCheckStatus();
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } finally {
-      setIsCalculating(false);
-    }
-  };
-
-  // Readiness Report Handler — loads unpublished grades for admin visibility
-  const handleReadinessReport = async () => {
-    const term = calcForm.term?.trim();
-    const academicYear = calcForm.academicYear?.trim();
-    const examType = calcForm.examType?.trim();
-
-    if (!term || !academicYear || !examType) {
-      toast({ title: "Error", description: "Please select Term, Exam Type and Year first", variant: "destructive" });
-      return;
-    }
-
-    setIsLoadingReadiness(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const params = new URLSearchParams({
-        classId: calcForm.classId || 'all',
-        subjectId: calcForm.subjectId || 'all',
-        term,
-        examType,
-        academicYear
-      });
-
-      const data = await syncFetch(`/api/school/grades/readiness?${params}`, {
-        headers: { 
-          'Authorization': `Bearer ${session.access_token}`,
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache'
-        },
-        forceSync: true,
-        cacheTTL: 0,
-        cacheKey: `grades-readiness-${calcForm.classId || 'all'}-${calcForm.subjectId || 'all'}-${term}-${examType}-${academicYear}`
-      });
-
-      setUnpublishedGrades(data || []);
-      setIsReadinessReportOpen(true);
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } finally {
-      setIsLoadingReadiness(false);
     }
   };
 
@@ -2342,356 +2240,204 @@ export default function AcademicManagement() {
                     </div>
                   </div>
 
-                  <Button
-                    onClick={() => handleCalculateGrades()}
-                    disabled={isCalculating || !calcForm.term || !calcForm.academicYear}
-                    className="w-full"
-                  >
-                    {isCalculating ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Calculating...
-                      </>
-                    ) : (
-                      'Calculate Grades'
-                    )}
-                  </Button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                    <Dialog open={isPublishModalOpen} onOpenChange={setIsPublishModalOpen}>
+                      <DialogTrigger asChild>
+                        <Button
+                          className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                          disabled={!calcForm.term || !calcForm.academicYear || !calcForm.examType}
+                        >
+                          <Send className="mr-2 h-4 w-4" />
+                          Review & Publish Results
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
+                        <DialogHeader>
+                          <DialogTitle>Publish Results</DialogTitle>
+                          <DialogDescription>
+                            Check if all subjects are submitted before publishing to students.
+                          </DialogDescription>
+                        </DialogHeader>
 
-                  {/* Readiness Report Button */}
-                  <Button
-                    variant="outline"
-                    className="w-full border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950"
-                    onClick={handleReadinessReport}
-                    disabled={isLoadingReadiness || !calcForm.term || !calcForm.academicYear || !calcForm.examType}
-                  >
-                    {isLoadingReadiness ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <ClipboardList className="mr-2 h-4 w-4" />
-                    )}
-                    Check Readiness Report
-                  </Button>
-
-                  {/* Data Audit Link */}
-                  <Button
-                    variant="outline"
-                    className="w-full border-red-300 text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950"
-                    onClick={() => { window.location.hash = '#data-audit'; }}
-                  >
-                    <ShieldAlert className="mr-2 h-4 w-4" />
-                    Check Results Anomalies
-                  </Button>
-
-                  {/* Readiness Report Dialog */}
-                  <Dialog open={isReadinessReportOpen} onOpenChange={setIsReadinessReportOpen}>
-                    <DialogContent className="sm:max-w-[750px] max-h-[85vh] overflow-y-auto">
-                      <DialogHeader>
-                        <DialogTitle className={cn("flex items-center gap-2", unpublishedGrades.length === 0 ? "text-green-600" : "text-amber-600")}>
-                          {unpublishedGrades.length === 0 ? (
-                            <CheckCircle2 className="h-5 w-5" />
-                          ) : (
-                            <AlertTriangle className="h-5 w-5" />
-                          )}
-                          Readiness Report — {unpublishedGrades.length === 0 ? "Ready for Calculation" : "Records Need Attention"}
-                        </DialogTitle>
-                        <DialogDescription>
-                          {unpublishedGrades.length === 0 ? (
-                            "All required grade entries have been submitted or published. You are ready to proceed with calculations."
-                          ) : (
-                            <div className="space-y-4 text-left">
-                              <p>
-                                The following student grades are <strong>Draft</strong> or <strong>Not Entered</strong>.
-                                Grades can only be calculated once all entries are either <strong>Submitted</strong> (by teachers) or <strong>Published</strong>.
-                              </p>
-                              <div className="flex justify-end gap-2 pt-2">
-                                <Button 
-                                  variant="destructive" 
-                                  size="sm"
-                                  onClick={() => {
-                                    if (confirm("Forcing calculation with missing grades may result in incomplete percentages for those students. Continue?")) {
-                                      handleCalculateGrades(true);
-                                      setIsReadinessReportOpen(false);
-                                    }
-                                  }}
-                                  disabled={isCalculating}
-                                >
-                                  {isCalculating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                                  Force Calculate Anyway
-                                </Button>
-                              </div>
+                        <div className="py-4 space-y-4">
+                          <div className="flex flex-col sm:flex-row gap-2 justify-between items-center">
+                            <div className="flex gap-2 w-full sm:w-auto">
+                              <Button variant="outline" onClick={handleCheckStatus} disabled={isCheckingStatus}>
+                                {isCheckingStatus ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                Check Status
+                              </Button>
+                              <Button
+                                onClick={initiatePublish}
+                                disabled={isActionLoading || gradeStatus.length === 0}
+                                className="bg-green-600 hover:bg-green-700"
+                              >
+                                {isPublishing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                Publish Results
+                              </Button>
                             </div>
-                          )}
-                        </DialogDescription>
-                      </DialogHeader>
-
-                      <div className="py-4">
-                        {unpublishedGrades.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center p-8 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
-                            <div className="h-12 w-12 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mb-3">
-                              <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                            </div>
-                            <p className="font-semibold text-green-700 dark:text-green-400">All Grades Ready!</p>
-                            <p className="text-sm text-green-600 dark:text-green-500 mt-1">All required grades have been submitted or published. You can proceed to calculate.</p>
                           </div>
-                        ) : (
-                          <>
-                            <div className="flex items-center gap-2 mb-3 p-3 bg-amber-50 dark:bg-amber-950 rounded-lg border border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-300">
-                              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                              <span><strong>{unpublishedGrades.length}</strong> record(s) need attention. Teachers must <strong>Submit</strong> these grades before calculation can proceed.</span>
-                            </div>
-                            <div className="border rounded-md overflow-hidden">
-                              <Table>
-                                <TableHeader>
-                                  <TableRow className="bg-slate-50 dark:bg-slate-800">
-                                    <TableHead>Student</TableHead>
-                                    <TableHead>Class</TableHead>
-                                    <TableHead>Subject</TableHead>
-                                    <TableHead>Code</TableHead>
-                                    <TableHead>Teacher</TableHead>
-                                    <TableHead>Status</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {unpublishedGrades.map((g: any, i: number) => (
-                                    <TableRow key={i}>
-                                      <TableCell className="font-medium">{g.studentName}</TableCell>
-                                      <TableCell className="text-muted-foreground text-sm">{g.className}</TableCell>
-                                      <TableCell>{g.subjectName}</TableCell>
-                                      <TableCell className="text-muted-foreground text-sm">{g.subjectCode}</TableCell>
-                                      <TableCell className="text-muted-foreground text-sm">{g.teacherName || '—'}</TableCell>
-                                      <TableCell>
-                                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${g.status === 'Not Entered' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
-                                          g.status === 'Draft' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' :
-                                            'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
-                                          }`}>
-                                          {g.status || 'Not Entered'}
-                                        </span>
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </DialogContent>
-                  </Dialog>
+                          {gradeStatus.length > 0 && (() => {
+                            const submittedList = gradeStatus.filter(s => s.status === 'Submitted' || s.status === 'Published');
+                            const pendingList = gradeStatus.filter(s => s.status !== 'Submitted' && s.status !== 'Published');
+                            
+                            const getUniqueTeachers = (list: any[]) => {
+                              const teachers = new Set<string>();
+                              list.forEach(s => {
+                                if (s.teacher && s.teacher !== 'Unassigned') {
+                                  s.teacher.split(', ').forEach((t: string) => teachers.add(t));
+                                }
+                              });
+                              return teachers.size;
+                            };
 
-                  <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <h3 className="font-semibold mb-2">Publish Results</h3>
-                        <p className="text-sm text-muted-foreground mb-4">
-                          Review subject status and publish final grades to the student dashboard.
-                        </p>
-                        <Dialog open={isPublishModalOpen} onOpenChange={setIsPublishModalOpen}>
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="w-full"
-                              disabled={!calcForm.term || !calcForm.academicYear}
-                            >
-                              Review & Publish Results
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
-                            <DialogHeader>
-                              <DialogTitle>Publish Results</DialogTitle>
-                              <DialogDescription>
-                                Check if all subjects are submitted before publishing to students.
-                              </DialogDescription>
-                            </DialogHeader>
+                            const submittedTeachersCount = getUniqueTeachers(submittedList);
+                            const pendingTeachersCount = getUniqueTeachers(pendingList);
 
-                            <div className="py-4 space-y-4">
-                              <div className="flex flex-col sm:flex-row gap-2 justify-between items-center">
-                                <div className="flex gap-2 w-full sm:w-auto">
-                                  <Button variant="outline" onClick={handleCheckStatus} disabled={isCheckingStatus}>
-                                    {isCheckingStatus ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                                    Check Status
-                                  </Button>
-                                  <Button
-                                    onClick={initiatePublish}
-                                    disabled={isActionLoading || gradeStatus.length === 0}
-                                    className="bg-green-600 hover:bg-green-700"
-                                  >
-                                    {isPublishing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                                    Publish Results
+                            return (
+                              <Tabs defaultValue="submitted" className="w-full">
+                                <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2 border-b pb-2 dark:border-slate-800">
+                                  <TabsList>
+                                    <TabsTrigger value="submitted">Submitted</TabsTrigger>
+                                    <TabsTrigger value="pending">Not Submitted</TabsTrigger>
+                                  </TabsList>
+                                  <Button variant="ghost" size="sm" onClick={handleDownloadPDF} className="text-blue-600">
+                                    <Download className="h-4 w-4 mr-2" />
+                                    Download PDF
                                   </Button>
                                 </div>
-                              </div>
-                              {gradeStatus.length > 0 && (() => {
-                                const submittedList = gradeStatus.filter(s => s.status === 'Submitted' || s.status === 'Published');
-                                const pendingList = gradeStatus.filter(s => s.status !== 'Submitted' && s.status !== 'Published');
-                                
-                                const getUniqueTeachers = (list: any[]) => {
-                                  const teachers = new Set<string>();
-                                  list.forEach(s => {
-                                    if (s.teacher && s.teacher !== 'Unassigned') {
-                                      s.teacher.split(', ').forEach((t: string) => teachers.add(t));
-                                    }
-                                  });
-                                  return teachers.size;
-                                };
 
-                                const submittedTeachersCount = getUniqueTeachers(submittedList);
-                                const pendingTeachersCount = getUniqueTeachers(pendingList);
-
-                                return (
-                                  <Tabs defaultValue="submitted" className="w-full">
-                                    <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2 border-b pb-2 dark:border-slate-800">
-                                      <TabsList>
-                                        <TabsTrigger value="submitted">Submitted</TabsTrigger>
-                                        <TabsTrigger value="pending">Not Submitted</TabsTrigger>
-                                      </TabsList>
-                                      <Button variant="ghost" size="sm" onClick={handleDownloadPDF} className="text-blue-600">
-                                        <Download className="h-4 w-4 mr-2" />
-                                        Download PDF
-                                      </Button>
+                                <TabsContent value="submitted" className="space-y-4 mt-0">
+                                  <div className="flex flex-wrap gap-3">
+                                    <div className="text-sm font-semibold bg-green-50 text-green-700 px-3 py-1.5 rounded-md dark:bg-green-950 dark:text-green-400">
+                                      Submitted Subjects: {submittedList.length}
                                     </div>
+                                    <div className="text-sm font-semibold bg-blue-50 text-blue-700 px-3 py-1.5 rounded-md dark:bg-blue-950 dark:text-blue-400">
+                                      Submitted Teachers: {submittedTeachersCount}
+                                    </div>
+                                  </div>
+                                  <div className="border rounded-md max-h-[50vh] overflow-y-auto">
+                                    <Table>
+                                      <TableHeader className="sticky top-0 bg-white dark:bg-slate-900 shadow-sm z-10">
+                                        <TableRow>
+                                          <TableHead>Subject</TableHead>
+                                          <TableHead>Teacher</TableHead>
+                                          <TableHead>Status</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {submittedList.map(s => (
+                                          <TableRow key={s.id}>
+                                            <TableCell>{s.name}</TableCell>
+                                            <TableCell className="text-muted-foreground">{s.teacher}</TableCell>
+                                            <TableCell>
+                                              <span className={`px-2 py-1 rounded text-xs font-medium ${s.status === 'Published' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                                                {s.status}
+                                              </span>
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
+                                        {submittedList.length === 0 && (
+                                          <TableRow>
+                                            <TableCell colSpan={3} className="text-center py-4 text-muted-foreground">
+                                              No submitted subjects found.
+                                            </TableCell>
+                                          </TableRow>
+                                        )}
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+                                </TabsContent>
 
-                                    <TabsContent value="submitted" className="space-y-4 mt-0">
-                                      <div className="flex flex-wrap gap-3">
-                                        <div className="text-sm font-semibold bg-green-50 text-green-700 px-3 py-1.5 rounded-md dark:bg-green-950 dark:text-green-400">
-                                          Submitted Subjects: {submittedList.length}
-                                        </div>
-                                        <div className="text-sm font-semibold bg-blue-50 text-blue-700 px-3 py-1.5 rounded-md dark:bg-blue-950 dark:text-blue-400">
-                                          Submitted Teachers: {submittedTeachersCount}
-                                        </div>
-                                      </div>
-                                      <div className="border rounded-md max-h-[50vh] overflow-y-auto">
-                                        <Table>
-                                          <TableHeader className="sticky top-0 bg-white dark:bg-slate-900 shadow-sm z-10">
-                                            <TableRow>
-                                              <TableHead>Subject</TableHead>
-                                              <TableHead>Teacher</TableHead>
-                                              <TableHead>Status</TableHead>
-                                            </TableRow>
-                                          </TableHeader>
-                                          <TableBody>
-                                            {submittedList.map(s => (
-                                              <TableRow key={s.id}>
-                                                <TableCell>{s.name}</TableCell>
-                                                <TableCell className="text-muted-foreground">{s.teacher}</TableCell>
-                                                <TableCell>
-                                                  <span className={`px-2 py-1 rounded text-xs font-medium ${s.status === 'Published' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
-                                                    {s.status}
-                                                  </span>
-                                                </TableCell>
-                                              </TableRow>
-                                            ))}
-                                            {submittedList.length === 0 && (
-                                              <TableRow>
-                                                <TableCell colSpan={3} className="text-center py-4 text-muted-foreground">
-                                                  No submitted subjects found.
-                                                </TableCell>
-                                              </TableRow>
-                                            )}
-                                          </TableBody>
-                                        </Table>
-                                      </div>
-                                    </TabsContent>
+                                <TabsContent value="pending" className="space-y-4 mt-0">
+                                  <div className="flex flex-wrap gap-3">
+                                    <div className="text-sm font-semibold bg-red-50 text-red-700 px-3 py-1.5 rounded-md dark:bg-red-950 dark:text-red-400">
+                                      Pending Subjects: {pendingList.length}
+                                    </div>
+                                    <div className="text-sm font-semibold bg-orange-50 text-orange-700 px-3 py-1.5 rounded-md dark:bg-orange-950 dark:text-orange-400">
+                                      Pending Teachers: {pendingTeachersCount}
+                                    </div>
+                                  </div>
+                                  <div className="border rounded-md max-h-[50vh] overflow-y-auto">
+                                    <Table>
+                                      <TableHeader className="sticky top-0 bg-white dark:bg-slate-900 shadow-sm z-10">
+                                        <TableRow>
+                                          <TableHead>Subject</TableHead>
+                                          <TableHead>Teacher</TableHead>
+                                          <TableHead>Status</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {pendingList.map(s => (
+                                          <TableRow key={s.id}>
+                                            <TableCell>{s.name}</TableCell>
+                                            <TableCell className="text-muted-foreground">{s.teacher}</TableCell>
+                                            <TableCell>
+                                              <span className={`px-2 py-1 rounded text-xs font-medium ${s.status === 'Draft' ? 'bg-yellow-100 text-yellow-800' : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'}`}>
+                                                {s.status}
+                                              </span>
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
+                                        {pendingList.length === 0 && (
+                                          <TableRow>
+                                            <TableCell colSpan={3} className="text-center py-4 text-muted-foreground">
+                                              All subjects have been submitted!
+                                            </TableCell>
+                                          </TableRow>
+                                        )}
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+                                </TabsContent>
+                              </Tabs>
+                            );
+                          })()}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
 
-                                    <TabsContent value="pending" className="space-y-4 mt-0">
-                                      <div className="flex flex-wrap gap-3">
-                                        <div className="text-sm font-semibold bg-red-50 text-red-700 px-3 py-1.5 rounded-md dark:bg-red-950 dark:text-red-400">
-                                          Pending Subjects: {pendingList.length}
-                                        </div>
-                                        <div className="text-sm font-semibold bg-orange-50 text-orange-700 px-3 py-1.5 rounded-md dark:bg-orange-950 dark:text-orange-400">
-                                          Pending Teachers: {pendingTeachersCount}
-                                        </div>
-                                      </div>
-                                      <div className="border rounded-md max-h-[50vh] overflow-y-auto">
-                                        <Table>
-                                          <TableHeader className="sticky top-0 bg-white dark:bg-slate-900 shadow-sm z-10">
-                                            <TableRow>
-                                              <TableHead>Subject</TableHead>
-                                              <TableHead>Teacher</TableHead>
-                                              <TableHead>Status</TableHead>
-                                            </TableRow>
-                                          </TableHeader>
-                                          <TableBody>
-                                            {pendingList.map(s => (
-                                              <TableRow key={s.id}>
-                                                <TableCell>{s.name}</TableCell>
-                                                <TableCell className="text-muted-foreground">{s.teacher}</TableCell>
-                                                <TableCell>
-                                                  <span className={`px-2 py-1 rounded text-xs font-medium ${s.status === 'Draft' ? 'bg-yellow-100 text-yellow-800' : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'}`}>
-                                                    {s.status}
-                                                  </span>
-                                                </TableCell>
-                                              </TableRow>
-                                            ))}
-                                            {pendingList.length === 0 && (
-                                              <TableRow>
-                                                <TableCell colSpan={3} className="text-center py-4 text-muted-foreground">
-                                                  All subjects have been submitted!
-                                                </TableCell>
-                                              </TableRow>
-                                            )}
-                                          </TableBody>
-                                        </Table>
-                                      </div>
-                                    </TabsContent>
-                                  </Tabs>
-                                );
-                              })()}
-                            </div>
-                          </DialogContent>
-                        </Dialog>
-                      </div>
-
-                      <div>
-                        <h3 className="font-semibold mb-2">Move Grades</h3>
-                        <p className="text-sm text-muted-foreground mb-4">
-                          Move entered grades from one assessment type to another.
-                        </p>
-                        <Dialog open={isMigrateModalOpen} onOpenChange={setIsMigrateModalOpen}>
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="w-full text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-900 dark:hover:bg-blue-950"
-                              disabled={!calcForm.classId || calcForm.classId === 'all' || !calcForm.subjectId || calcForm.subjectId === 'all'}
-                            >
-                              <ArrowRightLeft className="mr-2 h-4 w-4" /> Move Grades
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Bulk Move Grades</DialogTitle>
-                              <DialogDescription>
-                                Moving grades for <strong>{calcForm.examType}</strong> to a different assessment type.
-                                You must select a specific Class and Subject.
-                              </DialogDescription>
-                            </DialogHeader>
-                            <div className="py-4 space-y-4">
-                              <div className="space-y-2">
-                                <Label>Destination Assessment Type</Label>
-                                <Select value={targetExamType} onValueChange={setTargetExamType}>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Select destination..." />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {availableExamTypes.filter(t => t !== calcForm.examType).map(type => (
-                                      <SelectItem key={type} value={type}>{type}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                            <DialogFooter>
-                              <Button variant="outline" onClick={() => setIsMigrateModalOpen(false)}>Cancel</Button>
-                              <Button onClick={handleMigrateGrades} disabled={isMigrating || !targetExamType} className="bg-blue-600 hover:bg-blue-700">
-                                {isMigrating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRightLeft className="mr-2 h-4 w-4" />}
-                                Confirm Move
-                              </Button>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
-                      </div>
-                    </div>
+                    <Dialog open={isMigrateModalOpen} onOpenChange={setIsMigrateModalOpen}>
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-900 dark:hover:bg-blue-950"
+                          disabled={!calcForm.classId || calcForm.classId === 'all' || !calcForm.subjectId || calcForm.subjectId === 'all'}
+                        >
+                          <ArrowRightLeft className="mr-2 h-4 w-4" /> Move Grades
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Bulk Move Grades</DialogTitle>
+                          <DialogDescription>
+                            Moving grades for <strong>{calcForm.examType}</strong> to a different assessment type.
+                            You must select a specific Class and Subject.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="py-4 space-y-4">
+                          <div className="space-y-2">
+                            <Label>Destination Assessment Type</Label>
+                            <Select value={targetExamType} onValueChange={setTargetExamType}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select destination..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {availableExamTypes.filter(t => t !== calcForm.examType).map(type => (
+                                  <SelectItem key={type} value={type}>{type}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setIsMigrateModalOpen(false)}>Cancel</Button>
+                          <Button onClick={handleMigrateGrades} disabled={isMigrating || !targetExamType} className="bg-blue-600 hover:bg-blue-700">
+                            {isMigrating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRightLeft className="mr-2 h-4 w-4" />}
+                            Confirm Move
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
                   </div>
                 </div>
 
