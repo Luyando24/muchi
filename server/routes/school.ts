@@ -42,48 +42,90 @@ async function fetchAll(queryBuilder: any, limit = 1000) {
   return allData;
 }
 
+// ─── Ranking Helpers ────────────────────────────────────────────────────────
+
+/** Returns true if the class level is senior secondary (Grade 8–12 or Form classes). */
+function isSeniorSecondaryLevel(level: string): boolean {
+  const raw = (level || '').toLowerCase().trim();
+  if (/\bform\b/.test(raw)) return true;
+  const match = raw.match(/(\d{1,2})/);
+  if (match) {
+    const lvl = parseInt(match[1], 10);
+    return lvl >= 8 && lvl <= 12;
+  }
+  return false;
+}
+
+/**
+ * Checks if a subject name matches a configured compulsory subject.
+ * Mirrors the client-side `matchesCompulsorySubject` in ReportCard.tsx.
+ */
+function matchesCompulsorySubjectServer(subjectName: string, configuredSubject: string): boolean {
+  const normSub = subjectName.trim().toLowerCase();
+  const normConfig = configuredSubject.trim().toLowerCase();
+  if (!normSub || !normConfig) return false;
+  // Smart English matching
+  const isConfigEnglish = /^(eng|english|english\s+language|english\s+lang)$/i.test(normConfig);
+  if (isConfigEnglish) return /\b(english|eng|english\s+language|english\s+lang)\b/i.test(normSub);
+  if (normSub === normConfig) return true;
+  try {
+    const escaped = normConfig.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    if (new RegExp(`\\b${escaped}\\b`, 'i').test(normSub)) return true;
+  } catch (e) { /* noop */ }
+  return normSub.includes(normConfig) || normConfig.includes(normSub);
+}
+
 // Helper to calculate class rankings and averages
 async function getClassRankings(classId: string, term: string, examType: string, academicYear: string) {
+  // Fetch class level (needed to detect senior secondary) alongside school_id
   const { data: classObj } = await supabaseAdmin
     .from('classes')
-    .select('school_id')
+    .select('school_id, level')
     .eq('id', classId)
     .single();
   const schoolId = classObj?.school_id;
-  
+  const classLevel: string = classObj?.level || '';
+
   const { data: school } = schoolId ? await supabaseAdmin
     .from('schools')
-    .select('test_types, test_types_enabled, school_type')
+    .select('test_types, test_types_enabled, school_type, compulsory_subjects_secondary')
     .eq('id', schoolId)
     .single() : { data: null };
   const activeTestTypes = school?.test_types_enabled ? (school?.test_types || []) : [];
+
+  // Determine ranking mode: ECZ best-6 for senior secondary, average for all others
+  const seniorSec = isSeniorSecondaryLevel(classLevel);
+  const compulsorySubjects: string[] = (
+    Array.isArray(school?.compulsory_subjects_secondary) && school.compulsory_subjects_secondary.length > 0
+      ? school.compulsory_subjects_secondary
+      : ['English']
+  );
 
   const { data: enrollments } = await supabaseAdmin
     .from('enrollments')
     .select('student_id')
     .eq('class_id', classId)
     .eq('academic_year', academicYear);
-    
+
   if (!enrollments || enrollments.length === 0) return { rankings: {} as Record<string, number>, classAverage: 0, totalStudents: 0 };
-  
+
   const studentIds = enrollments.map(e => e.student_id);
-  
+
   // Need to use fetchAll to bypass 1000 row limit for grades if class is large
-  // Fetch all grades for the term and year to resolve exam & test combinations
+  // Fetch all grades for the term and year; include subject name for ECZ best-6 identification
   const gradesQuery = supabaseAdmin
     .from('student_grades')
-    .select('student_id, subject_id, percentage, exam_type, test_type')
+    .select('student_id, subject_id, percentage, exam_type, test_type, subjects(id, name)')
     .in('student_id', studentIds)
     .eq('term', term)
     .eq('academic_year', academicYear);
-    
+
   const grades = await fetchAll(gradesQuery);
-  
+
+  // Build a per-student map: subject_id → list of grade rows
   const studentGradesMap: Record<string, Record<string, any[]>> = {};
-  studentIds.forEach(id => {
-    studentGradesMap[id] = {};
-  });
-  
+  studentIds.forEach(id => { studentGradesMap[id] = {}; });
+
   if (grades) {
     grades.forEach((g: any) => {
       if (studentGradesMap[g.student_id]) {
@@ -94,91 +136,135 @@ async function getClassRankings(classId: string, term: string, examType: string,
       }
     });
   }
-  
-  const studentAverages: Record<string, { total: number, count: number, avg: number }> = {};
-  
-  studentIds.forEach(studentId => {
-    let total = 0;
-    let count = 0;
-    
-    const subjectsMap = studentGradesMap[studentId];
-    Object.values(subjectsMap).forEach((subjectGrades: any[]) => {
-      let percentage: number | null = null;
-      
-      if (activeTestTypes.length > 0) {
-        // If school has active test types, require all active tests to calculate average
-        const hasActiveTest1 = activeTestTypes.includes('Test 1');
-        const hasActiveTest2 = activeTestTypes.includes('Test 2');
-        const hasActiveTest3 = activeTestTypes.includes('Test 3');
-        
+
+  /**
+   * Resolves the effective percentage for a list of grade rows for one subject,
+   * applying the school's test-type configuration.
+   */
+  function resolveSubjectPercentage(subjectGrades: any[]): number | null {
+    let percentage: number | null = null;
+    if (activeTestTypes.length > 0) {
+      const hasActiveTest1 = activeTestTypes.includes('Test 1');
+      const hasActiveTest2 = activeTestTypes.includes('Test 2');
+      const hasActiveTest3 = activeTestTypes.includes('Test 3');
+      const test1Grade = subjectGrades.find(g => (g.test_type === 'Test 1' || g.exam_type === 'Test 1'));
+      const test2Grade = subjectGrades.find(g => (g.test_type === 'Test 2' || g.exam_type === 'Test 2'));
+      const test3Grade = subjectGrades.find(g => (g.test_type === 'Test 3' || g.exam_type === 'Test 3'));
+      const scores = [
+        hasActiveTest1 ? test1Grade?.percentage : null,
+        hasActiveTest2 ? test2Grade?.percentage : null,
+        hasActiveTest3 ? test3Grade?.percentage : null,
+      ].filter(t => t !== null && t !== undefined && t !== '') as number[];
+      if (scores.length > 0) {
+        percentage = scores.reduce((sum, s) => sum + Number(s), 0) / scores.length;
+      }
+    } else {
+      const match = subjectGrades.find(g => g.exam_type === examType && (!g.test_type || g.test_type === '' || g.test_type === 'none'));
+      if (match) {
+        percentage = match.percentage;
+      } else {
         const test1Grade = subjectGrades.find(g => (g.test_type === 'Test 1' || g.exam_type === 'Test 1'));
         const test2Grade = subjectGrades.find(g => (g.test_type === 'Test 2' || g.exam_type === 'Test 2'));
         const test3Grade = subjectGrades.find(g => (g.test_type === 'Test 3' || g.exam_type === 'Test 3'));
-        
-        const scores = [
-          hasActiveTest1 ? test1Grade?.percentage : null,
-          hasActiveTest2 ? test2Grade?.percentage : null,
-          hasActiveTest3 ? test3Grade?.percentage : null
-        ].filter(t => t !== null && t !== undefined && t !== '') as number[];
-        
+        const scores = [test1Grade?.percentage, test2Grade?.percentage, test3Grade?.percentage]
+          .filter(t => t !== null && t !== undefined && t !== '') as number[];
         if (scores.length > 0) {
           percentage = scores.reduce((sum, s) => sum + Number(s), 0) / scores.length;
-        } else {
-          percentage = null;
-        }
-      } else {
-        // Standard/no test types configuration:
-        // Try exact match: exam_type = examType AND test_type is empty
-        let match = subjectGrades.find(g => g.exam_type === examType && (!g.test_type || g.test_type === '' || g.test_type === 'none'));
-        if (match) {
-          percentage = match.percentage;
-        } else {
-          // Fallback to average of tests if no active test types are set but tests exist
-          const test1Grade = subjectGrades.find(g => (g.test_type === 'Test 1' || g.exam_type === 'Test 1'));
-          const test2Grade = subjectGrades.find(g => (g.test_type === 'Test 2' || g.exam_type === 'Test 2'));
-          const test3Grade = subjectGrades.find(g => (g.test_type === 'Test 3' || g.exam_type === 'Test 3'));
-          
-          const scores = [test1Grade?.percentage, test2Grade?.percentage, test3Grade?.percentage].filter(t => t !== null && t !== undefined && t !== '') as number[];
-          if (scores.length > 0) {
-            percentage = scores.reduce((sum, s) => sum + Number(s), 0) / scores.length;
-          }
         }
       }
-      
-      if (percentage !== null && percentage !== undefined) {
-        total += Number(percentage);
-        count += 1;
+    }
+    return percentage;
+  }
+
+  // Calculate each student's ranking score
+  // For senior secondary (Grades 8-12): ECZ best-6 total (compulsory + best 5 others)
+  // For other levels: simple average of all subjects
+  const studentScores: Record<string, { score: number, hasGrades: boolean }> = {};
+
+  studentIds.forEach(studentId => {
+    const subjectsMap = studentGradesMap[studentId];
+
+    if (seniorSec) {
+      // --- ECZ Best-6 Method ---
+      // Build list of {subjectName, percentage} for all subjects that have a score
+      const subjectPercentages: { subjectId: string; subjectName: string; percentage: number }[] = [];
+
+      Object.entries(subjectsMap).forEach(([subjectId, subjectGrades]) => {
+        const pct = resolveSubjectPercentage(subjectGrades);
+        if (pct !== null && pct !== undefined) {
+          // Get subject name from the first grade row that has it
+          const subjectName = (subjectGrades[0]?.subjects?.name || '').trim();
+          subjectPercentages.push({ subjectId, subjectName, percentage: Number(pct) });
+        }
+      });
+
+      if (subjectPercentages.length === 0) {
+        studentScores[studentId] = { score: 0, hasGrades: false };
+        return;
       }
-    });
-    
-    studentAverages[studentId] = { total, count, avg: count > 0 ? total / count : 0 };
+
+      // Identify compulsory subject entries (e.g., English)
+      const compulsoryEntries = subjectPercentages.filter(s =>
+        compulsorySubjects.some(cs => matchesCompulsorySubjectServer(s.subjectName, cs))
+      );
+      const nonCompulsoryEntries = subjectPercentages.filter(s =>
+        !compulsorySubjects.some(cs => matchesCompulsorySubjectServer(s.subjectName, cs))
+      );
+
+      // Sort non-compulsory by percentage descending (best first)
+      nonCompulsoryEntries.sort((a, b) => b.percentage - a.percentage);
+
+      // Build best-6: compulsory first, then fill up to 6 with best remaining
+      const selected: { subjectId: string; subjectName: string; percentage: number }[] = [];
+      for (const entry of compulsoryEntries) {
+        if (selected.length >= 6) break;
+        selected.push(entry);
+      }
+      for (const entry of nonCompulsoryEntries) {
+        if (selected.length >= 6) break;
+        if (selected.some(s => s.subjectId === entry.subjectId)) continue;
+        selected.push(entry);
+      }
+
+      const totalMarks = selected.reduce((sum, s) => sum + s.percentage, 0);
+      studentScores[studentId] = { score: totalMarks, hasGrades: true };
+
+    } else {
+      // --- Standard Average Method (Grades 1-7) ---
+      let total = 0;
+      let count = 0;
+      Object.values(subjectsMap).forEach((subjectGrades: any[]) => {
+        const pct = resolveSubjectPercentage(subjectGrades);
+        if (pct !== null && pct !== undefined) {
+          total += Number(pct);
+          count += 1;
+        }
+      });
+      const avg = count > 0 ? total / count : 0;
+      studentScores[studentId] = { score: avg, hasGrades: count > 0 };
+    }
   });
-  
-  let classTotal = 0;
-  let classCount = 0;
-  
-  const averagesList = Object.entries(studentAverages).map(([id, data]) => {
-     const avg = data.avg;
-     if (data.count > 0) {
-       classTotal += avg;
-       classCount += 1;
-     }
-     return { id, avg };
-  });
-  
-  averagesList.sort((a, b) => b.avg - a.avg);
-  
+
+  // Sort by score descending → highest score = position 1
+  const scoresList = Object.entries(studentScores).map(([id, data]) => ({ id, ...data }));
+  scoresList.sort((a, b) => b.score - a.score);
+
   const rankings: Record<string, number> = {};
-  averagesList.forEach((item, index) => {
+  scoresList.forEach((item, index) => {
     rankings[item.id] = index + 1; // 1-based rank
   });
-  
-  const classAverage = classCount > 0 ? classTotal / classCount : 0;
-  
+
+  // Class average: for senior sec use average of each student's best-6 total,
+  // for other levels use average of individual averages — either way it's the mean of scores.
+  const validScores = scoresList.filter(s => s.hasGrades);
+  const classAverage = validScores.length > 0
+    ? validScores.reduce((sum, s) => sum + s.score, 0) / validScores.length
+    : 0;
+
   return {
     rankings,
     classAverage,
-    totalStudents: studentIds.length
+    totalStudents: studentIds.length,
   };
 }
 
