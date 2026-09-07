@@ -292,9 +292,9 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
       const hasActiveTest2 = activeTestTypes.includes('Test 2');
       const hasActiveTest3 = activeTestTypes.includes('Test 3');
 
-      const classHasAnyTest1 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 1`)) ?? false;
-      const classHasAnyTest2 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 2`)) ?? false;
-      const classHasAnyTest3 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 3`)) ?? false;
+      const classHasAnyTest1 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 1`) || k.endsWith('-Test 1') || k.endsWith('-Test 1-')) ?? false;
+      const classHasAnyTest2 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 2`) || k.endsWith('-Test 2') || k.endsWith('-Test 2-')) ?? false;
+      const classHasAnyTest3 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 3`) || k.endsWith('-Test 3') || k.endsWith('-Test 3-')) ?? false;
 
       // Only consider a missing test as blocking if the school has published
       // that test type for this class (otherwise skip it silently).
@@ -309,9 +309,9 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
 
       // Average over whichever published tests this student has a score for.
       const scores = [
-        (hasActiveTest1 && classHasAnyTest1) ? item.test1 : null,
-        (hasActiveTest2 && classHasAnyTest2) ? item.test2 : null,
-        (hasActiveTest3 && classHasAnyTest3) ? item.test3 : null,
+        (hasActiveTest1 && (classHasAnyTest1 || item.test1 !== null)) ? item.test1 : null,
+        (hasActiveTest2 && (classHasAnyTest2 || item.test2 !== null)) ? item.test2 : null,
+        (hasActiveTest3 && (classHasAnyTest3 || item.test3 !== null)) ? item.test3 : null,
       ].filter(t => t !== null) as number[];
       
       if (scores.length > 0) {
@@ -460,9 +460,9 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
 
       // If the student has no scores, they are WAITING if the school has published
       // at least one active test type for this class, otherwise ABSENT.
-      const classHasAnyTest1 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 1`)) ?? false;
-      const classHasAnyTest2 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 2`)) ?? false;
-      const classHasAnyTest3 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 3`)) ?? false;
+      const classHasAnyTest1 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 1`) || k.endsWith('-Test 1') || k.endsWith('-Test 1-')) ?? false;
+      const classHasAnyTest2 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 2`) || k.endsWith('-Test 2') || k.endsWith('-Test 2-')) ?? false;
+      const classHasAnyTest3 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 3`) || k.endsWith('-Test 3') || k.endsWith('-Test 3-')) ?? false;
 
       const isTest1Waiting = hasActiveTest1 && classHasAnyTest1;
       const isTest2Waiting = hasActiveTest2 && classHasAnyTest2;
@@ -692,14 +692,14 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                         
                         const pts = isSeniorSec ? gradeToPoints(gradeStr) : null;
 
-                        const hasClassTest1 = classGradesKeys?.includes(`${gKey}-${examType}-Test 1`);
-                        const hasClassTest2 = classGradesKeys?.includes(`${gKey}-${examType}-Test 2`);
-                        const hasClassTest3 = classGradesKeys?.includes(`${gKey}-${examType}-Test 3`);
+                        const hasClassTest1 = classGradesKeys?.some(k => k.startsWith(`${gKey}-`) && (k.endsWith('-Test 1') || k.endsWith('-Test 1-')));
+                        const hasClassTest2 = classGradesKeys?.some(k => k.startsWith(`${gKey}-`) && (k.endsWith('-Test 2') || k.endsWith('-Test 2-')));
+                        const hasClassTest3 = classGradesKeys?.some(k => k.startsWith(`${gKey}-`) && (k.endsWith('-Test 3') || k.endsWith('-Test 3-')));
 
                         // Check whether each test type was published at the class level.
-                        const classPublishedTest1 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 1`)) ?? false;
-                        const classPublishedTest2 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 2`)) ?? false;
-                        const classPublishedTest3 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 3`)) ?? false;
+                        const classPublishedTest1 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 1`) || k.endsWith('-Test 1') || k.endsWith('-Test 1-')) ?? false;
+                        const classPublishedTest2 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 2`) || k.endsWith('-Test 2') || k.endsWith('-Test 2-')) ?? false;
+                        const classPublishedTest3 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 3`) || k.endsWith('-Test 3') || k.endsWith('-Test 3-')) ?? false;
 
                         const test1Display = item.test1 !== null ? `${item.test1}%` : (classPublishedTest1 ? 'ABSENT' : '-');
                         const test2Display = item.test2 !== null ? `${item.test2}%` : (classPublishedTest2 ? 'ABSENT' : '-');

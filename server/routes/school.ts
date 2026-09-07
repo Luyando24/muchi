@@ -19,6 +19,7 @@ import {
 // Helper function to bypass Supabase's max_rows limit by paginating
 async function fetchAll(queryBuilder: any, limit = 1000) {
   let allData: any[] = [];
+  const seenIds = new Set<any>();
   let from = 0;
   let to = limit - 1;
   let hasMore = true;
@@ -28,7 +29,16 @@ async function fetchAll(queryBuilder: any, limit = 1000) {
     if (error) throw error;
     
     if (data && data.length > 0) {
-      allData = allData.concat(data);
+      for (const item of data) {
+        if (item && item.id !== undefined && item.id !== null) {
+          if (!seenIds.has(item.id)) {
+            seenIds.add(item.id);
+            allData.push(item);
+          }
+        } else {
+          allData.push(item);
+        }
+      }
       if (data.length < limit) {
         hasMore = false;
       } else {
@@ -115,10 +125,11 @@ async function getClassRankings(classId: string, term: string, examType: string,
   // Fetch all grades for the term and year; include subject name for ECZ best-6 identification
   const gradesQuery = supabaseAdmin
     .from('student_grades')
-    .select('student_id, subject_id, percentage, exam_type, test_type, subjects(id, name)')
+    .select('id, student_id, subject_id, percentage, exam_type, test_type, subjects(id, name)')
     .in('student_id', studentIds)
     .eq('term', term)
-    .eq('academic_year', academicYear);
+    .eq('academic_year', academicYear)
+    .order('id', { ascending: true });
 
   const grades = await fetchAll(gradesQuery);
 
@@ -3823,17 +3834,19 @@ router.get(
 
       let gradesQuery = supabaseAdmin
         .from("student_grades")
-        .select("student_id, subject_id, status, exam_type, test_type")
+        .select("id, student_id, subject_id, status, exam_type, test_type")
         .eq("school_id", schoolId)
         .eq("term", term)
-        .eq("academic_year", academicYear);
+        .eq("academic_year", academicYear)
+        .order("id", { ascending: true });
 
       if (!isAllClasses) {
         const enrollmentsQuery = supabaseAdmin
           .from("enrollments")
-          .select("student_id")
+          .select("id, student_id")
           .eq("academic_year", academicYear)
-          .eq("class_id", classId);
+          .eq("class_id", classId)
+          .order("id", { ascending: true });
 
         const enrollments = await fetchAll(enrollmentsQuery);
         const studentIds = enrollments?.map((e) => e.student_id) || [];
@@ -3854,8 +3867,9 @@ router.get(
       // Fetch all enrollments to map student_id -> class_id
       const allEnrollmentsQuery = supabaseAdmin
         .from("enrollments")
-        .select("student_id, class_id, classes(name)")
-        .eq("academic_year", academicYear);
+        .select("id, student_id, class_id, classes(name)")
+        .eq("academic_year", academicYear)
+        .order("id", { ascending: true });
       
       const allEnrollments = await fetchAll(allEnrollmentsQuery);
       
@@ -4153,6 +4167,7 @@ router.get(
         if (!examType) return true;
         if (g.exam_type === examType) return true;
         if (['Test 1', 'Test 2', 'Test 3'].includes(g.exam_type)) return true;
+        if (g.exam_type === 'Term' && g.test_type && ['Test 1', 'Test 2', 'Test 3'].includes(g.test_type)) return true;
         return false;
       });
 
@@ -4362,10 +4377,11 @@ router.get(
       const enrollmentsQuery = supabaseAdmin
         .from("enrollments")
         .select(
-          "student_id, profiles!enrollments_student_id_fkey(full_name, student_number, gender), classes(name, class_teacher_id, class_teacher_name, teacher:class_teacher_id(full_name))",
+          "id, student_id, profiles!enrollments_student_id_fkey(full_name, student_number, gender), classes(name, class_teacher_id, class_teacher_name, teacher:class_teacher_id(full_name))",
         )
         .eq("class_id", classId)
-        .eq("academic_year", academicYear);
+        .eq("academic_year", academicYear)
+        .order("id", { ascending: true });
 
       const enrollments = await fetchAll(enrollmentsQuery);
 
@@ -4377,8 +4393,9 @@ router.get(
 
       const classSubjectsQuery = supabaseAdmin
         .from("class_subjects")
-        .select("subject_id, teacher_name, subjects(id, name, code, department), profiles(id, full_name)")
-        .eq("class_id", classId);
+        .select("id, subject_id, teacher_name, subjects(id, name, code, department), profiles(id, full_name)")
+        .eq("class_id", classId)
+        .order("id", { ascending: true });
 
       const classSubjects = await fetchAll(classSubjectsQuery);
 
@@ -4412,7 +4429,8 @@ router.get(
         .select("*, subjects(id, name, code, department)")
         .in("student_id", studentIds)
         .eq("term", term)
-        .eq("academic_year", academicYear);
+        .eq("academic_year", academicYear)
+        .order("id", { ascending: true });
 
       const allGrades = await fetchAll(allGradesQuery);
 
@@ -4428,6 +4446,7 @@ router.get(
         if (!examType) return true;
         if (g.exam_type === examType) return true;
         if (['Test 1', 'Test 2', 'Test 3'].includes(g.exam_type)) return true;
+        if (g.exam_type === 'Term' && g.test_type && ['Test 1', 'Test 2', 'Test 3'].includes(g.test_type)) return true;
         return false;
       });
 
@@ -7545,9 +7564,10 @@ router.get(
       // 2. Fetch Grades
       let gradesQuery = supabaseAdmin
         .from("student_grades")
-        .select(`percentage, student_id, term, academic_year, exam_type, status`)
+        .select(`id, percentage, student_id, term, academic_year, exam_type, status`)
         .eq("school_id", schoolId)
-        .in("status", ["Submitted", "Published"]);
+        .in("status", ["Submitted", "Published"])
+        .order("id", { ascending: true });
 
       if (term && term !== "All") gradesQuery = gradesQuery.eq("term", term);
       if (academic_year && academic_year !== "All") gradesQuery = gradesQuery.eq("academic_year", academic_year);
@@ -8064,6 +8084,7 @@ router.get(
       const gradesQuery = supabaseAdmin
         .from("student_grades")
         .select(`
+          id,
           percentage,
           grade,
           student_id,
@@ -8074,7 +8095,8 @@ router.get(
         .eq("term", term)
         .eq("academic_year", academic_year)
         .eq("exam_type", examType)
-        .in("status", ["Submitted", "Published"]);
+        .in("status", ["Submitted", "Published"])
+        .order("id", { ascending: true });
 
       let allGradesData = await fetchAll(gradesQuery);
 
@@ -9326,10 +9348,11 @@ router.get(
       ];
       let gradesQuery = supabaseAdmin
         .from("student_grades")
-        .select("student_id, subject_id, status, exam_type, test_type")
+        .select("id, student_id, subject_id, status, exam_type, test_type")
         .eq("school_id", schoolId)
         .eq("term", term)
-        .eq("academic_year", academicYear);
+        .eq("academic_year", academicYear)
+        .order("id", { ascending: true });
 
       if (classId && classId !== "all") {
         gradesQuery = gradesQuery.in("student_id", studentIds);
@@ -9590,10 +9613,11 @@ router.post(
             // 4. Fetch all Published & Draft grades
             let gradesQuery = supabaseAdmin
               .from("student_grades")
-              .select("student_id, subject_id, status, exam_type, test_type")
+              .select("id, student_id, subject_id, status, exam_type, test_type")
               .eq("school_id", schoolId)
               .eq("term", term)
-              .eq("academic_year", academicYear);
+              .eq("academic_year", academicYear)
+              .order("id", { ascending: true });
 
             if (classId && classId !== "all") {
               gradesQuery = gradesQuery.in("student_id", studentIds);
