@@ -23,6 +23,7 @@ import {
   getSchoolPrecomputeStatus,
   prioritizeSchool,
   getActiveWorkerProgress,
+  getSchedulerQueueInfo,
   invalidateAndRecomputeSchool,
   computeBatchReportCards,
 } from "../services/reportCardCacheService.js";
@@ -4406,6 +4407,7 @@ router.get(
           name: student.full_name,
           studentNumber: student.student_number,
           gender: student.gender,
+          classId: student.enrollments?.[0]?.class_id || student.enrollments?.[0]?.classes?.id || null,
           class: student.enrollments?.[0]?.classes?.name || "N/A",
           classTeacherName,
           attendance: 0, // Placeholder
@@ -4686,24 +4688,42 @@ router.get(
 );
 
 // POST /api/school/results/prioritize-precompute
-// Request the calculation scheduler to calculate this school next in line
+// Request the calculation scheduler to calculate a school next in line
 router.post(
   "/results/prioritize-precompute",
   requireSchoolRole(ADMIN_ROLES),
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
-    const schoolId = profile.school_id;
+    // Strict isolation: A school can never configure priority for another school
+    const targetSchoolId = profile.school_id;
 
-    if (!schoolId) {
-      return res.status(400).json({ message: "School ID not found in profile" });
+    if (!targetSchoolId) {
+      return res.status(400).json({ message: "School ID not found on profile" });
     }
 
     try {
-      const prioritized = prioritizeSchool(schoolId);
-      const status = await getSchoolPrecomputeStatus(schoolId);
-      res.json({ success: true, prioritized, ...status });
+      const prioritized = prioritizeSchool(targetSchoolId, true);
+      const status = await getSchoolPrecomputeStatus(targetSchoolId);
+      const queueInfo = await getSchedulerQueueInfo();
+      res.json({ success: true, prioritized, queueInfo, ...status });
     } catch (error: any) {
       console.error("Prioritize precompute error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  },
+);
+
+// GET /api/school/results/scheduler-queue
+// Returns the scheduler queue, priority list, and all schools
+router.get(
+  "/results/scheduler-queue",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    try {
+      const queueInfo = await getSchedulerQueueInfo();
+      res.json(queueInfo);
+    } catch (error: any) {
+      console.error("Scheduler queue error:", error);
       res.status(500).json({ message: error.message });
     }
   },

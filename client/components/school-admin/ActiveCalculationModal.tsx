@@ -9,6 +9,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { useToast } from '@/components/ui/use-toast';
 import {
   Loader2,
   CheckCircle2,
@@ -19,6 +20,7 @@ import {
   Layers,
   Activity,
   Check,
+  FileText,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -31,9 +33,24 @@ interface ActiveWorkerProgressData {
   isCompilingPdf?: boolean;
   activePdfSchoolId?: string | null;
   activePdfClassLabel?: string | null;
+  priorityQueue?: {
+    position: number;
+    schoolId: string;
+    schoolName: string;
+    isNext: boolean;
+  }[];
+  schools?: {
+    id: string;
+    name: string;
+    isCurrent: boolean;
+    isPrioritized: boolean;
+    priorityPosition: number | null;
+    isNextPriority: boolean;
+  }[];
   activeSchoolStatus: {
     schoolId: string;
     schoolName: string;
+    isSameSchool?: boolean;
     totalClasses: number;
     calculatedClasses: number;
     remainingClasses: number;
@@ -74,15 +91,19 @@ interface ActiveCalculationModalProps {
   isOpen: boolean;
   onClose: () => void;
   endpointUrl?: string; // default '/api/school/results/active-worker-progress'
+  onPrioritized?: () => void;
 }
 
 export default function ActiveCalculationModal({
   isOpen,
   onClose,
   endpointUrl = '/api/school/results/active-worker-progress',
+  onPrioritized,
 }: ActiveCalculationModalProps) {
   const [data, setData] = useState<ActiveWorkerProgressData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSettingPriority, setIsSettingPriority] = useState(false);
+  const { toast } = useToast();
 
   const fetchProgress = async () => {
     try {
@@ -104,6 +125,47 @@ export default function ActiveCalculationModal({
       console.error('Failed to fetch active worker progress:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSetPriority = async () => {
+    try {
+      setIsSettingPriority(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch('/api/school/results/prioritize-precompute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({}),
+      });
+
+      if (res.ok) {
+        toast({
+          title: 'Next Priority Set ⚡',
+          description: 'Your school is now #1 Next in line for calculation and PDF compilation.',
+        });
+        await fetchProgress();
+        onPrioritized?.();
+      } else {
+        toast({
+          title: 'Priority Update Failed',
+          description: 'Could not prioritize the school at this moment.',
+          variant: 'destructive',
+        });
+      }
+    } catch (err) {
+      console.error('Error setting priority:', err);
+      toast({
+        title: 'Network Error',
+        description: 'Failed to communicate with calculation service.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSettingPriority(false);
     }
   };
 
@@ -252,6 +314,68 @@ export default function ActiveCalculationModal({
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Priority Queue & Next Priority Controller */}
+              <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-amber-200/80 dark:border-amber-900/50 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3 border-amber-100 dark:border-amber-900/30">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-amber-500 text-white rounded-lg shadow-sm">
+                      <Zap className="h-4 w-4 fill-white" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                        Calculation & PDF Priority Queue
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        Schools scheduled to calculate and build PDFs immediately next in line
+                      </p>
+                    </div>
+                  </div>
+                  {data?.priorityQueue && data.priorityQueue.length > 0 && (
+                    <Badge className="bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950 dark:text-amber-200 text-xs font-bold self-start sm:self-auto">
+                      {data.priorityQueue.length} {data.priorityQueue.length === 1 ? 'School' : 'Schools'} Queued
+                    </Badge>
+                  )}
+                </div>
+
+                {/* Current #1 Next Priority Banner */}
+                <div className="flex items-center justify-between p-3 rounded-lg bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                      #1 Next in Line:
+                    </span>
+                    <span className="text-xs font-bold text-slate-900 dark:text-white">
+                      {data?.priorityQueue && data.priorityQueue.length > 0
+                        ? data.priorityQueue[0].schoolName
+                        : 'Default Queue Order (No manual priority set)'}
+                    </span>
+                  </div>
+                  {data?.priorityQueue && data.priorityQueue.length > 0 && (
+                    <Badge className="bg-amber-500 text-white font-black text-[10px] uppercase tracking-wide">
+                      Next Up
+                    </Badge>
+                  )}
+                </div>
+
+                {/* Prioritize Action for User's School */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1 border-t border-amber-100/60 dark:border-amber-900/30">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Need your school's report cards immediately? Prioritize your school as #1 Next in line.
+                  </p>
+                  <Button
+                    onClick={handleSetPriority}
+                    disabled={isSettingPriority || activeStatus?.isSameSchool}
+                    className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs h-9 shadow-sm shrink-0 w-full sm:w-auto"
+                  >
+                    {isSettingPriority ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <Zap className="h-3.5 w-3.5 mr-1.5 fill-current" />
+                    )}
+                    {activeStatus?.isSameSchool ? 'Your School is Currently Active' : 'Prioritize My School ⚡'}
+                  </Button>
+                </div>
               </div>
 
               {/* Class by Class Checklist for the Active School */}

@@ -18,6 +18,7 @@ export default function RenderClassReportCards() {
   const [isRenderComplete, setIsRenderComplete] = useState(false);
 
   useEffect(() => {
+    document.body.classList.add('headless-pdf-render');
     let isCancelled = false;
 
     const fetchCards = async () => {
@@ -47,7 +48,7 @@ export default function RenderClassReportCards() {
             if (!isCancelled) {
               setIsRenderComplete(true);
             }
-          }, 600);
+          }, 800);
         }
       } catch (err: any) {
         if (!isCancelled) {
@@ -60,6 +61,7 @@ export default function RenderClassReportCards() {
     fetchCards();
     return () => {
       isCancelled = true;
+      document.body.classList.remove('headless-pdf-render');
     };
   }, [schoolId, classId, term, examType, academicYear, token]);
 
@@ -76,6 +78,7 @@ export default function RenderClassReportCards() {
     return (
       <div className="p-8 text-center text-red-600 font-bold bg-white min-h-screen">
         <p>Render Error: {error}</p>
+        <div id="render-error" style={{ display: 'none' }} />
       </div>
     );
   }
@@ -93,6 +96,13 @@ export default function RenderClassReportCards() {
           margin: 0;
           padding: 0;
         }
+        @media print {
+          body.headless-pdf-render,
+          body.headless-pdf-render #root {
+            display: block !important;
+            visibility: visible !important;
+          }
+        }
         .page-break {
           break-before: page;
           page-break-before: always;
@@ -106,7 +116,7 @@ export default function RenderClassReportCards() {
           margin: 0 auto;
           padding: 0 !important;
           background: white !important;
-          display: flex;
+          display: flex !important;
           flex-direction: column;
         }
         * {
@@ -114,6 +124,7 @@ export default function RenderClassReportCards() {
           print-color-adjust: exact !important;
           color-adjust: exact !important;
         }
+        
         `}
       </style>
 

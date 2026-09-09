@@ -199,11 +199,6 @@ async function runPrecompute(key: CacheKey): Promise<void> {
       return;
     }
     console.log(`${label} — cached ${cards.length} cards ✓`);
-
-    // 2. Strict sequence: Only after database calculation is saved, build the PDF in the background
-    generateClassPdf({ schoolId, classId, term, examType, academicYear }).catch(pdfErr => {
-      console.warn(`${label} — background PDF generation error:`, pdfErr.message);
-    });
   } catch (err: any) {
     console.warn(`${label} — error:`, err.message);
   }
@@ -639,20 +634,30 @@ const schedulerState: SchedulerState = {
 };
 
 /**
- * Request that calculations for this school run next in line.
+ * Request that calculations & PDF compilation for this school run next in line.
+ * If jumpToFront is true (default), this school is placed at index 0 of the priority queue.
  */
-export function prioritizeSchool(schoolId: string): boolean {
+export function prioritizeSchool(schoolId: string, jumpToFront: boolean = true): boolean {
   if (schedulerState.currentSchoolId === schoolId) {
-    // Already running
+    // Already actively running
     return true;
   }
-  if (!schedulerState.priorityQueue.includes(schoolId)) {
+
+  // If already in queue, remove so we can place it at the front (or new priority position)
+  const existingIdx = schedulerState.priorityQueue.indexOf(schoolId);
+  if (existingIdx !== -1) {
+    schedulerState.priorityQueue.splice(existingIdx, 1);
+  }
+
+  if (jumpToFront) {
+    schedulerState.priorityQueue.unshift(schoolId);
+  } else {
     schedulerState.priorityQueue.push(schoolId);
-    console.log(`[ReportCardCache] School ${schoolId} prioritized! Current queue:`, schedulerState.priorityQueue);
-    triggerSchedulerWake();
-    return true;
   }
-  return false;
+
+  console.log(`[ReportCardCache] School ${schoolId} set as NEXT priority! Current priority queue:`, schedulerState.priorityQueue);
+  triggerSchedulerWake();
+  return true;
 }
 
 /**
@@ -748,7 +753,7 @@ async function getSchoolCombos(schoolId: string): Promise<{
 /**
  * Detailed report card calculation progress across all terms for a specific school.
  */
-export async function getSchoolPrecomputeStatus(schoolId: string) {
+export async function getSchoolPrecomputeStatus(schoolId: string, skipActiveMetrics: boolean = false) {
   try {
     const { combos, schoolName } = await getSchoolCombos(schoolId);
 
@@ -936,6 +941,65 @@ export async function getSchoolPrecomputeStatus(schoolId: string) {
       ? `~${Math.max(3, Math.ceil(estPdfSeconds))}s remaining`
       : `~${Math.ceil(estPdfSeconds / 60)} min remaining`;
 
+    // 10. Live metrics of the active running school (scores & pre-built PDF progress)
+    let activeSchoolMetrics: any = null;
+    if (!skipActiveMetrics && schedulerState.currentSchoolId) {
+      if (schedulerState.currentSchoolId === schoolId) {
+        activeSchoolMetrics = {
+          schoolId,
+          schoolName,
+          isSameSchool: true,
+          totalClasses,
+          calculatedClasses,
+          calcPercentage: progressPercentage,
+          totalPdfs: totalClasses,
+          builtPdfs,
+          pdfPercentage: pdfProgressPercentage,
+          isPdfCompleted,
+          isCurrentlyBuildingPdf,
+          activePdfLabel,
+          currentClassLabel: schedulerState.currentClassLabel,
+        };
+      } else {
+        try {
+          const activeStatus = await getSchoolPrecomputeStatus(schedulerState.currentSchoolId, true);
+          activeSchoolMetrics = {
+            schoolId: activeStatus.schoolId,
+            schoolName: activeStatus.schoolName,
+            isSameSchool: false,
+            totalClasses: activeStatus.totalClasses,
+            calculatedClasses: activeStatus.calculatedClasses,
+            calcPercentage: activeStatus.progressPercentage,
+            totalPdfs: activeStatus.totalPdfs,
+            builtPdfs: activeStatus.builtPdfs,
+            pdfPercentage: activeStatus.pdfProgressPercentage,
+            isPdfCompleted: activeStatus.isPdfCompleted,
+            isCurrentlyBuildingPdf: activeStatus.isCurrentlyBuildingPdf,
+            activePdfLabel: activeStatus.activePdfLabel,
+            currentClassLabel: schedulerState.currentClassLabel,
+          };
+        } catch (_) {
+          activeSchoolMetrics = {
+            schoolId: schedulerState.currentSchoolId,
+            schoolName: schedulerState.currentSchoolName,
+            isSameSchool: false,
+            totalClasses: 0,
+            calculatedClasses: 0,
+            calcPercentage: 0,
+            totalPdfs: 0,
+            builtPdfs: 0,
+            pdfPercentage: 0,
+            isPdfCompleted: false,
+            isCurrentlyBuildingPdf: pdfWorker.isCompiling && pdfWorker.currentSchoolId === schedulerState.currentSchoolId,
+            activePdfLabel: pdfWorker.currentClassLabel,
+            currentClassLabel: schedulerState.currentClassLabel,
+          };
+        }
+      }
+    }
+
+    const priorityIndex = schedulerState.priorityQueue.indexOf(schoolId);
+
     return {
       schoolId,
       schoolName,
@@ -947,12 +1011,15 @@ export async function getSchoolPrecomputeStatus(schoolId: string) {
       isCurrentlyCalculating,
       currentClassLabel: isCurrentlyCalculating ? schedulerState.currentClassLabel : null,
       currentRunningSchoolName: schedulerState.currentSchoolName,
+      activeSchoolMetrics,
       queuePosition,
       waitStatusText,
       estimatedTimeText,
       estimatedSeconds,
-      canPrioritize: !isCurrentlyCalculating && !isCompleted && !isPriorityQueued,
+      canPrioritize: !isCurrentlyCalculating && priorityIndex !== 0,
       isPriorityQueued,
+      priorityQueuePosition: priorityIndex !== -1 ? priorityIndex + 1 : null,
+      isNextPriority: priorityIndex === 0,
       terms,
       // Pre-built PDF compilation metrics
       totalPdfs: totalClasses,
@@ -1080,44 +1147,109 @@ async function processSchoolBackfill(schoolId: string, schoolNameFallback: strin
   const { combos, schoolName } = await getSchoolCombos(schoolId);
   if (combos.length === 0) return;
 
-  // Filter out combos that already have a cache entry
+  // ─── STAGE 1: Calculate & Cache Scores for THIS School ───────────────────────
   const { data: existingCache } = await supabaseAdmin
     .from('report_card_cache')
-    .select('class_id, term, exam_type, academic_year')
+    .select('class_id, term, exam_type, academic_year, student_count')
     .eq('school_id', schoolId);
 
-  const cachedSet = new Set(
-    (existingCache || []).map(c => `${c.class_id}|${c.term}|${c.exam_type}|${c.academic_year}`),
-  );
-
-  const pending = combos.filter(
-    c => !cachedSet.has(`${c.classId}|${c.term}|${c.examType}|${c.academicYear}`),
-  );
-
-  if (pending.length === 0) return;
-
-  console.log(`[ReportCardCache] ${schoolName} — ${pending.length} combos to pre-compute`);
-
-  for (const combo of pending) {
-    // If a priority school was requested during a regular backfill pass, yield to priority queue
-    if (isNormalPass && schedulerState.priorityQueue.length > 0) {
-      console.log(`[ReportCardCache] Yielding regular pass for ${schoolName} to higher priority school`);
-      break;
+  const cacheMap = new Map<string, number>();
+  if (existingCache) {
+    for (const row of existingCache) {
+      cacheMap.set(`${row.class_id}|${row.term}|${row.exam_type}|${row.academic_year}`, row.student_count || 0);
     }
+  }
 
-    const k = cacheKey(combo);
-    if (inFlight.has(k)) {
+  const pendingCalcs = combos.filter(
+    c => !cacheMap.has(`${c.classId}|${c.term}|${c.examType}|${c.academicYear}`),
+  );
+
+  if (pendingCalcs.length > 0) {
+    console.log(`[ReportCardCache] ${schoolName} — ${pendingCalcs.length} classes need score calculation`);
+
+    for (const combo of pendingCalcs) {
+      // If a priority school was requested during a regular pass, yield to priority queue
+      if (isNormalPass && schedulerState.priorityQueue.length > 0) {
+        console.log(`[ReportCardCache] Yielding regular pass for ${schoolName} to higher priority school`);
+        return;
+      }
+
+      const k = cacheKey(combo);
+      if (inFlight.has(k)) {
+        await sleep(BACKFILL_DELAY_MS);
+        continue;
+      }
+
+      schedulerState.currentClassLabel = `Calculating: ${combo.className || 'Class'} (${combo.term} - ${combo.examType})`;
+      try {
+        await runPrecompute(combo);
+      } catch (_) {
+        // Don't abort for one failed class
+      }
       await sleep(BACKFILL_DELAY_MS);
-      continue;
+    }
+  }
+
+  // ─── STAGE 2: Compile Pre-Built PDFs ONE SCHOOL AT A TIME ─────────────────────
+  // Re-fetch cache to get accurate student count for each class
+  const { data: updatedCache } = await supabaseAdmin
+    .from('report_card_cache')
+    .select('class_id, term, exam_type, academic_year, student_count')
+    .eq('school_id', schoolId);
+
+  const updatedCacheMap = new Map<string, number>();
+  if (updatedCache) {
+    for (const row of updatedCache) {
+      updatedCacheMap.set(`${row.class_id}|${row.term}|${row.exam_type}|${row.academic_year}`, row.student_count || 0);
+    }
+  }
+
+  // Find all classes for THIS school that have students but do not yet have a verified PDF on disk
+  const pendingPdfs = combos.filter(c => {
+    const studentCount = updatedCacheMap.get(`${c.classId}|${c.term}|${c.examType}|${c.academicYear}`) ?? 1;
+    if (studentCount === 0) return false; // skip empty classes with 0 students
+    return !isClassPdfReady({
+      schoolId,
+      classId: c.classId,
+      term: c.term,
+      examType: c.examType,
+      academicYear: c.academicYear,
+    });
+  });
+
+  if (pendingPdfs.length > 0) {
+    console.log(`[ReportCardCache] ${schoolName} — Compiling ${pendingPdfs.length} class PDFs sequentially (ONE SCHOOL AT A TIME)`);
+
+    for (let i = 0; i < pendingPdfs.length; i++) {
+      const combo = pendingPdfs[i];
+
+      // If a priority school was requested during a regular background pass, yield
+      if (isNormalPass && schedulerState.priorityQueue.length > 0) {
+        console.log(`[ReportCardCache] Yielding regular PDF compilation for ${schoolName} to higher priority school`);
+        return;
+      }
+
+      const classLabel = combo.className ? `${combo.className} (${combo.term})` : `${combo.term} - ${combo.examType}`;
+      schedulerState.currentClassLabel = `Compiling PDF [${i + 1}/${pendingPdfs.length}]: ${classLabel}`;
+      console.log(`[ReportCardCache] ${schoolName} — PDF [${i + 1}/${pendingPdfs.length}]: ${classLabel}`);
+
+      try {
+        await generateClassPdf({
+          schoolId,
+          classId: combo.classId,
+          term: combo.term,
+          examType: combo.examType,
+          academicYear: combo.academicYear,
+          className: combo.className,
+        });
+      } catch (pdfErr: any) {
+        console.warn(`[ReportCardCache] PDF generation error for ${classLabel}:`, pdfErr.message);
+      }
+
+      await sleep(1000); // 1s cooldown between PDF compilations
     }
 
-    schedulerState.currentClassLabel = `${combo.className || 'Class'} (${combo.term} - ${combo.examType})`;
-    try {
-      await runPrecompute(combo);
-    } catch (_) {
-      // Don't abort for one failed class
-    }
-    await sleep(BACKFILL_DELAY_MS);
+    console.log(`[ReportCardCache] ${schoolName} — Finished compiling all class PDFs ✓`);
   }
 }
 
@@ -1202,6 +1334,52 @@ export async function getSystemPrecomputeSummary() {
 }
 
 /**
+ * Retrieve details of the current scheduler queue, priority order, and all schools.
+ */
+export async function getSchedulerQueueInfo() {
+  const currentSchoolId = schedulerState.currentSchoolId;
+  const currentSchoolName = schedulerState.currentSchoolName;
+  const priorityQueueIds = [...schedulerState.priorityQueue];
+
+  const { data: allSchools } = await supabaseAdmin
+    .from('schools')
+    .select('id, name')
+    .order('name');
+
+  const schoolMap = new Map((allSchools || []).map((s: any) => [s.id, s.name]));
+
+  const priorityQueue = priorityQueueIds.map((id, idx) => ({
+    position: idx + 1,
+    schoolId: id,
+    schoolName: schoolMap.get(id) || 'School',
+    isNext: idx === 0,
+  }));
+
+  const schools = (allSchools || []).map((s: any) => {
+    const isCurrent = s.id === currentSchoolId;
+    const priorityIndex = priorityQueueIds.indexOf(s.id);
+    const isPrioritized = priorityIndex !== -1;
+    return {
+      id: s.id,
+      name: s.name,
+      isCurrent,
+      isPrioritized,
+      priorityPosition: isPrioritized ? priorityIndex + 1 : null,
+      isNextPriority: priorityIndex === 0,
+    };
+  });
+
+  return {
+    currentSchoolId,
+    currentSchoolName,
+    currentClassLabel: schedulerState.currentClassLabel,
+    isCalculating: schedulerState.isCalculating,
+    priorityQueue,
+    schools,
+  };
+}
+
+/**
  * Real-time progress of the school currently being processed by the background calculation worker.
  */
 export async function getActiveWorkerProgress() {
@@ -1214,13 +1392,14 @@ export async function getActiveWorkerProgress() {
   let activeSchoolStatus: any = null;
   if (currentSchoolId) {
     try {
-      activeSchoolStatus = await getSchoolPrecomputeStatus(currentSchoolId);
+      activeSchoolStatus = await getSchoolPrecomputeStatus(currentSchoolId, true);
     } catch (_) {
       // Fallback if status calculation encounters temporary read error
     }
   }
 
   const pdfWorker = getPdfWorkerState();
+  const queueInfo = await getSchedulerQueueInfo();
 
   return {
     isCalculating,
@@ -1232,7 +1411,10 @@ export async function getActiveWorkerProgress() {
     isCompilingPdf: pdfWorker.isCompiling,
     activePdfSchoolId: pdfWorker.currentSchoolId,
     activePdfClassLabel: pdfWorker.currentClassLabel,
+    priorityQueue: queueInfo.priorityQueue,
+    schools: queueInfo.schools,
   };
 }
+
 
 

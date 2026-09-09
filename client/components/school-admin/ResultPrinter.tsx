@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
-import ReactDOM from 'react-dom';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
     Printer,
     Download,
@@ -22,7 +21,9 @@ import {
     Layers,
     Sparkles,
     Activity,
-    Lock
+    Lock,
+    FileText,
+    Check
 } from 'lucide-react';
 import ActiveCalculationModal from '@/components/school-admin/ActiveCalculationModal';
 import { useNavigate } from 'react-router-dom';
@@ -84,22 +85,9 @@ export default function ResultPrinter() {
     const [students, setStudents] = useState<Student[]>([]);
     const [availableExamTypes, setAvailableExamTypes] = useState<string[]>(['Mid Term', 'End of Term']);
     const [isLoading, setIsLoading] = useState(true);
-    const [isPrinting, setIsPrinting] = useState(false);
-    const [batchData, setBatchData] = useState<any[]>([]);
     const [previewData, setPreviewData] = useState<any | null>(null);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-    const [printMode, setPrintMode] = useState<'pdf' | 'hardcopy'>('hardcopy');
     const [simplifiedAssessmentMode, setSimplifiedAssessmentMode] = useState<boolean>(false);
-
-    // Progress overlay state
-    const [printPhase, setPrintPhase] = useState<'idle' | 'fetching' | 'rendering' | 'ready'>('idle');
-    const [printProgressMsg, setPrintProgressMsg] = useState('');
-    const [progressPct, setProgressPct] = useState(0);
-    const [elapsedSec, setElapsedSec] = useState(0);
-    const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-    // State for print blocker dialog
     const [isBlockerOpen, setIsBlockerOpen] = useState(false);
     const [blockerMessage, setBlockerMessage] = useState("");
 
@@ -157,14 +145,18 @@ export default function ResultPrinter() {
             if (!session) return;
             const res = await fetch('/api/school/results/prioritize-precompute', {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${session.access_token}` }
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`
+                },
+                body: JSON.stringify({})
             });
             if (res.ok) {
                 const data = await res.json();
                 setPrecomputeStatus(data);
                 toast({
-                    title: "School Prioritized ⚡",
-                    description: "This school has been moved to the front of the queue and will be calculated next!",
+                    title: "Next Priority Set ⚡",
+                    description: "Your school has been moved to #1 Next in line and will be calculated and compiled next!",
                 });
             }
         } catch (err) {
@@ -182,76 +174,66 @@ export default function ResultPrinter() {
         fetchInitialData();
     }, []);
 
-    // Clean up batch data after print dialog closes
-    useEffect(() => {
-        const handleAfterPrint = () => {
-            setBatchData([]);
-            setIsPrinting(false);
-            setPrintPhase('idle');
-        };
-        window.addEventListener('afterprint', handleAfterPrint);
-        return () => window.removeEventListener('afterprint', handleAfterPrint);
-    }, []);
+    const [directClassPdfReady, setDirectClassPdfReady] = useState<boolean>(false);
 
-    // Check if class results are pre-cached for instant printing
+    // Check if selected class pre-built PDF is ready on disk
     useEffect(() => {
         if (!filters.classId || !filters.term || !filters.examType || !filters.academicYear) {
-            setIsCacheWarm(false);
+            setDirectClassPdfReady(false);
             return;
         }
         let cancelled = false;
-        const checkCache = async () => {
+        const checkPdf = async () => {
             try {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (!session) return;
-                const res = await fetch(
-                    `/api/school/results/cache-status?classId=${filters.classId}&term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`,
-                    { headers: { 'Authorization': `Bearer ${session.access_token}` } }
-                );
-                if (!res.ok) return;
-                const data = await res.json();
-                if (!cancelled) {
-                    setIsCacheWarm(!!data?.cached);
+                const query = new URLSearchParams({
+                    classId: filters.classId,
+                    term: filters.term,
+                    examType: filters.examType,
+                    academicYear: filters.academicYear,
+                });
+                const res = await fetch(`/api/school/results/class-pdf-status?${query.toString()}`, {
+                    headers: { 'Authorization': `Bearer ${session.access_token}` }
+                });
+                if (res.ok && !cancelled) {
+                    const data = await res.json();
+                    setDirectClassPdfReady(!!data?.ready);
                 }
             } catch {
-                if (!cancelled) setIsCacheWarm(false);
+                if (!cancelled) setDirectClassPdfReady(false);
             }
         };
-        checkCache();
-        return () => { cancelled = true; };
+        checkPdf();
+        const interval = setInterval(checkPdf, 2500);
+        return () => { cancelled = true; clearInterval(interval); };
     }, [filters.classId, filters.term, filters.examType, filters.academicYear]);
 
-    // Drive animated progress bar and elapsed counter while printing
-    useEffect(() => {
-        if (printPhase === 'idle') {
-            setProgressPct(0);
-            setElapsedSec(0);
-            if (progressRef.current) clearInterval(progressRef.current);
-            if (elapsedRef.current) clearInterval(elapsedRef.current);
-            return;
+    const isCurrentClassPdfReady = useMemo(() => {
+        if (!filters.classId) return false;
+        if (directClassPdfReady) return true;
+        if (!precomputeStatus?.terms) return false;
+        for (const termGroup of precomputeStatus.terms) {
+            if (termGroup.term === filters.term && termGroup.academicYear === filters.academicYear) {
+                const match = termGroup.classes?.find(
+                    (c: any) => c.classId === filters.classId && c.examType === filters.examType
+                );
+                if (match?.isPdfReady) return true;
+            }
         }
+        return false;
+    }, [filters.classId, filters.term, filters.examType, filters.academicYear, precomputeStatus, directClassPdfReady]);
 
-        // Elapsed seconds counter
-        elapsedRef.current = setInterval(() => setElapsedSec(s => s + 1), 1000);
+    const isAllPdfsReady = useMemo(() => {
+        return !!precomputeStatus?.isCompleted &&
+            !!precomputeStatus?.isPdfCompleted &&
+            (precomputeStatus?.totalPdfs ?? 0) > 0 &&
+            (precomputeStatus?.builtPdfs ?? 0) >= (precomputeStatus?.totalPdfs ?? 0);
+    }, [precomputeStatus]);
 
-        // Smoothly advance the bar based on phase targets
-        // fetching: 0→45, rendering: 45→85, ready: 85→100
-        const targets: Record<string, number> = { fetching: 45, rendering: 85, ready: 100 };
-        const target = targets[printPhase] ?? 100;
-        progressRef.current = setInterval(() => {
-            setProgressPct(p => {
-                if (p >= target) { clearInterval(progressRef.current!); return p; }
-                // Ease-out: bigger jumps early, smaller near target
-                const step = Math.max(0.4, (target - p) * 0.06);
-                return Math.min(p + step, target);
-            });
-        }, 50);
-
-        return () => {
-            if (progressRef.current) clearInterval(progressRef.current);
-            if (elapsedRef.current) clearInterval(elapsedRef.current);
-        };
-    }, [printPhase]);
+    const isPdfsBuilding = useMemo(() => {
+        return !!precomputeStatus?.isCompleted && !isAllPdfsReady;
+    }, [precomputeStatus, isAllPdfsReady]);
 
     /**
      * Converts an image URL to a base64 data URI.
@@ -384,109 +366,6 @@ export default function ResultPrinter() {
         }
     };
 
-    const handleBulkPrint = async () => {
-        if (!filters.classId || !filters.term || !filters.examType || !filters.academicYear) {
-            toast({ title: "Incomplete Selection", description: "Please select Class, Term, Assessment Type and Year.", variant: "destructive" });
-            return;
-        }
-
-        setIsPrinting(true);
-        setPrintPhase('fetching');
-        setPrintProgressMsg('Checking for data issues…');
-
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) return;
-
-            // Check if class has anomalies before printing
-            const anomaliesRes = await fetch('/api/school/grades/anomalies', {
-                headers: { 'Authorization': `Bearer ${session.access_token}` }
-            });
-            const anomaliesData = anomaliesRes.ok ? await anomaliesRes.json() : [];
-            if (anomaliesData && anomaliesData.length > 0) {
-                const studentIds = [...new Set(anomaliesData.map((a: any) => a.studentId))].filter(Boolean);
-                if (studentIds.length > 0) {
-                    const { data: anomalousEnrollments } = await supabase
-                        .from('enrollments')
-                        .select('student_id, class_id')
-                        .in('student_id', studentIds)
-                        .eq('class_id', filters.classId)
-                        .eq('academic_year', filters.academicYear);
-                    if (anomalousEnrollments && anomalousEnrollments.length > 0) {
-                        setBlockerMessage("Cannot print report cards. There are grade anomalies (scores > 100%) in this class. Please resolve them in the Data Audit section first.");
-                        setIsBlockerOpen(true);
-                        setIsPrinting(false);
-                        setPrintPhase('idle');
-                        return;
-                    }
-                }
-            }
-
-            setPrintProgressMsg('Fetching report card data…');
-
-            const dataRes = await fetch(
-                `/api/school/results/batch-report-cards?classId=${filters.classId}&term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`,
-                { headers: { 'Authorization': `Bearer ${session.access_token}` } }
-            );
-
-            if (!dataRes.ok) {
-                const err = await dataRes.json().catch(() => ({ message: 'Server error' }));
-                throw new Error(err.message || 'Failed to fetch report cards');
-            }
-
-            const data: any[] = await dataRes.json();
-
-            if (!data || data.length === 0) {
-                toast({ title: "No Data", description: "No published results found for this selection." });
-                setIsPrinting(false);
-                setPrintPhase('idle');
-                return;
-            }
-
-            setPrintPhase('rendering');
-            setPrintProgressMsg(`Preparing ${data.length} report cards…`);
-
-            // Use pre-warmed base64 images if available, otherwise convert now
-            const schoolWithImages = preWarmedSchoolRef.current
-                ? { ...preWarmedSchoolRef.current, ...Object.fromEntries(
-                    Object.entries(data[0]?.school || {}).filter(([k]) =>
-                        !['logo_url','seal_url','signature_url','coat_of_arms_url'].includes(k)
-                    ))
-                  }
-                : await preloadSchoolImages(data[0]?.school);
-
-            const dataWithImages = data.map((card: any) => ({ ...card, school: schoolWithImages }));
-
-            // Set document title for PDF filename
-            const originalTitle = document.title;
-            const safeTerm = filters.term.replace(/\s+/g, '_');
-            document.title = `${selectedClassName}_${safeTerm}_${filters.academicYear}_Reports`;
-
-            setBatchData(dataWithImages);
-
-            // Wait two animation frames for React to flush the DOM, then print.
-            // Two rAFs ensure the browser has painted at least once after the state update.
-            // This is more reliable than a fixed timeout for any class size.
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    setPrintPhase('ready');
-                    setPrintProgressMsg('Opening print dialog…');
-                    // Small yield so the 'ready' state renders before the dialog blocks the thread
-                    setTimeout(() => {
-                        window.print();
-                        document.title = originalTitle;
-                        // afterprint event handler will reset isPrinting + batchData
-                    }, 120);
-                });
-            });
-
-        } catch (error: any) {
-            toast({ title: "Error", description: error.message, variant: "destructive" });
-            setIsPrinting(false);
-            setPrintPhase('idle');
-        }
-    };
-
     const handleDownloadCompiledPdf = async () => {
         if (!filters.classId || !filters.term || !filters.examType || !filters.academicYear) {
             toast({ title: "Incomplete Selection", description: "Please select Class, Term, Assessment Type and Year.", variant: "destructive" });
@@ -541,68 +420,6 @@ export default function ResultPrinter() {
         }
     };
 
-    const handleIndividualPrint = async (studentId: string) => {
-        setIsPrinting(true);
-        setPrintPhase('fetching');
-        setPrintProgressMsg('Loading report card…');
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) return;
-
-            // Check if student has anomalies before printing
-            const anomaliesRes = await fetch('/api/school/grades/anomalies', {
-                headers: { 'Authorization': `Bearer ${session.access_token}` }
-            });
-            const anomaliesData = anomaliesRes.ok ? await anomaliesRes.json() : [];
-            if (anomaliesData) {
-                const studentHasAnomaly = anomaliesData.some((a: any) => a.studentId === studentId && a.academicYear === filters.academicYear);
-                if (studentHasAnomaly) {
-                    setBlockerMessage("Cannot print report card. This student has grade anomalies (scores > 100%). Please resolve them in the Data Audit section first.");
-                    setIsBlockerOpen(true);
-                    setIsPrinting(false);
-                    setPrintPhase('idle');
-                    return;
-                }
-            }
-
-            const dataRes = await fetch(
-                `/api/school/results/report-card/${studentId}?term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`,
-                { headers: { 'Authorization': `Bearer ${session.access_token}` } }
-            );
-            if (!dataRes.ok) throw new Error('Failed to load report card');
-            const data = await dataRes.json();
-
-            setPrintPhase('rendering');
-            setPrintProgressMsg('Preparing report card…');
-
-            const schoolWithImages = preWarmedSchoolRef.current || await preloadSchoolImages(data.school);
-            const dataWithImages = { ...data, school: schoolWithImages };
-
-            setBatchData([dataWithImages]);
-
-            const originalTitle = document.title;
-            const studentName = (data.student.name || 'Student').replace(/\s+/g, '_');
-            const safeTerm = filters.term.replace(/\s+/g, '_');
-            document.title = `${studentName}_${safeTerm}_${filters.academicYear}_Report`;
-
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    setPrintPhase('ready');
-                    setPrintProgressMsg('Opening print dialog…');
-                    setTimeout(() => {
-                        window.print();
-                        document.title = originalTitle;
-                    }, 120);
-                });
-            });
-
-        } catch (error: any) {
-            toast({ title: "Error", description: error.message, variant: "destructive" });
-            setIsPrinting(false);
-            setPrintPhase('idle');
-        }
-    };
-
     const handlePreview = async (studentId: string) => {
         try {
             const { data: { session } } = await supabase.auth.getSession();
@@ -622,15 +439,6 @@ export default function ResultPrinter() {
         }
     };
 
-    const handleOpenPrinterSettings = () => {
-        // Only works on Windows if the browser allows it (usually does via ms-settings protocol)
-        window.open('ms-settings:printers');
-        toast({
-            title: "System Settings",
-            description: "Opening Windows Printer & Scanner settings. Add your printer there if it's missing.",
-        });
-    };
-
     if (isLoading) {
         return <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
     }
@@ -639,106 +447,6 @@ export default function ResultPrinter() {
 
     return (
         <div className="space-y-6">
-            {/* ─── Print Progress Overlay ──────────────────────────────────── */}
-            {isPrinting && printPhase !== 'idle' && (
-                <div className="print:hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-
-                        {/* Colour strip at top — changes by phase */}
-                        <div className={`h-1.5 w-full transition-all duration-500 ${
-                            printPhase === 'ready' ? 'bg-green-500' : 'bg-blue-500'
-                        }`}
-                            style={{ width: `${Math.round(progressPct)}%`, transition: 'width 0.15s ease-out' }}
-                        />
-
-                        <div className="p-7 space-y-5">
-                            {/* Icon + headline */}
-                            <div className="flex items-center gap-4">
-                                {printPhase === 'ready' ? (
-                                    <div className="flex-shrink-0 h-12 w-12 rounded-full bg-green-50 dark:bg-green-900/30 flex items-center justify-center">
-                                        <CheckCheck className="h-6 w-6 text-green-500" />
-                                    </div>
-                                ) : (
-                                    <div className="flex-shrink-0 h-12 w-12 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
-                                        <Loader2 className="h-6 w-6 text-blue-500 animate-spin" />
-                                    </div>
-                                )}
-                                <div>
-                                    <p className="font-bold text-slate-900 dark:text-white text-base leading-tight">
-                                        {printPhase === 'ready' ? 'Ready to print!' : 'Preparing report cards'}
-                                    </p>
-                                    <p className="text-xs text-slate-400 mt-0.5">
-                                        {printPhase === 'ready' ? 'Opening print dialog now…' : `${elapsedSec}s elapsed`}
-                                    </p>
-                                </div>
-                                {/* Percentage badge */}
-                                <div className="ml-auto text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100">
-                                    {Math.round(progressPct)}%
-                                </div>
-                            </div>
-
-                            {/* Progress bar track */}
-                            <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
-                                <div
-                                    className={`h-full rounded-full transition-all duration-150 ease-out ${
-                                        printPhase === 'ready' ? 'bg-green-500' : 'bg-blue-500'
-                                    }`}
-                                    style={{ width: `${Math.round(progressPct)}%` }}
-                                />
-                            </div>
-
-                            {/* Step list */}
-                            <ol className="space-y-2.5">
-                                {([
-                                    { id: 'fetching',  label: 'Checking & fetching data',    detail: 'Validating grades, rankings & images' },
-                                    { id: 'rendering', label: 'Building report cards',        detail: 'Laying out all student pages in memory' },
-                                    { id: 'ready',     label: 'Sending to print',             detail: 'Handing off to the print dialog' },
-                                ] as const).map((step, i) => {
-                                    const phases = ['fetching', 'rendering', 'ready'];
-                                    const stepIdx = phases.indexOf(step.id);
-                                    const curIdx  = phases.indexOf(printPhase);
-                                    const done    = curIdx > stepIdx;
-                                    const active  = curIdx === stepIdx;
-                                    return (
-                                        <li key={step.id} className="flex items-start gap-3">
-                                            {/* Step circle */}
-                                            <div className={`mt-0.5 flex-shrink-0 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-black transition-colors duration-300 ${
-                                                done   ? 'bg-green-500 text-white' :
-                                                active ? 'bg-blue-500 text-white ring-2 ring-blue-200 dark:ring-blue-800' :
-                                                         'bg-slate-200 dark:bg-slate-700 text-slate-400'
-                                            }`}>
-                                                {done ? <CheckCheck className="h-3 w-3" /> : i + 1}
-                                            </div>
-                                            <div className="min-w-0">
-                                                <p className={`text-sm font-semibold leading-tight ${
-                                                    done   ? 'text-green-600 dark:text-green-400' :
-                                                    active ? 'text-slate-900 dark:text-white' :
-                                                             'text-slate-400'
-                                                }`}>{step.label}</p>
-                                                {active && (
-                                                    <p className="text-[11px] text-slate-400 mt-0.5 animate-pulse">{step.detail}</p>
-                                                )}
-                                            </div>
-                                        </li>
-                                    );
-                                })}
-                            </ol>
-
-                            {/* Tip */}
-                            {printPhase === 'fetching' && (
-                                <p className="text-[11px] text-slate-400 border-t border-slate-100 dark:border-slate-700 pt-4">
-                                    💡 Tip: For large classes the data fetch may take 10–30 seconds. Do not close this tab.
-                                </p>
-                            )}
-                            {printPhase === 'rendering' && (
-                                <p className="text-[11px] text-slate-400 border-t border-slate-100 dark:border-slate-700 pt-4">
-                                    💡 Tip: In the print dialog, set <b>Destination</b> to <b>Save as PDF</b> to get a digital copy, or choose your printer for hardcopies.
-                                </p>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* VIEW MODE 1: Report Card Calculation Progress Screen */}
             {viewMode === 'progress' && (
@@ -775,65 +483,91 @@ export default function ResultPrinter() {
                         </div>
 
                         <div className="flex items-center gap-2.5 flex-wrap self-start lg:self-center">
-                            {/* Button to review real-time progress of the school currently being calculated */}
-                            <Button
-                                variant="outline"
-                                onClick={() => setIsActiveModalOpen(true)}
-                                className="border-indigo-300 bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-900 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300 font-bold text-xs shadow-sm h-9"
-                            >
-                                <Activity className="h-3.5 w-3.5 mr-1.5 text-indigo-600 animate-pulse" />
-                                {precomputeStatus?.currentRunningSchoolName
-                                    ? `Review Active: ${precomputeStatus.currentRunningSchoolName}`
-                                    : 'Review Active School Progress'}
-                            </Button>
+                            {/* Button to review real-time progress & PDF build progress of the active school */}
+                            {(() => {
+                                const active = precomputeStatus?.activeSchoolMetrics;
+                                const isCalculating = precomputeStatus?.isCurrentlyCalculating || !!precomputeStatus?.currentRunningSchoolName;
+                                const activeName = active?.schoolName || precomputeStatus?.currentRunningSchoolName;
+                                const calcPct = active?.calcPercentage ?? (precomputeStatus?.isCurrentlyCalculating ? precomputeStatus?.progressPercentage : 0) ?? 0;
+                                const pdfBuilt = active?.builtPdfs ?? (precomputeStatus?.builtPdfs ?? 0);
+                                const pdfTotal = active?.totalPdfs ?? (precomputeStatus?.totalPdfs ?? 0);
+                                const pdfPct = active?.pdfPercentage ?? (precomputeStatus?.pdfProgressPercentage ?? (pdfTotal > 0 ? Math.round((pdfBuilt / pdfTotal) * 100) : 0));
+                                const isBuildingPdf = active?.isCurrentlyBuildingPdf || precomputeStatus?.isCurrentlyBuildingPdf;
+                                const isPdfDone = active?.isPdfCompleted || (pdfTotal > 0 && pdfBuilt >= pdfTotal);
 
-                            {precomputeStatus?.canPrioritize && (
+                                return (
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setIsActiveModalOpen(true)}
+                                        className="border-indigo-300 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-950 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200 font-bold text-xs shadow-sm h-auto py-1.5 px-3 transition-all flex items-center gap-2"
+                                        title="Click to review live calculation and PDF build progress"
+                                    >
+                                        <Activity className={`h-4 w-4 shrink-0 ${isCalculating || isBuildingPdf ? 'text-indigo-600 animate-pulse' : 'text-slate-400'}`} />
+                                        <div className="flex items-center gap-2 flex-wrap text-left">
+                                            <span className="font-extrabold text-slate-800 dark:text-slate-100">
+                                                {activeName ? `Active: ${activeName}` : 'Review Active School Progress'}
+                                            </span>
+
+                                            {isCalculating && (
+                                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200 text-[11px] font-semibold">
+                                                    <Loader2 className="h-3 w-3 animate-spin text-blue-600 shrink-0" />
+                                                    Calc: {calcPct}%
+                                                </span>
+                                            )}
+
+                                            {(pdfTotal > 0 || isBuildingPdf) && (
+                                                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold ${
+                                                    isBuildingPdf
+                                                        ? 'bg-purple-100 text-purple-900 dark:bg-purple-900/70 dark:text-purple-200 border border-purple-300 dark:border-purple-700 animate-pulse'
+                                                        : isPdfDone
+                                                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200'
+                                                        : 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300'
+                                                }`}>
+                                                    {isBuildingPdf ? (
+                                                        <Loader2 className="h-3 w-3 animate-spin text-purple-600 shrink-0" />
+                                                    ) : isPdfDone ? (
+                                                        <Check className="h-3 w-3 text-emerald-600 shrink-0" />
+                                                    ) : (
+                                                        <FileText className="h-3 w-3 text-purple-600 shrink-0" />
+                                                    )}
+                                                    PDF: {pdfBuilt}/{pdfTotal} ({pdfPct}%)
+                                                </span>
+                                            )}
+                                        </div>
+                                    </Button>
+                                );
+                            })()}                            {/* Option to Set Next Priority for this School */}
+                            {precomputeStatus?.isPriorityQueued || precomputeStatus?.isNextPriority ? (
+                                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800 shadow-sm">
+                                    <Zap className="h-3.5 w-3.5 text-amber-600 fill-current" />
+                                    Next in Line (#1 Priority)
+                                </div>
+                            ) : (
                                 <Button
                                     onClick={handlePrioritize}
-                                    disabled={isPrioritizing}
-                                    className="bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-sm"
+                                    disabled={isPrioritizing || precomputeStatus?.isCurrentlyCalculating || isAllPdfsReady}
+                                    className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm h-9 flex items-center gap-1.5"
+                                    title="Set your school as #1 Next in the calculation and PDF build queue"
                                 >
-                                    {isPrioritizing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Zap className="h-4 w-4 mr-2 fill-current" />}
-                                    Calculate This School Next
+                                    {isPrioritizing ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                        <Zap className="h-3.5 w-3.5 fill-current" />
+                                    )}
+                                    Set Next Priority ⚡
                                 </Button>
                             )}
-                            {precomputeStatus?.isPriorityQueued && (
-                                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800">
-                                    <Zap className="h-3.5 w-3.5 text-amber-600 fill-current" />
-                                    Prioritized (Next in Line)
-                                </div>
+                            {/* Print button ONLY APPEARS IF ALL PDFS ARE READY */}
+                            {isAllPdfsReady && (
+                                <Button
+                                    variant="default"
+                                    onClick={() => setViewMode('printer')}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm h-9 flex items-center gap-1.5"
+                                >
+                                    Continue to Print
+                                    <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                                </Button>
                             )}
-                            <Button
-                                variant={precomputeStatus?.isCompleted ? "default" : "outline"}
-                                onClick={() => {
-                                    if (precomputeStatus?.isCompleted) {
-                                        setViewMode('printer');
-                                    }
-                                }}
-                                disabled={!precomputeStatus?.isCompleted}
-                                className={`text-xs font-semibold transition-all ${
-                                    precomputeStatus?.isCompleted
-                                        ? "bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm"
-                                        : "border-slate-200 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-60"
-                                }`}
-                                title={
-                                    precomputeStatus?.isCompleted
-                                        ? "All submitted classes and subjects calculated. Proceed to print."
-                                        : "Calculations in progress. This button will activate once all submitted classes are calculated."
-                                }
-                            >
-                                {precomputeStatus?.isCompleted ? (
-                                    <>
-                                        Continue to Print
-                                        <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
-                                    </>
-                                ) : (
-                                    <>
-                                        <Lock className="h-3.5 w-3.5 mr-1.5" />
-                                        Continue to Print
-                                    </>
-                                )}
-                            </Button>
                         </div>
                     </div>
 
@@ -869,7 +603,7 @@ export default function ResultPrinter() {
                                         {(precomputeStatus?.remainingClasses ?? 0) === 0 ? "Zero classes pending" : "Pending calculation"}
                                     </p>
                                 </div>
-                                <div className="h-12 w-12 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                                <div className="h-12 w-12 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:blue-400 flex items-center justify-center">
                                     <Clock className="h-6 w-6" />
                                 </div>
                             </CardContent>
@@ -884,7 +618,7 @@ export default function ResultPrinter() {
                                         {precomputeStatus?.estimatedTimeText || "Calculating…"}
                                     </p>
                                     <p className="text-xs text-slate-500 mt-1">
-                                        {precomputeStatus?.isCompleted ? "Instant print ready" : "Automated background calculation"}
+                                        {precomputeStatus?.isCompleted ? "Instant export ready" : "Automated background calculation"}
                                     </p>
                                 </div>
                                 <div className="h-12 w-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
@@ -941,7 +675,7 @@ export default function ResultPrinter() {
                                     )}
                                     <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
                                         {precomputeStatus?.isCompleted
-                                            ? "Calculation Complete — Instant Print Ready"
+                                            ? "Calculation Complete — Instant Export Ready"
                                             : precomputeStatus?.isCurrentlyCalculating
                                             ? precomputeStatus.currentClassLabel
                                                 ? `Currently calculating: ${precomputeStatus.currentClassLabel}`
@@ -1125,16 +859,23 @@ export default function ResultPrinter() {
 
                     {/* Bottom Action Bar */}
                     <div className={`sticky bottom-4 z-20 flex flex-col sm:flex-row items-center justify-between gap-4 p-5 backdrop-blur-md rounded-2xl border-2 shadow-xl transition-all ${
-                        precomputeStatus?.isCompleted
+                        isAllPdfsReady
                             ? "bg-emerald-50/95 dark:bg-emerald-950/90 border-emerald-300 dark:border-emerald-700"
+                            : isPdfsBuilding
+                            ? "bg-purple-50/95 dark:bg-purple-950/90 border-purple-300 dark:border-purple-700"
                             : "bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-800"
                     }`}>
                         <div>
                             <p className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
-                                {precomputeStatus?.isCompleted ? (
+                                {isAllPdfsReady ? (
                                     <>
                                         <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                                        <span>All report cards for this school are pre-calculated!</span>
+                                        <span>All report cards and pre-built PDFs are ready!</span>
+                                    </>
+                                ) : isPdfsBuilding ? (
+                                    <>
+                                        <Loader2 className="h-5 w-5 text-purple-600 animate-spin flex-shrink-0" />
+                                        <span>Calculations Complete • Pre-building PDFs ({precomputeStatus?.builtPdfs ?? 0} of {precomputeStatus?.totalPdfs ?? 0} ready - {precomputeStatus?.pdfProgressPercentage ?? 0}%)</span>
                                     </>
                                 ) : (
                                     <>
@@ -1144,367 +885,251 @@ export default function ResultPrinter() {
                                 )}
                             </p>
                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                {precomputeStatus?.isCompleted
-                                    ? "All submitted classes and subjects are ready. You can now proceed to print report cards with instant ~50ms speed."
-                                    : "Printing is locked until all submitted classes and subjects have been calculated. This button will activate automatically."}
+                                {isAllPdfsReady
+                                    ? "All submitted classes and high-speed vector PDFs are ready. You can now proceed to export."
+                                    : isPdfsBuilding
+                                    ? "All class scores are calculated. Background worker is compiling pre-built vector PDFs. The export button will appear once all PDFs are ready."
+                                    : "PDF export is locked until all submitted classes and subjects have been calculated and compiled."}
                             </p>
                         </div>
 
-                        <div className="flex items-center gap-3 w-full sm:w-auto">
-                            {precomputeStatus?.canPrioritize && (
+                        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                            {isPdfsBuilding && (
+                                <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-100 dark:bg-purple-900/60 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800 text-xs font-bold animate-pulse">
+                                    <Loader2 className="h-4 w-4 animate-spin text-purple-600 shrink-0" />
+                                    <span>Compiling Pre-Built PDFs ({precomputeStatus?.builtPdfs ?? 0}/{precomputeStatus?.totalPdfs ?? 0})</span>
+                                </div>
+                            )}
+
+                            {isAllPdfsReady && (
                                 <Button
-                                    variant="outline"
-                                    onClick={handlePrioritize}
-                                    disabled={isPrioritizing}
-                                    className="border-amber-400 text-amber-700 dark:text-amber-300 hover:bg-amber-50 font-bold"
+                                    onClick={() => setViewMode('printer')}
+                                    size="lg"
+                                    className="w-full sm:w-auto font-black px-8 text-base bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg cursor-pointer transition-all"
                                 >
-                                    <Zap className="h-4 w-4 mr-1.5 fill-current" />
-                                    {isPrioritizing ? "Prioritizing…" : "Prioritize This School"}
+                                    Continue to Print
+                                    <ArrowRight className="h-5 w-5 ml-2" />
                                 </Button>
                             )}
-                            <Button
-                                onClick={() => {
-                                    if (precomputeStatus?.isCompleted) {
-                                        setViewMode('printer');
-                                    }
-                                }}
-                                size="lg"
-                                disabled={!precomputeStatus?.isCompleted}
-                                className={`w-full sm:w-auto font-black px-8 text-base transition-all ${
-                                    precomputeStatus?.isCompleted
-                                        ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg cursor-pointer animate-pulse hover:animate-none"
-                                        : "bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-300 dark:border-slate-700 cursor-not-allowed opacity-60 shadow-none"
-                                }`}
-                                title={
-                                    precomputeStatus?.isCompleted
-                                        ? "Click to proceed to report card printing"
-                                        : "Printing will activate once all submitted classes and subjects are calculated"
-                                }
-                            >
-                                {precomputeStatus?.isCompleted ? (
-                                    <>
-                                        Continue to Print
-                                        <ArrowRight className="h-5 w-5 ml-2" />
-                                    </>
-                                ) : (
-                                    <>
-                                        <Lock className="h-5 w-5 mr-2 text-slate-400 dark:text-slate-500" />
-                                        Continue to Print
-                                    </>
-                                )}
-                            </Button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* VIEW MODE 2: Normal Printer Screen */}
+            {/* VIEW MODE 2: Pre-Built PDF Export & Preview Screen */}
             {viewMode === 'printer' && (
                 <div className="space-y-6">
                     <div className="flex items-center justify-between print:hidden">
                         <div>
                             <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                <Printer className="h-6 w-6" />
-                                Print Results
+                                <FileText className="h-6 w-6 text-emerald-600" />
+                                Export Report Cards
                             </h2>
-                            <p className="text-slate-600 dark:text-slate-400">Print student report cards individually or in bulk.</p>
+                            <p className="text-slate-600 dark:text-slate-400">Download pre-compiled high-speed vector PDF report cards.</p>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-2">
                             <Button
                                 variant="outline"
                                 onClick={() => setViewMode('progress')}
-                                className="border-indigo-200 text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800"
+                                className="border-indigo-200 text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800 text-xs h-9 font-bold"
                             >
-                                <Gauge className="h-4 w-4 mr-2 text-indigo-600 dark:text-indigo-400" />
+                                <Gauge className="h-4 w-4 mr-1.5 text-indigo-600 dark:text-indigo-400" />
                                 Calculation Status ({precomputeStatus?.progressPercentage ?? 100}%)
                             </Button>
-                            <Button
-                                variant="outline"
-                                onClick={handleOpenPrinterSettings}
-                                className="border-slate-200"
-                            >
-                                <PlusCircle className="h-4 w-4 mr-2" />
-                                Add/Manage Printer
-                            </Button>
-                            {isCacheWarm && (
-                                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                    <Zap className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 fill-current" />
-                                    <span>Instant Print Ready</span>
+
+                            {/* The print button must not appear if PDFs are not ready */}
+                            {filters.classId && isCurrentClassPdfReady ? (
+                                <Button
+                                    onClick={handleDownloadCompiledPdf}
+                                    disabled={isDownloadingPdf}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm text-xs h-9"
+                                >
+                                    {isDownloadingPdf ? (
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    ) : (
+                                        <Download className="h-4 w-4 mr-2" />
+                                    )}
+                                    Download Pre-Built PDF ⚡
+                                </Button>
+                            ) : filters.classId ? (
+                                <div className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-purple-50 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-xs font-bold animate-pulse">
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-600" />
+                                    <span>PDF Compiling in Background…</span>
                                 </div>
-                            )}
-                            <Button
-                                onClick={handleDownloadCompiledPdf}
-                                disabled={isDownloadingPdf || !filters.classId}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm"
-                            >
-                                {isDownloadingPdf ? (
-                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : null}
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <Card className="md:col-span-2">
+                            <CardHeader>
+                                <CardTitle className="text-lg font-bold flex items-center gap-2">
+                                    <Filter className="h-5 w-5" />
+                                    Select Parameters
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Class</label>
+                                        <Select
+                                            value={filters.classId}
+                                            onValueChange={(val) => setFilters(prev => ({ ...prev, classId: val }))}
+                                        >
+                                            <SelectTrigger className="h-9 text-xs">
+                                                <SelectValue placeholder="Select Class" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {classes.map(c => (
+                                                    <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Term</label>
+                                        <Select
+                                            value={filters.term}
+                                            onValueChange={(val) => setFilters(prev => ({ ...prev, term: val }))}
+                                        >
+                                            <SelectTrigger className="h-9 text-xs">
+                                                <SelectValue placeholder="Select Term" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Term 1" className="text-xs">Term 1</SelectItem>
+                                                <SelectItem value="Term 2" className="text-xs">Term 2</SelectItem>
+                                                <SelectItem value="Term 3" className="text-xs">Term 3</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Assessment Type</label>
+                                        <Select
+                                            value={filters.examType}
+                                            onValueChange={(val) => setFilters(prev => ({ ...prev, examType: val }))}
+                                        >
+                                            <SelectTrigger className="h-9 text-xs">
+                                                <SelectValue placeholder="Select Assessment Type" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {availableExamTypes.map(type => (
+                                                    <SelectItem key={type} value={type} className="text-xs">{type}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Academic Year</label>
+                                        <Input
+                                            value={filters.academicYear}
+                                            onChange={(e) => setFilters(prev => ({ ...prev, academicYear: e.target.value }))}
+                                            className="h-9 text-xs"
+                                        />
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Pre-Built PDF Export Info Card */}
+                        <Card className="bg-gradient-to-br from-emerald-50/60 to-white dark:from-slate-900 dark:to-slate-800/80 border-emerald-200/80 dark:border-slate-700 shadow-sm">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+                                    <FileText className="h-4 w-4 text-emerald-600" />
+                                    Pre-Built PDF Export
+                                </CardTitle>
+                                <CardDescription className="text-xs text-slate-500">
+                                    Ultra-fast vector report cards generated directly on server.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                {filters.classId ? (
+                                    isCurrentClassPdfReady ? (
+                                        <div className="space-y-2.5">
+                                            <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs font-semibold flex items-center gap-2">
+                                                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                                                <span>Pre-compiled A4 PDF ready for download</span>
+                                            </div>
+                                            <Button
+                                                onClick={handleDownloadCompiledPdf}
+                                                disabled={isDownloadingPdf}
+                                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9 shadow-sm"
+                                            >
+                                                {isDownloadingPdf ? (
+                                                    <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+                                                ) : (
+                                                    <Download className="h-3.5 w-3.5 mr-2" />
+                                                )}
+                                                Download Class PDF ⚡
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <div className="p-3 bg-purple-50 dark:bg-purple-950/40 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-lg text-xs space-y-1.5 animate-pulse">
+                                            <div className="flex items-center gap-2 font-bold">
+                                                <Loader2 className="h-4 w-4 text-purple-600 animate-spin" />
+                                                <span>Compiling Pre-Built PDF…</span>
+                                            </div>
+                                            <p className="text-[11px] text-purple-700 dark:text-purple-400">
+                                                The download button will appear as soon as compilation completes.
+                                            </p>
+                                        </div>
+                                    )
                                 ) : (
-                                    <Download className="h-4 w-4 mr-2" />
+                                    <p className="text-xs text-slate-500 italic">
+                                        Select a class to view its pre-built PDF status.
+                                    </p>
                                 )}
-                                Download Pre-Built PDF ⚡
-                            </Button>
-                            <Button
-                                onClick={handleBulkPrint}
-                                disabled={isPrinting || !filters.classId}
-                                variant="outline"
-                                className="border-slate-300 text-slate-700 dark:border-slate-700 dark:text-slate-200"
-                            >
-                                {isPrinting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Printer className="h-4 w-4 mr-2" />}
-                                Browser Print Dialog
-                            </Button>
-                        </div>
-                    </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 print:hidden">
-                <Card className="lg:col-span-2">
-                    <CardHeader>
-                        <CardTitle className="text-sm font-medium">Filter Results</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div className="space-y-2">
-                                <label className="text-xs font-medium text-slate-500 uppercase">Class</label>
-                                <Select
-                                    value={filters.classId}
-                                    onValueChange={(val) => setFilters(prev => ({ ...prev, classId: val }))}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select Class" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {classes.map(c => (
-                                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-xs font-medium text-slate-500 uppercase">Term</label>
-                                <Select
-                                    value={filters.term}
-                                    onValueChange={(val) => setFilters(prev => ({ ...prev, term: val }))}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select Term" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Term 1">Term 1</SelectItem>
-                                        <SelectItem value="Term 2">Term 2</SelectItem>
-                                        <SelectItem value="Term 3">Term 3</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {!simplifiedAssessmentMode && (
-                                <div className="space-y-2">
-                                    <label className="text-xs font-medium text-slate-500 uppercase">Assessment</label>
-                                    <Select
-                                        value={filters.examType}
-                                        onValueChange={(val) => setFilters(prev => ({ ...prev, examType: val }))}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select Type" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {availableExamTypes.map(type => (
-                                                <SelectItem key={type} value={type}>{type}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                <div className="p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-[11px] text-slate-600 dark:text-slate-400">
+                                    <p className="font-semibold text-slate-700 dark:text-slate-300 mb-0.5">Need Paper Copies?</p>
+                                    <p>Open the downloaded vector PDF and print directly from your browser or PDF viewer.</p>
                                 </div>
-                            )}
-
-                            <div className="space-y-2">
-                                <label className="text-xs font-medium text-slate-500 uppercase">Academic Year</label>
-                                <Input
-                                    value={filters.academicYear}
-                                    onChange={(e) => setFilters(prev => ({ ...prev, academicYear: e.target.value }))}
-                                    placeholder="2024"
-                                />
-                            </div>
-                        </div>
-                        <div className="flex items-center justify-between mt-6 pt-6 border-t border-slate-100">
-                            <p className="text-xs text-slate-500 italic">Showing students in {selectedClassName || 'selected class'}</p>
-                            <Button variant="outline" size="sm" onClick={() => fetchStudents()}>
-                                <Filter className="h-4 w-4 mr-2" />
-                                Refresh List
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-slate-50/50 border-dashed border-2 border-slate-200">
-                    <CardHeader>
-                        <CardTitle className="text-sm font-medium flex items-center gap-2">
-                            <Settings className="h-4 w-4" />
-                            Printer Setup
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="flex flex-col gap-2">
-                            <Button
-                                variant={printMode === 'hardcopy' ? 'default' : 'outline'}
-                                className="w-full justify-start"
-                                onClick={() => setPrintMode('hardcopy')}
-                            >
-                                <Printer className="h-4 w-4 mr-2" />
-                                Print Hardcopies
-                            </Button>
-                            <Button
-                                variant={printMode === 'pdf' ? 'default' : 'outline'}
-                                className="w-full justify-start"
-                                onClick={() => setPrintMode('pdf')}
-                            >
-                                <Download className="h-4 w-4 mr-2" />
-                                Save as Digital PDF
-                            </Button>
-                        </div>
-                        <div className="p-3 bg-white rounded-lg border border-slate-100 shadow-sm text-[11px] text-slate-600 space-y-2">
-                            <p className="font-bold uppercase text-[9px] text-slate-400 tracking-widest">Helpful Tip</p>
-                            <p>For hardcopies, ensure your printer is powered on and connected via USB or Wi-Fi. In the print dialog, select your printer name from the <b>Destination</b> list.</p>
-                            <Button
-                                variant="link"
-                                size="sm"
-                                className="h-auto p-0 text-blue-600 font-bold"
-                                onClick={handleOpenPrinterSettings}
-                            >
-                                Not seeing your printer? Add it here.
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            <Card className="print:hidden">
-                <CardContent className="p-0">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Student Name</TableHead>
-                                <TableHead>Student ID</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {students.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={3} className="text-center py-8 text-slate-500">
-                                        {filters.classId ? "No students found in this class." : "Please select a class to see students."}
-                                    </TableCell>
-                                </TableRow>
-                            ) : (
-                                students.map(student => (
-                                    <TableRow key={student.id}>
-                                        <TableCell className="font-medium">{student.full_name}</TableCell>
-                                        <TableCell className="text-slate-500 font-mono text-xs">{student.student_number}</TableCell>
-                                        <TableCell className="text-right flex items-center justify-end gap-2">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => handlePreview(student.id)}
-                                                className="text-blue-600 hover:text-blue-700"
-                                            >
-                                                <Eye className="h-4 w-4 mr-2" />
-                                                Preview
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => handleIndividualPrint(student.id)}
-                                                disabled={isPrinting}
-                                                className="text-slate-600 hover:text-slate-900"
-                                            >
-                                                {printMode === 'hardcopy' ? <Printer className="h-4 w-4 mr-2" /> : <Download className="h-4 w-4 mr-2" />}
-                                                {printMode === 'hardcopy' ? 'Print' : 'PDF'}
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
-                </div>
-            )}
-
-            {/* Print Area - Rendered at root level via portal to avoid layout conflicts */}
-            {isPrinting && batchData.length > 0 && ReactDOM.createPortal(
-                <div id="school-print-portal" className="font-sans">
-                    <style>
-                        {`
-                        @media screen {
-                            #school-print-portal {
-                                display: none !important;
-                            }
-                        }
-                        @media print {
-                            @page {
-                                size: A4;
-                                margin: 10mm;
-                            }
-                            #root, .radix-portal, [data-radix-portal], header, nav, aside {
-                                display: none !important;
-                                visibility: hidden !important;
-                            }
-                            body {
-                                background: white !important;
-                                margin: 0;
-                                padding: 0;
-                            }
-                            #school-print-portal {
-                                display: block !important;
-                                visibility: visible !important;
-                                position: static !important;
-                                width: 100% !important;
-                                z-index: 999999 !important;
-                                background: white !important;
-                            }
-                            .page-break {
-                                break-before: page;
-                                page-break-before: always;
-                                display: block !important;
-                                clear: both;
-                            }
-                            .report-card-wrapper {
-                                width: 100% !important;
-                                min-height: 280mm; /* Close to A4 but allowing for margins */
-                                break-inside: avoid;
-                                margin: 0 auto;
-                                padding: 0 !important;
-                                background: white !important;
-                                display: flex;
-                                flex-direction: column;
-                            }
-                            /* Force black text for print */
-                            * {
-                                -webkit-print-color-adjust: exact !important;
-                                print-color-adjust: exact !important;
-                                color-adjust: exact !important;
-                            }
-                        }
-                        `}
-                    </style>
-                    <div className="w-full">
-                        {batchData.map((data, index) => (
-                            <div
-                                key={index}
-                                className={`${index > 0 ? "page-break" : ""} report-card-wrapper`}
-                            >
-                                <ReportCardContent
-                                    data={data}
-                                    term={filters.term}
-                                    examType={filters.examType}
-                                    academicYear={filters.academicYear}
-                                    className="border-none shadow-none w-full max-w-none p-0 !bg-white !text-black"
-                                />
-                            </div>
-                        ))}
+                            </CardContent>
+                        </Card>
                     </div>
-                </div>,
-                document.body
+
+                    <Card className="print:hidden">
+                        <CardContent className="p-0">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Student Name</TableHead>
+                                        <TableHead>Student ID</TableHead>
+                                        <TableHead className="text-right">Actions</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {students.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={3} className="text-center py-8 text-slate-500">
+                                                {filters.classId ? "No students found in this class." : "Please select a class to see students."}
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        students.map(student => (
+                                            <TableRow key={student.id}>
+                                                <TableCell className="font-medium">{student.full_name}</TableCell>
+                                                <TableCell className="text-slate-500 font-mono text-xs">{student.student_number}</TableCell>
+                                                <TableCell className="text-right flex items-center justify-end gap-2">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => handlePreview(student.id)}
+                                                        className="text-indigo-600 hover:text-indigo-700 border-indigo-200 text-xs h-8 font-medium"
+                                                    >
+                                                        <Eye className="h-3.5 w-3.5 mr-1.5" />
+                                                        Preview Report Card
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                </div>
             )}
 
             {/* Preview Dialog */}
@@ -1513,7 +1138,7 @@ export default function ResultPrinter() {
                     <DialogHeader>
                         <DialogTitle>Report Card Preview</DialogTitle>
                         <DialogDescription>
-                            Review the report card before printing.
+                            Review student report card before exporting.
                         </DialogDescription>
                     </DialogHeader>
                     {previewData && (
@@ -1528,15 +1153,18 @@ export default function ResultPrinter() {
                     )}
                     <div className="flex justify-end gap-2 mt-4">
                         <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>Close</Button>
-                        <Button
-                            onClick={() => {
-                                setIsPreviewOpen(false);
-                                handleIndividualPrint(previewData.student.id || previewData.student.studentId);
-                            }}
-                        >
-                            <Printer className="h-4 w-4 mr-2" />
-                            Print Now
-                        </Button>
+                        {isCurrentClassPdfReady && (
+                            <Button
+                                onClick={() => {
+                                    setIsPreviewOpen(false);
+                                    handleDownloadCompiledPdf();
+                                }}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                            >
+                                <Download className="h-4 w-4 mr-2" />
+                                Download Class PDF ⚡
+                            </Button>
+                        )}
                     </div>
                 </DialogContent>
             </Dialog>
@@ -1572,6 +1200,9 @@ export default function ResultPrinter() {
             <ActiveCalculationModal
                 isOpen={isActiveModalOpen}
                 onClose={() => setIsActiveModalOpen(false)}
+                onPrioritized={() => {
+                    fetchPrecomputeStatus();
+                }}
             />
         </div>
     );

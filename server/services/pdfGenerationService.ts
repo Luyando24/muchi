@@ -66,7 +66,7 @@ export function isClassPdfReady(key: PdfKey): boolean {
     const filePath = getPdfCacheFilePath(key);
     if (fs.existsSync(filePath)) {
       const stat = fs.statSync(filePath);
-      return stat.size > 1024; // Valid PDF is at least > 1KB
+      return stat.size > 5000; // Valid consolidated report card PDF is at least > 5KB
     }
     return false;
   } catch {
@@ -146,8 +146,8 @@ export async function generateClassPdf(key: PdfKey): Promise<string | null> {
     }
 
     const execPath = getBrowserExecutablePath();
-    const port = process.env.PORT || '8080';
-    const renderUrl = `http://127.0.0.1:${port}/render-class-report-cards?schoolId=${encodeURIComponent(
+    const port = process.env.CLIENT_PORT || process.env.VITE_PORT || '8080';
+    const renderUrl = `http://localhost:${port}/render-class-report-cards?schoolId=${encodeURIComponent(
       key.schoolId
     )}&classId=${encodeURIComponent(key.classId)}&term=${encodeURIComponent(
       key.term
@@ -178,24 +178,38 @@ export async function generateClassPdf(key: PdfKey): Promise<string | null> {
     });
 
     const page = await browser.newPage();
+    page.setDefaultTimeout(180000);
     await page.setViewport({ width: 1240, height: 1754 }); // A4 at 150 DPI approx
 
     // Navigate to local render page
     await page.goto(renderUrl, {
-      waitUntil: 'networkidle0',
-      timeout: 45000,
+      waitUntil: 'domcontentloaded',
+      timeout: 60000,
     });
 
-    // Wait until the React component signals that all report cards are rendered
-    await page.waitForSelector('#render-complete', { timeout: 30000 });
+    // Wait until the React component signals that all report cards are rendered or error
+    await page.waitForSelector('#render-complete, #render-error', { timeout: 60000 });
+    const hasError = await page.$('#render-error');
+    if (hasError) {
+      console.warn(`[PdfService] Render error detected on client page for ${fileKey}.`);
+      return null;
+    }
 
     console.log(`[PdfService] DOM rendered. Compiling PDF to ${targetPath}…`);
+
+    // Delete any old invalid/corrupt file first
+    if (fs.existsSync(targetPath)) {
+      try {
+        fs.unlinkSync(targetPath);
+      } catch (_) {}
+    }
 
     await page.pdf({
       path: targetPath,
       format: 'A4',
       printBackground: true,
       preferCSSPageSize: true,
+      timeout: 180000,
       margin: {
         top: '10mm',
         bottom: '10mm',
@@ -204,7 +218,15 @@ export async function generateClassPdf(key: PdfKey): Promise<string | null> {
       },
     });
 
-    console.log(`[PdfService] Successfully compiled PDF for class ${key.classId} ✓`);
+    // Verify written PDF is valid and not an empty stub
+    const writtenStat = fs.statSync(targetPath);
+    if (writtenStat.size < 5000) {
+      console.warn(`[PdfService] Generated PDF is suspiciously small (${writtenStat.size} bytes). Removing.`);
+      try { fs.unlinkSync(targetPath); } catch (_) {}
+      return null;
+    }
+
+    console.log(`[PdfService] Successfully compiled PDF for class ${key.classId} (${writtenStat.size} bytes) ✓`);
     return targetPath;
   } catch (err: any) {
     console.error(`[PdfService] PDF generation failed for ${fileKey}:`, err.message);

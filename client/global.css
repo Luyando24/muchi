@@ -138,8 +138,8 @@ body {
 }
 
 @media print {
-  /* Hide the main app root and other direct children */
-  body > *:not(.print-portal) {
+  /* Hide the main app root and other direct children unless doing headless background compilation */
+  body:not(.headless-pdf-render) > *:not(.print-portal) {
     display: none !important;
   }
   
