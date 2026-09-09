@@ -82,6 +82,10 @@ export default function ResultPrinter() {
     // Progress overlay state
     const [printPhase, setPrintPhase] = useState<'idle' | 'fetching' | 'rendering' | 'ready'>('idle');
     const [printProgressMsg, setPrintProgressMsg] = useState('');
+    const [progressPct, setProgressPct] = useState(0);
+    const [elapsedSec, setElapsedSec] = useState(0);
+    const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // State for print blocker dialog
     const [isBlockerOpen, setIsBlockerOpen] = useState(false);
@@ -113,6 +117,38 @@ export default function ResultPrinter() {
         window.addEventListener('afterprint', handleAfterPrint);
         return () => window.removeEventListener('afterprint', handleAfterPrint);
     }, []);
+
+    // Drive animated progress bar and elapsed counter while printing
+    useEffect(() => {
+        if (printPhase === 'idle') {
+            setProgressPct(0);
+            setElapsedSec(0);
+            if (progressRef.current) clearInterval(progressRef.current);
+            if (elapsedRef.current) clearInterval(elapsedRef.current);
+            return;
+        }
+
+        // Elapsed seconds counter
+        elapsedRef.current = setInterval(() => setElapsedSec(s => s + 1), 1000);
+
+        // Smoothly advance the bar based on phase targets
+        // fetching: 0→45, rendering: 45→85, ready: 85→100
+        const targets: Record<string, number> = { fetching: 45, rendering: 85, ready: 100 };
+        const target = targets[printPhase] ?? 100;
+        progressRef.current = setInterval(() => {
+            setProgressPct(p => {
+                if (p >= target) { clearInterval(progressRef.current!); return p; }
+                // Ease-out: bigger jumps early, smaller near target
+                const step = Math.max(0.4, (target - p) * 0.06);
+                return Math.min(p + step, target);
+            });
+        }, 50);
+
+        return () => {
+            if (progressRef.current) clearInterval(progressRef.current);
+            if (elapsedRef.current) clearInterval(elapsedRef.current);
+        };
+    }, [printPhase]);
 
     /**
      * Converts an image URL to a base64 data URI.
@@ -446,26 +482,103 @@ export default function ResultPrinter() {
 
     return (
         <div className="space-y-6">
-            {/* Progress overlay — visible only during print preparation */}
+            {/* ─── Print Progress Overlay ──────────────────────────────────── */}
             {isPrinting && printPhase !== 'idle' && (
-                <div className="print:hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-8 flex flex-col items-center gap-4 min-w-[320px]">
-                        {printPhase === 'ready' ? (
-                            <CheckCheck className="h-10 w-10 text-green-500" />
-                        ) : (
-                            <Loader2 className="h-10 w-10 text-blue-500 animate-spin" />
-                        )}
-                        <p className="text-base font-semibold text-slate-800 dark:text-slate-100 text-center">
-                            {printProgressMsg}
-                        </p>
-                        {printPhase === 'fetching' && (
-                            <p className="text-xs text-slate-400 text-center">This may take a moment for large classes…</p>
-                        )}
-                        {printPhase === 'rendering' && (
-                            <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
-                                <div className="h-full bg-blue-500 rounded-full animate-pulse w-3/4" />
+                <div className="print:hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+
+                        {/* Colour strip at top — changes by phase */}
+                        <div className={`h-1.5 w-full transition-all duration-500 ${
+                            printPhase === 'ready' ? 'bg-green-500' : 'bg-blue-500'
+                        }`}
+                            style={{ width: `${Math.round(progressPct)}%`, transition: 'width 0.15s ease-out' }}
+                        />
+
+                        <div className="p-7 space-y-5">
+                            {/* Icon + headline */}
+                            <div className="flex items-center gap-4">
+                                {printPhase === 'ready' ? (
+                                    <div className="flex-shrink-0 h-12 w-12 rounded-full bg-green-50 dark:bg-green-900/30 flex items-center justify-center">
+                                        <CheckCheck className="h-6 w-6 text-green-500" />
+                                    </div>
+                                ) : (
+                                    <div className="flex-shrink-0 h-12 w-12 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
+                                        <Loader2 className="h-6 w-6 text-blue-500 animate-spin" />
+                                    </div>
+                                )}
+                                <div>
+                                    <p className="font-bold text-slate-900 dark:text-white text-base leading-tight">
+                                        {printPhase === 'ready' ? 'Ready to print!' : 'Preparing report cards'}
+                                    </p>
+                                    <p className="text-xs text-slate-400 mt-0.5">
+                                        {printPhase === 'ready' ? 'Opening print dialog now…' : `${elapsedSec}s elapsed`}
+                                    </p>
+                                </div>
+                                {/* Percentage badge */}
+                                <div className="ml-auto text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100">
+                                    {Math.round(progressPct)}%
+                                </div>
                             </div>
-                        )}
+
+                            {/* Progress bar track */}
+                            <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
+                                <div
+                                    className={`h-full rounded-full transition-all duration-150 ease-out ${
+                                        printPhase === 'ready' ? 'bg-green-500' : 'bg-blue-500'
+                                    }`}
+                                    style={{ width: `${Math.round(progressPct)}%` }}
+                                />
+                            </div>
+
+                            {/* Step list */}
+                            <ol className="space-y-2.5">
+                                {([
+                                    { id: 'fetching',  label: 'Checking & fetching data',    detail: 'Validating grades, rankings & images' },
+                                    { id: 'rendering', label: 'Building report cards',        detail: 'Laying out all student pages in memory' },
+                                    { id: 'ready',     label: 'Sending to print',             detail: 'Handing off to the print dialog' },
+                                ] as const).map((step, i) => {
+                                    const phases = ['fetching', 'rendering', 'ready'];
+                                    const stepIdx = phases.indexOf(step.id);
+                                    const curIdx  = phases.indexOf(printPhase);
+                                    const done    = curIdx > stepIdx;
+                                    const active  = curIdx === stepIdx;
+                                    return (
+                                        <li key={step.id} className="flex items-start gap-3">
+                                            {/* Step circle */}
+                                            <div className={`mt-0.5 flex-shrink-0 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-black transition-colors duration-300 ${
+                                                done   ? 'bg-green-500 text-white' :
+                                                active ? 'bg-blue-500 text-white ring-2 ring-blue-200 dark:ring-blue-800' :
+                                                         'bg-slate-200 dark:bg-slate-700 text-slate-400'
+                                            }`}>
+                                                {done ? <CheckCheck className="h-3 w-3" /> : i + 1}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className={`text-sm font-semibold leading-tight ${
+                                                    done   ? 'text-green-600 dark:text-green-400' :
+                                                    active ? 'text-slate-900 dark:text-white' :
+                                                             'text-slate-400'
+                                                }`}>{step.label}</p>
+                                                {active && (
+                                                    <p className="text-[11px] text-slate-400 mt-0.5 animate-pulse">{step.detail}</p>
+                                                )}
+                                            </div>
+                                        </li>
+                                    );
+                                })}
+                            </ol>
+
+                            {/* Tip */}
+                            {printPhase === 'fetching' && (
+                                <p className="text-[11px] text-slate-400 border-t border-slate-100 dark:border-slate-700 pt-4">
+                                    💡 Tip: For large classes the data fetch may take 10–30 seconds. Do not close this tab.
+                                </p>
+                            )}
+                            {printPhase === 'rendering' && (
+                                <p className="text-[11px] text-slate-400 border-t border-slate-100 dark:border-slate-700 pt-4">
+                                    💡 Tip: In the print dialog, set <b>Destination</b> to <b>Save as PDF</b> to get a digital copy, or choose your printer for hardcopies.
+                                </p>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
