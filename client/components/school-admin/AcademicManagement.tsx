@@ -871,6 +871,7 @@ export default function AcademicManagement() {
       return;
     }
 
+    setGradeStatus([]);
     setIsCheckingStatus(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -1135,7 +1136,7 @@ export default function AcademicManagement() {
               value="grade-calculation"
               className="flex items-center gap-2 px-4 py-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white transition-all duration-200"
             >
-              <Layers className="h-4 w-4" /> Publish Results
+              <ClipboardList className="h-4 w-4" /> Check Readiness
             </TabsTrigger>
             <TabsTrigger
               value="printer"
@@ -2167,7 +2168,7 @@ export default function AcademicManagement() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Class</Label>
-                    <Select value={calcForm.classId} onValueChange={v => setCalcForm({ ...calcForm, classId: v })}>
+                    <Select value={calcForm.classId} onValueChange={v => { setCalcForm(prev => ({ ...prev, classId: v })); setGradeStatus([]); }}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select Class" />
                       </SelectTrigger>
@@ -2184,7 +2185,7 @@ export default function AcademicManagement() {
 
                   <div className="space-y-2">
                     <Label>Subject (Optional)</Label>
-                    <Select value={calcForm.subjectId} onValueChange={v => setCalcForm({ ...calcForm, subjectId: v })}>
+                    <Select value={calcForm.subjectId} onValueChange={v => { setCalcForm(prev => ({ ...prev, subjectId: v })); setGradeStatus([]); }}>
                       <SelectTrigger>
                         <SelectValue placeholder="All Subjects" />
                       </SelectTrigger>
@@ -2200,11 +2201,11 @@ export default function AcademicManagement() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label>Term</Label>
-                      <Input value={calcForm.term} onChange={e => setCalcForm({ ...calcForm, term: e.target.value })} placeholder="e.g. Term 1" />
+                      <Input value={calcForm.term} onChange={e => { setCalcForm(prev => ({ ...prev, term: e.target.value })); setGradeStatus([]); }} placeholder="e.g. Term 1" />
                     </div>
                     <div className="space-y-2">
                       <Label>Test Type</Label>
-                      <Select value={calcForm.examType} onValueChange={v => setCalcForm({ ...calcForm, examType: v })}>
+                      <Select value={calcForm.examType} onValueChange={v => { setCalcForm(prev => ({ ...prev, examType: v })); setGradeStatus([]); }}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select Type" />
                         </SelectTrigger>
@@ -2217,7 +2218,7 @@ export default function AcademicManagement() {
                     </div>
                     <div className="space-y-2">
                       <Label>Academic Year</Label>
-                      <Input value={calcForm.academicYear} onChange={e => setCalcForm({ ...calcForm, academicYear: e.target.value })} placeholder="e.g. 2024" />
+                      <Input value={calcForm.academicYear} onChange={e => { setCalcForm(prev => ({ ...prev, academicYear: e.target.value })); setGradeStatus([]); }} placeholder="e.g. 2024" />
                     </div>
                   </div>
 
@@ -2241,21 +2242,27 @@ export default function AcademicManagement() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                    <Dialog open={isPublishModalOpen} onOpenChange={setIsPublishModalOpen}>
+                    <Dialog open={isPublishModalOpen} onOpenChange={(open) => {
+                      setIsPublishModalOpen(open);
+                      if (open) {
+                        setGradeStatus([]);
+                      }
+                    }}>
                       <DialogTrigger asChild>
                         <Button
                           className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                           disabled={!calcForm.term || !calcForm.academicYear || !calcForm.examType}
+                          onClick={() => setGradeStatus([])}
                         >
-                          <Send className="mr-2 h-4 w-4" />
-                          Review & Publish Results
+                          <ClipboardList className="mr-2 h-4 w-4" />
+                          Check Readiness
                         </Button>
                       </DialogTrigger>
                       <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
                         <DialogHeader>
-                          <DialogTitle>Publish Results</DialogTitle>
+                          <DialogTitle>Check Readiness</DialogTitle>
                           <DialogDescription>
-                            Check if all subjects are submitted before publishing to students.
+                            Check if all subjects are submitted before viewing or printing results.
                           </DialogDescription>
                         </DialogHeader>
 
@@ -2266,16 +2273,32 @@ export default function AcademicManagement() {
                                 {isCheckingStatus ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                                 Check Status
                               </Button>
-                              <Button
-                                onClick={initiatePublish}
-                                disabled={isActionLoading || gradeStatus.length === 0}
-                                className="bg-green-600 hover:bg-green-700"
-                              >
-                                {isPublishing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                                Publish Results
-                              </Button>
                             </div>
                           </div>
+
+                          {gradeStatus.length === 0 && !isCheckingStatus && (
+                            <div className="p-8 text-center border rounded-lg bg-slate-50 dark:bg-slate-900/50 space-y-3">
+                              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                Click <strong>Check Status</strong> above to check submission readiness for:
+                              </p>
+                              <div className="inline-flex flex-wrap justify-center items-center gap-2 text-xs font-semibold px-3 py-1.5 bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 rounded-full border border-blue-200 dark:border-blue-800">
+                                <span>Class: {calcForm.classId === 'all' ? 'All Classes' : classes.find(c => c.id === calcForm.classId)?.name || 'Selected Class'}</span>
+                                <span>•</span>
+                                <span>Term: {calcForm.term}</span>
+                                <span>•</span>
+                                <span>Type: {calcForm.examType}</span>
+                                <span>•</span>
+                                <span>Year: {calcForm.academicYear}</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {isCheckingStatus && gradeStatus.length === 0 && (
+                            <div className="flex flex-col items-center justify-center p-12 space-y-3">
+                              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                              <p className="text-sm text-muted-foreground">Checking submission status...</p>
+                            </div>
+                          )}
                           {gradeStatus.length > 0 && (() => {
                             const submittedList = gradeStatus.filter(s => s.status === 'Submitted' || s.status === 'Published');
                             const pendingList = gradeStatus.filter(s => s.status !== 'Submitted' && s.status !== 'Published');
