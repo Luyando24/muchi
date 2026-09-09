@@ -21,7 +21,8 @@ import {
     RefreshCw,
     Layers,
     Sparkles,
-    Activity
+    Activity,
+    Lock
 } from 'lucide-react';
 import ActiveCalculationModal from '@/components/school-admin/ActiveCalculationModal';
 import { useNavigate } from 'react-router-dom';
@@ -748,12 +749,35 @@ export default function ResultPrinter() {
                                 </div>
                             )}
                             <Button
-                                variant="outline"
-                                onClick={() => setViewMode('printer')}
-                                className="border-slate-200 text-slate-700 dark:text-slate-300 text-xs font-semibold"
+                                variant={precomputeStatus?.isCompleted ? "default" : "outline"}
+                                onClick={() => {
+                                    if (precomputeStatus?.isCompleted) {
+                                        setViewMode('printer');
+                                    }
+                                }}
+                                disabled={!precomputeStatus?.isCompleted}
+                                className={`text-xs font-semibold transition-all ${
+                                    precomputeStatus?.isCompleted
+                                        ? "bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm"
+                                        : "border-slate-200 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-60"
+                                }`}
+                                title={
+                                    precomputeStatus?.isCompleted
+                                        ? "All submitted classes and subjects calculated. Proceed to print."
+                                        : "Calculations in progress. This button will activate once all submitted classes are calculated."
+                                }
                             >
-                                Continue to Print
-                                <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                                {precomputeStatus?.isCompleted ? (
+                                    <>
+                                        Continue to Print
+                                        <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                                    </>
+                                ) : (
+                                    <>
+                                        <Lock className="h-3.5 w-3.5 mr-1.5" />
+                                        Continue to Print
+                                    </>
+                                )}
                             </Button>
                         </div>
                     </div>
@@ -978,17 +1002,29 @@ export default function ResultPrinter() {
                     </div>
 
                     {/* Bottom Action Bar */}
-                    <div className="sticky bottom-4 z-20 flex flex-col sm:flex-row items-center justify-between gap-4 p-5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl border-2 border-indigo-200 dark:border-indigo-800/60 shadow-xl">
+                    <div className={`sticky bottom-4 z-20 flex flex-col sm:flex-row items-center justify-between gap-4 p-5 backdrop-blur-md rounded-2xl border-2 shadow-xl transition-all ${
+                        precomputeStatus?.isCompleted
+                            ? "bg-emerald-50/95 dark:bg-emerald-950/90 border-emerald-300 dark:border-emerald-700"
+                            : "bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-800"
+                    }`}>
                         <div>
-                            <p className="font-bold text-slate-900 dark:text-white text-base">
-                                {precomputeStatus?.isCompleted
-                                    ? "All report cards for this school are pre-calculated!"
-                                    : "Background calculation is active"}
+                            <p className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
+                                {precomputeStatus?.isCompleted ? (
+                                    <>
+                                        <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                                        <span>All report cards for this school are pre-calculated!</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Clock className="h-5 w-5 text-amber-500 animate-spin flex-shrink-0" />
+                                        <span>Background calculation in progress ({precomputeStatus?.calculatedClasses ?? 0} of {precomputeStatus?.totalClasses ?? 0} classes ready)</span>
+                                    </>
+                                )}
                             </p>
-                            <p className="text-xs text-slate-500 mt-0.5">
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                                 {precomputeStatus?.isCompleted
-                                    ? "You can now proceed to print report cards with instant ~50ms speed."
-                                    : "You can wait for completion, or proceed to print now on-demand."}
+                                    ? "All submitted classes and subjects are ready. You can now proceed to print report cards with instant ~50ms speed."
+                                    : "Printing is locked until all submitted classes and subjects have been calculated. This button will activate automatically."}
                             </p>
                         </div>
 
@@ -1005,16 +1041,35 @@ export default function ResultPrinter() {
                                 </Button>
                             )}
                             <Button
-                                onClick={() => setViewMode('printer')}
+                                onClick={() => {
+                                    if (precomputeStatus?.isCompleted) {
+                                        setViewMode('printer');
+                                    }
+                                }}
                                 size="lg"
-                                className={`w-full sm:w-auto font-black px-8 shadow-md text-base transition-all ${
+                                disabled={!precomputeStatus?.isCompleted}
+                                className={`w-full sm:w-auto font-black px-8 text-base transition-all ${
                                     precomputeStatus?.isCompleted
-                                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                                        : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                                        ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg cursor-pointer animate-pulse hover:animate-none"
+                                        : "bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-300 dark:border-slate-700 cursor-not-allowed opacity-60 shadow-none"
                                 }`}
+                                title={
+                                    precomputeStatus?.isCompleted
+                                        ? "Click to proceed to report card printing"
+                                        : "Printing will activate once all submitted classes and subjects are calculated"
+                                }
                             >
-                                Continue to Print
-                                <ArrowRight className="h-5 w-5 ml-2" />
+                                {precomputeStatus?.isCompleted ? (
+                                    <>
+                                        Continue to Print
+                                        <ArrowRight className="h-5 w-5 ml-2" />
+                                    </>
+                                ) : (
+                                    <>
+                                        <Lock className="h-5 w-5 mr-2 text-slate-400 dark:text-slate-500" />
+                                        Continue to Print
+                                    </>
+                                )}
                             </Button>
                         </div>
                     </div>
