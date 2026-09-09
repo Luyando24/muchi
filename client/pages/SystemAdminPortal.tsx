@@ -56,6 +56,7 @@ import BusinessFinances from '@/components/admin/BusinessFinances';
 import ProspectsManagement from '@/components/admin/ProspectsManagement';
 import AdvisorChat from '@/components/admin/AdvisorChat';
 import FloatingAdvisorChat from '@/components/admin/FloatingAdvisorChat';
+import ActiveCalculationModal from '@/components/school-admin/ActiveCalculationModal';
 
 // Mock data for System Admin Portal
 const databaseBackups: any[] = [];
@@ -168,6 +169,7 @@ export default function SystemAdminPortal() {
     currentClassLabel: string | null;
     queuedSchoolsCount: number;
   } | null>(null);
+  const [isActiveCalculationModalOpen, setIsActiveCalculationModalOpen] = useState(false);
 
   const fetchPrecomputeSummary = async () => {
     try {
@@ -645,15 +647,26 @@ export default function SystemAdminPortal() {
                         Pre-calculates student report cards, subject scores, and class rankings in the background for near-instant printing.
                       </CardDescription>
                     </div>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={fetchPrecomputeSummary}
-                      disabled={isLoadingPrecomputeSummary}
-                    >
-                      <RefreshCw className={`h-4 w-4 mr-1 ${isLoadingPrecomputeSummary ? 'animate-spin' : ''}`} />
-                      Refresh
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setIsActiveCalculationModalOpen(true)}
+                        className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 font-bold"
+                      >
+                        <Activity className="h-4 w-4 mr-1.5 text-indigo-600 animate-pulse" />
+                        Review Live Progress
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={fetchPrecomputeSummary}
+                        disabled={isLoadingPrecomputeSummary}
+                      >
+                        <RefreshCw className={`h-4 w-4 mr-1 ${isLoadingPrecomputeSummary ? 'animate-spin' : ''}`} />
+                        Refresh
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -745,6 +758,12 @@ export default function SystemAdminPortal() {
                   </div>
                 </CardContent>
               </Card>
+
+              <ActiveCalculationModal
+                isOpen={isActiveCalculationModalOpen}
+                onClose={() => setIsActiveCalculationModalOpen(false)}
+                endpointUrl="/api/admin/system/active-worker-progress"
+              />
             </TabsContent>
 
             {/* Logs Tab */}

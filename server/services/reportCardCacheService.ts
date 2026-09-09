@@ -1126,3 +1126,33 @@ export async function getSystemPrecomputeSummary() {
   }
 }
 
+/**
+ * Real-time progress of the school currently being processed by the background calculation worker.
+ */
+export async function getActiveWorkerProgress() {
+  const currentSchoolId = schedulerState.currentSchoolId;
+  const currentSchoolName = schedulerState.currentSchoolName;
+  const currentClassLabel = schedulerState.currentClassLabel;
+  const isCalculating = schedulerState.isCalculating;
+  const queuedSchoolsCount = schedulerState.priorityQueue.length;
+
+  let activeSchoolStatus: any = null;
+  if (currentSchoolId) {
+    try {
+      activeSchoolStatus = await getSchoolPrecomputeStatus(currentSchoolId);
+    } catch (_) {
+      // Fallback if status calculation encounters temporary read error
+    }
+  }
+
+  return {
+    isCalculating,
+    currentSchoolId,
+    currentSchoolName,
+    currentClassLabel,
+    queuedSchoolsCount,
+    activeSchoolStatus,
+  };
+}
+
+

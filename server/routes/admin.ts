@@ -7,7 +7,7 @@ import { WhatsAppService } from '../services/whatsappService.js';
 import { notifySystemAdmins } from '../services/emailService.js';
 import { checkIncompleteSchoolOnboardings } from '../services/onboardingReminderService.js';
 import { sendSchoolUsageSubscriptionReminders } from '../services/schoolReminderService.js';
-import { triggerFullSystemPrecompute, getSystemPrecomputeSummary } from '../services/reportCardCacheService.js';
+import { triggerFullSystemPrecompute, getSystemPrecomputeSummary, getActiveWorkerProgress } from '../services/reportCardCacheService.js';
 
 const router = Router();
 
@@ -1421,6 +1421,18 @@ router.get('/system/report-card-precompute-status', requireSystemAdmin, async (r
     res.json(summary);
   } catch (error: any) {
     console.error('Precompute Summary Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/admin/system/active-worker-progress
+// Returns live status of the school currently being calculated by the worker
+router.get('/system/active-worker-progress', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const progress = await getActiveWorkerProgress();
+    res.json(progress);
+  } catch (error: any) {
+    console.error('Active Worker Progress Error:', error);
     res.status(500).json({ message: error.message });
   }
 });

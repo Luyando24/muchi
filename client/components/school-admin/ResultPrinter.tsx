@@ -20,8 +20,10 @@ import {
     Gauge,
     RefreshCw,
     Layers,
-    Sparkles
+    Sparkles,
+    Activity
 } from 'lucide-react';
+import ActiveCalculationModal from '@/components/school-admin/ActiveCalculationModal';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -115,6 +117,7 @@ export default function ResultPrinter() {
     const [precomputeStatus, setPrecomputeStatus] = useState<any | null>(null);
     const [isLoadingStatus, setIsLoadingStatus] = useState<boolean>(true);
     const [isPrioritizing, setIsPrioritizing] = useState<boolean>(false);
+    const [isActiveModalOpen, setIsActiveModalOpen] = useState<boolean>(false);
 
     const { toast } = useToast();
 
@@ -716,6 +719,18 @@ export default function ResultPrinter() {
                         </div>
 
                         <div className="flex items-center gap-2.5 flex-wrap self-start lg:self-center">
+                            {/* Button to review real-time progress of the school currently being calculated */}
+                            <Button
+                                variant="outline"
+                                onClick={() => setIsActiveModalOpen(true)}
+                                className="border-indigo-300 bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-900 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300 font-bold text-xs shadow-sm h-9"
+                            >
+                                <Activity className="h-3.5 w-3.5 mr-1.5 text-indigo-600 animate-pulse" />
+                                {precomputeStatus?.currentRunningSchoolName
+                                    ? `Review Active: ${precomputeStatus.currentRunningSchoolName}`
+                                    : 'Review Active School Progress'}
+                            </Button>
+
                             {precomputeStatus?.canPrioritize && (
                                 <Button
                                     onClick={handlePrioritize}
@@ -1362,6 +1377,12 @@ export default function ResultPrinter() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            {/* Modal to review real-time calculation progress of the currently active school */}
+            <ActiveCalculationModal
+                isOpen={isActiveModalOpen}
+                onClose={() => setIsActiveModalOpen(false)}
+            />
         </div>
     );
 }

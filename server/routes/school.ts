@@ -22,6 +22,7 @@ import {
   invalidateCache,
   getSchoolPrecomputeStatus,
   prioritizeSchool,
+  getActiveWorkerProgress,
 } from "../services/reportCardCacheService.js";
 
 // Helper function to bypass Supabase's max_rows limit by paginating
@@ -4690,6 +4691,22 @@ router.post(
       res.json({ success: true, prioritized, ...status });
     } catch (error: any) {
       console.error("Prioritize precompute error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  },
+);
+
+// GET /api/school/results/active-worker-progress
+// Returns real-time progress of the school currently being calculated by the background worker
+router.get(
+  "/results/active-worker-progress",
+  requireSchoolRole([...ADMIN_ROLES, "teacher"]),
+  async (req: Request, res: Response) => {
+    try {
+      const progress = await getActiveWorkerProgress();
+      res.json(progress);
+    } catch (error: any) {
+      console.error("Active worker progress error:", error);
       res.status(500).json({ message: error.message });
     }
   },
