@@ -779,6 +779,7 @@ export async function getSchoolPrecomputeStatus(schoolId: string) {
         className: string;
         examType: string;
         isCalculated: boolean;
+        isPdfReady?: boolean;
         cachedAt: string | null;
         studentCount: number;
       }[];
