@@ -315,255 +315,6 @@ async function fetchGradingScalesForSchool(schoolId: string) {
   return data || [];
 }
 
-// GET /api/school/results/batch-report-cards
-// Generate batch report cards for a class — streams NDJSON for progressive rendering
-router.get(
-  "/results/batch-report-cards",
-  requireSchoolRole(ADMIN_ROLES),
-  async (req: Request, res: Response) => {
-    const profile = (req as any).profile;
-    const schoolId = profile.school_id;
-    const { classId, term, examType, academicYear } = req.query as {
-      classId: string;
-      term: string;
-      examType: string;
-      academicYear: string;
-    };
-
-    if (!classId || !term || !examType || !academicYear) {
-      return res.status(400).json({ message: "Missing required parameters" });
-    }
-
-    try {
-      // 1. Fetch Shared Info (School Details & Grading Scales)
-      const { data: schoolDetails } = await supabaseAdmin
-        .from("schools")
-        .select(
-          "name, address, email, phone, website, logo_url, signature_url, seal_url, coat_of_arms_url, school_type, headteacher_name, headteacher_title, compulsory_subjects_primary, compulsory_subjects_secondary, test_types, test_types_enabled, show_teacher_on_report_card",
-        )
-        .eq("id", schoolId)
-        .single();
-
-      const { data: scales } = await supabaseAdmin
-        .from("grading_scales")
-        .select("*")
-        .eq("school_id", schoolId)
-        .order("min_percentage", { ascending: false });
-
-      // 2. Fetch all students in the class
-      const enrollmentsQuery = supabaseAdmin
-        .from("enrollments")
-        .select(
-          "id, student_id, profiles!enrollments_student_id_fkey(full_name, student_number, gender), classes(name, class_teacher_id, class_teacher_name, teacher:class_teacher_id(full_name))",
-        )
-        .eq("class_id", classId)
-        .eq("academic_year", academicYear)
-        .order("id", { ascending: true });
-
-      const enrollments = await fetchAll(enrollmentsQuery);
-
-      if (!enrollments || enrollments.length === 0) {
-        return res.json([]);
-      }
-
-      const studentIds = enrollments.map((e) => e.student_id);
-
-      const classSubjectsQuery = supabaseAdmin
-        .from("class_subjects")
-        .select("id, subject_id, teacher_name, subjects(id, name, code, department), profiles(id, full_name)")
-        .eq("class_id", classId)
-        .order("id", { ascending: true });
-
-      const classSubjects = await fetchAll(classSubjectsQuery);
-
-      const allClassSubjects = (classSubjects || [])
-        .map((cs: any) => {
-          const rawName = cs.teacher_name || (Array.isArray(cs.profiles) ? cs.profiles[0]?.full_name : cs.profiles?.full_name);
-          let formattedTeacher = "";
-          if (rawName) {
-            const parts = rawName.trim().split(/\s+/);
-            if (parts.length > 0) {
-              if (parts.length === 1) {
-                formattedTeacher = parts[0];
-              } else {
-                const firstName = parts[0];
-                const lastName = parts[parts.length - 1];
-                formattedTeacher = `${firstName.charAt(0).toUpperCase()}. ${lastName}`;
-              }
-            }
-          }
-          return cs.subjects ? {
-            ...cs.subjects,
-            teacherName: formattedTeacher || null
-          } : null;
-        })
-        .filter(Boolean);
-
-
-      // 3. Run rankings and grades fetch in PARALLEL — eliminates the biggest sequential wait
-      const allGradesQuery = supabaseAdmin
-        .from("student_grades")
-        .select("*, subjects(id, name, code, department)")
-        .in("student_id", studentIds)
-        .eq("term", term)
-        .eq("academic_year", academicYear)
-        .order("id", { ascending: true });
-
-      const [rankingsData, allGrades] = await Promise.all([
-        getClassRankings(classId, term, examType, academicYear),
-        fetchAll(allGradesQuery),
-      ]);
-
-      const classGradesKeysSet = new Set<string>(
-        (allGrades || [])
-          .filter(g => g.percentage !== null && g.percentage !== undefined && g.percentage !== '')
-          .map((g: any) => `${g.subject_id}-${g.exam_type}-${g.test_type || ''}`)
-      );
-      const classGradesKeys = Array.from(classGradesKeysSet);
-
-      // Filter in-memory to keep grades that belong to this examType or are test_types
-      const filteredGrades = (allGrades || []).filter((g: any) => {
-        if (!examType) return true;
-        if (g.exam_type === examType) return true;
-        if (['Test 1', 'Test 2', 'Test 3'].includes(g.exam_type)) return true;
-        if (g.exam_type === 'Term' && g.test_type && ['Test 1', 'Test 2', 'Test 3'].includes(g.test_type)) return true;
-        return false;
-      });
-
-      // 4. Stream response as NDJSON — one JSON line per student card.
-      // The client starts rendering the first card immediately instead of
-      // waiting for all 191 cards to be assembled in memory.
-      res.setHeader("Content-Type", "application/x-ndjson");
-      res.setHeader("Transfer-Encoding", "chunked");
-      res.setHeader("X-Total-Count", String(enrollments.length));
-      res.setHeader("Access-Control-Expose-Headers", "X-Total-Count");
-
-      for (const enrollment of enrollments) {
-        const studentId = enrollment.student_id;
-        // Get recorded grades for this student
-        const studentRawGrades =
-          filteredGrades?.filter((g) => g.student_id === studentId) || [];
-
-        // Deduplicate grades (keeping newest)
-        const gradesMap = new Map();
-        const sortedGrades = [...studentRawGrades].sort((a, b) => {
-          const timeA = new Date(a.calculated_at || a.created_at).getTime();
-          const timeB = new Date(b.calculated_at || b.created_at).getTime();
-          return timeB - timeA;
-        });
-
-        for (const grade of sortedGrades) {
-          const subId = grade.subject_id || grade.subjects?.id || grade.subjects?.code;
-          if (!subId) continue;
-          // Key by subject + exam_type + test_type
-          const key = `${subId}-${grade.exam_type}-${grade.test_type || ''}`;
-          if (!gradesMap.has(key)) {
-            gradesMap.set(key, grade);
-          }
-        }
-
-        // Group deduplicated grades by subject_id
-        const gradesBySubject = new Map<string, any[]>();
-        for (const grade of gradesMap.values()) {
-          const subId = grade.subject_id;
-          if (!gradesBySubject.has(subId)) {
-            gradesBySubject.set(subId, []);
-          }
-          gradesBySubject.get(subId)!.push(grade);
-        }
-
-        // Merge with Class Subjects to include "ABSENT" entries
-        const finalGrades: any[] = [];
-        allClassSubjects.forEach((subject: any) => {
-          const subjectGrades = gradesBySubject.get(subject.id) || [];
-          if (subjectGrades.length > 0) {
-            subjectGrades.forEach((g) => {
-              finalGrades.push({
-                ...g,
-                subjects: {
-                  ...g.subjects,
-                  teacherName: subject.teacherName
-                }
-              });
-            });
-          } else {
-            // Return an "ABSENT" grade object if no grade exists
-            finalGrades.push({
-              student_id: studentId,
-              subject_id: subject.id,
-              subjects: subject,
-              grade: "ABSENT",
-              percentage: null,
-              exam_type: examType || "End of Term",
-              test_type: '',
-              status: "Published",
-            });
-          }
-        });
-
-        // Add any grades that might not be in class_subjects
-        const processedSubjectIds = new Set(allClassSubjects.map((s) => s.id));
-        for (const grade of gradesMap.values()) {
-          if (grade.subject_id && !processedSubjectIds.has(grade.subject_id)) {
-            finalGrades.push(grade);
-          }
-        }
-
-        // Format teacher's name as "F. Lastname"
-        const rawTeacherName = (enrollment.classes as any)?.class_teacher_name || (enrollment.classes as any)?.teacher?.full_name;
-
-        let classTeacherName = "";
-        if (rawTeacherName) {
-          const parts = rawTeacherName.trim().split(/\s+/);
-          if (parts.length > 0) {
-            if (parts.length === 1) {
-              classTeacherName = parts[0];
-            } else {
-              const firstName = parts[0];
-              const lastName = parts[parts.length - 1];
-              classTeacherName = `${firstName.charAt(0).toUpperCase()}. ${lastName}`;
-            }
-          }
-        }
-
-        const card = {
-          school: schoolDetails,
-          student: {
-            id: enrollment.student_id,
-            name: (enrollment.profiles as any)?.full_name,
-            studentNumber: (enrollment.profiles as any)?.student_number,
-            gender: (enrollment.profiles as any)?.gender,
-            class: (enrollment.classes as any)?.name || "N/A",
-            classTeacherName,
-            attendance: 0,
-            position: rankingsData.rankings[studentId] || 0,
-            totalStudents: rankingsData.totalStudents,
-            classAverage: rankingsData.classAverage
-          },
-          term,
-          academicYear,
-          grades: finalGrades,
-          gradingScale: scales || [],
-          classGradesKeys,
-        };
-
-        // Emit one NDJSON line — client receives and renders cards incrementally
-        res.write(JSON.stringify(card) + "\n");
-      }
-
-      res.end();
-    } catch (error: any) {
-      console.error("Batch Report Card Error:", error);
-      // If headers not yet sent, send a proper JSON error; otherwise just end the stream
-      if (!res.headersSent) {
-        res.status(500).json({ message: error.message });
-      } else {
-        res.end();
-      }
-    }
-  },
-);
-
 const router = Router();
 
 // --- PUBLIC ENDPOINTS ---
@@ -4582,6 +4333,202 @@ router.get(
       });
     } catch (error: any) {
       console.error("Report Card Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  },
+);
+
+// GET /api/school/results/batch-report-cards
+// Generate report cards for all students in a class.
+// Rankings and grades are fetched in parallel (Promise.all) to cut server wait time.
+router.get(
+  "/results/batch-report-cards",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { classId, term, examType, academicYear } = req.query as {
+      classId: string;
+      term: string;
+      examType: string;
+      academicYear: string;
+    };
+
+    if (!classId || !term || !examType || !academicYear) {
+      return res.status(400).json({ message: "Missing required parameters" });
+    }
+
+    try {
+      // 1. Fetch shared data (school + grading scales + enrollments + subjects)
+      const { data: schoolDetails } = await supabaseAdmin
+        .from("schools")
+        .select(
+          "name, address, email, phone, website, logo_url, signature_url, seal_url, coat_of_arms_url, school_type, headteacher_name, headteacher_title, compulsory_subjects_primary, compulsory_subjects_secondary, test_types, test_types_enabled, show_teacher_on_report_card",
+        )
+        .eq("id", schoolId)
+        .single();
+
+      const { data: scales } = await supabaseAdmin
+        .from("grading_scales")
+        .select("*")
+        .eq("school_id", schoolId)
+        .order("min_percentage", { ascending: false });
+
+      const enrollmentsQuery = supabaseAdmin
+        .from("enrollments")
+        .select(
+          "id, student_id, profiles!enrollments_student_id_fkey(full_name, student_number, gender), classes(name, class_teacher_id, class_teacher_name, teacher:class_teacher_id(full_name))",
+        )
+        .eq("class_id", classId)
+        .eq("academic_year", academicYear)
+        .order("id", { ascending: true });
+
+      const enrollments = await fetchAll(enrollmentsQuery);
+
+      if (!enrollments || enrollments.length === 0) {
+        return res.json([]);
+      }
+
+      const studentIds = enrollments.map((e) => e.student_id);
+
+      const classSubjectsQuery = supabaseAdmin
+        .from("class_subjects")
+        .select("id, subject_id, teacher_name, subjects(id, name, code, department), profiles(id, full_name)")
+        .eq("class_id", classId)
+        .order("id", { ascending: true });
+
+      const classSubjects = await fetchAll(classSubjectsQuery);
+
+      const allClassSubjects = (classSubjects || [])
+        .map((cs: any) => {
+          const rawName = cs.teacher_name || (Array.isArray(cs.profiles) ? cs.profiles[0]?.full_name : cs.profiles?.full_name);
+          let formattedTeacher = "";
+          if (rawName) {
+            const parts = rawName.trim().split(/\s+/);
+            if (parts.length > 0) {
+              formattedTeacher = parts.length === 1
+                ? parts[0]
+                : `${parts[0].charAt(0).toUpperCase()}. ${parts[parts.length - 1]}`;
+            }
+          }
+          return cs.subjects ? { ...cs.subjects, teacherName: formattedTeacher || null } : null;
+        })
+        .filter(Boolean);
+
+      // 2. Fetch rankings and all grades IN PARALLEL — eliminates the largest sequential wait
+      const allGradesQuery = supabaseAdmin
+        .from("student_grades")
+        .select("*, subjects(id, name, code, department)")
+        .in("student_id", studentIds)
+        .eq("term", term)
+        .eq("academic_year", academicYear)
+        .order("id", { ascending: true });
+
+      const [rankingsData, allGrades] = await Promise.all([
+        getClassRankings(classId, term, examType, academicYear),
+        fetchAll(allGradesQuery),
+      ]);
+
+      const classGradesKeysSet = new Set<string>(
+        (allGrades || [])
+          .filter(g => g.percentage !== null && g.percentage !== undefined && g.percentage !== '')
+          .map((g: any) => `${g.subject_id}-${g.exam_type}-${g.test_type || ''}`)
+      );
+      const classGradesKeys = Array.from(classGradesKeysSet);
+
+      const filteredGrades = (allGrades || []).filter((g: any) => {
+        if (!examType) return true;
+        if (g.exam_type === examType) return true;
+        if (['Test 1', 'Test 2', 'Test 3'].includes(g.exam_type)) return true;
+        if (g.exam_type === 'Term' && g.test_type && ['Test 1', 'Test 2', 'Test 3'].includes(g.test_type)) return true;
+        return false;
+      });
+
+      // 3. Assemble one report card object per student (pure CPU — very fast)
+      const reportCards = enrollments.map((enrollment) => {
+        const studentId = enrollment.student_id;
+        const studentRawGrades = filteredGrades?.filter((g) => g.student_id === studentId) || [];
+
+        // Deduplicate grades (keeping newest by calculated_at / created_at)
+        const gradesMap = new Map();
+        [...studentRawGrades]
+          .sort((a, b) => new Date(b.calculated_at || b.created_at).getTime() - new Date(a.calculated_at || a.created_at).getTime())
+          .forEach((grade) => {
+            const subId = grade.subject_id || grade.subjects?.id || grade.subjects?.code;
+            if (!subId) return;
+            const key = `${subId}-${grade.exam_type}-${grade.test_type || ''}`;
+            if (!gradesMap.has(key)) gradesMap.set(key, grade);
+          });
+
+        // Group by subject
+        const gradesBySubject = new Map<string, any[]>();
+        for (const grade of gradesMap.values()) {
+          const subId = grade.subject_id;
+          if (!gradesBySubject.has(subId)) gradesBySubject.set(subId, []);
+          gradesBySubject.get(subId)!.push(grade);
+        }
+
+        // Merge with class subjects, filling missing ones as ABSENT
+        const finalGrades: any[] = [];
+        allClassSubjects.forEach((subject: any) => {
+          const subjectGrades = gradesBySubject.get(subject.id) || [];
+          if (subjectGrades.length > 0) {
+            subjectGrades.forEach((g) => finalGrades.push({ ...g, subjects: { ...g.subjects, teacherName: subject.teacherName } }));
+          } else {
+            finalGrades.push({
+              student_id: studentId,
+              subject_id: subject.id,
+              subjects: subject,
+              grade: "ABSENT",
+              percentage: null,
+              exam_type: examType || "End of Term",
+              test_type: '',
+              status: "Published",
+            });
+          }
+        });
+
+        // Include any grades not in class_subjects (e.g. electives)
+        const processedSubjectIds = new Set(allClassSubjects.map((s) => s.id));
+        for (const grade of gradesMap.values()) {
+          if (grade.subject_id && !processedSubjectIds.has(grade.subject_id)) finalGrades.push(grade);
+        }
+
+        // Format class teacher name as "F. Lastname"
+        const rawTeacherName = (enrollment.classes as any)?.class_teacher_name || (enrollment.classes as any)?.teacher?.full_name;
+        let classTeacherName = "";
+        if (rawTeacherName) {
+          const parts = rawTeacherName.trim().split(/\s+/);
+          classTeacherName = parts.length === 1
+            ? parts[0]
+            : `${parts[0].charAt(0).toUpperCase()}. ${parts[parts.length - 1]}`;
+        }
+
+        return {
+          school: schoolDetails,
+          student: {
+            id: enrollment.student_id,
+            name: (enrollment.profiles as any)?.full_name,
+            studentNumber: (enrollment.profiles as any)?.student_number,
+            gender: (enrollment.profiles as any)?.gender,
+            class: (enrollment.classes as any)?.name || "N/A",
+            classTeacherName,
+            attendance: 0,
+            position: rankingsData.rankings[studentId] || 0,
+            totalStudents: rankingsData.totalStudents,
+            classAverage: rankingsData.classAverage,
+          },
+          term,
+          academicYear,
+          grades: finalGrades,
+          gradingScale: scales || [],
+          classGradesKeys,
+        };
+      });
+
+      res.json(reportCards);
+    } catch (error: any) {
+      console.error("Batch Report Card Error:", error);
       res.status(500).json({ message: error.message });
     }
   },

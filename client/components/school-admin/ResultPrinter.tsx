@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import {
     Printer,
@@ -11,7 +11,8 @@ import {
     AlertCircle,
     Eye,
     Settings,
-    PlusCircle
+    PlusCircle,
+    CheckCheck
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -77,10 +78,17 @@ export default function ResultPrinter() {
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [printMode, setPrintMode] = useState<'pdf' | 'hardcopy'>('hardcopy');
     const [simplifiedAssessmentMode, setSimplifiedAssessmentMode] = useState<boolean>(false);
-    
+
+    // Progress overlay state
+    const [printPhase, setPrintPhase] = useState<'idle' | 'fetching' | 'rendering' | 'ready'>('idle');
+    const [printProgressMsg, setPrintProgressMsg] = useState('');
+
     // State for print blocker dialog
     const [isBlockerOpen, setIsBlockerOpen] = useState(false);
     const [blockerMessage, setBlockerMessage] = useState("");
+
+    // Cache for pre-warmed school images (base64), loaded during fetchInitialData
+    const preWarmedSchoolRef = useRef<any>(null);
 
     const [filters, setFilters] = useState({
         classId: '',
@@ -93,6 +101,17 @@ export default function ResultPrinter() {
 
     useEffect(() => {
         fetchInitialData();
+    }, []);
+
+    // Clean up batch data after print dialog closes
+    useEffect(() => {
+        const handleAfterPrint = () => {
+            setBatchData([]);
+            setIsPrinting(false);
+            setPrintPhase('idle');
+        };
+        window.addEventListener('afterprint', handleAfterPrint);
+        return () => window.removeEventListener('afterprint', handleAfterPrint);
     }, []);
 
     /**
@@ -155,9 +174,10 @@ export default function ResultPrinter() {
             if (classData) setClasses(classData);
 
             // 2. Fetch Settings for Term/Year
-            const settings = await syncFetch('/api/school/settings', {
+            const settingsRes = await fetch('/api/school/settings', {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
+            const settings = settingsRes.ok ? await settingsRes.json() : null;
             if (settings) {
                 const isSimplified = !!settings.simplified_assessment_mode;
                 setSimplifiedAssessmentMode(isSimplified);
@@ -168,8 +188,7 @@ export default function ResultPrinter() {
                 }
                 setAvailableExamTypes(examTypes);
 
-                // Set 'End of Term' as default if it exists in the available options, otherwise fallback to the first option
-                const defaultExamType = isSimplified 
+                const defaultExamType = isSimplified
                     ? 'Term'
                     : (examTypes.includes('End of Term') ? 'End of Term' : examTypes[0]);
 
@@ -179,6 +198,24 @@ export default function ResultPrinter() {
                     examType: defaultExamType,
                     academicYear: settings.academic_year
                 }));
+
+                // 3. Pre-warm school images NOW (not at print time) so base64 cache is ready
+                if (settings.school) {
+                    preloadSchoolImages(settings.school).then(warmed => {
+                        preWarmedSchoolRef.current = warmed;
+                    });
+                } else {
+                    // Fetch school details separately for image pre-warming
+                    fetch('/api/school/details', {
+                        headers: { 'Authorization': `Bearer ${session.access_token}` }
+                    }).then(r => r.ok ? r.json() : null).then(school => {
+                        if (school) {
+                            preloadSchoolImages(school).then(warmed => {
+                                preWarmedSchoolRef.current = warmed;
+                            });
+                        }
+                    }).catch(() => {});
+                }
             }
         } catch (error) {
             console.error('Error fetching initial data:', error);
@@ -215,18 +252,20 @@ export default function ResultPrinter() {
         }
 
         setIsPrinting(true);
+        setPrintPhase('fetching');
+        setPrintProgressMsg('Checking for data issues…');
+
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
 
             // Check if class has anomalies before printing
-            const anomaliesData = await syncFetch('/api/school/grades/anomalies', {
+            const anomaliesRes = await fetch('/api/school/grades/anomalies', {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
+            const anomaliesData = anomaliesRes.ok ? await anomaliesRes.json() : [];
             if (anomaliesData && anomaliesData.length > 0) {
-                // We need to fetch enrollments for these anomalies to check if they belong to the selected class
                 const studentIds = [...new Set(anomaliesData.map((a: any) => a.studentId))].filter(Boolean);
-                
                 if (studentIds.length > 0) {
                     const { data: anomalousEnrollments } = await supabase
                         .from('enrollments')
@@ -234,103 +273,140 @@ export default function ResultPrinter() {
                         .in('student_id', studentIds)
                         .eq('class_id', filters.classId)
                         .eq('academic_year', filters.academicYear);
-                        
                     if (anomalousEnrollments && anomalousEnrollments.length > 0) {
                         setBlockerMessage("Cannot print report cards. There are grade anomalies (scores > 100%) in this class. Please resolve them in the Data Audit section first.");
                         setIsBlockerOpen(true);
                         setIsPrinting(false);
+                        setPrintPhase('idle');
                         return;
                     }
                 }
             }
 
-            const data = await syncFetch(`/api/school/results/batch-report-cards?classId=${filters.classId}&term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`, {
-                headers: { 'Authorization': `Bearer ${session.access_token}` }
-            });
+            setPrintProgressMsg('Fetching report card data…');
+
+            const dataRes = await fetch(
+                `/api/school/results/batch-report-cards?classId=${filters.classId}&term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`,
+                { headers: { 'Authorization': `Bearer ${session.access_token}` } }
+            );
+
+            if (!dataRes.ok) {
+                const err = await dataRes.json().catch(() => ({ message: 'Server error' }));
+                throw new Error(err.message || 'Failed to fetch report cards');
+            }
+
+            const data: any[] = await dataRes.json();
 
             if (!data || data.length === 0) {
                 toast({ title: "No Data", description: "No published results found for this selection." });
                 setIsPrinting(false);
+                setPrintPhase('idle');
                 return;
             }
 
-            // Preload school images as base64 once (shared across all cards)
-            // This eliminates N×M network requests during print layout.
-            const schoolWithImages = await preloadSchoolImages(data[0]?.school);
-            const dataWithImages = data.map((card: any) => ({ ...card, school: schoolWithImages }));
+            setPrintPhase('rendering');
+            setPrintProgressMsg(`Preparing ${data.length} report cards…`);
 
-            setBatchData(dataWithImages);
+            // Use pre-warmed base64 images if available, otherwise convert now
+            const schoolWithImages = preWarmedSchoolRef.current
+                ? { ...preWarmedSchoolRef.current, ...Object.fromEntries(
+                    Object.entries(data[0]?.school || {}).filter(([k]) =>
+                        !['logo_url','seal_url','signature_url','coat_of_arms_url'].includes(k)
+                    ))
+                  }
+                : await preloadSchoolImages(data[0]?.school);
+
+            const dataWithImages = data.map((card: any) => ({ ...card, school: schoolWithImages }));
 
             // Set document title for PDF filename
             const originalTitle = document.title;
             const safeTerm = filters.term.replace(/\s+/g, '_');
             document.title = `${selectedClassName}_${safeTerm}_${filters.academicYear}_Reports`;
 
-            // Scale delay with batch size: base 800ms + 15ms per card (max 5s)
-            const printDelay = Math.min(800 + data.length * 15, 5000);
+            setBatchData(dataWithImages);
 
-            // Allow DOM to update before printing
-            setTimeout(() => {
-                window.print();
-                document.title = originalTitle;
-                setIsPrinting(false);
-            }, printDelay);
+            // Wait two animation frames for React to flush the DOM, then print.
+            // Two rAFs ensure the browser has painted at least once after the state update.
+            // This is more reliable than a fixed timeout for any class size.
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    setPrintPhase('ready');
+                    setPrintProgressMsg('Opening print dialog…');
+                    // Small yield so the 'ready' state renders before the dialog blocks the thread
+                    setTimeout(() => {
+                        window.print();
+                        document.title = originalTitle;
+                        // afterprint event handler will reset isPrinting + batchData
+                    }, 120);
+                });
+            });
 
         } catch (error: any) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
             setIsPrinting(false);
+            setPrintPhase('idle');
         }
     };
 
     const handleIndividualPrint = async (studentId: string) => {
         setIsPrinting(true);
+        setPrintPhase('fetching');
+        setPrintProgressMsg('Loading report card…');
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
 
             // Check if student has anomalies before printing
-            const anomaliesData = await syncFetch('/api/school/grades/anomalies', {
+            const anomaliesRes = await fetch('/api/school/grades/anomalies', {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
+            const anomaliesData = anomaliesRes.ok ? await anomaliesRes.json() : [];
             if (anomaliesData) {
                 const studentHasAnomaly = anomaliesData.some((a: any) => a.studentId === studentId && a.academicYear === filters.academicYear);
-                
                 if (studentHasAnomaly) {
                     setBlockerMessage("Cannot print report card. This student has grade anomalies (scores > 100%). Please resolve them in the Data Audit section first.");
                     setIsBlockerOpen(true);
                     setIsPrinting(false);
+                    setPrintPhase('idle');
                     return;
                 }
             }
 
-            const data = await syncFetch(`/api/school/results/report-card/${studentId}?term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`, {
-                headers: { 'Authorization': `Bearer ${session.access_token}` }
-            });
+            const dataRes = await fetch(
+                `/api/school/results/report-card/${studentId}?term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`,
+                { headers: { 'Authorization': `Bearer ${session.access_token}` } }
+            );
+            if (!dataRes.ok) throw new Error('Failed to load report card');
+            const data = await dataRes.json();
 
-            if (!data) throw new Error('Failed to load report card');
+            setPrintPhase('rendering');
+            setPrintProgressMsg('Preparing report card…');
 
-            // Preload school images for single student print too
-            const schoolWithImages = await preloadSchoolImages(data.school);
+            const schoolWithImages = preWarmedSchoolRef.current || await preloadSchoolImages(data.school);
             const dataWithImages = { ...data, school: schoolWithImages };
 
             setBatchData([dataWithImages]);
 
-            // Set document title for PDF filename
             const originalTitle = document.title;
             const studentName = (data.student.name || 'Student').replace(/\s+/g, '_');
             const safeTerm = filters.term.replace(/\s+/g, '_');
             document.title = `${studentName}_${safeTerm}_${filters.academicYear}_Report`;
 
-            // Allow DOM to update and images to load before printing
-            setTimeout(() => {
-                window.print();
-                document.title = originalTitle;
-                setIsPrinting(false);
-            }, 1200);
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    setPrintPhase('ready');
+                    setPrintProgressMsg('Opening print dialog…');
+                    setTimeout(() => {
+                        window.print();
+                        document.title = originalTitle;
+                    }, 120);
+                });
+            });
 
         } catch (error: any) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
             setIsPrinting(false);
+            setPrintPhase('idle');
         }
     };
 
@@ -339,11 +415,12 @@ export default function ResultPrinter() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
 
-            const data = await syncFetch(`/api/school/results/report-card/${studentId}?term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`, {
-                headers: { 'Authorization': `Bearer ${session.access_token}` }
-            });
-
-            if (!data) throw new Error('Failed to load report card');
+            const dataRes = await fetch(
+                `/api/school/results/report-card/${studentId}?term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`,
+                { headers: { 'Authorization': `Bearer ${session.access_token}` } }
+            );
+            if (!dataRes.ok) throw new Error('Failed to load report card');
+            const data = await dataRes.json();
 
             setPreviewData(data);
             setIsPreviewOpen(true);
@@ -369,6 +446,30 @@ export default function ResultPrinter() {
 
     return (
         <div className="space-y-6">
+            {/* Progress overlay — visible only during print preparation */}
+            {isPrinting && printPhase !== 'idle' && (
+                <div className="print:hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-8 flex flex-col items-center gap-4 min-w-[320px]">
+                        {printPhase === 'ready' ? (
+                            <CheckCheck className="h-10 w-10 text-green-500" />
+                        ) : (
+                            <Loader2 className="h-10 w-10 text-blue-500 animate-spin" />
+                        )}
+                        <p className="text-base font-semibold text-slate-800 dark:text-slate-100 text-center">
+                            {printProgressMsg}
+                        </p>
+                        {printPhase === 'fetching' && (
+                            <p className="text-xs text-slate-400 text-center">This may take a moment for large classes…</p>
+                        )}
+                        {printPhase === 'rendering' && (
+                            <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                                <div className="h-full bg-blue-500 rounded-full animate-pulse w-3/4" />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             <div className="flex items-center justify-between print:hidden">
                 <div>
                     <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
