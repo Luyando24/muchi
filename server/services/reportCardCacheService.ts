@@ -24,6 +24,7 @@ import {
   generateClassPdf,
   deleteClassPdf,
   isClassPdfReady,
+  getPdfWorkerState,
 } from './pdfGenerationService.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -914,6 +915,27 @@ export async function getSchoolPrecomputeStatus(schoolId: string) {
 
     const terms = Array.from(termGroupsMap.values()).sort((a, b) => a.term.localeCompare(b.term));
 
+    // 9. PDF compilation progress
+    let builtPdfs = 0;
+    for (const group of termGroupsMap.values()) {
+      for (const cls of group.classes) {
+        if (cls.isPdfReady) builtPdfs++;
+      }
+    }
+    const remainingPdfs = Math.max(0, totalClasses - builtPdfs);
+    const pdfProgressPercentage = totalClasses > 0 ? Math.round((builtPdfs / totalClasses) * 100) : 100;
+    const isPdfCompleted = totalClasses > 0 ? (remainingPdfs === 0) : true;
+
+    const pdfWorker = getPdfWorkerState();
+    const isCurrentlyBuildingPdf = pdfWorker.currentSchoolId === schoolId && pdfWorker.isCompiling;
+    const activePdfLabel = isCurrentlyBuildingPdf ? pdfWorker.currentClassLabel : null;
+    const estPdfSeconds = remainingPdfs * 3.5;
+    const estPdfTimeText = isPdfCompleted
+      ? 'Complete'
+      : estPdfSeconds < 60
+      ? `~${Math.max(3, Math.ceil(estPdfSeconds))}s remaining`
+      : `~${Math.ceil(estPdfSeconds / 60)} min remaining`;
+
     return {
       schoolId,
       schoolName,
@@ -932,6 +954,15 @@ export async function getSchoolPrecomputeStatus(schoolId: string) {
       canPrioritize: !isCurrentlyCalculating && !isCompleted && !isPriorityQueued,
       isPriorityQueued,
       terms,
+      // Pre-built PDF compilation metrics
+      totalPdfs: totalClasses,
+      builtPdfs,
+      remainingPdfs,
+      pdfProgressPercentage,
+      isPdfCompleted,
+      isCurrentlyBuildingPdf,
+      activePdfLabel,
+      estPdfTimeText,
     };
   } catch (err: any) {
     console.error('[ReportCardCache] getSchoolPrecomputeStatus error:', err.message);
@@ -953,6 +984,14 @@ export async function getSchoolPrecomputeStatus(schoolId: string) {
       canPrioritize: false,
       isPriorityQueued: false,
       terms: [],
+      totalPdfs: 0,
+      builtPdfs: 0,
+      remainingPdfs: 0,
+      pdfProgressPercentage: 100,
+      isPdfCompleted: true,
+      isCurrentlyBuildingPdf: false,
+      activePdfLabel: null,
+      estPdfTimeText: 'Complete',
     };
   }
 }
@@ -1181,6 +1220,8 @@ export async function getActiveWorkerProgress() {
     }
   }
 
+  const pdfWorker = getPdfWorkerState();
+
   return {
     isCalculating,
     currentSchoolId,
@@ -1188,6 +1229,9 @@ export async function getActiveWorkerProgress() {
     currentClassLabel,
     queuedSchoolsCount,
     activeSchoolStatus,
+    isCompilingPdf: pdfWorker.isCompiling,
+    activePdfSchoolId: pdfWorker.currentSchoolId,
+    activePdfClassLabel: pdfWorker.currentClassLabel,
   };
 }
 

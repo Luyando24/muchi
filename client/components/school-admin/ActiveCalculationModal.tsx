@@ -28,6 +28,9 @@ interface ActiveWorkerProgressData {
   currentSchoolName: string | null;
   currentClassLabel: string | null;
   queuedSchoolsCount: number;
+  isCompilingPdf?: boolean;
+  activePdfSchoolId?: string | null;
+  activePdfClassLabel?: string | null;
   activeSchoolStatus: {
     schoolId: string;
     schoolName: string;
@@ -39,6 +42,15 @@ interface ActiveWorkerProgressData {
     isCurrentlyCalculating: boolean;
     currentClassLabel: string | null;
     estimatedTimeText: string;
+    // PDF build process metrics
+    totalPdfs?: number;
+    builtPdfs?: number;
+    remainingPdfs?: number;
+    pdfProgressPercentage?: number;
+    isPdfCompleted?: boolean;
+    isCurrentlyBuildingPdf?: boolean;
+    activePdfLabel?: string | null;
+    estPdfTimeText?: string;
     terms: {
       term: string;
       academicYear: string;
@@ -50,6 +62,7 @@ interface ActiveWorkerProgressData {
         className: string;
         examType: string;
         isCalculated: boolean;
+        isPdfReady?: boolean;
         cachedAt: string | null;
         studentCount: number;
       }[];
@@ -190,12 +203,12 @@ export default function ActiveCalculationModal({
                   )}
                 </div>
 
-                {/* Progress bar */}
+                {/* Stage 1: Calculation Progress bar */}
                 {activeStatus && (
                   <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                     <div className="flex justify-between items-center text-xs">
                       <span className="font-bold text-slate-700 dark:text-slate-300">
-                        {activeStatus.calculatedClasses} of {activeStatus.totalClasses} classes calculated
+                        Stage 1: Scores & Rankings ({activeStatus.calculatedClasses} of {activeStatus.totalClasses} classes calculated)
                       </span>
                       <span className="font-bold text-indigo-600 dark:text-indigo-400">
                         {activeStatus.progressPercentage}%
@@ -205,6 +218,37 @@ export default function ActiveCalculationModal({
                     <div className="flex justify-between items-center text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
                       <span>{activeStatus.remainingClasses} classes remaining</span>
                       <span>Est: {activeStatus.estimatedTimeText}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Stage 2: Background PDF Compilation bar */}
+                {activeStatus && (
+                  <div className="space-y-2 pt-2 border-t border-purple-100 dark:border-purple-900/40">
+                    <div className="flex justify-between items-center text-xs">
+                      <div className="flex items-center gap-2 font-bold text-purple-900 dark:text-purple-300">
+                        <span>Stage 2: Pre-Built PDFs ({activeStatus.builtPdfs ?? 0} of {activeStatus.totalClasses} compiled)</span>
+                        {(activeStatus.isCurrentlyBuildingPdf || data?.isCompilingPdf) && (
+                          <span className="text-[10px] text-purple-600 dark:text-purple-400 flex items-center gap-1 font-semibold animate-pulse">
+                            <Loader2 className="h-3 w-3 animate-spin" /> Compiling: {activeStatus.activePdfLabel || data?.activePdfClassLabel}
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-bold text-purple-600 dark:text-purple-400">
+                        {activeStatus.pdfProgressPercentage ?? 0}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ease-out ${
+                          activeStatus.isPdfCompleted ? 'bg-emerald-500' : 'bg-purple-600'
+                        }`}
+                        style={{ width: `${activeStatus.pdfProgressPercentage ?? 0}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
+                      <span>{activeStatus.remainingPdfs ?? 0} PDFs remaining</span>
+                      <span>Est: {activeStatus.estPdfTimeText || 'Calculating…'}</span>
                     </div>
                   </div>
                 )}
@@ -264,9 +308,16 @@ export default function ActiveCalculationModal({
                                   <span className="font-semibold truncate">{cls.className}</span>
                                   <span className="text-[10px] text-slate-400 shrink-0">({cls.examType})</span>
                                 </div>
-                                <span className="text-[10px] font-bold uppercase shrink-0">
-                                  {cls.isCalculated ? 'Ready' : isBeingComputedNow ? 'Calculating' : 'Waiting'}
-                                </span>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {cls.isPdfReady && (
+                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+                                      PDF ⚡
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] font-bold uppercase">
+                                    {cls.isCalculated ? 'Ready' : isBeingComputedNow ? 'Calculating' : 'Waiting'}
+                                  </span>
+                                </div>
                               </div>
                             );
                           })}

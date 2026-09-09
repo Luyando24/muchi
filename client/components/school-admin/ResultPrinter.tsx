@@ -970,6 +970,66 @@ export default function ResultPrinter() {
                         </CardContent>
                     </Card>
 
+                    {/* Stage 2: Pre-Built PDF Compilation Progress Card */}
+                    <Card className="border-purple-200/80 dark:border-purple-900/50 overflow-hidden shadow-sm bg-gradient-to-r from-purple-50/40 via-white to-white dark:from-purple-950/20 dark:via-slate-900 dark:to-slate-900">
+                        <CardContent className="p-6 space-y-3">
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                                <div className="flex items-center gap-2">
+                                    {precomputeStatus?.isCurrentlyBuildingPdf ? (
+                                        <span className="relative flex h-3 w-3">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-3 w-3 bg-purple-500"></span>
+                                        </span>
+                                    ) : (
+                                        <FileCheck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                    )}
+                                    <span className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 flex-wrap">
+                                        <span>Pre-Built PDF Compilation:</span>
+                                        <span className="font-normal text-slate-600 dark:text-slate-300">
+                                            {precomputeStatus?.isPdfCompleted
+                                                ? "All class PDFs compiled & ready for instant download ✓"
+                                                : precomputeStatus?.isCurrentlyBuildingPdf
+                                                ? precomputeStatus.activePdfLabel
+                                                    ? `Compiling PDF: ${precomputeStatus.activePdfLabel}`
+                                                    : "Compiling class PDFs in background…"
+                                                : precomputeStatus?.isCompleted
+                                                ? "Starting background PDF compilation…"
+                                                : "Starts automatically after each class is calculated"}
+                                        </span>
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2.5">
+                                    <span className="text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950 px-2.5 py-0.5 rounded-full">
+                                        {precomputeStatus?.builtPdfs ?? 0} / {precomputeStatus?.totalClasses ?? 0} PDFs Ready
+                                    </span>
+                                    <span className="text-base font-black tabular-nums text-purple-700 dark:text-purple-300">
+                                        {precomputeStatus?.pdfProgressPercentage ?? 0}%
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-3.5 overflow-hidden">
+                                <div
+                                    className={`h-full rounded-full transition-all duration-300 ease-out ${
+                                        precomputeStatus?.isPdfCompleted ? "bg-emerald-500" : "bg-purple-600"
+                                    }`}
+                                    style={{ width: `${precomputeStatus?.pdfProgressPercentage ?? 0}%` }}
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                                <span>
+                                    {precomputeStatus?.remainingPdfs === 0
+                                        ? "All classes have pre-rendered vector PDFs stored on server."
+                                        : `${precomputeStatus?.remainingPdfs ?? 0} class PDFs remaining to compile`}
+                                </span>
+                                <span>
+                                    {precomputeStatus?.isPdfCompleted ? "Instant download ready" : `Est. PDF Time: ${precomputeStatus?.estPdfTimeText || 'Calculating…'}`}
+                                </span>
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     {/* All Terms Breakdown */}
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">

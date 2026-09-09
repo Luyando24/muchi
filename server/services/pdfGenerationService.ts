@@ -22,6 +22,27 @@ export interface PdfKey {
   term: string;
   examType: string;
   academicYear: string;
+  className?: string;
+}
+
+export interface PdfWorkerState {
+  currentSchoolId: string | null;
+  currentClassId: string | null;
+  currentClassLabel: string | null;
+  isCompiling: boolean;
+  startedAt: string | null;
+}
+
+export const pdfWorkerState: PdfWorkerState = {
+  currentSchoolId: null,
+  currentClassId: null,
+  currentClassLabel: null,
+  isCompiling: false,
+  startedAt: null,
+};
+
+export function getPdfWorkerState(): PdfWorkerState {
+  return { ...pdfWorkerState };
 }
 
 function sanitize(val: string): string {
@@ -136,6 +157,14 @@ export async function generateClassPdf(key: PdfKey): Promise<string | null> {
 
     console.log(`[PdfService] Launching headless browser for ${key.classId} (${key.term})…`);
 
+    pdfWorkerState.currentSchoolId = key.schoolId;
+    pdfWorkerState.currentClassId = key.classId;
+    pdfWorkerState.currentClassLabel = key.className
+      ? `${key.className} (${key.term} - ${key.examType})`
+      : `${key.term} - ${key.examType}`;
+    pdfWorkerState.isCompiling = true;
+    pdfWorkerState.startedAt = new Date().toISOString();
+
     browser = await puppeteer.launch({
       executablePath: execPath,
       headless: true,
@@ -186,6 +215,11 @@ export async function generateClassPdf(key: PdfKey): Promise<string | null> {
         await browser.close();
       } catch (_) {}
     }
+    pdfWorkerState.isCompiling = false;
+    pdfWorkerState.currentSchoolId = null;
+    pdfWorkerState.currentClassId = null;
+    pdfWorkerState.currentClassLabel = null;
+    pdfWorkerState.startedAt = null;
     pdfInFlight.delete(fileKey);
   }
 }
