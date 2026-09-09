@@ -630,6 +630,7 @@ router.get("/public-events", rateLimiter({ windowMs: 15 * 60 * 1000, max: 20 }),
 
 // Middleware to verify School Admin or Teacher
 const ADMIN_ROLES = [
+  "system_admin",
   "school_admin",
   "bursar",
   "registrar",
@@ -685,7 +686,9 @@ export const requireSchoolRole = (allowedRoles: string[]) => {
           .json({ message: "Forbidden: Profile not found" });
       }
 
-      if (!allowedRoles.includes(profile.role) && (!profile.secondary_role || !allowedRoles.includes(profile.secondary_role))) {
+      // System admins always have access to school endpoints
+      const isSysAdmin = profile.role === 'system_admin' || profile.secondary_role === 'system_admin';
+      if (!isSysAdmin && !allowedRoles.includes(profile.role) && (!profile.secondary_role || !allowedRoles.includes(profile.secondary_role))) {
         console.error(`[Auth] Forbidden: Role mismatch for UID ${user.id}. Role: ${profile.role}, Allowed: ${allowedRoles}`);
         return res
           .status(403)
@@ -6590,15 +6593,30 @@ router.post(
     const { subjectId, teacherId, classSubjectId } = req.body;
 
     if (!subjectId && !classSubjectId) {
-      return res.status(400).json({ message: "Subject ID is required" });
+      return res.status(400).json({ message: "Subject ID or Class Subject ID is required" });
     }
 
     try {
+      const validTeacherId =
+        teacherId && typeof teacherId === "string" && teacherId !== "unassigned" && teacherId.trim() !== ""
+          ? teacherId.trim()
+          : null;
+
+      // Look up teacher's full name snapshot if a valid teacher is assigned
+      let teacherName: string | null = null;
+      if (validTeacherId) {
+        const { data: teacherProfile } = await supabaseAdmin
+          .from("profiles")
+          .select("full_name")
+          .eq("id", validTeacherId)
+          .maybeSingle();
+        teacherName = teacherProfile?.full_name || null;
+      }
+
       let rowId: string | null = classSubjectId || null;
 
-      if (!rowId) {
+      if (!rowId && subjectId) {
         // Fallback: find first matching row by class_id + subject_id
-        // Use maybeSingle() so it doesn't throw when multiple rows exist
         const { data: existing } = await supabaseAdmin
           .from("class_subjects")
           .select("id")
@@ -6612,14 +6630,50 @@ router.post(
       let result;
       if (rowId) {
         // Update the specific class_subjects row by its primary key
+        const updatePayload: Record<string, any> = { teacher_id: validTeacherId };
+        updatePayload.teacher_name = teacherName;
+
         const { data, error } = await supabaseAdmin
           .from("class_subjects")
-          .update({ teacher_id: teacherId || null })
+          .update(updatePayload)
           .eq("id", rowId)
           .select()
-          .single();
-        if (error) throw error;
-        result = data;
+          .maybeSingle();
+
+        if (error) {
+          if (error.code === "23505") {
+            return res.status(400).json({
+              message: "This teacher is already assigned to this subject in this class.",
+            });
+          }
+          throw error;
+        }
+
+        if (!data) {
+          // If the row was not found by rowId, create assignment
+          const { data: inserted, error: insertError } = await supabaseAdmin
+            .from("class_subjects")
+            .insert({
+              class_id: id,
+              subject_id: subjectId,
+              teacher_id: validTeacherId,
+              teacher_name: teacherName,
+            })
+            .select()
+            .single();
+
+          if (insertError) {
+            if (insertError.code === "23505") {
+              return res.status(400).json({
+                message: "This teacher is already assigned to this subject in this class.",
+              });
+            }
+            throw insertError;
+          }
+          result = inserted;
+        } else {
+          result = data;
+        }
       } else {
         // Create new assignment (subject not yet added to this class)
         const { data, error } = await supabaseAdmin
@@ -6627,18 +6681,27 @@ router.post(
           .insert({
             class_id: id,
             subject_id: subjectId,
-            teacher_id: teacherId || null,
+            teacher_id: validTeacherId,
+            teacher_name: teacherName,
           })
           .select()
           .single();
-        if (error) throw error;
+
+        if (error) {
+          if (error.code === "23505") {
+            return res.status(400).json({
+              message: "This teacher is already assigned to this subject in this class.",
+            });
+          }
+          throw error;
+        }
         result = data;
       }
 
       res.json(result);
     } catch (error: any) {
       console.error("Assign Subject Teacher Error:", error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json({ message: error.message || "Failed to update teacher assignment" });
     }
   },
 );

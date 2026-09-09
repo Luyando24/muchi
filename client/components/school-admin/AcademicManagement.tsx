@@ -364,13 +364,14 @@ export default function AcademicManagement() {
       
       const data = await syncFetch(`/api/school/classes/${classId}/subjects`, {
         headers: { 'Authorization': `Bearer ${session.access_token}` },
-        cacheKey: `class-subjects-${classId}`
+        cacheKey: `class-subjects-${classId}`,
+        forceSync: true
       });
       
-      setClassSubjects(data);
-    } catch (error) {
+      setClassSubjects(data || []);
+    } catch (error: any) {
       console.error('Error fetching allocations:', error);
-      toast({ title: "Error", description: "Failed to load class subjects", variant: "destructive" });
+      toast({ title: "Error", description: error?.message || "Failed to load class subjects", variant: "destructive" });
     } finally {
       setIsLoadingAllocations(false);
     }
@@ -390,6 +391,10 @@ export default function AcademicManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
+      const teacherIdToAssign = (!allocationForm.teacherId || allocationForm.teacherId === 'unassigned')
+        ? null
+        : allocationForm.teacherId;
+
       const result = await syncFetch(`/api/school/classes/${allocationClassId}/subjects/assign`, {
         method: 'POST',
         headers: {
@@ -398,8 +403,8 @@ export default function AcademicManagement() {
         },
         body: JSON.stringify({
           subjectId: allocationForm.subjectId,
-          classSubjectId: allocationForm.classSubjectId || null,
-          teacherId: allocationForm.teacherId || null
+          classSubjectId: (allocationForm as any).classSubjectId || null,
+          teacherId: teacherIdToAssign
         })
       });
 
@@ -412,7 +417,8 @@ export default function AcademicManagement() {
       setAllocationForm({ subjectId: '', teacherId: '' });
       fetchAllocations(allocationClassId);
     } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      console.error('Failed to assign subject:', error);
+      toast({ title: "Error", description: error?.message || "Failed to assign subject", variant: "destructive" });
     } finally {
       setIsActionLoading(false);
     }
@@ -1835,6 +1841,8 @@ export default function AcademicManagement() {
                                  const { data: { session } } = await supabase.auth.getSession();
                                  if (!session) return;
                                  
+                                 const teacherIdToAssign = (!newTeacherId || newTeacherId === "unassigned") ? null : newTeacherId;
+
                                  const result = await syncFetch(`/api/school/classes/${allocationClassId}/subjects/assign`, {
                                      method: 'POST',
                                      headers: {
@@ -1844,7 +1852,7 @@ export default function AcademicManagement() {
                                      body: JSON.stringify({
                                        subjectId: cs.id,
                                        classSubjectId: cs.classSubjectId,
-                                       teacherId: newTeacherId === "unassigned" ? null : newTeacherId
+                                       teacherId: teacherIdToAssign
                                      })
                                   });
                                   
@@ -1854,8 +1862,13 @@ export default function AcademicManagement() {
                                     toast({ title: "Success", description: "Teacher updated" });
                                   }
                                  fetchAllocations(allocationClassId);
-                               } catch (e) {
-                                 toast({ title: "Error", description: "Failed to update teacher", variant: "destructive" });
+                               } catch (e: any) {
+                                 console.error("Failed to update teacher:", e);
+                                 toast({ 
+                                   title: "Error", 
+                                   description: e?.message || "Failed to update teacher", 
+                                   variant: "destructive" 
+                                 });
                                 }
                              }}
                            />
