@@ -558,7 +558,7 @@ async function getClassRankings(classId: string, term: string, examType: string,
 
 // ─── Backfill Scheduler & Queue Management ─────────────────────────────────────
 
-const BACKFILL_DELAY_MS = 3000; // 3 s between each class computation during backfill
+const BACKFILL_DELAY_MS = 600; // 600ms between each class computation during backfill
 const SCHOOL_DELAY_MS   = 1000; // 1 s between schools
 
 function sleep(ms: number) {
@@ -627,65 +627,101 @@ export function prioritizeSchool(schoolId: string): boolean {
 }
 
 /**
- * Detailed report card calculation progress across all terms for a specific school.
+ * Robust helper to discover all distinct (classId, term, examType, academicYear) combinations
+ * that have submitted or published grades for a given school.
  */
-export async function getSchoolPrecomputeStatus(schoolId: string) {
-  try {
-    // 1. Get school name and all classes
-    const [{ data: school }, { data: allClasses }] = await Promise.all([
-      supabaseAdmin.from('schools').select('name').eq('id', schoolId).single(),
-      supabaseAdmin.from('classes').select('id, name').eq('school_id', schoolId).order('name'),
-    ]);
+async function getSchoolCombos(schoolId: string): Promise<{
+  combos: (CacheKey & { className: string })[];
+  classNameMap: Map<string, string>;
+  schoolName: string;
+}> {
+  const [{ data: school }, { data: allClasses }] = await Promise.all([
+    supabaseAdmin.from('schools').select('name').eq('id', schoolId).single(),
+    supabaseAdmin.from('classes').select('id, name').eq('school_id', schoolId).order('name'),
+  ]);
 
-    const schoolName = school?.name || 'School';
-    const classNameMap = new Map<string, string>((allClasses || []).map((c: any) => [c.id, c.name || 'Class']));
+  const schoolName = school?.name || 'School';
+  const classNameMap = new Map<string, string>((allClasses || []).map((c: any) => [c.id, c.name || 'Class']));
+  const classIds = (allClasses || []).map((c: any) => c.id);
 
-    // 2. Query distinct submitted/published grades for this school
-    const { data: gradeDistinct } = await supabaseAdmin
+  if (classIds.length === 0) {
+    return { combos: [], classNameMap, schoolName };
+  }
+
+  // 1. Fetch all enrollments for classes belonging to this school (paginated)
+  const allEnrollments: { student_id: string; class_id: string; academic_year: string }[] = [];
+  let ePage = 0;
+  const pageSize = 1000;
+  while (true) {
+    const { data: batch, error: bErr } = await supabaseAdmin
+      .from('enrollments')
+      .select('student_id, class_id, academic_year')
+      .in('class_id', classIds)
+      .range(ePage * pageSize, (ePage + 1) * pageSize - 1);
+
+    if (bErr || !batch || batch.length === 0) break;
+    allEnrollments.push(...batch);
+    if (batch.length < pageSize) break;
+    ePage++;
+  }
+
+  if (allEnrollments.length === 0) {
+    return { combos: [], classNameMap, schoolName };
+  }
+
+  const studentClassMap = new Map<string, Map<string, string>>();
+  for (const e of allEnrollments) {
+    if (!studentClassMap.has(e.student_id)) studentClassMap.set(e.student_id, new Map());
+    studentClassMap.get(e.student_id)!.set(String(e.academic_year), e.class_id);
+  }
+
+  // 2. Fetch distinct submitted/published student grades for this school
+  const gradeDistinct: { term: string; exam_type: string; academic_year: string; student_id: string }[] = [];
+  let gPage = 0;
+  while (true) {
+    const { data: gBatch, error: gErr } = await supabaseAdmin
       .from('student_grades')
       .select('term, exam_type, academic_year, student_id')
       .eq('school_id', schoolId)
       .in('status', ['Submitted', 'Published'])
-      .limit(50000);
+      .range(gPage * pageSize, (gPage + 1) * pageSize - 1);
 
-    // 3. Query enrollments to map student -> class
-    const { data: allEnrollments } = await supabaseAdmin
-      .from('enrollments')
-      .select('student_id, class_id, academic_year')
-      .eq('school_id', schoolId)
-      .limit(100000);
+    if (gErr || !gBatch || gBatch.length === 0) break;
+    gradeDistinct.push(...gBatch);
+    if (gBatch.length < pageSize || gradeDistinct.length >= 30000) break;
+    gPage++;
+  }
 
-    const studentClassMap = new Map<string, Map<string, string>>();
-    for (const e of allEnrollments || []) {
-      if (!studentClassMap.has(e.student_id)) studentClassMap.set(e.student_id, new Map());
-      studentClassMap.get(e.student_id)!.set(e.academic_year, e.class_id);
+  const comboMap = new Map<string, CacheKey & { className: string }>();
+  for (const g of gradeDistinct) {
+    const classId = studentClassMap.get(g.student_id)?.get(String(g.academic_year));
+    if (!classId) continue;
+    const key = `${classId}|${g.term}|${g.exam_type}|${g.academic_year}`;
+    if (!comboMap.has(key)) {
+      comboMap.set(key, {
+        schoolId,
+        classId,
+        className: classNameMap.get(classId) || 'Class',
+        term: g.term,
+        examType: g.exam_type,
+        academicYear: String(g.academic_year),
+      });
     }
+  }
 
-    // 4. Build unique combos
-    const comboMap = new Map<string, {
-      classId: string;
-      className: string;
-      term: string;
-      examType: string;
-      academicYear: string;
-    }>();
+  return {
+    combos: Array.from(comboMap.values()),
+    classNameMap,
+    schoolName,
+  };
+}
 
-    for (const g of gradeDistinct || []) {
-      const classId = studentClassMap.get(g.student_id)?.get(g.academic_year);
-      if (!classId) continue;
-      const key = `${classId}|${g.term}|${g.exam_type}|${g.academic_year}`;
-      if (!comboMap.has(key)) {
-        comboMap.set(key, {
-          classId,
-          className: classNameMap.get(classId) || 'Class',
-          term: g.term,
-          examType: g.exam_type,
-          academicYear: g.academic_year,
-        });
-      }
-    }
-
-    const combos = Array.from(comboMap.values());
+/**
+ * Detailed report card calculation progress across all terms for a specific school.
+ */
+export async function getSchoolPrecomputeStatus(schoolId: string) {
+  try {
+    const { combos, schoolName } = await getSchoolCombos(schoolId);
 
     // 5. Fetch existing cache entries
     const { data: existingCache, error: cacheErr } = await supabaseAdmin
@@ -917,17 +953,20 @@ export async function startBackfillScheduler(): Promise<void> {
       while (index < schools.length || schedulerState.priorityQueue.length > 0) {
         let targetSchoolId: string;
         let targetSchoolName: string;
+        let isNormalPass = false;
 
         // Check if there is an explicit priority request
         if (schedulerState.priorityQueue.length > 0) {
           targetSchoolId = schedulerState.priorityQueue.shift()!;
           const match = schools.find((s: any) => s.id === targetSchoolId);
           targetSchoolName = match?.name || 'Prioritized School';
+          isNormalPass = false;
           console.log(`[ReportCardCache] Executing PRIORITY backfill for: ${targetSchoolName}`);
         } else {
           const current = schools[index];
           targetSchoolId = current.id;
           targetSchoolName = current.name;
+          isNormalPass = true;
           index++;
         }
 
@@ -936,7 +975,7 @@ export async function startBackfillScheduler(): Promise<void> {
         schedulerState.isCalculating = true;
 
         try {
-          await processSchoolBackfill(targetSchoolId, targetSchoolName);
+          await processSchoolBackfill(targetSchoolId, targetSchoolName, isNormalPass);
         } catch (schoolErr: any) {
           console.warn(`[ReportCardCache] Error processing ${targetSchoolName}:`, schoolErr.message);
         }
@@ -962,60 +1001,9 @@ export async function startBackfillScheduler(): Promise<void> {
   }
 }
 
-async function processSchoolBackfill(schoolId: string, schoolName: string): Promise<void> {
-  // Query submitted/published grades for this school
-  const { data: gradeDistinct } = await supabaseAdmin
-    .from('student_grades')
-    .select('term, exam_type, academic_year, student_id')
-    .eq('school_id', schoolId)
-    .in('status', ['Submitted', 'Published'])
-    .limit(50000);
-
-  if (!gradeDistinct || gradeDistinct.length === 0) return;
-
-  // Get all enrollments for this school to map student → class
-  const [{ data: allEnrollments }, { data: allClasses }] = await Promise.all([
-    supabaseAdmin
-      .from('enrollments')
-      .select('student_id, class_id, academic_year')
-      .eq('school_id', schoolId)
-      .limit(100000),
-    supabaseAdmin
-      .from('classes')
-      .select('id, name')
-      .eq('school_id', schoolId),
-  ]);
-
-  if (!allEnrollments || allEnrollments.length === 0) return;
-
-  const classNameMap = new Map<string, string>((allClasses || []).map((c: any) => [c.id, c.name || 'Class']));
-  const studentClassMap = new Map<string, Map<string, string>>();
-  for (const e of allEnrollments) {
-    if (!studentClassMap.has(e.student_id)) studentClassMap.set(e.student_id, new Map());
-    studentClassMap.get(e.student_id)!.set(e.academic_year, e.class_id);
-  }
-
-  // Build unique combo set
-  const comboSet = new Set<string>();
-  const comboList: (CacheKey & { className?: string })[] = [];
-  for (const g of gradeDistinct) {
-    const classId = studentClassMap.get(g.student_id)?.get(g.academic_year);
-    if (!classId) continue;
-    const key = `${schoolId}|${classId}|${g.term}|${g.exam_type}|${g.academic_year}`;
-    if (!comboSet.has(key)) {
-      comboSet.add(key);
-      comboList.push({
-        schoolId,
-        classId,
-        className: classNameMap.get(classId) || 'Class',
-        term: g.term,
-        examType: g.exam_type,
-        academicYear: g.academic_year,
-      });
-    }
-  }
-
-  if (comboList.length === 0) return;
+async function processSchoolBackfill(schoolId: string, schoolNameFallback: string, isNormalPass: boolean): Promise<void> {
+  const { combos, schoolName } = await getSchoolCombos(schoolId);
+  if (combos.length === 0) return;
 
   // Filter out combos that already have a cache entry
   const { data: existingCache } = await supabaseAdmin
@@ -1027,7 +1015,7 @@ async function processSchoolBackfill(schoolId: string, schoolName: string): Prom
     (existingCache || []).map(c => `${c.class_id}|${c.term}|${c.exam_type}|${c.academic_year}`),
   );
 
-  const pending = comboList.filter(
+  const pending = combos.filter(
     c => !cachedSet.has(`${c.classId}|${c.term}|${c.examType}|${c.academicYear}`),
   );
 
@@ -1036,9 +1024,9 @@ async function processSchoolBackfill(schoolId: string, schoolName: string): Prom
   console.log(`[ReportCardCache] ${schoolName} — ${pending.length} combos to pre-compute`);
 
   for (const combo of pending) {
-    // If a higher priority school was requested, pause and yield
-    if (schedulerState.priorityQueue.length > 0 && !schedulerState.priorityQueue.includes(schoolId)) {
-      console.log(`[ReportCardCache] Yielding ${schoolName} to higher priority school`);
+    // If a priority school was requested during a regular backfill pass, yield to priority queue
+    if (isNormalPass && schedulerState.priorityQueue.length > 0) {
+      console.log(`[ReportCardCache] Yielding regular pass for ${schoolName} to higher priority school`);
       break;
     }
 

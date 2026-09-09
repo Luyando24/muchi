@@ -6629,6 +6629,46 @@ router.post(
 
       let result;
       if (rowId) {
+        // If updating to a validTeacherId, check if another row for the same class and subject already has this teacher
+        let targetSubjectId = subjectId;
+        if (!targetSubjectId) {
+          const { data: currentCs } = await supabaseAdmin
+            .from("class_subjects")
+            .select("subject_id")
+            .eq("id", rowId)
+            .maybeSingle();
+          targetSubjectId = currentCs?.subject_id;
+        }
+
+        if (validTeacherId && targetSubjectId) {
+          const { data: duplicate } = await supabaseAdmin
+            .from("class_subjects")
+            .select("id")
+            .eq("class_id", id)
+            .eq("subject_id", targetSubjectId)
+            .eq("teacher_id", validTeacherId)
+            .neq("id", rowId)
+            .maybeSingle();
+
+          if (duplicate) {
+            // Teacher is already assigned to this subject on another row in this class.
+            // Clean up the redundant duplicate row so the allocation remains clean.
+            await supabaseAdmin
+              .from("class_subjects")
+              .delete()
+              .eq("id", rowId);
+
+            return res.json({
+              id: duplicate.id,
+              class_id: id,
+              subject_id: targetSubjectId,
+              teacher_id: validTeacherId,
+              teacher_name: teacherName,
+              message: "Teacher is already assigned to this subject in this class.",
+            });
+          }
+        }
+
         // Update the specific class_subjects row by its primary key
         const updatePayload: Record<string, any> = { teacher_id: validTeacherId };
         updatePayload.teacher_name = teacherName;
@@ -6651,6 +6691,20 @@ router.post(
 
         if (!data) {
           // If the row was not found by rowId, create assignment
+          if (validTeacherId && subjectId) {
+            const { data: duplicate } = await supabaseAdmin
+              .from("class_subjects")
+              .select("*")
+              .eq("class_id", id)
+              .eq("subject_id", subjectId)
+              .eq("teacher_id", validTeacherId)
+              .maybeSingle();
+
+            if (duplicate) {
+              return res.json(duplicate);
+            }
+          }
+
           const { data: inserted, error: insertError } = await supabaseAdmin
             .from("class_subjects")
             .insert({
@@ -6676,6 +6730,20 @@ router.post(
         }
       } else {
         // Create new assignment (subject not yet added to this class)
+        if (validTeacherId && subjectId) {
+          const { data: duplicate } = await supabaseAdmin
+            .from("class_subjects")
+            .select("*")
+            .eq("class_id", id)
+            .eq("subject_id", subjectId)
+            .eq("teacher_id", validTeacherId)
+            .maybeSingle();
+
+          if (duplicate) {
+            return res.json(duplicate);
+          }
+        }
+
         const { data, error } = await supabaseAdmin
           .from("class_subjects")
           .insert({
