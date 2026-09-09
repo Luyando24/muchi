@@ -151,7 +151,7 @@ export default function AcademicManagement() {
   const [weightForm, setWeightForm] = useState({ id: '', assessment_type: '', weight_percentage: 0 });
 
   // Grade Calculation State
-  const [calcForm, setCalcForm] = useState({ classId: 'all', subjectId: 'all', term: '', examType: 'End of Term', academicYear: new Date().getFullYear().toString(), skipCalculation: true });
+  const [calcForm, setCalcForm] = useState({ classId: 'all', subjectId: 'all', term: 'Term 1', examType: 'End of Term', academicYear: new Date().getFullYear().toString(), skipCalculation: true });
   const [availableExamTypes, setAvailableExamTypes] = useState<string[]>(['Mid Term', 'End of Term']);
   const [gradeStatus, setGradeStatus] = useState<{ id: string, name: string, status: string, teacher: string }[]>([]);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
@@ -1020,7 +1020,7 @@ export default function AcademicManagement() {
     
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`Class: ${className} | Term: ${calcForm.term} | Year: ${calcForm.academicYear}`, 14, 22);
+    doc.text(`Class: ${className} | Term: ${calcForm.term} | Type: ${calcForm.examType} | Year: ${calcForm.academicYear}`, 14, 22);
 
     const submittedList = gradeStatus.filter(s => s.status === 'Submitted' || s.status === 'Published');
     const pendingList = gradeStatus.filter(s => s.status !== 'Submitted' && s.status !== 'Published');
@@ -1069,7 +1069,10 @@ export default function AcademicManagement() {
       alternateRowStyles: { fillColor: [254, 242, 242] }, // Red-50
     });
 
-    doc.save(`Readiness_Status_${className}_${calcForm.term}_${calcForm.academicYear}.pdf`);
+    const cleanClassName = className.replace(/\s+/g, '_');
+    const cleanTerm = (calcForm.term || 'Term').replace(/\s+/g, '_');
+    const cleanExamType = (calcForm.examType || 'Exam').replace(/\s+/g, '_');
+    doc.save(`Readiness_Status_${cleanClassName}_${cleanTerm}_${cleanExamType}_${calcForm.academicYear}.pdf`);
   };
 
   const initiatePublish = () => {
@@ -2201,7 +2204,25 @@ export default function AcademicManagement() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label>Term</Label>
-                      <Input value={calcForm.term} onChange={e => { setCalcForm(prev => ({ ...prev, term: e.target.value })); setGradeStatus([]); }} placeholder="e.g. Term 1" />
+                      <Select
+                        value={calcForm.term}
+                        onValueChange={v => {
+                          setCalcForm(prev => ({ ...prev, term: v }));
+                          setGradeStatus([]);
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select Term" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Term 1">Term 1</SelectItem>
+                          <SelectItem value="Term 2">Term 2</SelectItem>
+                          <SelectItem value="Term 3">Term 3</SelectItem>
+                          {calcForm.term && !['Term 1', 'Term 2', 'Term 3'].includes(calcForm.term) && (
+                            <SelectItem value={calcForm.term}>{calcForm.term}</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <Label>Test Type</Label>
@@ -2267,28 +2288,31 @@ export default function AcademicManagement() {
                         </DialogHeader>
 
                         <div className="py-4 space-y-4">
-                          <div className="flex flex-col sm:flex-row gap-2 justify-between items-center">
-                            <div className="flex gap-2 w-full sm:w-auto">
-                              <Button variant="outline" onClick={handleCheckStatus} disabled={isCheckingStatus}>
-                                {isCheckingStatus ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                                Check Status
-                              </Button>
-                            </div>
-                          </div>
-
                           {gradeStatus.length === 0 && !isCheckingStatus && (
-                            <div className="p-8 text-center border rounded-lg bg-slate-50 dark:bg-slate-900/50 space-y-3">
+                            <div className="p-8 text-center border rounded-lg bg-slate-50 dark:bg-slate-900/50 space-y-4">
                               <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                Click <strong>Check Status</strong> above to check submission readiness for:
+                                Click <strong>Check Status</strong> below to check submission readiness for:
                               </p>
-                              <div className="inline-flex flex-wrap justify-center items-center gap-2 text-xs font-semibold px-3 py-1.5 bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 rounded-full border border-blue-200 dark:border-blue-800">
-                                <span>Class: {calcForm.classId === 'all' ? 'All Classes' : classes.find(c => c.id === calcForm.classId)?.name || 'Selected Class'}</span>
-                                <span>•</span>
-                                <span>Term: {calcForm.term}</span>
-                                <span>•</span>
-                                <span>Type: {calcForm.examType}</span>
-                                <span>•</span>
-                                <span>Year: {calcForm.academicYear}</span>
+                              <div>
+                                <div className="inline-flex flex-wrap justify-center items-center gap-2 text-xs font-semibold px-3 py-1.5 bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 rounded-full border border-blue-200 dark:border-blue-800">
+                                  <span>Class: {calcForm.classId === 'all' ? 'All Classes' : classes.find(c => c.id === calcForm.classId)?.name || 'Selected Class'}</span>
+                                  <span>•</span>
+                                  <span>Term: {calcForm.term}</span>
+                                  <span>•</span>
+                                  <span>Type: {calcForm.examType}</span>
+                                  <span>•</span>
+                                  <span>Year: {calcForm.academicYear}</span>
+                                </div>
+                              </div>
+                              <div className="pt-1">
+                                <Button
+                                  onClick={handleCheckStatus}
+                                  disabled={isCheckingStatus}
+                                  className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm px-6"
+                                >
+                                  {isCheckingStatus ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                  Check Status
+                                </Button>
                               </div>
                             </div>
                           )}
@@ -2323,10 +2347,16 @@ export default function AcademicManagement() {
                                     <TabsTrigger value="submitted">Submitted</TabsTrigger>
                                     <TabsTrigger value="pending">Not Submitted</TabsTrigger>
                                   </TabsList>
-                                  <Button variant="ghost" size="sm" onClick={handleDownloadPDF} className="text-blue-600">
-                                    <Download className="h-4 w-4 mr-2" />
-                                    Download PDF
-                                  </Button>
+                                  <div className="flex items-center gap-2">
+                                    <Button variant="outline" size="sm" onClick={handleCheckStatus} disabled={isCheckingStatus} className="text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-900">
+                                      {isCheckingStatus ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
+                                      Check Status
+                                    </Button>
+                                    <Button variant="ghost" size="sm" onClick={handleDownloadPDF} className="text-blue-600">
+                                      <Download className="h-4 w-4 mr-2" />
+                                      Download PDF
+                                    </Button>
+                                  </div>
                                 </div>
 
                                 <TabsContent value="submitted" className="space-y-4 mt-0">
