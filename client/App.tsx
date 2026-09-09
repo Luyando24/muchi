@@ -34,6 +34,7 @@ import FeedingFeedback from "./pages/FeedingFeedback";
 import EnterResults from "./pages/results/EnterResults";
 import ResultsAnalysis from "./pages/results/ResultsAnalysis";
 import MasterSheet from "./pages/results/MasterSheet";
+import RenderClassReportCards from "./pages/RenderClassReportCards";
 import { getSubdomain } from "./lib/subdomain";
 
 /** Shared providers wrapper */
@@ -62,6 +63,7 @@ const CommonRoutes = () => (
     <Route path="/verify/:hash" element={<VerifyReport />} />
     <Route path="/school-calendar" element={<SchoolCalendar />} />
     <Route path="/feeding-feedback" element={<FeedingFeedback />} />
+    <Route path="/render-class-report-cards" element={<RenderClassReportCards />} />
   </>
 );
 
@@ -276,6 +278,7 @@ const RootApp = () => (
       <Route path="/check-results" element={<CheckResults />} />
       <Route path="/school-calendar" element={<SchoolCalendar />} />
       <Route path="/feeding-feedback" element={<FeedingFeedback />} />
+      <Route path="/render-class-report-cards" element={<RenderClassReportCards />} />
       <Route path="/:slug/*" element={<SchoolWebsite />} />
       <Route path="*" element={<NotFound />} />
     </Routes>

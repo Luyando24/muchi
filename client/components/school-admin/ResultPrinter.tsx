@@ -119,6 +119,7 @@ export default function ResultPrinter() {
     const [isLoadingStatus, setIsLoadingStatus] = useState<boolean>(true);
     const [isPrioritizing, setIsPrioritizing] = useState<boolean>(false);
     const [isActiveModalOpen, setIsActiveModalOpen] = useState<boolean>(false);
+    const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
 
     const { toast } = useToast();
 
@@ -483,6 +484,60 @@ export default function ResultPrinter() {
             toast({ title: "Error", description: error.message, variant: "destructive" });
             setIsPrinting(false);
             setPrintPhase('idle');
+        }
+    };
+
+    const handleDownloadCompiledPdf = async () => {
+        if (!filters.classId || !filters.term || !filters.examType || !filters.academicYear) {
+            toast({ title: "Incomplete Selection", description: "Please select Class, Term, Assessment Type and Year.", variant: "destructive" });
+            return;
+        }
+
+        setIsDownloadingPdf(true);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return;
+
+            const query = new URLSearchParams({
+                classId: filters.classId,
+                term: filters.term,
+                examType: filters.examType,
+                academicYear: filters.academicYear,
+            });
+
+            const res = await fetch(`/api/school/results/download-class-pdf?${query.toString()}`, {
+                headers: { 'Authorization': `Bearer ${session.access_token}` }
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ message: 'Download failed' }));
+                throw new Error(err.message || 'Failed to download pre-built PDF');
+            }
+
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const currentClassName = classes.find(c => c.id === filters.classId)?.name || 'Class';
+            const safeTerm = filters.term.replace(/\s+/g, '_');
+            a.download = `${currentClassName}_${safeTerm}_${filters.academicYear}_ReportCards.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            toast({
+                title: "PDF Ready & Downloaded ⚡",
+                description: "Pre-compiled report card PDF downloaded successfully with zero browser preview delays.",
+            });
+        } catch (err: any) {
+            toast({
+                title: "PDF Download Error",
+                description: err.message || "Failed to download pre-built PDF.",
+                variant: "destructive"
+            });
+        } finally {
+            setIsDownloadingPdf(false);
         }
     };
 
@@ -987,9 +1042,16 @@ export default function ResultPrinter() {
                                                             )}
                                                         </div>
                                                         {c.isCalculated && c.studentCount > 0 && (
-                                                            <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium mt-2">
-                                                                ✓ {c.studentCount} student report cards cached
-                                                            </p>
+                                                            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                                                                <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium">
+                                                                    ✓ {c.studentCount} student cards cached
+                                                                </p>
+                                                                {c.isPdfReady && (
+                                                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+                                                                        PDF Ready ⚡
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         )}
                                                     </div>
                                                 ))}
@@ -1111,12 +1173,25 @@ export default function ResultPrinter() {
                                 </div>
                             )}
                             <Button
+                                onClick={handleDownloadCompiledPdf}
+                                disabled={isDownloadingPdf || !filters.classId}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm"
+                            >
+                                {isDownloadingPdf ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                    <Download className="h-4 w-4 mr-2" />
+                                )}
+                                Download Pre-Built PDF ⚡
+                            </Button>
+                            <Button
                                 onClick={handleBulkPrint}
                                 disabled={isPrinting || !filters.classId}
-                                className="bg-blue-600 hover:bg-blue-700"
+                                variant="outline"
+                                className="border-slate-300 text-slate-700 dark:border-slate-700 dark:text-slate-200"
                             >
                                 {isPrinting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Printer className="h-4 w-4 mr-2" />}
-                                Bulk Print {printMode === 'hardcopy' ? 'Hardcopies' : 'PDFs'}
+                                Browser Print Dialog
                             </Button>
                         </div>
                     </div>

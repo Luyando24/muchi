@@ -23,7 +23,16 @@ import {
   getSchoolPrecomputeStatus,
   prioritizeSchool,
   getActiveWorkerProgress,
+  invalidateAndRecomputeSchool,
+  computeBatchReportCards,
 } from "../services/reportCardCacheService.js";
+import {
+  INTERNAL_RENDER_SECRET,
+  generateClassPdf,
+  getPdfCacheFilePath,
+  isClassPdfReady,
+  deleteClassPdf,
+} from "../services/pdfGenerationService.js";
 
 // Helper function to bypass Supabase's max_rows limit by paginating
 async function fetchAll(queryBuilder: any, limit = 1000) {
@@ -3269,6 +3278,7 @@ router.post(
         .then(({ data: enr }) => {
           if (enr?.class_id) {
             invalidateCache({ schoolId, classId: enr.class_id, term, examType, academicYear });
+            schedulePrecompute({ schoolId, classId: enr.class_id, term, examType, academicYear });
           }
         })
         .catch(() => {});
@@ -3853,8 +3863,9 @@ router.post(
         }
       }
 
-      // Also trigger background precomputation when admin publishes
+      // Also trigger background precomputation and PDF rebuild when admin/teacher submits or publishes
       if (classId && classId !== "all") {
+        invalidateCache({ schoolId, classId, term, examType, academicYear });
         schedulePrecompute({
           schoolId,
           classId,
@@ -3862,6 +3873,8 @@ router.post(
           examType,
           academicYear,
         });
+      } else {
+        invalidateAndRecomputeSchool(schoolId);
       }
 
       const action = isTeacher ? "submitted to admin" : "published to students";
@@ -4710,6 +4723,90 @@ router.get(
       res.status(500).json({ message: error.message });
     }
   },
+);
+
+// GET /api/school/results/internal-class-report-cards
+// Unauthenticated internal endpoint accessed by headless Edge to capture the report card DOM
+router.get("/results/internal-class-report-cards", async (req: Request, res: Response) => {
+  const { schoolId, classId, term, examType, academicYear, token } = req.query as Record<string, string>;
+
+  if (token !== INTERNAL_RENDER_SECRET) {
+    return res.status(403).json({ message: "Invalid internal render token" });
+  }
+
+  if (!schoolId || !classId || !term || !examType || !academicYear) {
+    return res.status(400).json({ message: "Missing required query parameters" });
+  }
+
+  try {
+    const cached = await getCachedReportCards({ schoolId, classId, term, examType, academicYear });
+    if (cached && Array.isArray(cached) && cached.length > 0) {
+      return res.json(cached);
+    }
+
+    // Fallback: compute live if not yet in cache
+    const cards = await computeBatchReportCards(schoolId, classId, term, examType, academicYear);
+    return res.json(cards || []);
+  } catch (err: any) {
+    console.error("Internal class report cards error:", err);
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/school/results/download-class-pdf
+// Direct download of the pre-compiled A4 PDF (zero browser preview freezing)
+router.get(
+  "/results/download-class-pdf",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { classId, term, examType, academicYear } = req.query as Record<string, string>;
+
+    if (!schoolId || !classId || !term || !examType || !academicYear) {
+      return res.status(400).json({ message: "Missing required parameters" });
+    }
+
+    try {
+      const key = { schoolId, classId, term, examType, academicYear };
+      if (!isClassPdfReady(key)) {
+        console.log(`[PdfDownload] PDF not yet ready in cache, generating on-demand for ${classId}…`);
+        await generateClassPdf(key);
+      }
+
+      if (!isClassPdfReady(key)) {
+        return res.status(404).json({ message: "Unable to generate PDF. Ensure calculation is complete." });
+      }
+
+      const filePath = getPdfCacheFilePath(key);
+      const safeTerm = term.replace(/\s+/g, '_');
+      const filename = `ReportCards_${safeTerm}_${academicYear}.pdf`;
+
+      res.download(filePath, filename);
+    } catch (error: any) {
+      console.error("PDF download error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// GET /api/school/results/class-pdf-status
+// Checks if the pre-built PDF is ready on disk
+router.get(
+  "/results/class-pdf-status",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { classId, term, examType, academicYear } = req.query as Record<string, string>;
+
+    if (!schoolId || !classId || !term || !examType || !academicYear) {
+      return res.status(400).json({ message: "Missing required parameters" });
+    }
+
+    const ready = isClassPdfReady({ schoolId, classId, term, examType, academicYear });
+    res.json({ ready });
+  }
 );
 
 // POST /api/school/students/:id/attendance

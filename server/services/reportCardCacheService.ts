@@ -20,6 +20,11 @@
  */
 
 import { supabaseAdmin } from '../lib/supabase.js';
+import {
+  generateClassPdf,
+  deleteClassPdf,
+  isClassPdfReady,
+} from './pdfGenerationService.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -101,9 +106,27 @@ export async function invalidateCache(key: Omit<CacheKey, 'schoolId'> & { school
     if (key.schoolId) q = q.eq('school_id', key.schoolId);
     if (key.examType) q = q.eq('exam_type', key.examType);
     await q;
+
+    // Delete outdated PDF on disk
+    deleteClassPdf({
+      schoolId: key.schoolId || '',
+      classId: key.classId,
+      term: key.term,
+      examType: key.examType || '',
+      academicYear: key.academicYear,
+    });
   } catch (e: any) {
     console.warn('[ReportCardCache] invalidate error:', e.message);
   }
+}
+
+/**
+ * Call this when a teacher submits/publishes a gradebook or edits marks:
+ * Invalidates and re-triggers background calculation and PDF updates for the school.
+ */
+export function invalidateAndRecomputeSchool(schoolId: string): void {
+  prioritizeSchool(schoolId);
+  triggerSchedulerWake();
 }
 
 /**
@@ -175,6 +198,11 @@ async function runPrecompute(key: CacheKey): Promise<void> {
       return;
     }
     console.log(`${label} — cached ${cards.length} cards ✓`);
+
+    // 2. Strict sequence: Only after database calculation is saved, build the PDF in the background
+    generateClassPdf({ schoolId, classId, term, examType, academicYear }).catch(pdfErr => {
+      console.warn(`${label} — background PDF generation error:`, pdfErr.message);
+    });
   } catch (err: any) {
     console.warn(`${label} — error:`, err.message);
   }
@@ -788,6 +816,13 @@ export async function getSchoolPrecomputeStatus(schoolId: string) {
         className: c.className,
         examType: c.examType,
         isCalculated,
+        isPdfReady: isClassPdfReady({
+          schoolId,
+          classId: c.classId,
+          term: c.term,
+          examType: c.examType,
+          academicYear: c.academicYear,
+        }),
         cachedAt: cacheItem?.cachedAt || null,
         studentCount: cacheItem?.studentCount || 0,
       });
