@@ -1058,3 +1058,83 @@ async function processSchoolBackfill(schoolId: string, schoolName: string): Prom
   }
 }
 
+/**
+ * System Admin manual trigger:
+ * Forces a full system-wide precompute cycle across all schools and all submitted classes.
+ */
+export async function triggerFullSystemPrecompute() {
+  // 1. Check if report_card_cache table exists and is accessible
+  const { error: tableCheckError } = await supabaseAdmin
+    .from('report_card_cache')
+    .select('id')
+    .limit(1);
+
+  if (tableCheckError) {
+    throw new Error(`Database table 'report_card_cache' is not ready: ${tableCheckError.message}. Please verify the SQL migration has been executed in Supabase.`);
+  }
+
+  // 2. Fetch all schools
+  const { data: schools, error: schoolsError } = await supabaseAdmin
+    .from('schools')
+    .select('id, name')
+    .order('name');
+
+  if (schoolsError || !schools || schools.length === 0) {
+    throw new Error(`No schools found: ${schoolsError?.message || 'Empty school list'}`);
+  }
+
+  // 3. Populate priority queue with all schools so they process immediately
+  for (const s of schools) {
+    if (!schedulerState.priorityQueue.includes(s.id)) {
+      schedulerState.priorityQueue.push(s.id);
+    }
+  }
+
+  // 4. Wake the scheduler immediately
+  triggerSchedulerWake();
+
+  return {
+    success: true,
+    message: `Triggered background calculation for ${schools.length} schools.`,
+    totalSchools: schools.length,
+    queuedSchools: schedulerState.priorityQueue.length,
+    isCalculating: schedulerState.isCalculating,
+    currentSchoolName: schedulerState.currentSchoolName,
+    currentClassLabel: schedulerState.currentClassLabel,
+  };
+}
+
+/**
+ * System Admin summary:
+ * Returns system-wide calculation stats (how many schools, classes cached, active worker status).
+ */
+export async function getSystemPrecomputeSummary() {
+  try {
+    const [{ count: cachedRows, error: cacheErr }, { count: totalSchools }] = await Promise.all([
+      supabaseAdmin.from('report_card_cache').select('*', { count: 'exact', head: true }),
+      supabaseAdmin.from('schools').select('*', { count: 'exact', head: true }),
+    ]);
+
+    return {
+      tableReady: !cacheErr,
+      cachedReportCardCount: cachedRows || 0,
+      totalSchools: totalSchools || 0,
+      isCalculating: schedulerState.isCalculating,
+      currentSchoolName: schedulerState.currentSchoolName,
+      currentClassLabel: schedulerState.currentClassLabel,
+      queuedSchoolsCount: schedulerState.priorityQueue.length,
+    };
+  } catch (err: any) {
+    return {
+      tableReady: false,
+      cachedReportCardCount: 0,
+      totalSchools: 0,
+      isCalculating: false,
+      currentSchoolName: null,
+      currentClassLabel: null,
+      queuedSchoolsCount: 0,
+      error: err.message,
+    };
+  }
+}
+

@@ -7,6 +7,7 @@ import { WhatsAppService } from '../services/whatsappService.js';
 import { notifySystemAdmins } from '../services/emailService.js';
 import { checkIncompleteSchoolOnboardings } from '../services/onboardingReminderService.js';
 import { sendSchoolUsageSubscriptionReminders } from '../services/schoolReminderService.js';
+import { triggerFullSystemPrecompute, getSystemPrecomputeSummary } from '../services/reportCardCacheService.js';
 
 const router = Router();
 
@@ -1396,6 +1397,30 @@ router.post('/system/fix-class-enrollments', requireSystemAdmin, async (req: Req
     res.json({ message: `Successfully repaired ${totalFixed} student records`, fixedCount: totalFixed });
   } catch (error: any) {
     console.error('System Fix Enrollments Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/admin/system/trigger-report-card-precompute
+// Manually triggers or restarts full-system report card pre-computation across all schools
+router.post('/system/trigger-report-card-precompute', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const result = await triggerFullSystemPrecompute();
+    res.json(result);
+  } catch (error: any) {
+    console.error('Trigger Precompute Error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/admin/system/report-card-precompute-status
+// Gets status summary of the background report card cache
+router.get('/system/report-card-precompute-status', requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const summary = await getSystemPrecomputeSummary();
+    res.json(summary);
+  } catch (error: any) {
+    console.error('Precompute Summary Error:', error);
     res.status(500).json({ message: error.message });
   }
 });

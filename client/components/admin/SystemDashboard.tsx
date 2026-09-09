@@ -13,7 +13,8 @@ import {
   RefreshCw,
   DollarSign,
   TrendingUp,
-  Trash2
+  Trash2,
+  Zap
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -217,6 +218,16 @@ export default function SystemDashboard({
             <Activity className="h-4 w-4 mr-2" />
             Refresh
           </Button>
+          {onNavigate && (
+            <Button 
+              variant="outline" 
+              onClick={() => onNavigate('database')} 
+              className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-400 flex-1 sm:flex-none font-medium"
+            >
+              <Zap className="h-4 w-4 mr-2 text-amber-500 fill-amber-500" />
+              Report Cards Cache
+            </Button>
+          )}
           <Button className="bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-700 flex-1 sm:flex-none" onClick={handleProvisionSchool}>
             <Plus className="h-4 w-4 mr-2" />
             Provision School

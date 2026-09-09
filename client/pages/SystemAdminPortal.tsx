@@ -29,7 +29,8 @@ import {
   Edit,
   Terminal,
   Save,
-  Clock
+  Clock,
+  Zap
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -155,6 +156,85 @@ export default function SystemAdminPortal() {
       setIsFixingEnrollments(false);
     }
   };
+
+  const [isTriggeringPrecompute, setIsTriggeringPrecompute] = useState(false);
+  const [isLoadingPrecomputeSummary, setIsLoadingPrecomputeSummary] = useState(false);
+  const [precomputeSummary, setPrecomputeSummary] = useState<{
+    tableReady: boolean;
+    cachedReportCardCount: number;
+    totalSchools: number;
+    isCalculating: boolean;
+    currentSchoolName: string | null;
+    currentClassLabel: string | null;
+    queuedSchoolsCount: number;
+  } | null>(null);
+
+  const fetchPrecomputeSummary = async () => {
+    try {
+      setIsLoadingPrecomputeSummary(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch('/api/admin/system/report-card-precompute-status', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPrecomputeSummary(data);
+      }
+    } catch (err) {
+      console.error('Error fetching precompute summary:', err);
+    } finally {
+      setIsLoadingPrecomputeSummary(false);
+    }
+  };
+
+  const handleTriggerPrecompute = async () => {
+    setIsTriggeringPrecompute(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("No active session");
+
+      const response = await fetch('/api/admin/system/trigger-report-card-precompute', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.message || "Failed to trigger background calculation");
+      }
+
+      toast({
+        title: "Report Card Pre-computation Started",
+        description: `Enqueued ${result.totalSchools} schools for background report card generation.`,
+      });
+
+      fetchPrecomputeSummary();
+    } catch (error: any) {
+      console.error("Trigger precompute error:", error);
+      toast({
+        title: "Failed to Start Calculation",
+        description: error.message || "An error occurred while triggering background computation.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsTriggeringPrecompute(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (activeTab === 'database') {
+      fetchPrecomputeSummary();
+      const interval = setInterval(fetchPrecomputeSummary, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab]);
 
   const sidebarItems = [
 
@@ -547,6 +627,119 @@ export default function SystemAdminPortal() {
                         </>
                       ) : (
                         "Run Diagnostic & Fix"
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-indigo-200 shadow-sm dark:border-indigo-900/50">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-indigo-700 dark:text-indigo-400">
+                        <Zap className="h-5 w-5 text-amber-500 fill-amber-500" />
+                        Report Card Background Calculation & Cache
+                      </CardTitle>
+                      <CardDescription>
+                        Pre-calculates student report cards, subject scores, and class rankings in the background for near-instant printing.
+                      </CardDescription>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={fetchPrecomputeSummary}
+                      disabled={isLoadingPrecomputeSummary}
+                    >
+                      <RefreshCw className={`h-4 w-4 mr-1 ${isLoadingPrecomputeSummary ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Status Banner */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                      <div className="text-xs font-semibold uppercase text-slate-500">Database Table</div>
+                      <div className="mt-1 flex items-center gap-2">
+                        {precomputeSummary?.tableReady ? (
+                          <>
+                            <CheckCircle className="h-4 w-4 text-emerald-500" />
+                            <span className="font-semibold text-slate-900 dark:text-white">report_card_cache Ready</span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertTriangle className="h-4 w-4 text-amber-500" />
+                            <span className="font-semibold text-amber-700 dark:text-amber-400">Migration Pending</span>
+                          </>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {precomputeSummary?.tableReady ? 'Table connected & active' : 'Run SQL migration in Supabase'}
+                      </p>
+                    </div>
+
+                    <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                      <div className="text-xs font-semibold uppercase text-slate-500">Cached Report Cards</div>
+                      <div className="mt-1 text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+                        {precomputeSummary ? precomputeSummary.cachedReportCardCount.toLocaleString() : '...'}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Across {precomputeSummary?.totalSchools || 0} registered schools
+                      </p>
+                    </div>
+
+                    <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                      <div className="text-xs font-semibold uppercase text-slate-500">Calculation Worker Status</div>
+                      <div className="mt-1 flex items-center gap-2">
+                        {precomputeSummary?.isCalculating ? (
+                          <>
+                            <Loader2 className="h-4 w-4 text-amber-500 animate-spin" />
+                            <span className="font-bold text-amber-600 dark:text-amber-400">Calculating...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle className="h-4 w-4 text-emerald-500" />
+                            <span className="font-bold text-slate-700 dark:text-slate-300">
+                              {precomputeSummary && precomputeSummary.cachedReportCardCount > 0 ? 'Up to date' : 'Idle'}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1 truncate">
+                        {precomputeSummary?.isCalculating 
+                          ? `${precomputeSummary.currentSchoolName || 'School'}: ${precomputeSummary.currentClassLabel || ''}`
+                          : (precomputeSummary?.queuedSchoolsCount ? `${precomputeSummary.queuedSchoolsCount} schools queued` : 'Waiting for trigger or new grades')}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Manual Trigger Bar */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50">
+                    <div>
+                      <h4 className="font-bold text-indigo-950 dark:text-indigo-100 flex items-center gap-2">
+                        <Zap className="h-4 w-4 text-amber-500 fill-amber-500" />
+                        Trigger Full Background Calculation
+                      </h4>
+                      <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 max-w-xl">
+                        Enqueues all schools and submitted classes to pre-compute student scores, rankings, and populate the report card cache. Safe to run anytime in the background.
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={handleTriggerPrecompute} 
+                      disabled={isTriggeringPrecompute}
+                      className="shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm"
+                    >
+                      {isTriggeringPrecompute ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Starting Queue...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="mr-2 h-4 w-4 fill-white" />
+                          Start / Restart Calculation
+                        </>
                       )}
                     </Button>
                   </div>
