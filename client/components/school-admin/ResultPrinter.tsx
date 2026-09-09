@@ -12,12 +12,21 @@ import {
     Eye,
     Settings,
     PlusCircle,
-    CheckCheck
+    CheckCheck,
+    Zap,
+    Clock,
+    Hourglass,
+    ArrowRight,
+    Gauge,
+    RefreshCw,
+    Layers,
+    Sparkles
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from "@/components/ui/badge";
 import {
     Dialog,
     DialogContent,
@@ -101,7 +110,68 @@ export default function ResultPrinter() {
         academicYear: new Date().getFullYear().toString()
     });
 
+    const [isCacheWarm, setIsCacheWarm] = useState<boolean>(false);
+    const [viewMode, setViewMode] = useState<'progress' | 'printer'>('progress');
+    const [precomputeStatus, setPrecomputeStatus] = useState<any | null>(null);
+    const [isLoadingStatus, setIsLoadingStatus] = useState<boolean>(true);
+    const [isPrioritizing, setIsPrioritizing] = useState<boolean>(false);
+
     const { toast } = useToast();
+
+    const fetchPrecomputeStatus = async () => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return;
+            const res = await fetch('/api/school/results/precompute-status', {
+                headers: { 'Authorization': `Bearer ${session.access_token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setPrecomputeStatus(data);
+            }
+        } catch (err) {
+            console.error('Error fetching precompute status:', err);
+        } finally {
+            setIsLoadingStatus(false);
+        }
+    };
+
+    // Poll calculation status every 2.5s
+    useEffect(() => {
+        fetchPrecomputeStatus();
+        const interval = setInterval(() => {
+            fetchPrecomputeStatus();
+        }, 2500);
+        return () => clearInterval(interval);
+    }, []);
+
+    const handlePrioritize = async () => {
+        setIsPrioritizing(true);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return;
+            const res = await fetch('/api/school/results/prioritize-precompute', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${session.access_token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setPrecomputeStatus(data);
+                toast({
+                    title: "School Prioritized ⚡",
+                    description: "This school has been moved to the front of the queue and will be calculated next!",
+                });
+            }
+        } catch (err) {
+            toast({
+                title: "Priority Request Failed",
+                description: "Unable to prioritize at this moment.",
+                variant: "destructive"
+            });
+        } finally {
+            setIsPrioritizing(false);
+        }
+    };
 
     useEffect(() => {
         fetchInitialData();
@@ -117,6 +187,34 @@ export default function ResultPrinter() {
         window.addEventListener('afterprint', handleAfterPrint);
         return () => window.removeEventListener('afterprint', handleAfterPrint);
     }, []);
+
+    // Check if class results are pre-cached for instant printing
+    useEffect(() => {
+        if (!filters.classId || !filters.term || !filters.examType || !filters.academicYear) {
+            setIsCacheWarm(false);
+            return;
+        }
+        let cancelled = false;
+        const checkCache = async () => {
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session) return;
+                const res = await fetch(
+                    `/api/school/results/cache-status?classId=${filters.classId}&term=${encodeURIComponent(filters.term)}&examType=${encodeURIComponent(filters.examType)}&academicYear=${encodeURIComponent(filters.academicYear)}`,
+                    { headers: { 'Authorization': `Bearer ${session.access_token}` } }
+                );
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!cancelled) {
+                    setIsCacheWarm(!!data?.cached);
+                }
+            } catch {
+                if (!cancelled) setIsCacheWarm(false);
+            }
+        };
+        checkCache();
+        return () => { cancelled = true; };
+    }, [filters.classId, filters.term, filters.examType, filters.academicYear]);
 
     // Drive animated progress bar and elapsed counter while printing
     useEffect(() => {
@@ -583,33 +681,375 @@ export default function ResultPrinter() {
                 </div>
             )}
 
-            <div className="flex items-center justify-between print:hidden">
-                <div>
-                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <Printer className="h-6 w-6" />
-                        Print Results
-                    </h2>
-                    <p className="text-slate-600 dark:text-slate-400">Print student report cards individually or in bulk.</p>
+            {/* VIEW MODE 1: Report Card Calculation Progress Screen */}
+            {viewMode === 'progress' && (
+                <div className="space-y-6 print:hidden">
+                    {/* Hero Header */}
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-gradient-to-r from-indigo-50/80 via-blue-50/50 to-white dark:from-slate-900 dark:via-slate-800/80 dark:to-slate-900 p-6 rounded-2xl border border-indigo-100 dark:border-slate-700/80 shadow-sm">
+                        <div className="flex items-start gap-4">
+                            <div className="p-3 bg-indigo-600 rounded-xl text-white shadow-md shadow-indigo-200 dark:shadow-none flex-shrink-0">
+                                <Gauge className="h-7 w-7" />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2.5 flex-wrap">
+                                    <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                                        Report Card Calculation Progress
+                                    </h2>
+                                    {precomputeStatus?.isCompleted ? (
+                                        <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 font-bold px-2.5 py-0.5">
+                                            <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-600" /> All Classes Ready
+                                        </Badge>
+                                    ) : precomputeStatus?.isCurrentlyCalculating ? (
+                                        <Badge className="bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950 dark:text-blue-300 font-bold px-2.5 py-0.5 animate-pulse">
+                                            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin text-blue-600" /> Calculating Now
+                                        </Badge>
+                                    ) : (
+                                        <Badge className="bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300 font-bold px-2.5 py-0.5">
+                                            <Clock className="h-3.5 w-3.5 mr-1 text-amber-600" /> In Queue
+                                        </Badge>
+                                    )}
+                                </div>
+                                <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                                    Background pre-computation across all terms for <span className="font-semibold text-slate-800 dark:text-slate-200">{precomputeStatus?.schoolName || 'your school'}</span>
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 flex-wrap self-start lg:self-center">
+                            {precomputeStatus?.canPrioritize && (
+                                <Button
+                                    onClick={handlePrioritize}
+                                    disabled={isPrioritizing}
+                                    className="bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-sm"
+                                >
+                                    {isPrioritizing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Zap className="h-4 w-4 mr-2 fill-current" />}
+                                    Calculate This School Next
+                                </Button>
+                            )}
+                            {precomputeStatus?.isPriorityQueued && (
+                                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800">
+                                    <Zap className="h-3.5 w-3.5 text-amber-600 fill-current" />
+                                    Prioritized (Next in Line)
+                                </div>
+                            )}
+                            <Button
+                                variant="outline"
+                                onClick={() => setViewMode('printer')}
+                                className="border-slate-200 text-slate-700 dark:text-slate-300 text-xs font-semibold"
+                            >
+                                Continue to Print
+                                <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* 4 KPI Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {/* 1: Calculated Classes */}
+                        <Card className="border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
+                            <CardContent className="p-5 flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Classes Calculated</p>
+                                    <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                                        {precomputeStatus?.calculatedClasses ?? 0} <span className="text-sm font-semibold text-slate-400">/ {precomputeStatus?.totalClasses ?? 0}</span>
+                                    </p>
+                                    <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
+                                        {precomputeStatus?.progressPercentage ?? 0}% pre-computed
+                                    </p>
+                                </div>
+                                <div className="h-12 w-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                                    <CheckCheck className="h-6 w-6" />
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* 2: Classes Remaining */}
+                        <Card className="border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
+                            <CardContent className="p-5 flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Classes Remaining</p>
+                                    <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                                        {precomputeStatus?.remainingClasses ?? 0}
+                                    </p>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        {(precomputeStatus?.remainingClasses ?? 0) === 0 ? "Zero classes pending" : "Pending calculation"}
+                                    </p>
+                                </div>
+                                <div className="h-12 w-12 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                                    <Clock className="h-6 w-6" />
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* 3: Est. Completion Time */}
+                        <Card className="border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
+                            <CardContent className="p-5 flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Est. Completion Time</p>
+                                    <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                                        {precomputeStatus?.estimatedTimeText || "Calculating…"}
+                                    </p>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        {precomputeStatus?.isCompleted ? "Instant print ready" : "Automated background calculation"}
+                                    </p>
+                                </div>
+                                <div className="h-12 w-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                                    <Hourglass className="h-6 w-6" />
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* 4: Queue Status */}
+                        <Card className="border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
+                            <CardContent className="p-5 flex items-center justify-between">
+                                <div className="min-w-0 pr-2">
+                                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Queue Status</p>
+                                    <p className="text-base font-black text-slate-900 dark:text-white mt-1 truncate">
+                                        {precomputeStatus?.isCompleted
+                                            ? "Completed ✓"
+                                            : precomputeStatus?.isCurrentlyCalculating
+                                            ? "Calculating Now"
+                                            : `Position ${precomputeStatus?.queuePosition || 1}`}
+                                    </p>
+                                    <p className="text-xs text-slate-500 mt-1 truncate" title={precomputeStatus?.waitStatusText}>
+                                        {precomputeStatus?.waitStatusText || "Ready"}
+                                    </p>
+                                </div>
+                                <div className={`h-12 w-12 rounded-xl flex-shrink-0 flex items-center justify-center ${
+                                    precomputeStatus?.isCompleted
+                                        ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"
+                                        : precomputeStatus?.isCurrentlyCalculating
+                                        ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
+                                        : "bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400"
+                                }`}>
+                                    {precomputeStatus?.isCurrentlyCalculating ? (
+                                        <RefreshCw className="h-6 w-6 animate-spin" />
+                                    ) : precomputeStatus?.isCompleted ? (
+                                        <CheckCircle2 className="h-6 w-6" />
+                                    ) : (
+                                        <Zap className="h-6 w-6" />
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Progress Bar & Live Activity */}
+                    <Card className="border-slate-200/80 overflow-hidden shadow-sm">
+                        <CardContent className="p-6 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    {precomputeStatus?.isCurrentlyCalculating && (
+                                        <span className="relative flex h-3 w-3">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                                        </span>
+                                    )}
+                                    <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                                        {precomputeStatus?.isCompleted
+                                            ? "Calculation Complete — Instant Print Ready"
+                                            : precomputeStatus?.isCurrentlyCalculating
+                                            ? precomputeStatus.currentClassLabel
+                                                ? `Currently calculating: ${precomputeStatus.currentClassLabel}`
+                                                : "Pre-computing report cards for this school…"
+                                            : precomputeStatus?.waitStatusText || "Waiting in queue…"}
+                                    </span>
+                                </div>
+                                <span className="text-base font-black tabular-nums text-slate-800 dark:text-white">
+                                    {precomputeStatus?.progressPercentage ?? 0}%
+                                </span>
+                            </div>
+
+                            <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-3.5 overflow-hidden">
+                                <div
+                                    className={`h-full rounded-full transition-all duration-300 ease-out ${
+                                        precomputeStatus?.isCompleted ? "bg-emerald-500" : "bg-blue-600"
+                                    }`}
+                                    style={{ width: `${precomputeStatus?.progressPercentage ?? 0}%` }}
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                                <span>{precomputeStatus?.calculatedClasses ?? 0} of {precomputeStatus?.totalClasses ?? 0} classes pre-computed</span>
+                                <span>{precomputeStatus?.remainingClasses ?? 0} classes left</span>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* All Terms Breakdown */}
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                    <Layers className="h-5 w-5 text-slate-500" />
+                                    Submitted Classes Across All Terms
+                                </h3>
+                                <p className="text-xs text-slate-500">
+                                    All terms and classes with submitted subject grades in this school
+                                </p>
+                            </div>
+                            <Button variant="outline" size="sm" onClick={fetchPrecomputeStatus} className="text-xs border-slate-200">
+                                <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Refresh Status
+                            </Button>
+                        </div>
+
+                        {(!precomputeStatus?.terms || precomputeStatus.terms.length === 0) ? (
+                            <Card className="border-dashed border-2 border-slate-200 p-8 text-center">
+                                <p className="text-slate-500 text-sm font-medium">No submitted grades found yet for this school.</p>
+                                <p className="text-xs text-slate-400 mt-1">When teachers submit grades from the Gradebook, background calculation for each class will start automatically.</p>
+                            </Card>
+                        ) : (
+                            <div className="space-y-4">
+                                {precomputeStatus.terms.map((termGroup: any) => (
+                                    <Card key={`${termGroup.term}-${termGroup.academicYear}`} className="border-slate-200 shadow-sm overflow-hidden">
+                                        <CardHeader className="bg-slate-50/70 dark:bg-slate-800/40 py-3.5 px-5 flex flex-row items-center justify-between">
+                                            <div className="flex items-center gap-2.5">
+                                                <span className="font-bold text-slate-900 dark:text-white text-base">{termGroup.term}</span>
+                                                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                                                    {termGroup.academicYear}
+                                                </span>
+                                            </div>
+                                            <div className="text-xs font-semibold">
+                                                {termGroup.calculatedClasses === termGroup.totalClasses ? (
+                                                    <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                                                        <CheckCircle2 className="h-3.5 w-3.5" /> All {termGroup.totalClasses} classes ready
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-600 dark:text-slate-400">
+                                                        {termGroup.calculatedClasses} of {termGroup.totalClasses} classes calculated
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </CardHeader>
+                                        <CardContent className="p-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                                                {termGroup.classes.map((c: any) => (
+                                                    <div
+                                                        key={`${c.classId}-${c.examType}`}
+                                                        className={`p-3 rounded-xl border transition-colors ${
+                                                            c.isCalculated
+                                                                ? "bg-emerald-50/40 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800/50"
+                                                                : "bg-slate-50/60 border-slate-200 dark:bg-slate-800/30 dark:border-slate-700"
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-start justify-between gap-2">
+                                                            <div>
+                                                                <p className="font-bold text-sm text-slate-800 dark:text-slate-200">{c.className}</p>
+                                                                <p className="text-[11px] text-slate-400 mt-0.5">{c.examType}</p>
+                                                            </div>
+                                                            {c.isCalculated ? (
+                                                                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 text-[10px] font-bold px-2 py-0.5">
+                                                                    <CheckCircle2 className="h-3 w-3 mr-1" /> Ready
+                                                                </Badge>
+                                                            ) : (
+                                                                <Badge variant="outline" className="text-slate-500 border-slate-300 dark:border-slate-600 text-[10px] font-medium px-2 py-0.5">
+                                                                    <Clock className="h-3 w-3 mr-1" /> Pending
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                        {c.isCalculated && c.studentCount > 0 && (
+                                                            <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium mt-2">
+                                                                ✓ {c.studentCount} student report cards cached
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Bottom Action Bar */}
+                    <div className="sticky bottom-4 z-20 flex flex-col sm:flex-row items-center justify-between gap-4 p-5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl border-2 border-indigo-200 dark:border-indigo-800/60 shadow-xl">
+                        <div>
+                            <p className="font-bold text-slate-900 dark:text-white text-base">
+                                {precomputeStatus?.isCompleted
+                                    ? "All report cards for this school are pre-calculated!"
+                                    : "Background calculation is active"}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                                {precomputeStatus?.isCompleted
+                                    ? "You can now proceed to print report cards with instant ~50ms speed."
+                                    : "You can wait for completion, or proceed to print now on-demand."}
+                            </p>
+                        </div>
+
+                        <div className="flex items-center gap-3 w-full sm:w-auto">
+                            {precomputeStatus?.canPrioritize && (
+                                <Button
+                                    variant="outline"
+                                    onClick={handlePrioritize}
+                                    disabled={isPrioritizing}
+                                    className="border-amber-400 text-amber-700 dark:text-amber-300 hover:bg-amber-50 font-bold"
+                                >
+                                    <Zap className="h-4 w-4 mr-1.5 fill-current" />
+                                    {isPrioritizing ? "Prioritizing…" : "Prioritize This School"}
+                                </Button>
+                            )}
+                            <Button
+                                onClick={() => setViewMode('printer')}
+                                size="lg"
+                                className={`w-full sm:w-auto font-black px-8 shadow-md text-base transition-all ${
+                                    precomputeStatus?.isCompleted
+                                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                        : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                                }`}
+                            >
+                                Continue to Print
+                                <ArrowRight className="h-5 w-5 ml-2" />
+                            </Button>
+                        </div>
+                    </div>
                 </div>
-                <div className="flex gap-2">
-                    <Button
-                        variant="outline"
-                        onClick={handleOpenPrinterSettings}
-                        className="border-slate-200"
-                    >
-                        <PlusCircle className="h-4 w-4 mr-2" />
-                        Add/Manage Printer
-                    </Button>
-                    <Button
-                        onClick={handleBulkPrint}
-                        disabled={isPrinting || !filters.classId}
-                        className="bg-blue-600 hover:bg-blue-700"
-                    >
-                        {isPrinting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Printer className="h-4 w-4 mr-2" />}
-                        Bulk Print {printMode === 'hardcopy' ? 'Hardcopies' : 'PDFs'}
-                    </Button>
-                </div>
-            </div>
+            )}
+
+            {/* VIEW MODE 2: Normal Printer Screen */}
+            {viewMode === 'printer' && (
+                <div className="space-y-6">
+                    <div className="flex items-center justify-between print:hidden">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                <Printer className="h-6 w-6" />
+                                Print Results
+                            </h2>
+                            <p className="text-slate-600 dark:text-slate-400">Print student report cards individually or in bulk.</p>
+                        </div>
+                        <div className="flex gap-2">
+                            <Button
+                                variant="outline"
+                                onClick={() => setViewMode('progress')}
+                                className="border-indigo-200 text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800"
+                            >
+                                <Gauge className="h-4 w-4 mr-2 text-indigo-600 dark:text-indigo-400" />
+                                Calculation Status ({precomputeStatus?.progressPercentage ?? 100}%)
+                            </Button>
+                            <Button
+                                variant="outline"
+                                onClick={handleOpenPrinterSettings}
+                                className="border-slate-200"
+                            >
+                                <PlusCircle className="h-4 w-4 mr-2" />
+                                Add/Manage Printer
+                            </Button>
+                            {isCacheWarm && (
+                                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                    <Zap className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 fill-current" />
+                                    <span>Instant Print Ready</span>
+                                </div>
+                            )}
+                            <Button
+                                onClick={handleBulkPrint}
+                                disabled={isPrinting || !filters.classId}
+                                className="bg-blue-600 hover:bg-blue-700"
+                            >
+                                {isPrinting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Printer className="h-4 w-4 mr-2" />}
+                                Bulk Print {printMode === 'hardcopy' ? 'Hardcopies' : 'PDFs'}
+                            </Button>
+                        </div>
+                    </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 print:hidden">
                 <Card className="lg:col-span-2">
@@ -782,6 +1222,8 @@ export default function ResultPrinter() {
                     </Table>
                 </CardContent>
             </Card>
+                </div>
+            )}
 
             {/* Print Area - Rendered at root level via portal to avoid layout conflicts */}
             {isPrinting && batchData.length > 0 && ReactDOM.createPortal(

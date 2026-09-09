@@ -15,6 +15,14 @@ import {
   resolveGradingScale,
   resolveGradingScaleForStudent,
 } from "../../shared/gradingScale.js";
+import {
+  schedulePrecompute,
+  getCachedReportCards,
+  getCacheStatus,
+  invalidateCache,
+  getSchoolPrecomputeStatus,
+  prioritizeSchool,
+} from "../services/reportCardCacheService.js";
 
 // Helper function to bypass Supabase's max_rows limit by paginating
 async function fetchAll(queryBuilder: any, limit = 1000) {
@@ -3247,6 +3255,20 @@ router.post(
 
       if (error) throw error;
 
+      // Invalidate report card cache for this student's class asynchronously
+      supabaseAdmin
+        .from("enrollments")
+        .select("class_id")
+        .eq("student_id", id)
+        .eq("academic_year", academicYear)
+        .maybeSingle()
+        .then(({ data: enr }) => {
+          if (enr?.class_id) {
+            invalidateCache({ schoolId, classId: enr.class_id, term, examType, academicYear });
+          }
+        })
+        .catch(() => {});
+
       res.json({ message: "Grade saved successfully", grade });
     } catch (error: any) {
       console.error("Save Grade Error:", error);
@@ -3361,6 +3383,29 @@ router.post(
 
       if (error) throw error;
 
+      if (grades.length > 0) {
+        const first = grades[0];
+        const term = first?.term || "";
+        const examType = first?.examType || "";
+        const academicYear = first?.academicYear || "";
+        if (req.body.classId) {
+          invalidateCache({ schoolId, classId: req.body.classId, term, examType, academicYear });
+        } else if (first?.studentId && academicYear) {
+          supabaseAdmin
+            .from("enrollments")
+            .select("class_id")
+            .eq("student_id", first.studentId)
+            .eq("academic_year", academicYear)
+            .maybeSingle()
+            .then(({ data: enr }) => {
+              if (enr?.class_id) {
+                invalidateCache({ schoolId, classId: enr.class_id, term, examType, academicYear });
+              }
+            })
+            .catch(() => {});
+        }
+      }
+
       res.json({ message: "Batch grades saved successfully" });
     } catch (error: any) {
       console.error("Batch Save Grade Error:", error);
@@ -3468,6 +3513,10 @@ router.post(
 
       if (error) {
         throw error;
+      }
+
+      if (classId) {
+        invalidateCache({ schoolId, classId, term, examType, academicYear });
       }
 
       res.json({ message: `Successfully cleared ${count || 0} grade records from ${examType}.` });
@@ -3582,6 +3631,17 @@ router.post(
       const { data, error, count } = await query;
 
       if (error) throw error;
+
+      // Every time a teacher submits a subject from gradebook, trigger precomputation for this class
+      if (classId && classId !== "all") {
+        schedulePrecompute({
+          schoolId,
+          classId,
+          term,
+          examType,
+          academicYear,
+        });
+      }
 
       res.json({
         message: "Results submitted to admin successfully",
@@ -3787,6 +3847,17 @@ router.post(
           console.error("Failed to send result notifications:", notifError);
           // We don't fail the whole request if notifications fail
         }
+      }
+
+      // Also trigger background precomputation when admin publishes
+      if (classId && classId !== "all") {
+        schedulePrecompute({
+          schoolId,
+          classId,
+          term,
+          examType,
+          academicYear,
+        });
       }
 
       const action = isTeacher ? "submitted to admin" : "published to students";
@@ -4359,6 +4430,12 @@ router.get(
     }
 
     try {
+      // 0. Check pre-computed cache first (fast return: ~50ms instead of 10-30s)
+      const cached = await getCachedReportCards({ schoolId, classId, term, examType, academicYear });
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        return res.json(cached);
+      }
+
       // 1. Fetch shared data (school + grading scales + enrollments + subjects)
       const { data: schoolDetails } = await supabaseAdmin
         .from("schools")
@@ -4526,9 +4603,90 @@ router.get(
         };
       });
 
+      // Warm the cache in background for subsequent requests
+      if (reportCards && reportCards.length > 0) {
+        schedulePrecompute({ schoolId, classId, term, examType, academicYear });
+      }
+
       res.json(reportCards);
     } catch (error: any) {
       console.error("Batch Report Card Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  },
+);
+
+// GET /api/school/results/cache-status
+// Checks if pre-computed report cards are ready in cache
+router.get(
+  "/results/cache-status",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { classId, term, examType, academicYear } = req.query as {
+      classId: string;
+      term: string;
+      examType: string;
+      academicYear: string;
+    };
+
+    if (!classId || !term || !examType || !academicYear) {
+      return res.status(400).json({ message: "Missing required parameters" });
+    }
+
+    try {
+      const status = await getCacheStatus({ schoolId, classId, term, examType, academicYear });
+      res.json(status);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  },
+);
+
+// GET /api/school/results/precompute-status
+// Returns overall calculation progress across all terms, remaining classes,
+// queue status (active, waiting after N schools), and classes breakdown.
+router.get(
+  "/results/precompute-status",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+
+    if (!schoolId) {
+      return res.status(400).json({ message: "School ID not found in profile" });
+    }
+
+    try {
+      const status = await getSchoolPrecomputeStatus(schoolId);
+      res.json(status);
+    } catch (error: any) {
+      console.error("Precompute status error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  },
+);
+
+// POST /api/school/results/prioritize-precompute
+// Request the calculation scheduler to calculate this school next in line
+router.post(
+  "/results/prioritize-precompute",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+
+    if (!schoolId) {
+      return res.status(400).json({ message: "School ID not found in profile" });
+    }
+
+    try {
+      const prioritized = prioritizeSchool(schoolId);
+      const status = await getSchoolPrecomputeStatus(schoolId);
+      res.json({ success: true, prioritized, ...status });
+    } catch (error: any) {
+      console.error("Prioritize precompute error:", error);
       res.status(500).json({ message: error.message });
     }
   },

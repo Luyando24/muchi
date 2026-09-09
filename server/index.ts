@@ -30,6 +30,7 @@ import { trackActiveUser } from './lib/activeUsers.js';
 import { startOnboardingCheckScheduler } from './services/onboardingReminderService.js';
 import { startSchoolReminderScheduler } from './services/schoolReminderService.js';
 import { startLoginReminderScheduler } from './services/loginReminderService.js';
+import { startBackfillScheduler } from './services/reportCardCacheService.js';
 
 const app = express();
 const port = CONFIG.server.port;
@@ -118,6 +119,7 @@ if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
   startOnboardingCheckScheduler();
   startSchoolReminderScheduler();
   startLoginReminderScheduler();
+  startBackfillScheduler();
 }
 
 export default app;
