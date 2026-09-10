@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, Download, CheckCircle2 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Loader2, Download, Printer, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { syncFetch } from '@/lib/syncService';
@@ -49,6 +50,18 @@ export default function ReportCardPreview({ studentId, term, examType, academicY
     }
   }, [studentId, term, examType, academicYear]);
 
+  // Set document title for PDF filename so when printing/saving as PDF, default filename is clean
+  useEffect(() => {
+    if (data?.student?.name) {
+      const originalTitle = document.title;
+      const studentName = (data.student.name || 'Student').replace(/[^a-zA-Z0-9_-]/g, '_');
+      document.title = `${studentName}_Report_Card_${term.replace(/\s+/g, '_')}_${academicYear}`;
+      return () => {
+        document.title = originalTitle;
+      };
+    }
+  }, [data, term, academicYear]);
+
   // Poll class pre-built PDF readiness status
   const classId = data?.student?.classId;
   useEffect(() => {
@@ -87,6 +100,17 @@ export default function ReportCardPreview({ studentId, term, examType, academicY
       clearInterval(interval);
     };
   }, [classId, term, examType, academicYear]);
+
+  const handlePrint = () => {
+    if (!data) return;
+    const originalTitle = document.title;
+    const studentName = (data.student.name || 'Student').replace(/[^a-zA-Z0-9_-]/g, '_');
+    document.title = `${studentName}_Report_Card_${term.replace(/\s+/g, '_')}_${academicYear}`;
+    window.print();
+    setTimeout(() => {
+      document.title = originalTitle;
+    }, 1000);
+  };
 
   const handleDownloadPdf = async () => {
     if (!classId) return;
@@ -149,32 +173,98 @@ export default function ReportCardPreview({ studentId, term, examType, academicY
 
   return (
     <div className="space-y-4">
-      <ReportCardContent data={data} term={term} examType={examType} academicYear={academicYear} />
+      {/* On-Screen Version */}
+      <div className="print:hidden space-y-4">
+        <ReportCardContent data={data} term={term} examType={examType} academicYear={academicYear} />
 
-      {/* Export Controls - Pre-built PDF only, no browser print dialog */}
-      <div className="flex justify-end items-center gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
-        {isPdfReady ? (
-          <Button
-            variant="default"
-            size="sm"
-            onClick={handleDownloadPdf}
-            disabled={isDownloading}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5"
-          >
-            {isDownloading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        {/* Export & Print Controls */}
+        <div className="flex flex-wrap justify-between items-center gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+          {/* Background Pre-built Class PDF Status / Download */}
+          <div className="flex items-center gap-2">
+            {isPdfReady ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadPdf}
+                disabled={isDownloading}
+                className="text-emerald-700 border-emerald-300 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-950/50 font-bold text-xs shadow-sm flex items-center gap-1.5"
+              >
+                {isDownloading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" />
+                )}
+                Download Class PDF (Pre-built) ⚡
+              </Button>
             ) : (
-              <Download className="h-3.5 w-3.5" />
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-lg text-xs font-semibold">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-600 shrink-0" />
+                <span>Pre-built PDF compiling in background…</span>
+              </div>
             )}
-            Download Pre-Built PDF ⚡
-          </Button>
-        ) : (
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-lg text-xs font-semibold animate-pulse">
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-600 shrink-0" />
-            <span>Pre-built PDF compiling in background…</span>
           </div>
-        )}
+
+          {/* Immediate Individual Print Button - Always available */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handlePrint}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Print Report Card
+            </Button>
+          </div>
+        </div>
       </div>
+
+      {/* Print-Only Portal Version - Rendered directly to body to bypass modal/dialog layout constraints */}
+      {createPortal(
+        <div className="print-portal">
+          <style>
+            {`
+              @media screen {
+                .print-portal { display: none !important; }
+              }
+              @media print {
+                @page { 
+                  size: A4; 
+                  margin: 8mm; 
+                }
+                body { 
+                  background: white !important; 
+                  margin: 0 !important; 
+                  padding: 0 !important; 
+                }
+                body:not(.headless-pdf-render) > *:not(.print-portal) { 
+                  display: none !important; 
+                }
+                .print-portal {
+                  display: block !important;
+                  position: static !important;
+                  width: 100% !important;
+                  background: white !important;
+                  padding: 0 !important;
+                  margin: 0 !important;
+                  visibility: visible !important;
+                }
+                .print-portal * {
+                  visibility: visible !important;
+                }
+              }
+            `}
+          </style>
+          <ReportCardContent
+            data={data}
+            term={term}
+            examType={examType}
+            academicYear={academicYear}
+            className="border-none shadow-none w-full max-w-none print:w-full print:max-w-none !bg-white !text-black" 
+          />
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
