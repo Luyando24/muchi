@@ -544,8 +544,8 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
 
       {/* Global Watermark */}
       {school?.logo_url && (
-        <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none z-0 overflow-hidden">
-          <img src={school.logo_url} alt="" className="w-[80%] object-contain grayscale" />
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 overflow-hidden">
+          <img src={school.logo_url} alt="" className="w-[80%] object-contain grayscale opacity-[0.03]" />
         </div>
       )}
 
@@ -883,7 +883,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
             <div className="flex flex-col items-end text-right">
               {school?.seal_url && (
                  <div className="mb-2 print:mb-1 absolute right-0 -top-12 print:-top-16 z-0">
-                    <img src={school.seal_url} alt="Seal" className="h-28 w-28 print:h-28 print:w-28 object-contain opacity-80 mix-blend-multiply" />
+                    <img src={school.seal_url} alt="Seal" className="h-28 w-28 print:h-28 print:w-28 object-contain opacity-80 mix-blend-multiply print:mix-blend-normal" />
                  </div>
               )}
               <div className="flex justify-end items-center mb-2 print:mb-1 gap-4 mt-8 print:mt-6 relative z-10">

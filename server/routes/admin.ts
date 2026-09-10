@@ -7,7 +7,13 @@ import { WhatsAppService } from '../services/whatsappService.js';
 import { notifySystemAdmins } from '../services/emailService.js';
 import { checkIncompleteSchoolOnboardings } from '../services/onboardingReminderService.js';
 import { sendSchoolUsageSubscriptionReminders } from '../services/schoolReminderService.js';
-import { triggerFullSystemPrecompute, getSystemPrecomputeSummary, getActiveWorkerProgress } from '../services/reportCardCacheService.js';
+import { acquirePdfWorkerLease, releasePdfWorkerLease } from '../services/pdfGenerationService.js';
+import {
+  triggerFullSystemPrecompute,
+  getSystemPrecomputeSummary,
+  getActiveWorkerProgress,
+  processNextPendingReportCardJob,
+} from '../services/reportCardCacheService.js';
 
 const router = Router();
 
@@ -3507,6 +3513,33 @@ router.get('/cron/school-reminders', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('[Cron] Weekly school usage & subscription reminders cron failed:', error);
     res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/admin/cron/report-card-pdfs — bounded durable worker for Vercel
+router.get('/cron/report-card-pdfs', async (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (process.env.VERCEL && (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`)) {
+    return res.status(401).json({ message: 'Unauthorized: Invalid cron secret' });
+  }
+  let leaseOwner: string | null = null;
+  try {
+    leaseOwner = await acquirePdfWorkerLease();
+    if (!leaseOwner) {
+      return res.status(202).json({ success: true, skipped: true, message: 'PDF worker is already running.' });
+    }
+    console.log('[Cron] Report-card PDF worker triggered');
+    const result = await processNextPendingReportCardJob();
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    console.error('[Cron] Report-card PDF worker failed:', error);
+    res.status(500).json({ success: false, message: error.message });
+  } finally {
+    if (leaseOwner) {
+      await releasePdfWorkerLease(leaseOwner).catch((error) => {
+        console.error('[Cron] Unable to release PDF worker lease:', error);
+      });
+    }
   }
 });
 

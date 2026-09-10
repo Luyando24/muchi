@@ -24,6 +24,11 @@ import {
   generateClassPdf,
   deleteClassPdf,
   isClassPdfReady,
+  getPdfStorageObjectPath,
+  listReadyClassPdfPaths,
+  queueSchoolPdfBuild,
+  getQueuedPdfSchoolIds,
+  dequeueSchoolPdfBuild,
   getPdfWorkerState,
 } from './pdfGenerationService.js';
 
@@ -108,14 +113,16 @@ export async function invalidateCache(key: Omit<CacheKey, 'schoolId'> & { school
     if (key.examType) q = q.eq('exam_type', key.examType);
     await q;
 
-    // Delete outdated PDF on disk
-    deleteClassPdf({
-      schoolId: key.schoolId || '',
-      classId: key.classId,
-      term: key.term,
-      examType: key.examType || '',
-      academicYear: key.academicYear,
-    });
+    if (key.schoolId) {
+      await deleteClassPdf({
+        schoolId: key.schoolId,
+        classId: key.classId,
+        term: key.term,
+        examType: key.examType || '',
+        academicYear: key.academicYear,
+      });
+      await queueSchoolPdfBuild(key.schoolId);
+    }
   } catch (e: any) {
     console.warn('[ReportCardCache] invalidate error:', e.message);
   }
@@ -773,6 +780,15 @@ export async function getSchoolPrecomputeStatus(schoolId: string, skipActiveMetr
       }
     }
 
+    let pdfStorageError: string | null = null;
+    let readyPdfPaths = new Set<string>();
+    try {
+      readyPdfPaths = await listReadyClassPdfPaths(schoolId);
+    } catch (error: any) {
+      pdfStorageError = error.message || 'Unable to read PDF storage';
+    }
+    const queuedPdfSchoolIds = await getQueuedPdfSchoolIds().catch(() => [] as string[]);
+
     // 6. Group by term & academic year
     const termGroupsMap = new Map<string, {
       term: string;
@@ -793,6 +809,7 @@ export async function getSchoolPrecomputeStatus(schoolId: string, skipActiveMetr
 
     let totalClasses = 0;
     let calculatedClasses = 0;
+    let totalPdfs = 0;
 
     for (const c of combos) {
       totalClasses++;
@@ -800,6 +817,7 @@ export async function getSchoolPrecomputeStatus(schoolId: string, skipActiveMetr
       const cacheItem = cacheMap.get(cacheKeyStr);
       const isCalculated = !!cacheItem;
       if (isCalculated) calculatedClasses++;
+      if (!cacheItem || cacheItem.studentCount > 0) totalPdfs++;
 
       const groupKey = `${c.term} - ${c.academicYear}`;
       if (!termGroupsMap.has(groupKey)) {
@@ -823,13 +841,13 @@ export async function getSchoolPrecomputeStatus(schoolId: string, skipActiveMetr
         className: c.className,
         examType: c.examType,
         isCalculated,
-        isPdfReady: isClassPdfReady({
+        isPdfReady: readyPdfPaths.has(getPdfStorageObjectPath({
           schoolId,
           classId: c.classId,
           term: c.term,
           examType: c.examType,
           academicYear: c.academicYear,
-        }),
+        })),
         cachedAt: cacheItem?.cachedAt || null,
         studentCount: cacheItem?.studentCount || 0,
       });
@@ -846,7 +864,8 @@ export async function getSchoolPrecomputeStatus(schoolId: string, skipActiveMetr
 
     // 7. Queue position & wait status
     const isCurrentlyCalculating = schedulerState.currentSchoolId === schoolId;
-    const isPriorityQueued = schedulerState.priorityQueue.includes(schoolId);
+    const isPriorityQueued = schedulerState.priorityQueue.includes(schoolId)
+      || queuedPdfSchoolIds.includes(schoolId);
 
     let queuePosition = 0;
     let waitStatusText = '';
@@ -924,17 +943,17 @@ export async function getSchoolPrecomputeStatus(schoolId: string, skipActiveMetr
     let builtPdfs = 0;
     for (const group of termGroupsMap.values()) {
       for (const cls of group.classes) {
-        if (cls.isPdfReady) builtPdfs++;
+        if (cls.studentCount > 0 && cls.isPdfReady) builtPdfs++;
       }
     }
-    const remainingPdfs = Math.max(0, totalClasses - builtPdfs);
-    const pdfProgressPercentage = totalClasses > 0 ? Math.round((builtPdfs / totalClasses) * 100) : 100;
-    const isPdfCompleted = totalClasses > 0 ? (remainingPdfs === 0) : true;
+    const remainingPdfs = Math.max(0, totalPdfs - builtPdfs);
+    const pdfProgressPercentage = totalPdfs > 0 ? Math.round((builtPdfs / totalPdfs) * 100) : 100;
+    const isPdfCompleted = totalPdfs > 0 ? (remainingPdfs === 0) : true;
 
     const pdfWorker = getPdfWorkerState();
     const isCurrentlyBuildingPdf = pdfWorker.currentSchoolId === schoolId && pdfWorker.isCompiling;
     const activePdfLabel = isCurrentlyBuildingPdf ? pdfWorker.currentClassLabel : null;
-    const estPdfSeconds = remainingPdfs * 3.5;
+    const estPdfSeconds = remainingPdfs * (process.env.VERCEL ? 60 : 3.5);
     const estPdfTimeText = isPdfCompleted
       ? 'Complete'
       : estPdfSeconds < 60
@@ -952,7 +971,7 @@ export async function getSchoolPrecomputeStatus(schoolId: string, skipActiveMetr
           totalClasses,
           calculatedClasses,
           calcPercentage: progressPercentage,
-          totalPdfs: totalClasses,
+          totalPdfs,
           builtPdfs,
           pdfPercentage: pdfProgressPercentage,
           isPdfCompleted,
@@ -1022,12 +1041,14 @@ export async function getSchoolPrecomputeStatus(schoolId: string, skipActiveMetr
       isNextPriority: priorityIndex === 0,
       terms,
       // Pre-built PDF compilation metrics
-      totalPdfs: totalClasses,
+      totalPdfs,
       builtPdfs,
       remainingPdfs,
       pdfProgressPercentage,
       isPdfCompleted,
       isCurrentlyBuildingPdf,
+      pdfWorkerPhase: isCurrentlyBuildingPdf ? pdfWorker.phase : 'queued',
+      pdfStorageError,
       activePdfLabel,
       estPdfTimeText,
     };
@@ -1204,17 +1225,19 @@ async function processSchoolBackfill(schoolId: string, schoolNameFallback: strin
     }
   }
 
-  // Find all classes for THIS school that have students but do not yet have a verified PDF on disk
+  const readyPdfPaths = await listReadyClassPdfPaths(schoolId);
+
+  // Find calculated classes with students that do not yet have a verified Storage object.
   const pendingPdfs = combos.filter(c => {
-    const studentCount = updatedCacheMap.get(`${c.classId}|${c.term}|${c.examType}|${c.academicYear}`) ?? 1;
-    if (studentCount === 0) return false; // skip empty classes with 0 students
-    return !isClassPdfReady({
+    const studentCount = updatedCacheMap.get(`${c.classId}|${c.term}|${c.examType}|${c.academicYear}`);
+    if (!studentCount) return false;
+    return !readyPdfPaths.has(getPdfStorageObjectPath({
       schoolId,
       classId: c.classId,
       term: c.term,
       examType: c.examType,
       academicYear: c.academicYear,
-    });
+    }));
   });
 
   if (pendingPdfs.length > 0) {
@@ -1251,6 +1274,106 @@ async function processSchoolBackfill(schoolId: string, schoolNameFallback: strin
 
     console.log(`[ReportCardCache] ${schoolName} — Finished compiling all class PDFs ✓`);
   }
+
+  const refreshedReadyPaths = await listReadyClassPdfPaths(schoolId);
+  const hasPendingPdf = combos.some(c => {
+    const count = updatedCacheMap.get(`${c.classId}|${c.term}|${c.examType}|${c.academicYear}`);
+    return !!count && !refreshedReadyPaths.has(getPdfStorageObjectPath(c));
+  });
+  if (!hasPendingPdf) await dequeueSchoolPdfBuild(schoolId);
+}
+
+/**
+ * Processes one durable unit of report-card work for a serverless cron run.
+ * Supabase cache rows, Storage PDFs, and Storage queue markers survive between
+ * invocations, so no in-memory scheduler state is required on Vercel.
+ */
+export async function processNextPendingReportCardJob(): Promise<{
+  processed: boolean;
+  action?: 'calculated' | 'pdf';
+  schoolId?: string;
+  schoolName?: string;
+  classLabel?: string;
+  message: string;
+}> {
+  const { data: schools, error } = await supabaseAdmin
+    .from('schools')
+    .select('id, name')
+    .order('name');
+  if (error) throw new Error(`Unable to load schools for PDF worker: ${error.message}`);
+  if (!schools?.length) return { processed: false, message: 'No schools found.' };
+
+  const queuedIds = await getQueuedPdfSchoolIds().catch(() => [] as string[]);
+  const schoolById = new Map(schools.map((school: any) => [school.id, school]));
+  const orderedSchools = [
+    ...queuedIds.map(id => schoolById.get(id)).filter(Boolean),
+    ...schools.filter((school: any) => !queuedIds.includes(school.id)),
+  ] as { id: string; name: string }[];
+
+  for (const school of orderedSchools) {
+    const { combos } = await getSchoolCombos(school.id);
+    if (combos.length === 0) {
+      if (queuedIds.includes(school.id)) await dequeueSchoolPdfBuild(school.id);
+      continue;
+    }
+
+    const { data: cacheRows, error: cacheError } = await supabaseAdmin
+      .from('report_card_cache')
+      .select('class_id, term, exam_type, academic_year, student_count')
+      .eq('school_id', school.id);
+    if (cacheError) throw new Error(`Unable to load report-card cache: ${cacheError.message}`);
+
+    const cacheMap = new Map<string, number>();
+    for (const row of cacheRows || []) {
+      cacheMap.set(`${row.class_id}|${row.term}|${row.exam_type}|${row.academic_year}`, row.student_count || 0);
+    }
+
+    const missingCalculation = combos.find(combo =>
+      !cacheMap.has(`${combo.classId}|${combo.term}|${combo.examType}|${combo.academicYear}`),
+    );
+    if (missingCalculation) {
+      await runPrecompute(missingCalculation);
+      return {
+        processed: true,
+        action: 'calculated',
+        schoolId: school.id,
+        schoolName: school.name,
+        classLabel: `${missingCalculation.className} (${missingCalculation.term} - ${missingCalculation.examType})`,
+        message: 'Calculated one missing report-card cache.',
+      };
+    }
+
+    const readyPaths = await listReadyClassPdfPaths(school.id);
+    const pendingPdfs = combos.filter(combo => {
+      const count = cacheMap.get(`${combo.classId}|${combo.term}|${combo.examType}|${combo.academicYear}`);
+      return !!count && !readyPaths.has(getPdfStorageObjectPath(combo));
+    });
+
+    if (pendingPdfs.length === 0) {
+      if (queuedIds.includes(school.id)) await dequeueSchoolPdfBuild(school.id);
+      continue;
+    }
+
+    const combo = pendingPdfs[0];
+    const classLabel = `${combo.className} (${combo.term} - ${combo.examType})`;
+    await generateClassPdf(combo);
+    if (!(await isClassPdfReady(combo))) {
+      throw new Error(`PDF upload verification failed for ${classLabel}.`);
+    }
+    if (pendingPdfs.length === 1 && queuedIds.includes(school.id)) {
+      await dequeueSchoolPdfBuild(school.id);
+    }
+    return {
+      processed: true,
+      action: 'pdf',
+      schoolId: school.id,
+      schoolName: school.name,
+      classLabel,
+      message: 'Generated and stored one report-card PDF.',
+    };
+  }
+
+  return { processed: false, message: 'All report-card calculations and PDFs are ready.' };
 }
 
 /**
@@ -1415,6 +1538,3 @@ export async function getActiveWorkerProgress() {
     schools: queueInfo.schools,
   };
 }
-
-
-

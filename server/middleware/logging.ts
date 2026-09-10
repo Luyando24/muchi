@@ -2,6 +2,18 @@ import { Request, Response, NextFunction } from 'express';
 import crypto from 'node:crypto';
 import { contextStorage, Logger } from '../lib/logger.js';
 
+function redactSensitiveQueryParams(requestUrl: string): string {
+  try {
+    const parsed = new URL(requestUrl, 'http://internal');
+    for (const name of ['token', 'access_token', 'refresh_token']) {
+      if (parsed.searchParams.has(name)) parsed.searchParams.set(name, '[redacted]');
+    }
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return requestUrl;
+  }
+}
+
 export const requestLogger = (req: Request, res: Response, next: NextFunction) => {
   const isAnonymousFeedingFeedback = (req.originalUrl || req.url).startsWith('/api/public/feeding-feedback');
   const requestId = isAnonymousFeedingFeedback
@@ -9,7 +21,7 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
     : ((req.headers['x-request-id'] as string) || crypto.randomUUID());
   const loggedUrl = isAnonymousFeedingFeedback
     ? '/api/public/feeding-feedback/[redacted]'
-    : (req.originalUrl || req.url);
+    : redactSensitiveQueryParams(req.originalUrl || req.url);
   res.setHeader('x-request-id', requestId);
 
   contextStorage.run({ requestId }, () => {
@@ -44,7 +56,7 @@ export const errorLogger = (err: any, req: Request, res: Response, next: NextFun
   const requestUrl = req.originalUrl || req.url;
   const loggedUrl = requestUrl.startsWith('/api/public/feeding-feedback')
     ? '/api/public/feeding-feedback/[redacted]'
-    : requestUrl;
+    : redactSensitiveQueryParams(requestUrl);
 
   Logger.error(`Request Error: ${req.method} ${loggedUrl} - ${statusCode}`, {
     method: req.method,

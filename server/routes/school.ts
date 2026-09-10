@@ -28,11 +28,11 @@ import {
   computeBatchReportCards,
 } from "../services/reportCardCacheService.js";
 import {
-  INTERNAL_RENDER_SECRET,
+  verifyInternalRenderToken,
   generateClassPdf,
-  getPdfCacheFilePath,
   isClassPdfReady,
-  deleteClassPdf,
+  createClassPdfDownloadUrl,
+  queueSchoolPdfBuild,
 } from "../services/pdfGenerationService.js";
 
 // Helper function to bypass Supabase's max_rows limit by paginating
@@ -4703,6 +4703,7 @@ router.post(
 
     try {
       const prioritized = prioritizeSchool(targetSchoolId, true);
+      await queueSchoolPdfBuild(targetSchoolId);
       const status = await getSchoolPrecomputeStatus(targetSchoolId);
       const queueInfo = await getSchedulerQueueInfo();
       res.json({ success: true, prioritized, queueInfo, ...status });
@@ -4750,7 +4751,7 @@ router.get(
 router.get("/results/internal-class-report-cards", async (req: Request, res: Response) => {
   const { schoolId, classId, term, examType, academicYear, token } = req.query as Record<string, string>;
 
-  if (token !== INTERNAL_RENDER_SECRET) {
+  if (!verifyInternalRenderToken({ schoolId, classId, term, examType, academicYear }, token || '')) {
     return res.status(403).json({ message: "Invalid internal render token" });
   }
 
@@ -4789,20 +4790,19 @@ router.get(
 
     try {
       const key = { schoolId, classId, term, examType, academicYear };
-      if (!isClassPdfReady(key)) {
+      if (!(await isClassPdfReady(key))) {
         console.log(`[PdfDownload] PDF not yet ready in cache, generating on-demand for ${classId}…`);
         await generateClassPdf(key);
       }
 
-      if (!isClassPdfReady(key)) {
+      if (!(await isClassPdfReady(key))) {
         return res.status(404).json({ message: "Unable to generate PDF. Ensure calculation is complete." });
       }
 
-      const filePath = getPdfCacheFilePath(key);
       const safeTerm = term.replace(/\s+/g, '_');
       const filename = `ReportCards_${safeTerm}_${academicYear}.pdf`;
-
-      res.download(filePath, filename);
+      const signedUrl = await createClassPdfDownloadUrl(key, filename);
+      res.redirect(302, signedUrl);
     } catch (error: any) {
       console.error("PDF download error:", error);
       res.status(500).json({ message: error.message });
@@ -4824,7 +4824,7 @@ router.get(
       return res.status(400).json({ message: "Missing required parameters" });
     }
 
-    const ready = isClassPdfReady({ schoolId, classId, term, examType, academicYear });
+    const ready = await isClassPdfReady({ schoolId, classId, term, examType, academicYear });
     res.json({ ready });
   }
 );

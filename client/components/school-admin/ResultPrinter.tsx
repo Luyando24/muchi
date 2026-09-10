@@ -234,6 +234,8 @@ export default function ResultPrinter() {
     const isPdfsBuilding = useMemo(() => {
         return !!precomputeStatus?.isCompleted && !isAllPdfsReady;
     }, [precomputeStatus, isAllPdfsReady]);
+    const isPdfWorkerActive = isPdfsBuilding && !!precomputeStatus?.isCurrentlyBuildingPdf;
+    const hasPdfStorageError = isPdfsBuilding && !!precomputeStatus?.pdfStorageError;
 
     /**
      * Converts an image URL to a base64 data URI.
@@ -722,19 +724,21 @@ export default function ResultPrinter() {
                                         <span className="font-normal text-slate-600 dark:text-slate-300">
                                             {precomputeStatus?.isPdfCompleted
                                                 ? "All class PDFs compiled & ready for instant download ✓"
+                                                : precomputeStatus?.pdfStorageError
+                                                ? `Storage unavailable: ${precomputeStatus.pdfStorageError}`
                                                 : precomputeStatus?.isCurrentlyBuildingPdf
                                                 ? precomputeStatus.activePdfLabel
                                                     ? `Compiling PDF: ${precomputeStatus.activePdfLabel}`
                                                     : "Compiling class PDFs in background…"
                                                 : precomputeStatus?.isCompleted
-                                                ? "Starting background PDF compilation…"
+                                                ? "Queued for the next background worker run"
                                                 : "Starts automatically after each class is calculated"}
                                         </span>
                                     </span>
                                 </div>
                                 <div className="flex items-center gap-2.5">
                                     <span className="text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950 px-2.5 py-0.5 rounded-full">
-                                        {precomputeStatus?.builtPdfs ?? 0} / {precomputeStatus?.totalClasses ?? 0} PDFs Ready
+                                        {precomputeStatus?.builtPdfs ?? 0} / {precomputeStatus?.totalPdfs ?? 0} PDFs Ready
                                     </span>
                                     <span className="text-base font-black tabular-nums text-purple-700 dark:text-purple-300">
                                         {precomputeStatus?.pdfProgressPercentage ?? 0}%
@@ -754,7 +758,7 @@ export default function ResultPrinter() {
                             <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
                                 <span>
                                     {precomputeStatus?.remainingPdfs === 0
-                                        ? "All classes have pre-rendered vector PDFs stored on server."
+                                        ? "All classes have private PDFs stored in Supabase."
                                         : `${precomputeStatus?.remainingPdfs ?? 0} class PDFs remaining to compile`}
                                 </span>
                                 <span>
@@ -861,8 +865,12 @@ export default function ResultPrinter() {
                     <div className={`sticky bottom-4 z-20 flex flex-col sm:flex-row items-center justify-between gap-4 p-5 backdrop-blur-md rounded-2xl border-2 shadow-xl transition-all ${
                         isAllPdfsReady
                             ? "bg-emerald-50/95 dark:bg-emerald-950/90 border-emerald-300 dark:border-emerald-700"
-                            : isPdfsBuilding
+                            : hasPdfStorageError
+                            ? "bg-red-50/95 dark:bg-red-950/90 border-red-300 dark:border-red-800"
+                            : isPdfWorkerActive
                             ? "bg-purple-50/95 dark:bg-purple-950/90 border-purple-300 dark:border-purple-700"
+                            : isPdfsBuilding
+                            ? "bg-amber-50/95 dark:bg-amber-950/90 border-amber-300 dark:border-amber-800"
                             : "bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-800"
                     }`}>
                         <div>
@@ -872,10 +880,20 @@ export default function ResultPrinter() {
                                         <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                                         <span>All report cards and pre-built PDFs are ready!</span>
                                     </>
-                                ) : isPdfsBuilding ? (
+                                ) : hasPdfStorageError ? (
+                                    <>
+                                        <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+                                        <span>PDF storage is unavailable</span>
+                                    </>
+                                ) : isPdfWorkerActive ? (
                                     <>
                                         <Loader2 className="h-5 w-5 text-purple-600 animate-spin flex-shrink-0" />
                                         <span>Calculations Complete • Pre-building PDFs ({precomputeStatus?.builtPdfs ?? 0} of {precomputeStatus?.totalPdfs ?? 0} ready - {precomputeStatus?.pdfProgressPercentage ?? 0}%)</span>
+                                    </>
+                                ) : isPdfsBuilding ? (
+                                    <>
+                                        <Clock className="h-5 w-5 text-amber-600 flex-shrink-0" />
+                                        <span>Calculations Complete • PDFs queued ({precomputeStatus?.builtPdfs ?? 0} of {precomputeStatus?.totalPdfs ?? 0} ready)</span>
                                     </>
                                 ) : (
                                     <>
@@ -887,17 +905,27 @@ export default function ResultPrinter() {
                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                                 {isAllPdfsReady
                                     ? "All submitted classes and high-speed vector PDFs are ready. You can now proceed to export."
+                                    : hasPdfStorageError
+                                    ? precomputeStatus.pdfStorageError
+                                    : isPdfWorkerActive
+                                    ? "The worker is compiling and uploading a private PDF to Supabase Storage."
                                     : isPdfsBuilding
-                                    ? "All class scores are calculated. Background worker is compiling pre-built vector PDFs. The export button will appear once all PDFs are ready."
+                                    ? "The next worker run will continue compiling private PDFs in Supabase Storage."
                                     : "PDF export is locked until all submitted classes and subjects have been calculated and compiled."}
                             </p>
                         </div>
 
                         <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-                            {isPdfsBuilding && (
-                                <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-100 dark:bg-purple-900/60 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800 text-xs font-bold animate-pulse">
-                                    <Loader2 className="h-4 w-4 animate-spin text-purple-600 shrink-0" />
-                                    <span>Compiling Pre-Built PDFs ({precomputeStatus?.builtPdfs ?? 0}/{precomputeStatus?.totalPdfs ?? 0})</span>
+                            {isPdfsBuilding && !hasPdfStorageError && (
+                                <div className={`flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-bold ${
+                                    isPdfWorkerActive
+                                        ? "bg-purple-100 dark:bg-purple-900/60 text-purple-900 dark:text-purple-200 border-purple-200 dark:border-purple-800 animate-pulse"
+                                        : "bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 border-amber-200 dark:border-amber-800"
+                                }`}>
+                                    {isPdfWorkerActive
+                                        ? <Loader2 className="h-4 w-4 animate-spin text-purple-600 shrink-0" />
+                                        : <Clock className="h-4 w-4 text-amber-600 shrink-0" />}
+                                    <span>{isPdfWorkerActive ? "Compiling" : "Queued"} ({precomputeStatus?.builtPdfs ?? 0}/{precomputeStatus?.totalPdfs ?? 0})</span>
                                 </div>
                             )}
 
