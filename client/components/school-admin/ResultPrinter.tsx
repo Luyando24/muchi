@@ -107,13 +107,17 @@ export default function ResultPrinter() {
     const [viewMode, setViewMode] = useState<'progress' | 'printer'>('progress');
     const [precomputeStatus, setPrecomputeStatus] = useState<any | null>(null);
     const [isLoadingStatus, setIsLoadingStatus] = useState<boolean>(true);
+    const [statusFetchError, setStatusFetchError] = useState<string | null>(null);
     const [isPrioritizing, setIsPrioritizing] = useState<boolean>(false);
     const [isActiveModalOpen, setIsActiveModalOpen] = useState<boolean>(false);
     const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
 
     const { toast } = useToast();
 
-    const fetchPrecomputeStatus = async () => {
+    const fetchPrecomputeStatus = async (isInitial = false) => {
+        if (isInitial && !precomputeStatus) {
+            setIsLoadingStatus(true);
+        }
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
@@ -123,9 +127,17 @@ export default function ResultPrinter() {
             if (res.ok) {
                 const data = await res.json();
                 setPrecomputeStatus(data);
+                setStatusFetchError(null);
+            } else {
+                if (!precomputeStatus) {
+                    setStatusFetchError('Unable to load calculation data from server.');
+                }
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('Error fetching precompute status:', err);
+            if (!precomputeStatus) {
+                setStatusFetchError(err?.message || 'Error connecting to calculation service.');
+            }
         } finally {
             setIsLoadingStatus(false);
         }
@@ -133,9 +145,9 @@ export default function ResultPrinter() {
 
     // Poll calculation status every 2.5s
     useEffect(() => {
-        fetchPrecomputeStatus();
+        fetchPrecomputeStatus(true);
         const interval = setInterval(() => {
-            fetchPrecomputeStatus();
+            fetchPrecomputeStatus(false);
         }, 2500);
         return () => clearInterval(interval);
     }, []);
@@ -621,14 +633,75 @@ export default function ResultPrinter() {
         }
     };
 
-    if (isLoading) {
-        return <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
-    }
-
     const selectedClassName = classes.find(c => c.id === filters.classId)?.name || '';
+    const isWaitingForCalculationData = isLoading || isLoadingStatus || !precomputeStatus || isPrioritizing;
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 relative min-h-[500px]">
+
+            {/* Loading Blocker Layer: Does not give user a chance to click any button while waiting for calculation data to display */}
+            {isWaitingForCalculationData && (
+                <div
+                    className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/85 dark:bg-slate-950/85 backdrop-blur-md rounded-2xl p-6 select-none cursor-wait transition-all duration-300 pointer-events-auto"
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                    onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                    onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                    aria-busy="true"
+                    aria-live="polite"
+                >
+                    <div className="flex flex-col items-center max-w-md w-full mx-auto p-8 rounded-2xl bg-white/95 dark:bg-slate-900/95 border border-slate-200/90 dark:border-slate-800 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="relative flex items-center justify-center">
+                            <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-indigo-500/15 via-blue-500/20 to-indigo-600/25 dark:from-indigo-950/70 dark:to-blue-900/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center shadow-inner">
+                                <Gauge className="h-8 w-8 text-indigo-600 dark:text-indigo-400 animate-pulse" />
+                            </div>
+                            <div className="absolute -top-1.5 -right-1.5 p-1 bg-white dark:bg-slate-900 rounded-full shadow-sm border border-slate-200 dark:border-slate-700">
+                                <Loader2 className="h-4 w-4 text-indigo-600 animate-spin" />
+                            </div>
+                        </div>
+
+                        <div className="space-y-1.5 text-center">
+                            <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
+                                {isPrioritizing
+                                    ? "Prioritizing School Calculation…"
+                                    : "Loading Calculation Data…"}
+                            </h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-xs mx-auto">
+                                {isPrioritizing
+                                    ? "Setting school as #1 priority and recalculating schedule metrics. Please wait…"
+                                    : "Retrieving real-time pre-computation status, subject scores, and queue metrics across all classes."}
+                            </p>
+                        </div>
+
+                        {statusFetchError ? (
+                            <div className="w-full space-y-3">
+                                <div className="p-3 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-xl text-xs text-red-700 dark:text-red-300 flex items-center gap-2">
+                                    <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+                                    <span>{statusFetchError}</span>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    onClick={() => fetchPrecomputeStatus(true)}
+                                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs"
+                                >
+                                    <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                                    Retry Connection
+                                </Button>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden p-0.5">
+                                    <div className="h-full bg-gradient-to-r from-indigo-500 via-blue-500 to-indigo-600 rounded-full w-2/3 animate-pulse" />
+                                </div>
+
+                                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-900/60 text-[11px] font-bold text-indigo-700 dark:text-indigo-300">
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-600 dark:text-indigo-400" />
+                                    <span>Please wait, preparing calculations…</span>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* VIEW MODE 1: Report Card Calculation Progress Screen */}
             {viewMode === 'progress' && (
@@ -681,6 +754,7 @@ export default function ResultPrinter() {
                                     <Button
                                         variant="outline"
                                         onClick={() => setIsActiveModalOpen(true)}
+                                        disabled={isWaitingForCalculationData}
                                         className="border-indigo-300 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-950 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200 font-bold text-xs shadow-sm h-auto py-1.5 px-3 transition-all flex items-center gap-2"
                                         title="Click to review live calculation and PDF build progress"
                                     >
@@ -718,7 +792,9 @@ export default function ResultPrinter() {
                                         </div>
                                     </Button>
                                 );
-                            })()}                            {/* Option to Set Next Priority for this School */}
+                            })()}
+
+                            {/* Option to Set Next Priority for this School */}
                             {precomputeStatus?.isPriorityQueued || precomputeStatus?.isNextPriority ? (
                                 <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800 shadow-sm">
                                     <Zap className="h-3.5 w-3.5 text-amber-600 fill-current" />
@@ -727,7 +803,7 @@ export default function ResultPrinter() {
                             ) : (
                                 <Button
                                     onClick={handlePrioritize}
-                                    disabled={isPrioritizing || precomputeStatus?.isCurrentlyCalculating || isAllPdfsReady}
+                                    disabled={isWaitingForCalculationData || isPrioritizing || precomputeStatus?.isCurrentlyCalculating || isAllPdfsReady}
                                     className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm h-9 flex items-center gap-1.5"
                                     title="Set your school as #1 Next in the calculation and PDF build queue"
                                 >
@@ -739,11 +815,13 @@ export default function ResultPrinter() {
                                     Set Next Priority ⚡
                                 </Button>
                             )}
+
                             {/* Print button ONLY APPEARS IF ALL PDFS ARE READY */}
                             {isAllPdfsReady && (
                                 <Button
                                     variant="default"
                                     onClick={() => setViewMode('printer')}
+                                    disabled={isWaitingForCalculationData}
                                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm h-9 flex items-center gap-1.5"
                                 >
                                     Continue to Print
@@ -962,7 +1040,7 @@ export default function ResultPrinter() {
                                     All terms and classes with submitted subject grades in this school
                                 </p>
                             </div>
-                            <Button variant="outline" size="sm" onClick={fetchPrecomputeStatus} className="text-xs border-slate-200">
+                            <Button variant="outline" size="sm" onClick={() => fetchPrecomputeStatus(true)} disabled={isWaitingForCalculationData} className="text-xs border-slate-200">
                                 <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Refresh Status
                             </Button>
                         </div>
@@ -1114,6 +1192,7 @@ export default function ResultPrinter() {
                             {isAllPdfsReady && (
                                 <Button
                                     onClick={() => setViewMode('printer')}
+                                    disabled={isWaitingForCalculationData}
                                     size="lg"
                                     className="w-full sm:w-auto font-black px-8 text-base bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg cursor-pointer transition-all"
                                 >
@@ -1141,6 +1220,7 @@ export default function ResultPrinter() {
                             <Button
                                 variant="outline"
                                 onClick={() => setViewMode('progress')}
+                                disabled={isWaitingForCalculationData}
                                 className="border-indigo-200 text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800 text-xs h-9 font-bold"
                             >
                                 <Gauge className="h-4 w-4 mr-1.5 text-indigo-600 dark:text-indigo-400" />
