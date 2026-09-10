@@ -33,6 +33,7 @@ import {
   isClassPdfReady,
   createClassPdfDownloadUrl,
   queueSchoolPdfBuild,
+  generateAllClassesZip,
 } from "../services/pdfGenerationService.js";
 
 // Helper function to bypass Supabase's max_rows limit by paginating
@@ -4816,6 +4817,35 @@ router.get(
     } catch (error: any) {
       console.error("PDF download error:", error);
       res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// GET /api/school/results/download-all-classes-zip
+// Downloads all pre-compiled class PDFs for the term in a single zipped folder
+router.get(
+  "/results/download-all-classes-zip",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const { term, academicYear } = req.query as Record<string, string>;
+
+    if (!schoolId || !term || !academicYear) {
+      return res.status(400).json({ message: "Missing required parameters: term and academicYear" });
+    }
+
+    try {
+      const { buffer, filename } = await generateAllClassesZip(schoolId, term, academicYear);
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Length", buffer.length.toString());
+      return res.send(buffer);
+    } catch (error: any) {
+      console.error("[ZipExport] Error generating classes ZIP:", error);
+      return res.status(error.message?.includes("No pre-compiled") ? 404 : 500).json({
+        message: error.message || "Failed to generate zipped folder",
+      });
     }
   }
 );

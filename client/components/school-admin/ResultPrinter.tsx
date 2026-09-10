@@ -23,7 +23,9 @@ import {
     Activity,
     Lock,
     FileText,
-    Check
+    Check,
+    Archive,
+    FolderArchive
 } from 'lucide-react';
 import ActiveCalculationModal from '@/components/school-admin/ActiveCalculationModal';
 import { useNavigate } from 'react-router-dom';
@@ -176,9 +178,23 @@ export default function ResultPrinter() {
 
     const [directClassPdfReady, setDirectClassPdfReady] = useState<boolean>(false);
 
+    // Auto-resolve examType when class or term changes if present in precomputeStatus
+    useEffect(() => {
+        if (!filters.classId || !precomputeStatus?.terms) return;
+        for (const termGroup of precomputeStatus.terms) {
+            if ((!filters.term || termGroup.term === filters.term) && termGroup.academicYear === filters.academicYear) {
+                const match = termGroup.classes?.find((c: any) => c.classId === filters.classId);
+                if (match?.examType && match.examType !== filters.examType) {
+                    setFilters(prev => ({ ...prev, examType: match.examType }));
+                    break;
+                }
+            }
+        }
+    }, [filters.classId, filters.term, filters.academicYear, precomputeStatus]);
+
     // Check if selected class pre-built PDF is ready on disk
     useEffect(() => {
-        if (!filters.classId || !filters.term || !filters.examType || !filters.academicYear) {
+        if (!filters.classId || filters.classId === 'ALL_CLASSES' || !filters.term || !filters.academicYear) {
             setDirectClassPdfReady(false);
             return;
         }
@@ -187,10 +203,24 @@ export default function ResultPrinter() {
             try {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (!session) return;
+
+                let examTypeToUse = filters.examType || 'End of Term';
+                if (precomputeStatus?.terms) {
+                    for (const termGroup of precomputeStatus.terms) {
+                        if (termGroup.term === filters.term && termGroup.academicYear === filters.academicYear) {
+                            const match = termGroup.classes?.find((c: any) => c.classId === filters.classId);
+                            if (match?.examType) {
+                                examTypeToUse = match.examType;
+                                break;
+                            }
+                        }
+                    }
+                }
+
                 const query = new URLSearchParams({
                     classId: filters.classId,
                     term: filters.term,
-                    examType: filters.examType,
+                    examType: examTypeToUse,
                     academicYear: filters.academicYear,
                 });
                 const res = await fetch(`/api/school/results/class-pdf-status?${query.toString()}`, {
@@ -207,22 +237,53 @@ export default function ResultPrinter() {
         checkPdf();
         const interval = setInterval(checkPdf, 2500);
         return () => { cancelled = true; clearInterval(interval); };
-    }, [filters.classId, filters.term, filters.examType, filters.academicYear]);
+    }, [filters.classId, filters.term, filters.examType, filters.academicYear, precomputeStatus]);
+
+    const termClasses = useMemo(() => {
+        const termGroup = precomputeStatus?.terms?.find(
+            (t: any) => t.term === filters.term && String(t.academicYear) === String(filters.academicYear)
+        );
+        const computedClasses = termGroup?.classes || [];
+        const computedMap = new Map<string, any>();
+        computedClasses.forEach((c: any) => computedMap.set(c.classId, c));
+
+        if (classes && classes.length > 0) {
+            return classes.map(c => {
+                const existing = computedMap.get(c.id);
+                return {
+                    classId: c.id,
+                    className: c.name,
+                    studentCount: existing?.studentCount ?? 0,
+                    examType: existing?.examType || filters.examType || 'End of Term',
+                    isCalculated: existing?.isCalculated ?? false,
+                    isPdfReady: existing?.isPdfReady ?? false,
+                };
+            });
+        }
+        return computedClasses;
+    }, [precomputeStatus, filters.term, filters.academicYear, filters.examType, classes]);
+
+    const readyClassesInTerm = useMemo(() => {
+        return termClasses.filter((c: any) => c.isPdfReady);
+    }, [termClasses]);
 
     const isCurrentClassPdfReady = useMemo(() => {
         if (!filters.classId) return false;
+        if (filters.classId === 'ALL_CLASSES') {
+            return readyClassesInTerm.length > 0;
+        }
         if (directClassPdfReady) return true;
         if (!precomputeStatus?.terms) return false;
         for (const termGroup of precomputeStatus.terms) {
             if (termGroup.term === filters.term && termGroup.academicYear === filters.academicYear) {
                 const match = termGroup.classes?.find(
-                    (c: any) => c.classId === filters.classId && c.examType === filters.examType
-                );
+                    (c: any) => c.classId === filters.classId && (!filters.examType || c.examType === filters.examType)
+                ) || termGroup.classes?.find((c: any) => c.classId === filters.classId);
                 if (match?.isPdfReady) return true;
             }
         }
         return false;
-    }, [filters.classId, filters.term, filters.examType, filters.academicYear, precomputeStatus, directClassPdfReady]);
+    }, [filters.classId, filters.term, filters.examType, filters.academicYear, precomputeStatus, directClassPdfReady, readyClassesInTerm]);
 
     const isAllPdfsReady = useMemo(() => {
         return !!precomputeStatus?.isCompleted &&
@@ -279,8 +340,10 @@ export default function ResultPrinter() {
     };
 
     useEffect(() => {
-        if (filters.classId && filters.academicYear) {
+        if (filters.classId && filters.classId !== 'ALL_CLASSES' && filters.academicYear) {
             fetchStudents();
+        } else if (filters.classId === 'ALL_CLASSES') {
+            setStudents([]);
         }
     }, [filters.classId, filters.academicYear]);
 
@@ -371,8 +434,8 @@ export default function ResultPrinter() {
     };
 
     const handleDownloadCompiledPdf = async () => {
-        if (!filters.classId || !filters.term || !filters.examType || !filters.academicYear) {
-            toast({ title: "Incomplete Selection", description: "Please select Class, Term, Assessment Type and Year.", variant: "destructive" });
+        if (!filters.classId || !filters.term || !filters.academicYear) {
+            toast({ title: "Incomplete Selection", description: "Please select Class, Term and Year.", variant: "destructive" });
             return;
         }
 
@@ -381,10 +444,23 @@ export default function ResultPrinter() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
 
+            let examTypeToUse = filters.examType || 'End of Term';
+            if (precomputeStatus?.terms) {
+                for (const termGroup of precomputeStatus.terms) {
+                    if (termGroup.term === filters.term && termGroup.academicYear === filters.academicYear) {
+                        const match = termGroup.classes?.find((c: any) => c.classId === filters.classId);
+                        if (match?.examType) {
+                            examTypeToUse = match.examType;
+                            break;
+                        }
+                    }
+                }
+            }
+
             const query = new URLSearchParams({
                 classId: filters.classId,
                 term: filters.term,
-                examType: filters.examType,
+                examType: examTypeToUse,
                 academicYear: filters.academicYear,
             });
 
@@ -417,6 +493,108 @@ export default function ResultPrinter() {
             toast({
                 title: "PDF Download Error",
                 description: err.message || "Failed to download pre-built PDF.",
+                variant: "destructive"
+            });
+        } finally {
+            setIsDownloadingPdf(false);
+        }
+    };
+
+    const handleDownloadAllClassesZip = async () => {
+        if (!filters.term || !filters.academicYear) {
+            toast({ title: "Incomplete Selection", description: "Please select Term and Year.", variant: "destructive" });
+            return;
+        }
+
+        if (readyClassesInTerm.length === 0) {
+            toast({ title: "No PDFs Ready", description: "PDFs for this term are still being compiled.", variant: "destructive" });
+            return;
+        }
+
+        setIsDownloadingPdf(true);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return;
+
+            const query = new URLSearchParams({
+                term: filters.term,
+                academicYear: filters.academicYear,
+            });
+
+            const res = await fetch(`/api/school/results/download-all-classes-zip?${query.toString()}`, {
+                headers: { 'Authorization': `Bearer ${session.access_token}` }
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ message: 'Download failed' }));
+                throw new Error(err.message || 'Failed to download zipped classes');
+            }
+
+            const blob = await res.blob();
+            const safeTerm = filters.term.replace(/\s+/g, '_');
+            const filename = `Report_Cards_All_Classes_${safeTerm}_${filters.academicYear}.zip`;
+
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            toast({
+                title: "Zipped Folder Downloaded 📦⚡",
+                description: `Successfully downloaded ZIP containing ${readyClassesInTerm.length} class report card PDFs.`,
+            });
+        } catch (err: any) {
+            toast({
+                title: "ZIP Download Error",
+                description: err.message || "Failed to download zipped folder.",
+                variant: "destructive"
+            });
+        } finally {
+            setIsDownloadingPdf(false);
+        }
+    };
+
+    const handleDownloadSingleClassFromList = async (cls: any) => {
+        setIsDownloadingPdf(true);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return;
+
+            const query = new URLSearchParams({
+                classId: cls.classId,
+                term: filters.term,
+                examType: cls.examType || 'End of Term',
+                academicYear: filters.academicYear,
+            });
+
+            const res = await fetch(`/api/school/results/download-class-pdf?${query.toString()}`, {
+                headers: { 'Authorization': `Bearer ${session.access_token}` }
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ message: 'Download failed' }));
+                throw new Error(err.message || 'Failed to download PDF');
+            }
+
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const currentClassName = cls.className || 'Class';
+            const safeTerm = filters.term.replace(/\s+/g, '_');
+            a.download = `${currentClassName}_${safeTerm}_${filters.academicYear}_ReportCards.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (err: any) {
+            toast({
+                title: "PDF Download Error",
+                description: err.message || "Failed to download class PDF.",
                 variant: "destructive"
             });
         } finally {
@@ -971,22 +1149,41 @@ export default function ResultPrinter() {
 
                             {/* The print button must not appear if PDFs are not ready */}
                             {filters.classId && isCurrentClassPdfReady ? (
-                                <Button
-                                    onClick={handleDownloadCompiledPdf}
-                                    disabled={isDownloadingPdf}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm text-xs h-9"
-                                >
-                                    {isDownloadingPdf ? (
-                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                    ) : (
-                                        <Download className="h-4 w-4 mr-2" />
-                                    )}
-                                    Download Pre-Built PDF ⚡
-                                </Button>
+                                filters.classId === 'ALL_CLASSES' ? (
+                                    <Button
+                                        onClick={handleDownloadAllClassesZip}
+                                        disabled={isDownloadingPdf}
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm text-xs h-9"
+                                    >
+                                        {isDownloadingPdf ? (
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        ) : (
+                                            <FolderArchive className="h-4 w-4 mr-2" />
+                                        )}
+                                        Download All Classes (ZIP) ⚡
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        onClick={handleDownloadCompiledPdf}
+                                        disabled={isDownloadingPdf}
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm text-xs h-9"
+                                    >
+                                        {isDownloadingPdf ? (
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        ) : (
+                                            <Download className="h-4 w-4 mr-2" />
+                                        )}
+                                        Download Pre-Built PDF ⚡
+                                    </Button>
+                                )
                             ) : filters.classId ? (
                                 <div className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-purple-50 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-xs font-bold animate-pulse">
                                     <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-600" />
-                                    <span>PDF Compiling in Background…</span>
+                                    <span>
+                                        {filters.classId === 'ALL_CLASSES'
+                                            ? `Compiling Class PDFs in Background (0 of ${termClasses.length} ready)…`
+                                            : "PDF Compiling in Background…"}
+                                    </span>
                                 </div>
                             ) : null}
                         </div>
@@ -1001,7 +1198,7 @@ export default function ResultPrinter() {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <div>
                                         <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Class</label>
                                         <Select
@@ -1012,6 +1209,9 @@ export default function ResultPrinter() {
                                                 <SelectValue placeholder="Select Class" />
                                             </SelectTrigger>
                                             <SelectContent>
+                                                <SelectItem value="ALL_CLASSES" className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                                                    📦 All Classes (Zipped Folder)
+                                                </SelectItem>
                                                 {classes.map(c => (
                                                     <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>
                                                 ))}
@@ -1037,23 +1237,6 @@ export default function ResultPrinter() {
                                     </div>
 
                                     <div>
-                                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Assessment Type</label>
-                                        <Select
-                                            value={filters.examType}
-                                            onValueChange={(val) => setFilters(prev => ({ ...prev, examType: val }))}
-                                        >
-                                            <SelectTrigger className="h-9 text-xs">
-                                                <SelectValue placeholder="Select Assessment Type" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {availableExamTypes.map(type => (
-                                                    <SelectItem key={type} value={type} className="text-xs">{type}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-
-                                    <div>
                                         <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Academic Year</label>
                                         <Input
                                             value={filters.academicYear}
@@ -1069,16 +1252,53 @@ export default function ResultPrinter() {
                         <Card className="bg-gradient-to-br from-emerald-50/60 to-white dark:from-slate-900 dark:to-slate-800/80 border-emerald-200/80 dark:border-slate-700 shadow-sm">
                             <CardHeader className="pb-3">
                                 <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-900 dark:text-white">
-                                    <FileText className="h-4 w-4 text-emerald-600" />
-                                    Pre-Built PDF Export
+                                    {filters.classId === 'ALL_CLASSES' ? (
+                                        <FolderArchive className="h-4 w-4 text-emerald-600" />
+                                    ) : (
+                                        <FileText className="h-4 w-4 text-emerald-600" />
+                                    )}
+                                    {filters.classId === 'ALL_CLASSES' ? 'Zipped Class PDFs Export' : 'Pre-Built PDF Export'}
                                 </CardTitle>
                                 <CardDescription className="text-xs text-slate-500">
-                                    Ultra-fast vector report cards generated directly on server.
+                                    {filters.classId === 'ALL_CLASSES'
+                                        ? 'Bundles all ready class report cards into a single downloadable .zip archive.'
+                                        : 'Ultra-fast vector report cards generated directly on server.'}
                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-3">
                                 {filters.classId ? (
-                                    isCurrentClassPdfReady ? (
+                                    filters.classId === 'ALL_CLASSES' ? (
+                                        isCurrentClassPdfReady ? (
+                                            <div className="space-y-2.5">
+                                                <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs font-semibold flex items-center gap-2">
+                                                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                                                    <span>{readyClassesInTerm.length} of {termClasses.length} classes ready in package</span>
+                                                </div>
+                                                <Button
+                                                    onClick={handleDownloadAllClassesZip}
+                                                    disabled={isDownloadingPdf}
+                                                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9 shadow-sm"
+                                                >
+                                                    {isDownloadingPdf ? (
+                                                        <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+                                                    ) : (
+                                                        <FolderArchive className="h-3.5 w-3.5 mr-2" />
+                                                    )}
+                                                    Download All Classes (ZIP) ⚡
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <div className="p-3 bg-purple-50 dark:bg-purple-950/40 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-lg text-xs space-y-1.5 animate-pulse">
+                                                <div className="flex items-center gap-2 font-bold">
+                                                    <Loader2 className="h-4 w-4 text-purple-600 animate-spin" />
+                                                    <span>Compiling Class PDFs in Background…</span>
+                                                </div>
+                                                <p className="text-[11px] text-purple-700 dark:text-purple-400">
+                                                    The ZIP download button will appear as soon as classes complete compiling.
+                                                </p>
+                                            </div>
+                                        )
+                                    ) : isCurrentClassPdfReady ? (
                                         <div className="space-y-2.5">
                                             <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs font-semibold flex items-center gap-2">
                                                 <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
@@ -1121,46 +1341,134 @@ export default function ResultPrinter() {
                         </Card>
                     </div>
 
-                    <Card className="print:hidden">
-                        <CardContent className="p-0">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Student Name</TableHead>
-                                        <TableHead>Student ID</TableHead>
-                                        <TableHead className="text-right">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {students.length === 0 ? (
+                    {filters.classId === 'ALL_CLASSES' ? (
+                        <Card className="print:hidden">
+                            <CardHeader className="py-4 border-b border-slate-100 dark:border-slate-800 flex flex-row items-center justify-between">
+                                <div>
+                                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                                        <FolderArchive className="h-4 w-4 text-emerald-600" />
+                                        All Classes Status ({readyClassesInTerm.length} of {termClasses.length} Ready for Download)
+                                    </CardTitle>
+                                    <CardDescription className="text-xs">
+                                        You can download the entire package as a ZIP archive, or download individual class PDFs below.
+                                    </CardDescription>
+                                </div>
+                                {readyClassesInTerm.length > 0 && (
+                                    <Button
+                                        size="sm"
+                                        onClick={handleDownloadAllClassesZip}
+                                        disabled={isDownloadingPdf}
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-8 shadow-sm"
+                                    >
+                                        <FolderArchive className="h-3.5 w-3.5 mr-1.5" />
+                                        Download Ready ({readyClassesInTerm.length}) as ZIP
+                                    </Button>
+                                )}
+                            </CardHeader>
+                            <CardContent className="p-0">
+                                <Table>
+                                    <TableHeader>
                                         <TableRow>
-                                            <TableCell colSpan={3} className="text-center py-8 text-slate-500">
-                                                {filters.classId ? "No students found in this class." : "Please select a class to see students."}
-                                            </TableCell>
+                                            <TableHead>Class Name</TableHead>
+                                            <TableHead>Students</TableHead>
+                                            <TableHead>PDF Status</TableHead>
+                                            <TableHead className="text-right">Actions</TableHead>
                                         </TableRow>
-                                    ) : (
-                                        students.map(student => (
-                                            <TableRow key={student.id}>
-                                                <TableCell className="font-medium">{student.full_name}</TableCell>
-                                                <TableCell className="text-slate-500 font-mono text-xs">{student.student_number}</TableCell>
-                                                <TableCell className="text-right flex items-center justify-end gap-2">
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() => handlePreview(student.id)}
-                                                        className="text-indigo-600 hover:text-indigo-700 border-indigo-200 text-xs h-8 font-medium"
-                                                    >
-                                                        <Eye className="h-3.5 w-3.5 mr-1.5" />
-                                                        Preview Report Card
-                                                    </Button>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {termClasses.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={4} className="text-center py-8 text-slate-500">
+                                                    No classes found for this term.
                                                 </TableCell>
                                             </TableRow>
-                                        ))
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
+                                        ) : (
+                                            termClasses.map((cls: any) => (
+                                                <TableRow key={cls.classId}>
+                                                    <TableCell className="font-bold text-slate-900 dark:text-white">
+                                                        {cls.className}
+                                                    </TableCell>
+                                                    <TableCell className="text-slate-600 dark:text-slate-400 text-xs">
+                                                        {cls.studentCount > 0 ? `${cls.studentCount} students` : '—'}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {cls.isPdfReady ? (
+                                                            <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 text-[11px] font-semibold gap-1">
+                                                                <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                                                Ready for Print
+                                                            </Badge>
+                                                        ) : (
+                                                            <Badge variant="outline" className="bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border-purple-300 text-[11px] gap-1 animate-pulse">
+                                                                <Loader2 className="h-3 w-3 animate-spin text-purple-600" />
+                                                                Compiling…
+                                                            </Badge>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        {cls.isPdfReady ? (
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={() => handleDownloadSingleClassFromList(cls)}
+                                                                disabled={isDownloadingPdf}
+                                                                className="text-emerald-700 hover:text-emerald-800 border-emerald-200 hover:bg-emerald-50 text-xs h-8 font-semibold"
+                                                            >
+                                                                <Download className="h-3.5 w-3.5 mr-1.5" />
+                                                                Download PDF
+                                                            </Button>
+                                                        ) : (
+                                                            <span className="text-xs text-slate-400 italic">In progress</span>
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+                    ) : (
+                        <Card className="print:hidden">
+                            <CardContent className="p-0">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Student Name</TableHead>
+                                            <TableHead>Student ID</TableHead>
+                                            <TableHead className="text-right">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {students.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={3} className="text-center py-8 text-slate-500">
+                                                    {filters.classId ? "No students found in this class." : "Please select a class to see students."}
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                            students.map(student => (
+                                                <TableRow key={student.id}>
+                                                    <TableCell className="font-medium">{student.full_name}</TableCell>
+                                                    <TableCell className="text-slate-500 font-mono text-xs">{student.student_number}</TableCell>
+                                                    <TableCell className="text-right flex items-center justify-end gap-2">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => handlePreview(student.id)}
+                                                            className="text-indigo-600 hover:text-indigo-700 border-indigo-200 text-xs h-8 font-medium"
+                                                        >
+                                                            <Eye className="h-3.5 w-3.5 mr-1.5" />
+                                                            Preview Report Card
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+                    )}
                 </div>
             )}
 

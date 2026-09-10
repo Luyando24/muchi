@@ -8,6 +8,7 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import fs from 'fs';
 import { PDFDocument } from 'pdf-lib';
 import * as tus from 'tus-js-client';
+import JSZip from 'jszip';
 import { supabaseAdmin } from '../lib/supabase.js';
 
 export const PDF_STORAGE_BUCKET = process.env.REPORT_CARD_PDF_BUCKET || 'report-card-pdfs';
@@ -591,4 +592,95 @@ export async function generateClassPdf(key: PdfKey, sharedBrowser?: Browser): Pr
     if (pdfWorkerState.phase !== 'failed') pdfWorkerState.phase = 'idle';
     pdfInFlight.delete(lockKey);
   }
+}
+
+/**
+ * Packages all pre-compiled class PDFs for a given school, term, and year into a ZIP archive.
+ */
+export async function generateAllClassesZip(
+  schoolId: string,
+  term: string,
+  academicYear: string
+): Promise<{ buffer: Buffer; filename: string; count: number }> {
+  await ensurePdfStorageBucket();
+
+  const folder = sanitize(schoolId);
+  const { data: files, error: listError } = await supabaseAdmin.storage
+    .from(PDF_STORAGE_BUCKET)
+    .list(folder, { limit: 1000 });
+
+  if (listError) {
+    throw new Error(`Unable to list PDFs from storage: ${listError.message}`);
+  }
+
+  const { data: classes } = await supabaseAdmin
+    .from('classes')
+    .select('id, name')
+    .eq('school_id', schoolId);
+
+  const classNameMap = new Map<string, string>((classes || []).map((c: any) => [c.id, String(c.name || 'Class')]));
+
+  const safeTerm = sanitize(term);
+  const safeYear = sanitize(academicYear);
+
+  const matchingFiles = (files || []).filter((file: any) => {
+    if (!file.name.endsWith('.pdf') || storedFileSize(file) <= MIN_PDF_BYTES) return false;
+    // Expected pattern: {classId}_{term}_{examType}_{academicYear}.pdf
+    return file.name.includes(`_${safeTerm}_`) && file.name.includes(`_${safeYear}.pdf`);
+  });
+
+  if (matchingFiles.length === 0) {
+    throw new Error(`No pre-compiled class PDFs found ready for ${term} ${academicYear}.`);
+  }
+
+  const zip = new JSZip();
+  let count = 0;
+  const seenClassNames = new Set<string>();
+
+  for (const file of matchingFiles) {
+    try {
+      const { data, error: downloadError } = await supabaseAdmin.storage
+        .from(PDF_STORAGE_BUCKET)
+        .download(`${folder}/${file.name}`);
+
+      if (downloadError || !data) {
+        console.warn(`[ZipExport] Failed to download ${file.name}:`, downloadError?.message);
+        continue;
+      }
+
+      const arrayBuf = await data.arrayBuffer();
+
+      // Extract class ID and resolve human-friendly name
+      const parts = file.name.replace(/\.pdf$/, '').split('_');
+      const classId = parts[0];
+      const rawClassName = classNameMap.get(classId) || 'Class';
+      let cleanClassName = rawClassName.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+      if (seenClassNames.has(cleanClassName)) {
+        // If multiple PDFs for same class (e.g. Mid Term and End of Term), disambiguate
+        const examType = parts[2] || '';
+        cleanClassName = `${cleanClassName}_${examType}`;
+      }
+      seenClassNames.add(cleanClassName);
+
+      const entryFilename = `${cleanClassName}_${term.replace(/\s+/g, '_')}_${academicYear}_ReportCards.pdf`;
+      zip.file(entryFilename, Buffer.from(arrayBuf));
+      count++;
+    } catch (err: any) {
+      console.warn(`[ZipExport] Error packaging ${file.name}:`, err.message);
+    }
+  }
+
+  if (count === 0) {
+    throw new Error(`Failed to package any valid PDF files for ${term} ${academicYear}.`);
+  }
+
+  const buffer = await zip.generateAsync({
+    type: 'nodebuffer',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 },
+  });
+
+  const zipFilename = `Report_Cards_All_Classes_${term.replace(/\s+/g, '_')}_${academicYear}.zip`;
+  return { buffer, filename: zipFilename, count };
 }
