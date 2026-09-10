@@ -105,6 +105,8 @@ interface SystemPrecomputeSummary {
   currentClassLabel: string | null;
   queuedSchoolsCount: number;
   generatedAt: string;
+  isStale?: boolean;
+  lastRefreshAttemptAt?: string;
   error?: string;
 }
 
@@ -204,9 +206,17 @@ export default function SystemAdminPortal() {
   const [isTriggeringPrecompute, setIsTriggeringPrecompute] = useState(false);
   const [isLoadingPrecomputeSummary, setIsLoadingPrecomputeSummary] = useState(false);
   const [precomputeSummary, setPrecomputeSummary] = useState<SystemPrecomputeSummary | null>(null);
+  const [precomputeRefreshError, setPrecomputeRefreshError] = useState<string | null>(null);
   const [isActiveCalculationModalOpen, setIsActiveCalculationModalOpen] = useState(false);
+  const precomputeSummaryRequestInFlight = React.useRef(false);
+  const lastValidPrecomputeSummary = React.useRef<SystemPrecomputeSummary | null>(null);
 
   const fetchPrecomputeSummary = async () => {
+    if (precomputeSummaryRequestInFlight.current) return;
+
+    precomputeSummaryRequestInFlight.current = true;
+    const controller = new AbortController();
+    const requestTimeout = window.setTimeout(() => controller.abort(), 30_000);
     try {
       setIsLoadingPrecomputeSummary(true);
       const { data: { session } } = await supabase.auth.getSession();
@@ -215,15 +225,46 @@ export default function SystemAdminPortal() {
       const res = await fetch('/api/admin/system/report-card-precompute-status', {
         headers: {
           Authorization: `Bearer ${session.access_token}`
-        }
+        },
+        signal: controller.signal,
       });
-      if (res.ok) {
-        const data = await res.json();
-        setPrecomputeSummary(data);
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.message || `Unable to refresh progress (${res.status})`);
       }
-    } catch (err) {
+      if (!data) {
+        throw new Error('Unable to read the progress response.');
+      }
+
+      if (data.progressReady) {
+        const nextSummary = data as SystemPrecomputeSummary;
+        setPrecomputeSummary(nextSummary);
+        lastValidPrecomputeSummary.current = nextSummary;
+        setPrecomputeRefreshError(nextSummary.isStale ? nextSummary.error || 'Progress refresh was delayed.' : null);
+      } else if (lastValidPrecomputeSummary.current) {
+        const errorMessage = data.error || 'Unable to refresh system-wide progress.';
+        setPrecomputeSummary({
+          ...lastValidPrecomputeSummary.current,
+          isStale: true,
+          error: errorMessage,
+          lastRefreshAttemptAt: new Date().toISOString(),
+        });
+        setPrecomputeRefreshError(errorMessage);
+      } else {
+        setPrecomputeSummary(data);
+        setPrecomputeRefreshError(data.error || 'Unable to load system-wide progress.');
+      }
+    } catch (err: any) {
       console.error('Error fetching precompute summary:', err);
+      setPrecomputeRefreshError(
+        err?.name === 'AbortError'
+          ? 'The progress refresh timed out. Retrying shortly.'
+          : err?.message || 'Unable to refresh system-wide progress.',
+      );
     } finally {
+      window.clearTimeout(requestTimeout);
+      precomputeSummaryRequestInFlight.current = false;
       setIsLoadingPrecomputeSummary(false);
     }
   };
@@ -266,11 +307,24 @@ export default function SystemAdminPortal() {
   };
 
   React.useEffect(() => {
-    if (activeTab === 'database') {
-      fetchPrecomputeSummary();
-      const interval = setInterval(fetchPrecomputeSummary, 5000);
-      return () => clearInterval(interval);
-    }
+    if (activeTab !== 'database') return;
+
+    let cancelled = false;
+    let refreshTimer: number | undefined;
+
+    const poll = async () => {
+      await fetchPrecomputeSummary();
+      if (!cancelled) {
+        refreshTimer = window.setTimeout(poll, 15_000);
+      }
+    };
+
+    void poll();
+
+    return () => {
+      cancelled = true;
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+    };
   }, [activeTab]);
 
   const sidebarItems = [
@@ -718,29 +772,47 @@ export default function SystemAdminPortal() {
                         ) : (
                           <>
                             <AlertTriangle className="h-4 w-4 text-amber-500" />
-                            <span className="font-semibold text-amber-700 dark:text-amber-400">Migration Pending</span>
+                            <span className="font-semibold text-amber-700 dark:text-amber-400">
+                              {precomputeSummary?.error ? 'Status unavailable' : 'Migration Pending'}
+                            </span>
                           </>
                         )}
                       </div>
                       <p className="text-xs text-slate-400 mt-1">
-                        {precomputeSummary?.tableReady ? 'Table connected & active' : 'Run SQL migration in Supabase'}
+                        {precomputeSummary?.tableReady
+                          ? 'Table connected & active'
+                          : precomputeSummary?.error
+                          ? 'Could not verify the Supabase table'
+                          : 'Run SQL migration in Supabase'}
                       </p>
                     </div>
 
                     <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
                       <div className="text-xs font-semibold uppercase text-slate-500">Cached Report Cards</div>
                       <div className="mt-1 text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-                        {precomputeSummary ? precomputeSummary.cachedReportCardCount.toLocaleString() : '...'}
+                        {precomputeSummary?.progressReady
+                          ? precomputeSummary.cachedReportCardCount.toLocaleString()
+                          : '...'}
                       </div>
                       <p className="text-xs text-slate-400 mt-1">
-                        Across {precomputeSummary?.totalSchools || 0} registered schools
+                        Across {precomputeSummary?.progressReady ? precomputeSummary.totalSchools : '...'} registered schools
                       </p>
                     </div>
 
                     <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
                       <div className="text-xs font-semibold uppercase text-slate-500">Calculation Worker Status</div>
                       <div className="mt-1 flex items-center gap-2">
-                        {precomputeSummary?.isCalculating ? (
+                        {!precomputeSummary?.progressReady ? (
+                          <>
+                            <AlertTriangle className="h-4 w-4 text-amber-500" />
+                            <span className="font-bold text-amber-600 dark:text-amber-400">Status unavailable</span>
+                          </>
+                        ) : precomputeSummary.isStale ? (
+                          <>
+                            <AlertTriangle className="h-4 w-4 text-amber-500" />
+                            <span className="font-bold text-amber-600 dark:text-amber-400">Showing cached status</span>
+                          </>
+                        ) : precomputeSummary.isCalculating ? (
                           <>
                             <Loader2 className="h-4 w-4 text-amber-500 animate-spin" />
                             <span className="font-bold text-amber-600 dark:text-amber-400">Calculating...</span>
@@ -757,7 +829,9 @@ export default function SystemAdminPortal() {
                       <p className="text-xs text-slate-400 mt-1 truncate">
                         {precomputeSummary?.isCalculating 
                           ? `${precomputeSummary.currentSchoolName || 'School'}: ${precomputeSummary.currentClassLabel || ''}`
-                          : (precomputeSummary?.queuedSchoolsCount ? `${precomputeSummary.queuedSchoolsCount} schools queued` : 'Waiting for trigger or new grades')}
+                          : !precomputeSummary?.progressReady
+                          ? 'Waiting for a successful status check'
+                          : (precomputeSummary.queuedSchoolsCount ? `${precomputeSummary.queuedSchoolsCount} schools queued` : 'Waiting for trigger or new grades')}
                       </p>
                     </div>
                   </div>
@@ -771,21 +845,27 @@ export default function SystemAdminPortal() {
                           <h4 className="font-bold text-slate-900 dark:text-white">Results Calculation Progress Across All Schools</h4>
                         </div>
                         <p className="text-xs text-slate-500 mt-1">
-                          {precomputeSummary?.schoolsWithResults || 0} schools have submitted results
+                          {precomputeSummary?.progressReady
+                            ? `${precomputeSummary.schoolsWithResults} schools have submitted results`
+                            : 'Progress temporarily unavailable'}
                         </p>
                       </div>
                       <div className="md:text-right">
                         <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">
-                          {precomputeSummary?.calculationProgressPercentage ?? 0}%
+                          {precomputeSummary?.progressReady
+                            ? `${precomputeSummary.calculationProgressPercentage}%`
+                            : '--'}
                         </div>
                         <p className="text-xs text-slate-500">
-                          {precomputeSummary?.calculatedClasses || 0} of {precomputeSummary?.totalClasses || 0} classes calculated
+                          {precomputeSummary?.progressReady
+                            ? `${precomputeSummary.calculatedClasses} of ${precomputeSummary.totalClasses} classes calculated`
+                            : 'Progress temporarily unavailable'}
                         </p>
                       </div>
                     </div>
 
                     <Progress
-                      value={precomputeSummary?.calculationProgressPercentage ?? 0}
+                      value={precomputeSummary?.progressReady ? precomputeSummary.calculationProgressPercentage : 0}
                       className="h-2.5 bg-slate-200 dark:bg-slate-700 [&>div]:bg-blue-600"
                       aria-label="System-wide results calculation progress"
                     />
@@ -797,26 +877,41 @@ export default function SystemAdminPortal() {
                       </div>
                     )}
 
+                    {precomputeSummary?.progressReady && precomputeRefreshError && (
+                      <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+                        <AlertTriangle className="h-4 w-4 shrink-0" />
+                        <span>Showing the last successful progress snapshot. {precomputeRefreshError}</span>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
                       <div>
                         <p className="text-xs text-slate-500">Schools Calculated</p>
                         <p className="font-bold text-slate-900 dark:text-white">
-                          {precomputeSummary?.schoolsCalculationComplete || 0} / {precomputeSummary?.schoolsWithResults || 0}
+                          {precomputeSummary?.progressReady
+                            ? `${precomputeSummary.schoolsCalculationComplete} / ${precomputeSummary.schoolsWithResults}`
+                            : '--'}
                         </p>
                       </div>
                       <div>
                         <p className="text-xs text-slate-500">Classes Remaining</p>
-                        <p className="font-bold text-slate-900 dark:text-white">{precomputeSummary?.remainingClasses || 0}</p>
+                        <p className="font-bold text-slate-900 dark:text-white">
+                          {precomputeSummary?.progressReady ? precomputeSummary.remainingClasses : '--'}
+                        </p>
                       </div>
                       <div>
                         <p className="text-xs text-slate-500">PDFs Ready</p>
                         <p className="font-bold text-slate-900 dark:text-white">
-                          {precomputeSummary?.builtPdfs || 0} / {precomputeSummary?.totalPdfs || 0}
+                          {precomputeSummary?.progressReady
+                            ? `${precomputeSummary.builtPdfs} / ${precomputeSummary.totalPdfs}`
+                            : '--'}
                         </p>
                       </div>
                       <div>
                         <p className="text-xs text-slate-500">PDF Progress</p>
-                        <p className="font-bold text-slate-900 dark:text-white">{precomputeSummary?.pdfProgressPercentage ?? 0}%</p>
+                        <p className="font-bold text-slate-900 dark:text-white">
+                          {precomputeSummary?.progressReady ? `${precomputeSummary.pdfProgressPercentage}%` : '--'}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -846,7 +941,11 @@ export default function SystemAdminPortal() {
                           {!precomputeSummary?.schools?.length ? (
                             <TableRow>
                               <TableCell colSpan={4} className="h-24 text-center text-sm text-slate-500">
-                                {isLoadingPrecomputeSummary ? 'Loading school progress...' : 'No schools found.'}
+                                {isLoadingPrecomputeSummary
+                                  ? 'Loading school progress...'
+                                  : precomputeSummary?.progressReady
+                                  ? 'No schools found.'
+                                  : 'School progress is temporarily unavailable.'}
                               </TableCell>
                             </TableRow>
                           ) : precomputeSummary.schools.map((school) => {

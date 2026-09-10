@@ -1493,7 +1493,7 @@ export function summarizeSystemPrecomputeProgress(schools: SystemSchoolPrecomput
   };
 }
 
-const SYSTEM_PRECOMPUTE_SUMMARY_TTL_MS = 10_000;
+const SYSTEM_PRECOMPUTE_SUMMARY_TTL_MS = 20_000;
 let systemPrecomputeSummaryCache: { expiresAt: number; data: any } | null = null;
 let systemPrecomputeSummaryInFlight: Promise<any> | null = null;
 
@@ -1546,8 +1546,7 @@ export async function triggerFullSystemPrecompute() {
  * Returns weighted system-wide progress and one compact status row per school.
  */
 async function buildSystemPrecomputeSummary() {
-  const [{ count: cachedRows, error: cacheErr }, progressResult, queuedPdfSchoolIds] = await Promise.all([
-    supabaseAdmin.from('report_card_cache').select('*', { count: 'exact', head: true }),
+  const [progressResult, queuedPdfSchoolIds] = await Promise.all([
     supabaseAdmin.rpc('get_system_report_card_progress', {
       p_pdf_bucket: PDF_STORAGE_BUCKET,
       p_min_pdf_bytes: MIN_PDF_BYTES,
@@ -1555,32 +1554,8 @@ async function buildSystemPrecomputeSummary() {
     getQueuedPdfSchoolIds().catch(() => [] as string[]),
   ]);
 
-  const emptyAggregate = summarizeSystemPrecomputeProgress([]);
-
-  if (cacheErr) {
-    return {
-      tableReady: false,
-      progressReady: false,
-      cachedReportCardCount: 0,
-      totalSchools: 0,
-      ...emptyAggregate,
-      schools: [] as SystemSchoolPrecomputeProgress[],
-      generatedAt: new Date().toISOString(),
-      error: cacheErr.message || 'Unable to read the report-card cache table.',
-    };
-  }
-
   if (progressResult.error) {
-    return {
-      tableReady: true,
-      progressReady: false,
-      cachedReportCardCount: cachedRows || 0,
-      totalSchools: 0,
-      ...emptyAggregate,
-      schools: [] as SystemSchoolPrecomputeProgress[],
-      generatedAt: new Date().toISOString(),
-      error: progressResult.error.message || 'Unable to calculate system-wide progress.',
-    };
+    throw new Error(progressResult.error.message || 'Unable to calculate system-wide progress.');
   }
 
   const queuedSchoolIds = new Set([...schedulerState.priorityQueue, ...queuedPdfSchoolIds]);
@@ -1617,12 +1592,14 @@ async function buildSystemPrecomputeSummary() {
     return a.schoolName.localeCompare(b.schoolName);
   });
 
+  const aggregate = summarizeSystemPrecomputeProgress(schoolProgress);
+
   return {
     tableReady: true,
     progressReady: true,
-    cachedReportCardCount: cachedRows || 0,
+    cachedReportCardCount: aggregate.calculatedClasses,
     totalSchools: schoolProgress.length,
-    ...summarizeSystemPrecomputeProgress(schoolProgress),
+    ...aggregate,
     schools: schoolProgress,
     generatedAt: new Date().toISOString(),
   };
@@ -1653,6 +1630,7 @@ export async function getSystemPrecomputeSummary() {
 
     return {
       ...snapshot,
+      isStale: false,
       isCalculating: schedulerState.isCalculating,
       currentSchoolId: schedulerState.currentSchoolId,
       currentSchoolName: schedulerState.currentSchoolName,
@@ -1660,6 +1638,24 @@ export async function getSystemPrecomputeSummary() {
       queuedSchoolsCount: schedulerState.priorityQueue.length,
     };
   } catch (err: any) {
+    const lastSuccessfulSnapshot = systemPrecomputeSummaryCache?.data?.progressReady
+      ? systemPrecomputeSummaryCache.data
+      : null;
+
+    if (lastSuccessfulSnapshot) {
+      return {
+        ...lastSuccessfulSnapshot,
+        isStale: true,
+        isCalculating: schedulerState.isCalculating,
+        currentSchoolId: schedulerState.currentSchoolId,
+        currentSchoolName: schedulerState.currentSchoolName,
+        currentClassLabel: schedulerState.currentClassLabel,
+        queuedSchoolsCount: schedulerState.priorityQueue.length,
+        lastRefreshAttemptAt: new Date().toISOString(),
+        error: err?.message || 'Unable to refresh system-wide progress.',
+      };
+    }
+
     const emptyAggregate = summarizeSystemPrecomputeProgress([]);
     return {
       tableReady: false,
@@ -1668,13 +1664,14 @@ export async function getSystemPrecomputeSummary() {
       totalSchools: 0,
       ...emptyAggregate,
       schools: [] as SystemSchoolPrecomputeProgress[],
-      isCalculating: false,
-      currentSchoolId: null,
-      currentSchoolName: null,
-      currentClassLabel: null,
-      queuedSchoolsCount: 0,
+      isStale: false,
+      isCalculating: schedulerState.isCalculating,
+      currentSchoolId: schedulerState.currentSchoolId,
+      currentSchoolName: schedulerState.currentSchoolName,
+      currentClassLabel: schedulerState.currentClassLabel,
+      queuedSchoolsCount: schedulerState.priorityQueue.length,
       generatedAt: new Date().toISOString(),
-      error: err.message,
+      error: err?.message || 'Unable to load system-wide progress.',
     };
   }
 }
