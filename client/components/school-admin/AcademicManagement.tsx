@@ -59,6 +59,35 @@ interface Subject {
   code: string;
 }
 
+interface ClassSubjectAllocation {
+  classSubjectId: string;
+  teacherId: string | null;
+  teacherName: string | null;
+}
+
+interface ClassSubjectSummary {
+  id: string;
+  name: string;
+  department: string | null;
+  code: string | null;
+  allocations?: ClassSubjectAllocation[];
+  teachers?: Array<{ id: string; name: string | null }>;
+  classSubjectId?: string;
+  teacherId?: string | null;
+  teacherName?: string | null;
+}
+
+function getClassSubjectAllocations(subject: ClassSubjectSummary): ClassSubjectAllocation[] {
+  if (subject.allocations?.length) return subject.allocations;
+  if (!subject.classSubjectId) return [];
+
+  return [{
+    classSubjectId: subject.classSubjectId,
+    teacherId: subject.teacherId ?? null,
+    teacherName: subject.teacherName ?? null,
+  }];
+}
+
 interface Class {
   id: string;
   name: string;
@@ -278,7 +307,7 @@ export default function AcademicManagement() {
 
   // Allocation State
   const [allocationClassId, setAllocationClassId] = useState<string>('');
-  const [classSubjects, setClassSubjects] = useState<any[]>([]);
+  const [classSubjects, setClassSubjects] = useState<ClassSubjectSummary[]>([]);
   const [isLoadingAllocations, setIsLoadingAllocations] = useState(false);
   const [isAddAllocationOpen, setIsAddAllocationOpen] = useState(false);
   const [allocationForm, setAllocationForm] = useState<{ subjectId: string; teacherId: string; classSubjectId?: string }>({ subjectId: '', teacherId: '' });
@@ -1824,54 +1853,68 @@ export default function AcademicManagement() {
                   </TableHeader>
                   <TableBody>
                     {classSubjects.map((cs) => (
-                      <TableRow key={cs.classSubjectId}>
+                      <TableRow key={cs.id}>
                         <TableCell>{cs.code}</TableCell>
-                        <TableCell className="font-medium">{cs.name}</TableCell>
+                        <TableCell className="font-medium">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span>{cs.name}</span>
+                            {(cs.teachers?.length ?? 0) > 1 && (
+                              <Badge variant="secondary">
+                                {cs.teachers?.length} teachers
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>{cs.department}</TableCell>
                         <TableCell>
-                           <Combobox
-                             className="w-[200px] h-8"
-                             options={[
-                               { label: "Unassigned", value: "unassigned" },
-                               ...teachers.map(t => ({ label: t.fullName, value: t.id }))
-                             ]}
-                             value={cs.teacherId || "unassigned"}
-                             onValueChange={async (newTeacherId) => {
-                               try {
-                                 const { data: { session } } = await supabase.auth.getSession();
-                                 if (!session) return;
-                                 
-                                 const teacherIdToAssign = (!newTeacherId || newTeacherId === "unassigned") ? null : newTeacherId;
+                          <div className="flex min-w-[200px] flex-col gap-2">
+                            {getClassSubjectAllocations(cs).map((allocation) => (
+                              <Combobox
+                                key={allocation.classSubjectId}
+                                className="h-8 w-[200px]"
+                                options={[
+                                  { label: "Unassigned", value: "unassigned" },
+                                  ...teachers.map(t => ({ label: t.fullName, value: t.id }))
+                                ]}
+                                value={allocation.teacherId || "unassigned"}
+                                onValueChange={async (newTeacherId) => {
+                                  try {
+                                    const { data: { session } } = await supabase.auth.getSession();
+                                    if (!session) return;
 
-                                 const result = await syncFetch(`/api/school/classes/${allocationClassId}/subjects/assign`, {
-                                     method: 'POST',
-                                     headers: {
-                                       'Content-Type': 'application/json',
-                                       'Authorization': `Bearer ${session.access_token}`
-                                     },
-                                     body: JSON.stringify({
-                                       subjectId: cs.id,
-                                       classSubjectId: cs.classSubjectId,
-                                       teacherId: teacherIdToAssign
-                                     })
-                                  });
-                                  
-                                  if (result.offline) {
-                                    toast({ title: "Offline Mode", description: "Teacher update queued for sync." });
-                                  } else {
-                                    toast({ title: "Success", description: "Teacher updated" });
+                                    const teacherIdToAssign = (!newTeacherId || newTeacherId === "unassigned") ? null : newTeacherId;
+
+                                    const result = await syncFetch(`/api/school/classes/${allocationClassId}/subjects/assign`, {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${session.access_token}`
+                                      },
+                                      body: JSON.stringify({
+                                        subjectId: cs.id,
+                                        classSubjectId: allocation.classSubjectId,
+                                        teacherId: teacherIdToAssign
+                                      })
+                                    });
+
+                                    if (result.offline) {
+                                      toast({ title: "Offline Mode", description: "Teacher update queued for sync." });
+                                    } else {
+                                      toast({ title: "Success", description: "Teacher updated" });
+                                    }
+                                    fetchAllocations(allocationClassId);
+                                  } catch (e: any) {
+                                    console.error("Failed to update teacher:", e);
+                                    toast({
+                                      title: "Error",
+                                      description: e?.message || "Failed to update teacher",
+                                      variant: "destructive"
+                                    });
                                   }
-                                 fetchAllocations(allocationClassId);
-                               } catch (e: any) {
-                                 console.error("Failed to update teacher:", e);
-                                 toast({ 
-                                   title: "Error", 
-                                   description: e?.message || "Failed to update teacher", 
-                                   variant: "destructive" 
-                                 });
-                                }
-                             }}
-                           />
+                                }}
+                              />
+                            ))}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right">
                           <Button 

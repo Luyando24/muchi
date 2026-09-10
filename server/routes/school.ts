@@ -7,6 +7,7 @@ import { requireActiveLicense } from "../middleware/license.js";
 import { rateLimiter } from "../middleware/rateLimiter.js";
 import { ensureSchoolSettings } from "../lib/school-settings.js";
 import { findBestClassMatch, normalizeClassName } from "../lib/class-matching.js";
+import { groupClassSubjectAllocations } from "../lib/class-subject-allocations.js";
 import { standardizeSubjectName, standardizeClassName, standardizeDepartmentName } from "../../shared/name-standardization.js";
 import {
   isG57Class,
@@ -6728,6 +6729,7 @@ router.get(
         id,
         subject_id,
         teacher_id,
+        teacher_name,
         subjects(id, name, code, department),
         profiles(id, full_name)
       `,
@@ -6739,13 +6741,7 @@ router.get(
         throw error;
       }
 
-      // Map to a cleaner structure
-      const subjects = data.map((item: any) => ({
-        ...item.subjects,
-        classSubjectId: item.id,
-        teacherId: item.teacher_id,
-        teacherName: Array.isArray(item.profiles) ? item.profiles[0]?.full_name : item.profiles?.full_name,
-      }));
+      const subjects = groupClassSubjectAllocations(data || []);
 
       res.json(subjects);
     } catch (error: any) {

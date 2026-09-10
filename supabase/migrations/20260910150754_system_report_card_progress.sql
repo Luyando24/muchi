@@ -19,18 +19,18 @@ set search_path = ''
 as $$
   with submitted_combos as (
     select distinct
-      grades.school_id,
-      enrollments.class_id,
-      grades.term,
-      grades.exam_type,
-      grades.academic_year
-    from public.student_grades as grades
-    inner join public.enrollments as enrollments
-      on enrollments.school_id = grades.school_id
-      and enrollments.student_id = grades.student_id
-      and enrollments.academic_year = grades.academic_year
-    where grades.status in ('Submitted', 'Published')
-      and enrollments.class_id is not null
+      g.school_id,
+      e.class_id,
+      g.term,
+      g.exam_type,
+      g.academic_year
+    from public.student_grades g
+    join public.enrollments e on e.student_id = g.student_id
+      and e.academic_year = g.academic_year
+    join public.classes c on c.id = e.class_id
+      and c.school_id = g.school_id
+    where g.status in ('Submitted', 'Published')
+      and e.class_id is not null
   ),
   combo_progress as (
     select
