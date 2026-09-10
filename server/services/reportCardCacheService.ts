@@ -33,6 +33,8 @@ import {
   getPdfWorkerState,
   isPdfWorkerLeaseActive,
   launchPdfBrowser,
+  MIN_PDF_BYTES,
+  PDF_STORAGE_BUCKET,
 } from './pdfGenerationService.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -1448,6 +1450,53 @@ export async function processPendingReportCardBatch(): Promise<{
  * System Admin manual trigger:
  * Forces a full system-wide precompute cycle across all schools and all submitted classes.
  */
+export interface SystemSchoolPrecomputeProgress {
+  schoolId: string;
+  schoolName: string;
+  totalClasses: number;
+  calculatedClasses: number;
+  remainingClasses: number;
+  calculationProgressPercentage: number;
+  totalPdfs: number;
+  builtPdfs: number;
+  remainingPdfs: number;
+  pdfProgressPercentage: number;
+  isCalculationCompleted: boolean;
+  isPdfCompleted: boolean;
+  isQueued: boolean;
+}
+
+export function summarizeSystemPrecomputeProgress(schools: SystemSchoolPrecomputeProgress[]) {
+  const schoolsWithResults = schools.filter((school) => school.totalClasses > 0);
+  const totalClasses = schoolsWithResults.reduce((sum, school) => sum + school.totalClasses, 0);
+  const calculatedClasses = schoolsWithResults.reduce((sum, school) => sum + school.calculatedClasses, 0);
+  const totalPdfs = schoolsWithResults.reduce((sum, school) => sum + school.totalPdfs, 0);
+  const builtPdfs = schoolsWithResults.reduce((sum, school) => sum + school.builtPdfs, 0);
+
+  return {
+    schoolsWithResults: schoolsWithResults.length,
+    schoolsCalculationComplete: schoolsWithResults.filter((school) => school.isCalculationCompleted).length,
+    schoolsPdfComplete: schoolsWithResults.filter((school) => school.isPdfCompleted).length,
+    schoolsFullyComplete: schoolsWithResults.filter(
+      (school) => school.isCalculationCompleted && school.isPdfCompleted,
+    ).length,
+    totalClasses,
+    calculatedClasses,
+    remainingClasses: Math.max(0, totalClasses - calculatedClasses),
+    calculationProgressPercentage: totalClasses > 0
+      ? Math.round((calculatedClasses / totalClasses) * 100)
+      : 100,
+    totalPdfs,
+    builtPdfs,
+    remainingPdfs: Math.max(0, totalPdfs - builtPdfs),
+    pdfProgressPercentage: totalPdfs > 0 ? Math.round((builtPdfs / totalPdfs) * 100) : 100,
+  };
+}
+
+const SYSTEM_PRECOMPUTE_SUMMARY_TTL_MS = 10_000;
+let systemPrecomputeSummaryCache: { expiresAt: number; data: any } | null = null;
+let systemPrecomputeSummaryInFlight: Promise<any> | null = null;
+
 export async function triggerFullSystemPrecompute() {
   // 1. Check if report_card_cache table exists and is accessible
   const { error: tableCheckError } = await supabaseAdmin
@@ -1476,6 +1525,8 @@ export async function triggerFullSystemPrecompute() {
     }
   }
 
+  systemPrecomputeSummaryCache = null;
+
   // 4. Wake the scheduler immediately
   triggerSchedulerWake();
 
@@ -1492,33 +1543,137 @@ export async function triggerFullSystemPrecompute() {
 
 /**
  * System Admin summary:
- * Returns system-wide calculation stats (how many schools, classes cached, active worker status).
+ * Returns weighted system-wide progress and one compact status row per school.
  */
-export async function getSystemPrecomputeSummary() {
-  try {
-    const [{ count: cachedRows, error: cacheErr }, { count: totalSchools }] = await Promise.all([
-      supabaseAdmin.from('report_card_cache').select('*', { count: 'exact', head: true }),
-      supabaseAdmin.from('schools').select('*', { count: 'exact', head: true }),
-    ]);
+async function buildSystemPrecomputeSummary() {
+  const [{ count: cachedRows, error: cacheErr }, progressResult, queuedPdfSchoolIds] = await Promise.all([
+    supabaseAdmin.from('report_card_cache').select('*', { count: 'exact', head: true }),
+    supabaseAdmin.rpc('get_system_report_card_progress', {
+      p_pdf_bucket: PDF_STORAGE_BUCKET,
+      p_min_pdf_bytes: MIN_PDF_BYTES,
+    }),
+    getQueuedPdfSchoolIds().catch(() => [] as string[]),
+  ]);
+
+  const emptyAggregate = summarizeSystemPrecomputeProgress([]);
+
+  if (cacheErr) {
+    return {
+      tableReady: false,
+      progressReady: false,
+      cachedReportCardCount: 0,
+      totalSchools: 0,
+      ...emptyAggregate,
+      schools: [] as SystemSchoolPrecomputeProgress[],
+      generatedAt: new Date().toISOString(),
+      error: cacheErr.message || 'Unable to read the report-card cache table.',
+    };
+  }
+
+  if (progressResult.error) {
+    return {
+      tableReady: true,
+      progressReady: false,
+      cachedReportCardCount: cachedRows || 0,
+      totalSchools: 0,
+      ...emptyAggregate,
+      schools: [] as SystemSchoolPrecomputeProgress[],
+      generatedAt: new Date().toISOString(),
+      error: progressResult.error.message || 'Unable to calculate system-wide progress.',
+    };
+  }
+
+  const queuedSchoolIds = new Set([...schedulerState.priorityQueue, ...queuedPdfSchoolIds]);
+  const schoolProgress: SystemSchoolPrecomputeProgress[] = (progressResult.data || []).map((row: any) => {
+    const totalClasses = Number(row.total_classes || 0);
+    const calculatedClasses = Number(row.calculated_classes || 0);
+    const totalPdfs = Number(row.total_pdfs || 0);
+    const builtPdfs = Number(row.built_pdfs || 0);
 
     return {
-      tableReady: !cacheErr,
-      cachedReportCardCount: cachedRows || 0,
-      totalSchools: totalSchools || 0,
+      schoolId: row.school_id,
+      schoolName: row.school_name || 'School',
+      totalClasses,
+      calculatedClasses,
+      remainingClasses: Math.max(0, totalClasses - calculatedClasses),
+      calculationProgressPercentage: totalClasses > 0
+        ? Math.round((calculatedClasses / totalClasses) * 100)
+        : 100,
+      totalPdfs,
+      builtPdfs,
+      remainingPdfs: Math.max(0, totalPdfs - builtPdfs),
+      pdfProgressPercentage: totalPdfs > 0 ? Math.round((builtPdfs / totalPdfs) * 100) : 100,
+      isCalculationCompleted: totalClasses === calculatedClasses,
+      isPdfCompleted: totalPdfs === builtPdfs,
+      isQueued: queuedSchoolIds.has(row.school_id),
+    };
+  });
+
+  schoolProgress.sort((a, b) => {
+    if (a.schoolId === schedulerState.currentSchoolId) return -1;
+    if (b.schoolId === schedulerState.currentSchoolId) return 1;
+    if ((a.totalClasses > 0) !== (b.totalClasses > 0)) return a.totalClasses > 0 ? -1 : 1;
+    if (a.isCalculationCompleted !== b.isCalculationCompleted) return a.isCalculationCompleted ? 1 : -1;
+    return a.schoolName.localeCompare(b.schoolName);
+  });
+
+  return {
+    tableReady: true,
+    progressReady: true,
+    cachedReportCardCount: cachedRows || 0,
+    totalSchools: schoolProgress.length,
+    ...summarizeSystemPrecomputeProgress(schoolProgress),
+    schools: schoolProgress,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+export async function getSystemPrecomputeSummary() {
+  try {
+    let snapshot = systemPrecomputeSummaryCache?.expiresAt && systemPrecomputeSummaryCache.expiresAt > Date.now()
+      ? systemPrecomputeSummaryCache.data
+      : null;
+
+    if (!snapshot) {
+      if (!systemPrecomputeSummaryInFlight) {
+        systemPrecomputeSummaryInFlight = buildSystemPrecomputeSummary()
+          .then((data) => {
+            systemPrecomputeSummaryCache = {
+              data,
+              expiresAt: Date.now() + SYSTEM_PRECOMPUTE_SUMMARY_TTL_MS,
+            };
+            return data;
+          })
+          .finally(() => {
+            systemPrecomputeSummaryInFlight = null;
+          });
+      }
+      snapshot = await systemPrecomputeSummaryInFlight;
+    }
+
+    return {
+      ...snapshot,
       isCalculating: schedulerState.isCalculating,
+      currentSchoolId: schedulerState.currentSchoolId,
       currentSchoolName: schedulerState.currentSchoolName,
       currentClassLabel: schedulerState.currentClassLabel,
       queuedSchoolsCount: schedulerState.priorityQueue.length,
     };
   } catch (err: any) {
+    const emptyAggregate = summarizeSystemPrecomputeProgress([]);
     return {
       tableReady: false,
+      progressReady: false,
       cachedReportCardCount: 0,
       totalSchools: 0,
+      ...emptyAggregate,
+      schools: [] as SystemSchoolPrecomputeProgress[],
       isCalculating: false,
+      currentSchoolId: null,
       currentSchoolName: null,
       currentClassLabel: null,
       queuedSchoolsCount: 0,
+      generatedAt: new Date().toISOString(),
       error: err.message,
     };
   }

@@ -12,7 +12,7 @@ import JSZip from 'jszip';
 import { supabaseAdmin } from '../lib/supabase.js';
 
 export const PDF_STORAGE_BUCKET = process.env.REPORT_CARD_PDF_BUCKET || 'report-card-pdfs';
-const MIN_PDF_BYTES = 5_000;
+export const MIN_PDF_BYTES = 5_000;
 const LARGE_UPLOAD_BYTES = 6 * 1024 * 1024;
 const QUEUE_FOLDER = '_queue';
 const WORKER_LEASE_PATH = '_worker/report-card-pdfs.json';

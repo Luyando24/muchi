@@ -65,6 +65,49 @@ const securityLogs: any[] = [];
 
 const systemLogs: any[] = [];
 
+interface SystemSchoolPrecomputeProgress {
+  schoolId: string;
+  schoolName: string;
+  totalClasses: number;
+  calculatedClasses: number;
+  remainingClasses: number;
+  calculationProgressPercentage: number;
+  totalPdfs: number;
+  builtPdfs: number;
+  remainingPdfs: number;
+  pdfProgressPercentage: number;
+  isCalculationCompleted: boolean;
+  isPdfCompleted: boolean;
+  isQueued: boolean;
+}
+
+interface SystemPrecomputeSummary {
+  tableReady: boolean;
+  progressReady: boolean;
+  cachedReportCardCount: number;
+  totalSchools: number;
+  schoolsWithResults: number;
+  schoolsCalculationComplete: number;
+  schoolsPdfComplete: number;
+  schoolsFullyComplete: number;
+  totalClasses: number;
+  calculatedClasses: number;
+  remainingClasses: number;
+  calculationProgressPercentage: number;
+  totalPdfs: number;
+  builtPdfs: number;
+  remainingPdfs: number;
+  pdfProgressPercentage: number;
+  schools: SystemSchoolPrecomputeProgress[];
+  isCalculating: boolean;
+  currentSchoolId: string | null;
+  currentSchoolName: string | null;
+  currentClassLabel: string | null;
+  queuedSchoolsCount: number;
+  generatedAt: string;
+  error?: string;
+}
+
 export default function SystemAdminPortal() {
   const queryTab = new URLSearchParams(window.location.search).get('tab');
   const [activeTab, setActiveTab] = useState(queryTab || "dashboard");
@@ -160,15 +203,7 @@ export default function SystemAdminPortal() {
 
   const [isTriggeringPrecompute, setIsTriggeringPrecompute] = useState(false);
   const [isLoadingPrecomputeSummary, setIsLoadingPrecomputeSummary] = useState(false);
-  const [precomputeSummary, setPrecomputeSummary] = useState<{
-    tableReady: boolean;
-    cachedReportCardCount: number;
-    totalSchools: number;
-    isCalculating: boolean;
-    currentSchoolName: string | null;
-    currentClassLabel: string | null;
-    queuedSchoolsCount: number;
-  } | null>(null);
+  const [precomputeSummary, setPrecomputeSummary] = useState<SystemPrecomputeSummary | null>(null);
   const [isActiveCalculationModalOpen, setIsActiveCalculationModalOpen] = useState(false);
 
   const fetchPrecomputeSummary = async () => {
@@ -637,7 +672,7 @@ export default function SystemAdminPortal() {
 
               <Card className="border-indigo-200 shadow-sm dark:border-indigo-900/50">
                 <CardHeader>
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     <div>
                       <CardTitle className="flex items-center gap-2 text-indigo-700 dark:text-indigo-400">
                         <Zap className="h-5 w-5 text-amber-500 fill-amber-500" />
@@ -724,6 +759,159 @@ export default function SystemAdminPortal() {
                           ? `${precomputeSummary.currentSchoolName || 'School'}: ${precomputeSummary.currentClassLabel || ''}`
                           : (precomputeSummary?.queuedSchoolsCount ? `${precomputeSummary.queuedSchoolsCount} schools queued` : 'Waiting for trigger or new grades')}
                       </p>
+                    </div>
+                  </div>
+
+                  {/* System-wide progress */}
+                  <div className="border-y border-slate-200 dark:border-slate-700 py-5 space-y-5">
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Activity className={`h-4 w-4 ${precomputeSummary?.isCalculating ? 'text-blue-600 animate-pulse' : 'text-slate-500'}`} />
+                          <h4 className="font-bold text-slate-900 dark:text-white">Results Calculation Progress Across All Schools</h4>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {precomputeSummary?.schoolsWithResults || 0} schools have submitted results
+                        </p>
+                      </div>
+                      <div className="md:text-right">
+                        <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">
+                          {precomputeSummary?.calculationProgressPercentage ?? 0}%
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          {precomputeSummary?.calculatedClasses || 0} of {precomputeSummary?.totalClasses || 0} classes calculated
+                        </p>
+                      </div>
+                    </div>
+
+                    <Progress
+                      value={precomputeSummary?.calculationProgressPercentage ?? 0}
+                      className="h-2.5 bg-slate-200 dark:bg-slate-700 [&>div]:bg-blue-600"
+                      aria-label="System-wide results calculation progress"
+                    />
+
+                    {precomputeSummary?.error && !precomputeSummary.progressReady && (
+                      <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+                        <AlertTriangle className="h-4 w-4 shrink-0" />
+                        <span>{precomputeSummary.error}</span>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <p className="text-xs text-slate-500">Schools Calculated</p>
+                        <p className="font-bold text-slate-900 dark:text-white">
+                          {precomputeSummary?.schoolsCalculationComplete || 0} / {precomputeSummary?.schoolsWithResults || 0}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">Classes Remaining</p>
+                        <p className="font-bold text-slate-900 dark:text-white">{precomputeSummary?.remainingClasses || 0}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">PDFs Ready</p>
+                        <p className="font-bold text-slate-900 dark:text-white">
+                          {precomputeSummary?.builtPdfs || 0} / {precomputeSummary?.totalPdfs || 0}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">PDF Progress</p>
+                        <p className="font-bold text-slate-900 dark:text-white">{precomputeSummary?.pdfProgressPercentage ?? 0}%</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Per-school progress */}
+                  <div className="space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                      <h4 className="font-bold text-slate-900 dark:text-white">School Progress</h4>
+                      {precomputeSummary?.generatedAt && (
+                        <p className="text-xs text-slate-400">
+                          Updated {new Date(precomputeSummary.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-slate-50 dark:bg-slate-800/60">
+                            <TableHead className="min-w-48">School</TableHead>
+                            <TableHead className="min-w-56">Class Calculations</TableHead>
+                            <TableHead className="min-w-44">Stored PDFs</TableHead>
+                            <TableHead className="text-right">Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {!precomputeSummary?.schools?.length ? (
+                            <TableRow>
+                              <TableCell colSpan={4} className="h-24 text-center text-sm text-slate-500">
+                                {isLoadingPrecomputeSummary ? 'Loading school progress...' : 'No schools found.'}
+                              </TableCell>
+                            </TableRow>
+                          ) : precomputeSummary.schools.map((school) => {
+                            const hasResults = school.totalClasses > 0;
+                            const isActive = precomputeSummary.currentSchoolId === school.schoolId;
+                            const isFullyComplete = school.isCalculationCompleted && school.isPdfCompleted;
+                            const status = !hasResults
+                              ? { label: 'No results', className: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300' }
+                              : isActive
+                              ? { label: 'Calculating', className: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300' }
+                              : isFullyComplete
+                              ? { label: 'Complete', className: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300' }
+                              : school.isCalculationCompleted
+                              ? { label: 'Building PDFs', className: 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300' }
+                              : school.isQueued
+                              ? { label: 'Queued', className: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300' }
+                              : { label: 'Pending', className: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300' };
+
+                            return (
+                              <TableRow key={school.schoolId}>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <Building className="h-4 w-4 text-slate-400 shrink-0" />
+                                    <span className="font-semibold text-slate-900 dark:text-white">{school.schoolName}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {hasResults ? (
+                                    <div className="space-y-1.5">
+                                      <div className="flex items-center justify-between gap-3 text-xs">
+                                        <span className="text-slate-500">{school.calculatedClasses} / {school.totalClasses} classes</span>
+                                        <span className="font-bold text-slate-700 dark:text-slate-300">{school.calculationProgressPercentage}%</span>
+                                      </div>
+                                      <Progress
+                                        value={school.calculationProgressPercentage}
+                                        className="h-1.5 bg-slate-200 dark:bg-slate-700 [&>div]:bg-blue-600"
+                                        aria-label={`${school.schoolName} calculation progress`}
+                                      />
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-slate-400">No submitted classes</span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {hasResults ? (
+                                    <div>
+                                      <span className="font-semibold text-slate-800 dark:text-slate-200">{school.builtPdfs} / {school.totalPdfs}</span>
+                                      <span className="text-xs text-slate-500 ml-1.5">({school.pdfProgressPercentage}%)</span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-slate-400">Not applicable</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Badge variant="outline" className={`whitespace-nowrap ${status.className}`}>
+                                    {isActive && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                                    {!isActive && isFullyComplete && <CheckCircle className="h-3 w-3 mr-1" />}
+                                    {status.label}
+                                  </Badge>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
                     </div>
                   </div>
 
