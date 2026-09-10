@@ -11,8 +11,11 @@ export default function RenderClassReportCards() {
   const examType = searchParams.get('examType') || '';
   const academicYear = searchParams.get('academicYear') || '';
   const token = searchParams.get('token') || '';
+  const offset = Math.max(0, Number.parseInt(searchParams.get('offset') || '0', 10) || 0);
+  const limit = Math.max(0, Number.parseInt(searchParams.get('limit') || '0', 10) || 0);
 
   const [cards, setCards] = useState<any[]>([]);
+  const [totalCards, setTotalCards] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRenderComplete, setIsRenderComplete] = useState(false);
@@ -31,6 +34,10 @@ export default function RenderClassReportCards() {
           academicYear,
           token,
         });
+        if (limit > 0) {
+          query.set('offset', String(offset));
+          query.set('limit', String(limit));
+        }
 
         const res = await fetch(`/api/school/results/internal-class-report-cards?${query.toString()}`);
         if (!res.ok) {
@@ -39,8 +46,10 @@ export default function RenderClassReportCards() {
         }
 
         const data = await res.json();
+        const nextCards = Array.isArray(data) ? data : (Array.isArray(data.cards) ? data.cards : []);
         if (!isCancelled) {
-          setCards(Array.isArray(data) ? data : []);
+          setCards(nextCards);
+          setTotalCards(Number(data.total ?? nextCards.length));
           setIsLoading(false);
 
           // Allow DOM and fonts to settle before signaling completion
@@ -63,7 +72,7 @@ export default function RenderClassReportCards() {
       isCancelled = true;
       document.body.classList.remove('headless-pdf-render');
     };
-  }, [schoolId, classId, term, examType, academicYear, token]);
+  }, [schoolId, classId, term, examType, academicYear, token, offset, limit]);
 
   if (isLoading) {
     return (
@@ -146,7 +155,9 @@ export default function RenderClassReportCards() {
       </div>
 
       {/* Headless browser waits for this signal */}
-      {isRenderComplete && <div id="render-complete" style={{ display: 'none' }} />}
+      {isRenderComplete && (
+        <div id="render-complete" data-total-cards={totalCards} style={{ display: 'none' }} />
+      )}
     </div>
   );
 }

@@ -234,7 +234,9 @@ export default function ResultPrinter() {
     const isPdfsBuilding = useMemo(() => {
         return !!precomputeStatus?.isCompleted && !isAllPdfsReady;
     }, [precomputeStatus, isAllPdfsReady]);
-    const isPdfWorkerActive = isPdfsBuilding && !!precomputeStatus?.isCurrentlyBuildingPdf;
+    const isPdfWorkerActive = isPdfsBuilding && (
+        !!precomputeStatus?.isCurrentlyBuildingPdf || !!precomputeStatus?.isPdfWorkerActive
+    );
     const hasPdfStorageError = isPdfsBuilding && !!precomputeStatus?.pdfStorageError;
 
     /**
@@ -726,10 +728,10 @@ export default function ResultPrinter() {
                                                 ? "All class PDFs compiled & ready for instant download ✓"
                                                 : precomputeStatus?.pdfStorageError
                                                 ? `Storage unavailable: ${precomputeStatus.pdfStorageError}`
-                                                : precomputeStatus?.isCurrentlyBuildingPdf
+                                                : isPdfWorkerActive
                                                 ? precomputeStatus.activePdfLabel
                                                     ? `Compiling PDF: ${precomputeStatus.activePdfLabel}`
-                                                    : "Compiling class PDFs in background…"
+                                                    : "Processing queued PDF batch"
                                                 : precomputeStatus?.isCompleted
                                                 ? "Queued for the next background worker run"
                                                 : "Starts automatically after each class is calculated"}
@@ -762,7 +764,9 @@ export default function ResultPrinter() {
                                         : `${precomputeStatus?.remainingPdfs ?? 0} class PDFs remaining to compile`}
                                 </span>
                                 <span>
-                                    {precomputeStatus?.isPdfCompleted ? "Instant download ready" : `Est. PDF Time: ${precomputeStatus?.estPdfTimeText || 'Calculating…'}`}
+                                    {precomputeStatus?.isPdfCompleted
+                                        ? "Instant download ready"
+                                        : `Adaptive batching • up to ${precomputeStatus?.pdfBatchSize ?? 8} jobs per run`}
                                 </span>
                             </div>
                         </CardContent>

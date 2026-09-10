@@ -12,7 +12,7 @@ import {
   triggerFullSystemPrecompute,
   getSystemPrecomputeSummary,
   getActiveWorkerProgress,
-  processNextPendingReportCardJob,
+  processPendingReportCardBatch,
 } from '../services/reportCardCacheService.js';
 
 const router = Router();
@@ -3529,7 +3529,7 @@ router.get('/cron/report-card-pdfs', async (req: Request, res: Response) => {
       return res.status(202).json({ success: true, skipped: true, message: 'PDF worker is already running.' });
     }
     console.log('[Cron] Report-card PDF worker triggered');
-    const result = await processNextPendingReportCardJob();
+    const result = await processPendingReportCardBatch();
     res.json({ success: true, ...result });
   } catch (error: any) {
     console.error('[Cron] Report-card PDF worker failed:', error);

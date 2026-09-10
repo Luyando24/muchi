@@ -6,6 +6,7 @@ import chromium from '@sparticuz/chromium';
 import puppeteer, { Browser, Page } from 'puppeteer-core';
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import fs from 'fs';
+import { PDFDocument } from 'pdf-lib';
 import * as tus from 'tus-js-client';
 import { supabaseAdmin } from '../lib/supabase.js';
 
@@ -15,6 +16,14 @@ const LARGE_UPLOAD_BYTES = 6 * 1024 * 1024;
 const QUEUE_FOLDER = '_queue';
 const WORKER_LEASE_PATH = '_worker/report-card-pdfs.json';
 const WORKER_LEASE_MS = 6 * 60 * 1000;
+const RENDER_CHUNK_SIZE = Math.min(
+  50,
+  Math.max(12, Number.parseInt(process.env.PDF_RENDER_CHUNK_SIZE || '40', 10) || 40),
+);
+const RENDER_CONCURRENCY = Math.min(
+  3,
+  Math.max(1, Number.parseInt(process.env.PDF_RENDER_CONCURRENCY || '2', 10) || 2),
+);
 
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 export const INTERNAL_RENDER_SECRET = process.env.INTERNAL_RENDER_SECRET
@@ -349,6 +358,21 @@ export async function releasePdfWorkerLease(owner: string): Promise<void> {
   }
 }
 
+export async function isPdfWorkerLeaseActive(): Promise<boolean> {
+  await ensurePdfStorageBucket();
+  const existing = await supabaseAdmin.storage.from(PDF_STORAGE_BUCKET).download(WORKER_LEASE_PATH);
+  if (existing.error) {
+    if (/not found/i.test(existing.error.message)) return false;
+    throw new Error(`Unable to read PDF worker lease: ${existing.error.message}`);
+  }
+  try {
+    const current = JSON.parse(await existing.data.text()) as PdfWorkerLease;
+    return new Date(current.expiresAt).getTime() > Date.now();
+  } catch {
+    return false;
+  }
+}
+
 export function getBrowserExecutablePath(): string {
   if (process.env.PUPPETEER_EXECUTABLE_PATH && fs.existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
     return process.env.PUPPETEER_EXECUTABLE_PATH;
@@ -386,6 +410,15 @@ async function browserLaunchOptions() {
     executablePath: getBrowserExecutablePath(),
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
   };
+}
+
+export async function launchPdfBrowser(): Promise<Browser> {
+  const launch = await browserLaunchOptions();
+  return puppeteer.launch({
+    executablePath: launch.executablePath,
+    headless: process.env.VERCEL ? 'shell' : true,
+    args: launch.args,
+  });
 }
 
 async function preparePdfWatermarks(page: Page): Promise<void> {
@@ -427,21 +460,72 @@ async function preparePdfWatermarks(page: Page): Promise<void> {
   });
 }
 
-export async function generateClassPdf(key: PdfKey): Promise<string | null> {
+async function mergePdfChunks(chunks: Buffer[]): Promise<Buffer> {
+  if (chunks.length === 1) return chunks[0];
+  const merged = await PDFDocument.create();
+  for (const chunk of chunks) {
+    const source = await PDFDocument.load(chunk);
+    const pages = await merged.copyPages(source, source.getPageIndices());
+    for (const page of pages) merged.addPage(page);
+  }
+  return Buffer.from(await merged.save({ useObjectStreams: true, addDefaultPage: false }));
+}
+
+async function renderPdfChunk(browser: Browser, key: PdfKey, offset: number): Promise<{
+  buffer: Buffer;
+  totalCards: number;
+}> {
+  const query = new URLSearchParams({
+    schoolId: key.schoolId,
+    classId: key.classId,
+    term: key.term,
+    examType: key.examType,
+    academicYear: key.academicYear,
+    token: createInternalRenderToken(key),
+    offset: String(offset),
+    limit: String(RENDER_CHUNK_SIZE),
+  });
+  const page = await browser.newPage();
+
+  try {
+    page.setDefaultTimeout(120_000);
+    await page.setViewport({ width: 1240, height: 1754 });
+    await page.goto(`${getPdfRenderBaseUrl()}/render-class-report-cards?${query}`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 45_000,
+    });
+    await page.waitForSelector('#render-complete, #render-error', { timeout: 60_000 });
+    if (await page.$('#render-error')) throw new Error('The report-card render page returned an error.');
+
+    const totalCards = await page.$eval('#render-complete', (element) =>
+      Number((element as HTMLElement).dataset.totalCards || '0'),
+    );
+    if (totalCards <= 0) throw new Error('No report cards were returned for PDF generation.');
+    await preparePdfWatermarks(page);
+    await page.evaluate(() => document.fonts.ready);
+    const bytes = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      preferCSSPageSize: true,
+      timeout: 90_000,
+      margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' },
+    });
+    console.log(
+      `[PdfService] Rendered cards ${offset + 1}-${Math.min(offset + RENDER_CHUNK_SIZE, totalCards)} of ${totalCards}`,
+    );
+    return { buffer: Buffer.from(bytes), totalCards };
+  } finally {
+    try { await page.close(); } catch (_) {}
+  }
+}
+
+export async function generateClassPdf(key: PdfKey, sharedBrowser?: Browser): Promise<string | null> {
   const lockKey = `${key.schoolId}|${key.classId}|${key.term}|${key.examType}|${key.academicYear}`;
   if (pdfInFlight.has(lockKey)) return null;
   pdfInFlight.add(lockKey);
-  let browser: Browser | null = null;
+  let browser: Browser | null = sharedBrowser || null;
+  const ownsBrowser = !sharedBrowser;
   try {
-    const launch = await browserLaunchOptions();
-    const query = new URLSearchParams({
-      schoolId: key.schoolId,
-      classId: key.classId,
-      term: key.term,
-      examType: key.examType,
-      academicYear: key.academicYear,
-      token: createInternalRenderToken(key),
-    });
     pdfWorkerState.currentSchoolId = key.schoolId;
     pdfWorkerState.currentClassId = key.classId;
     pdfWorkerState.currentClassLabel = key.className
@@ -452,30 +536,31 @@ export async function generateClassPdf(key: PdfKey): Promise<string | null> {
     pdfWorkerState.startedAt = new Date().toISOString();
     pdfWorkerState.lastError = null;
 
-    browser = await puppeteer.launch({
-      executablePath: launch.executablePath,
-      headless: process.env.VERCEL ? 'shell' : true,
-      args: launch.args,
-    });
-    const page = await browser.newPage();
-    page.setDefaultTimeout(180_000);
-    await page.setViewport({ width: 1240, height: 1754 });
-    await page.goto(`${getPdfRenderBaseUrl()}/render-class-report-cards?${query}`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 60_000,
-    });
-    await page.waitForSelector('#render-complete, #render-error', { timeout: 90_000 });
-    if (await page.$('#render-error')) throw new Error('The report-card render page returned an error.');
-    await preparePdfWatermarks(page);
+    if (!browser) browser = await launchPdfBrowser();
+    const firstChunk = await renderPdfChunk(browser, key, 0);
+    const remainingOffsets: number[] = [];
+    for (let offset = RENDER_CHUNK_SIZE; offset < firstChunk.totalCards; offset += RENDER_CHUNK_SIZE) {
+      remainingOffsets.push(offset);
+    }
 
-    const bytes = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      preferCSSPageSize: true,
-      timeout: 150_000,
-      margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' },
-    });
-    const buffer = Buffer.from(bytes);
+    const remainingChunks = new Array<Buffer>(remainingOffsets.length);
+    let nextChunkIndex = 0;
+    const workers = Array.from(
+      { length: Math.min(RENDER_CONCURRENCY, remainingOffsets.length) },
+      async () => {
+        while (nextChunkIndex < remainingOffsets.length) {
+          const chunkIndex = nextChunkIndex++;
+          const rendered = await renderPdfChunk(browser!, key, remainingOffsets[chunkIndex]);
+          if (rendered.totalCards !== firstChunk.totalCards) {
+            throw new Error('Report-card data changed while the PDF was being rendered.');
+          }
+          remainingChunks[chunkIndex] = rendered.buffer;
+        }
+      },
+    );
+    await Promise.all(workers);
+
+    const buffer = await mergePdfChunks([firstChunk.buffer, ...remainingChunks]);
     pdfWorkerState.phase = 'uploading';
     pdfWorkerState.totalBytes = buffer.length;
     const objectPath = getPdfStorageObjectPath(key);
@@ -495,7 +580,7 @@ export async function generateClassPdf(key: PdfKey): Promise<string | null> {
     console.error(`[PdfService] PDF generation failed for ${lockKey}:`, pdfWorkerState.lastError);
     throw error;
   } finally {
-    if (browser) try { await browser.close(); } catch (_) {}
+    if (ownsBrowser && browser) try { await browser.close(); } catch (_) {}
     pdfWorkerState.isCompiling = false;
     pdfWorkerState.currentSchoolId = null;
     pdfWorkerState.currentClassId = null;

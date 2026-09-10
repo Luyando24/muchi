@@ -4749,7 +4749,7 @@ router.get(
 // GET /api/school/results/internal-class-report-cards
 // Unauthenticated internal endpoint accessed by headless Edge to capture the report card DOM
 router.get("/results/internal-class-report-cards", async (req: Request, res: Response) => {
-  const { schoolId, classId, term, examType, academicYear, token } = req.query as Record<string, string>;
+  const { schoolId, classId, term, examType, academicYear, token, offset, limit } = req.query as Record<string, string>;
 
   if (!verifyInternalRenderToken({ schoolId, classId, term, examType, academicYear }, token || '')) {
     return res.status(403).json({ message: "Invalid internal render token" });
@@ -4760,14 +4760,24 @@ router.get("/results/internal-class-report-cards", async (req: Request, res: Res
   }
 
   try {
+    const sendCards = (cards: any[]) => {
+      const requestedLimit = Math.min(50, Math.max(0, Number.parseInt(limit || '0', 10) || 0));
+      if (requestedLimit === 0) return res.json(cards);
+      const requestedOffset = Math.max(0, Number.parseInt(offset || '0', 10) || 0);
+      return res.json({
+        cards: cards.slice(requestedOffset, requestedOffset + requestedLimit),
+        total: cards.length,
+      });
+    };
+
     const cached = await getCachedReportCards({ schoolId, classId, term, examType, academicYear });
     if (cached && Array.isArray(cached) && cached.length > 0) {
-      return res.json(cached);
+      return sendCards(cached);
     }
 
     // Fallback: compute live if not yet in cache
     const cards = await computeBatchReportCards(schoolId, classId, term, examType, academicYear);
-    return res.json(cards || []);
+    return sendCards(cards || []);
   } catch (err: any) {
     console.error("Internal class report cards error:", err);
     return res.status(500).json({ message: err.message });

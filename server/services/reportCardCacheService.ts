@@ -20,6 +20,7 @@
  */
 
 import { supabaseAdmin } from '../lib/supabase.js';
+import type { Browser } from 'puppeteer-core';
 import {
   generateClassPdf,
   deleteClassPdf,
@@ -30,6 +31,8 @@ import {
   getQueuedPdfSchoolIds,
   dequeueSchoolPdfBuild,
   getPdfWorkerState,
+  isPdfWorkerLeaseActive,
+  launchPdfBrowser,
 } from './pdfGenerationService.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -40,6 +43,24 @@ interface CacheKey {
   term: string;
   examType: string;
   academicYear: string;
+}
+
+export const PDF_JOBS_PER_CRON = Math.min(
+  8,
+  Math.max(1, Number.parseInt(process.env.PDF_JOBS_PER_CRON || '8', 10) || 8),
+);
+const PDF_CRON_BUDGET_MS = Math.min(
+  270_000,
+  Math.max(60_000, Number.parseInt(process.env.PDF_CRON_BUDGET_MS || '270000', 10) || 270_000),
+);
+
+export interface ReportCardJobResult {
+  processed: boolean;
+  action?: 'calculated' | 'pdf';
+  schoolId?: string;
+  schoolName?: string;
+  classLabel?: string;
+  message: string;
 }
 
 // ─── In-process queue ─────────────────────────────────────────────────────────
@@ -788,6 +809,7 @@ export async function getSchoolPrecomputeStatus(schoolId: string, skipActiveMetr
       pdfStorageError = error.message || 'Unable to read PDF storage';
     }
     const queuedPdfSchoolIds = await getQueuedPdfSchoolIds().catch(() => [] as string[]);
+    const isSharedPdfWorkerActive = await isPdfWorkerLeaseActive().catch(() => false);
 
     // 6. Group by term & academic year
     const termGroupsMap = new Map<string, {
@@ -1047,7 +1069,11 @@ export async function getSchoolPrecomputeStatus(schoolId: string, skipActiveMetr
       pdfProgressPercentage,
       isPdfCompleted,
       isCurrentlyBuildingPdf,
-      pdfWorkerPhase: isCurrentlyBuildingPdf ? pdfWorker.phase : 'queued',
+      isPdfWorkerActive: isSharedPdfWorkerActive,
+      pdfBatchSize: PDF_JOBS_PER_CRON,
+      pdfWorkerPhase: isCurrentlyBuildingPdf
+        ? pdfWorker.phase
+        : isSharedPdfWorkerActive ? 'rendering' : 'queued',
       pdfStorageError,
       activePdfLabel,
       estPdfTimeText,
@@ -1288,14 +1314,9 @@ async function processSchoolBackfill(schoolId: string, schoolNameFallback: strin
  * Supabase cache rows, Storage PDFs, and Storage queue markers survive between
  * invocations, so no in-memory scheduler state is required on Vercel.
  */
-export async function processNextPendingReportCardJob(): Promise<{
-  processed: boolean;
-  action?: 'calculated' | 'pdf';
-  schoolId?: string;
-  schoolName?: string;
-  classLabel?: string;
-  message: string;
-}> {
+export async function processNextPendingReportCardJob(
+  getBrowser?: () => Promise<Browser>,
+): Promise<ReportCardJobResult> {
   const { data: schools, error } = await supabaseAdmin
     .from('schools')
     .select('id, name')
@@ -1356,7 +1377,7 @@ export async function processNextPendingReportCardJob(): Promise<{
 
     const combo = pendingPdfs[0];
     const classLabel = `${combo.className} (${combo.term} - ${combo.examType})`;
-    await generateClassPdf(combo);
+    await generateClassPdf(combo, getBrowser ? await getBrowser() : undefined);
     if (!(await isClassPdfReady(combo))) {
       throw new Error(`PDF upload verification failed for ${classLabel}.`);
     }
@@ -1374,6 +1395,53 @@ export async function processNextPendingReportCardJob(): Promise<{
   }
 
   return { processed: false, message: 'All report-card calculations and PDFs are ready.' };
+}
+
+export async function processPendingReportCardBatch(): Promise<{
+  processedJobs: number;
+  completed: boolean;
+  elapsedMs: number;
+  jobs: ReportCardJobResult[];
+  message: string;
+}> {
+  const startedAt = Date.now();
+  const jobs: ReportCardJobResult[] = [];
+  let completed = false;
+  let lastJobDurationMs = 30_000;
+  let browser: Browser | null = null;
+  const getBrowser = async () => {
+    if (!browser) browser = await launchPdfBrowser();
+    return browser;
+  };
+
+  try {
+    while (jobs.length < PDF_JOBS_PER_CRON) {
+      const elapsedMs = Date.now() - startedAt;
+      const nextJobReserveMs = Math.max(45_000, Math.ceil(lastJobDurationMs * 1.2));
+      if (jobs.length > 0 && elapsedMs + nextJobReserveMs > PDF_CRON_BUDGET_MS) break;
+
+      const jobStartedAt = Date.now();
+      const job = await processNextPendingReportCardJob(getBrowser);
+      lastJobDurationMs = Date.now() - jobStartedAt;
+      if (!job.processed) {
+        completed = true;
+        break;
+      }
+      jobs.push(job);
+    }
+  } finally {
+    if (browser) try { await browser.close(); } catch (_) {}
+  }
+
+  return {
+    processedJobs: jobs.length,
+    completed,
+    elapsedMs: Date.now() - startedAt,
+    jobs,
+    message: completed
+      ? 'All report-card calculations and PDFs are ready.'
+      : `Processed ${jobs.length} report-card job${jobs.length === 1 ? '' : 's'} in this worker run.`,
+  };
 }
 
 /**
