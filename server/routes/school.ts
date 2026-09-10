@@ -6944,6 +6944,85 @@ router.post(
   },
 );
 
+// DELETE /api/school/classes/:id/subjects/:subjectId/assignments/:classSubjectId
+// Removes one teacher allocation while preserving the subject when it has no other allocations.
+router.delete(
+  "/classes/:id/subjects/:subjectId/assignments/:classSubjectId",
+  requireSchoolRole(ADMIN_ROLES),
+  async (req: Request, res: Response) => {
+    const profile = (req as any).profile;
+    const schoolId = profile.school_id;
+    const isSystemAdmin = profile.role === "system_admin" || profile.secondary_role === "system_admin";
+    const { id: classId, subjectId, classSubjectId } = req.params;
+
+    try {
+      let classQuery = supabaseAdmin
+        .from("classes")
+        .select("id")
+        .eq("id", classId);
+
+      if (!isSystemAdmin) {
+        classQuery = classQuery.eq("school_id", schoolId);
+      }
+
+      const { data: schoolClass, error: classError } = await classQuery.maybeSingle();
+
+      if (classError) throw classError;
+      if (!schoolClass) {
+        return res.status(404).json({ message: "Class not found" });
+      }
+
+      const { data: allocation, error: allocationError } = await supabaseAdmin
+        .from("class_subjects")
+        .select("id, teacher_id")
+        .eq("id", classSubjectId)
+        .eq("class_id", classId)
+        .eq("subject_id", subjectId)
+        .maybeSingle();
+
+      if (allocationError) throw allocationError;
+      if (!allocation) {
+        return res.status(404).json({ message: "Teacher assignment not found" });
+      }
+      if (!allocation.teacher_id) {
+        return res.status(400).json({ message: "This subject already has no assigned teacher" });
+      }
+
+      const { data: subjectAllocations, error: allocationsError } = await supabaseAdmin
+        .from("class_subjects")
+        .select("id")
+        .eq("class_id", classId)
+        .eq("subject_id", subjectId);
+
+      if (allocationsError) throw allocationsError;
+
+      if ((subjectAllocations?.length || 0) <= 1) {
+        const { error: updateError } = await supabaseAdmin
+          .from("class_subjects")
+          .update({ teacher_id: null, teacher_name: null })
+          .eq("id", classSubjectId);
+
+        if (updateError) throw updateError;
+        return res.json({
+          message: "Teacher removed; the subject remains available without an assigned teacher.",
+          subjectRetained: true,
+        });
+      }
+
+      const { error: deleteError } = await supabaseAdmin
+        .from("class_subjects")
+        .delete()
+        .eq("id", classSubjectId);
+
+      if (deleteError) throw deleteError;
+      res.json({ message: "Teacher removed from subject", subjectRetained: true });
+    } catch (error: any) {
+      console.error("Remove Subject Teacher Error:", error);
+      res.status(500).json({ message: error.message || "Failed to remove teacher assignment" });
+    }
+  },
+);
+
 // DELETE /api/school/classes/:id/subjects/:subjectId
 router.delete(
   "/classes/:id/subjects/:subjectId",

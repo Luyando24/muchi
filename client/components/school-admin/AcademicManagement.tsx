@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { standardizeSubjectName, standardizeClassName, standardizeDepartmentName } from '@shared/name-standardization';
-import { Plus, Trash2, Edit, Save, Search, Settings, BookOpen, Calculator, CheckCircle2, AlertTriangle, Loader2, ClipboardList, Send, ArrowRightLeft, Download, Layers, Building, Calendar, Printer, FileSpreadsheet, Lock, ShieldAlert, GraduationCap } from 'lucide-react';
+import { Plus, Trash2, Edit, Save, Search, Settings, BookOpen, Calculator, CheckCircle2, AlertTriangle, Loader2, ClipboardList, Send, ArrowRightLeft, Download, Layers, Building, Calendar, Printer, FileSpreadsheet, Lock, ShieldAlert, GraduationCap, UserMinus } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { SubmitButton } from '@/components/ui/submit-button';
@@ -43,6 +43,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import BulkAcademicImport from './BulkAcademicImport';
 import { Combobox } from "@/components/ui/combobox";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface Teacher {
   id: string;
@@ -311,6 +312,7 @@ export default function AcademicManagement() {
   const [isLoadingAllocations, setIsLoadingAllocations] = useState(false);
   const [isAddAllocationOpen, setIsAddAllocationOpen] = useState(false);
   const [allocationForm, setAllocationForm] = useState<{ subjectId: string; teacherId: string; classSubjectId?: string }>({ subjectId: '', teacherId: '' });
+  const [removingTeacherAllocationId, setRemovingTeacherAllocationId] = useState<string | null>(null);
 
   // Confirmation State
   const [confirmState, setConfirmState] = useState<{
@@ -475,6 +477,49 @@ export default function AcademicManagement() {
       fetchAllocations(allocationClassId);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleRemoveTeacherAssignment = async (
+    subject: ClassSubjectSummary,
+    allocation: ClassSubjectAllocation,
+  ) => {
+    if (!allocationClassId || !allocation.teacherId) return;
+
+    const teacherName = allocation.teacherName || teachers.find((teacher) => teacher.id === allocation.teacherId)?.fullName || 'this teacher';
+    const assignedTeacherCount = getClassSubjectAllocations(subject)
+      .filter((item) => item.teacherId)
+      .length;
+    const confirmationMessage = assignedTeacherCount <= 1
+      ? `Remove ${teacherName} from ${subject.name}? The subject will remain in the class without an assigned teacher.`
+      : `Remove ${teacherName} from ${subject.name}?`;
+
+    if (!confirm(confirmationMessage)) return;
+
+    setRemovingTeacherAllocationId(allocation.classSubjectId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const result = await syncFetch(
+        `/api/school/classes/${allocationClassId}/subjects/${subject.id}/assignments/${allocation.classSubjectId}`,
+        {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+        },
+      );
+
+      if (result.offline) {
+        toast({ title: "Offline Mode", description: "Teacher removal queued for sync." });
+      } else {
+        toast({ title: "Success", description: "Teacher removed from subject" });
+      }
+      fetchAllocations(allocationClassId);
+    } catch (error: any) {
+      console.error('Failed to remove teacher assignment:', error);
+      toast({ title: "Error", description: error?.message || "Failed to remove teacher assignment", variant: "destructive" });
+    } finally {
+      setRemovingTeacherAllocationId(null);
     }
   };
 
@@ -1869,50 +1914,73 @@ export default function AcademicManagement() {
                         <TableCell>
                           <div className="flex min-w-[200px] flex-col gap-2">
                             {getClassSubjectAllocations(cs).map((allocation) => (
-                              <Combobox
-                                key={allocation.classSubjectId}
-                                className="h-8 w-[200px]"
-                                options={[
-                                  { label: "Unassigned", value: "unassigned" },
-                                  ...teachers.map(t => ({ label: t.fullName, value: t.id }))
-                                ]}
-                                value={allocation.teacherId || "unassigned"}
-                                onValueChange={async (newTeacherId) => {
-                                  try {
-                                    const { data: { session } } = await supabase.auth.getSession();
-                                    if (!session) return;
+                              <div key={allocation.classSubjectId} className="flex items-center gap-1">
+                                <Combobox
+                                  className="h-8 w-[200px]"
+                                  options={[
+                                    { label: "Unassigned", value: "unassigned" },
+                                    ...teachers.map(t => ({ label: t.fullName, value: t.id }))
+                                  ]}
+                                  value={allocation.teacherId || "unassigned"}
+                                  onValueChange={async (newTeacherId) => {
+                                    try {
+                                      const { data: { session } } = await supabase.auth.getSession();
+                                      if (!session) return;
 
-                                    const teacherIdToAssign = (!newTeacherId || newTeacherId === "unassigned") ? null : newTeacherId;
+                                      const teacherIdToAssign = (!newTeacherId || newTeacherId === "unassigned") ? null : newTeacherId;
 
-                                    const result = await syncFetch(`/api/school/classes/${allocationClassId}/subjects/assign`, {
-                                      method: 'POST',
-                                      headers: {
-                                        'Content-Type': 'application/json',
-                                        'Authorization': `Bearer ${session.access_token}`
-                                      },
-                                      body: JSON.stringify({
-                                        subjectId: cs.id,
-                                        classSubjectId: allocation.classSubjectId,
-                                        teacherId: teacherIdToAssign
-                                      })
-                                    });
+                                      const result = await syncFetch(`/api/school/classes/${allocationClassId}/subjects/assign`, {
+                                        method: 'POST',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                          'Authorization': `Bearer ${session.access_token}`
+                                        },
+                                        body: JSON.stringify({
+                                          subjectId: cs.id,
+                                          classSubjectId: allocation.classSubjectId,
+                                          teacherId: teacherIdToAssign
+                                        })
+                                      });
 
-                                    if (result.offline) {
-                                      toast({ title: "Offline Mode", description: "Teacher update queued for sync." });
-                                    } else {
-                                      toast({ title: "Success", description: "Teacher updated" });
+                                      if (result.offline) {
+                                        toast({ title: "Offline Mode", description: "Teacher update queued for sync." });
+                                      } else {
+                                        toast({ title: "Success", description: "Teacher updated" });
+                                      }
+                                      fetchAllocations(allocationClassId);
+                                    } catch (e: any) {
+                                      console.error("Failed to update teacher:", e);
+                                      toast({
+                                        title: "Error",
+                                        description: e?.message || "Failed to update teacher",
+                                        variant: "destructive"
+                                      });
                                     }
-                                    fetchAllocations(allocationClassId);
-                                  } catch (e: any) {
-                                    console.error("Failed to update teacher:", e);
-                                    toast({
-                                      title: "Error",
-                                      description: e?.message || "Failed to update teacher",
-                                      variant: "destructive"
-                                    });
-                                  }
-                                }}
-                              />
+                                  }}
+                                />
+                                {allocation.teacherId && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 shrink-0 text-red-500 hover:text-red-700"
+                                        aria-label={`Remove ${allocation.teacherName || 'teacher'} from ${cs.name}`}
+                                        disabled={removingTeacherAllocationId === allocation.classSubjectId}
+                                        onClick={() => handleRemoveTeacherAssignment(cs, allocation)}
+                                      >
+                                        {removingTeacherAllocationId === allocation.classSubjectId ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <UserMinus className="h-4 w-4" />
+                                        )}
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Remove teacher assignment</TooltipContent>
+                                  </Tooltip>
+                                )}
+                              </div>
                             ))}
                           </div>
                         </TableCell>
