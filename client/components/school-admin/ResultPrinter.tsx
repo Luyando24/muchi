@@ -143,12 +143,12 @@ export default function ResultPrinter() {
         }
     };
 
-    // Poll calculation status every 2.5s
+    // Poll calculation status every 10s; skip silently when tab is hidden
     useEffect(() => {
         fetchPrecomputeStatus(true);
         const interval = setInterval(() => {
-            fetchPrecomputeStatus(false);
-        }, 2500);
+            if (document.visibilityState === 'visible') fetchPrecomputeStatus(false);
+        }, 10000);
         return () => clearInterval(interval);
     }, []);
 
@@ -247,7 +247,9 @@ export default function ResultPrinter() {
             }
         };
         checkPdf();
-        const interval = setInterval(checkPdf, 2500);
+        const interval = setInterval(() => {
+            if (document.visibilityState === 'visible') checkPdf();
+        }, 10000);
         return () => { cancelled = true; clearInterval(interval); };
     }, [filters.classId, filters.term, filters.examType, filters.academicYear, precomputeStatus]);
 

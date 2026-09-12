@@ -663,6 +663,31 @@ const schedulerState: SchedulerState = {
   isCalculating: false,
 };
 
+// ─── Server-side TTL caches ────────────────────────────────────────────────────
+// Prevents each 10-second client poll from executing a fresh paginated DB scan.
+// Entries are auto-expired after STATUS_TTL_MS; the scheduler also busts the
+// cache for the school it just finished computing.
+
+const STATUS_TTL_MS = 10_000; // 10 seconds — matches the client polling interval
+const WORKER_TTL_MS = 8_000;  // slightly shorter for the shared worker endpoint
+
+const precomputeStatusCache = new Map<string, { data: any; expiresAt: number }>();
+let activeWorkerCache: { data: any; expiresAt: number } | null = null;
+
+/**
+ * Bust cached status for a specific school (call when computation finishes for
+ * that school so the next poll immediately reflects the updated state).
+ */
+export function invalidateStatusCache(schoolId?: string): void {
+  if (schoolId) {
+    precomputeStatusCache.delete(`${schoolId}:false`);
+    precomputeStatusCache.delete(`${schoolId}:true`);
+  } else {
+    precomputeStatusCache.clear();
+  }
+  activeWorkerCache = null;
+}
+
 /**
  * Request that calculations & PDF compilation for this school run next in line.
  * If jumpToFront is true (default), this school is placed at index 0 of the priority queue.
@@ -712,78 +737,44 @@ async function getSchoolCombos(schoolId: string): Promise<{
     return { combos: [], classNameMap, schoolName };
   }
 
-  // 1. Fetch all enrollments for classes belonging to this school (paginated)
-  const allEnrollments: { student_id: string; class_id: string; academic_year: string }[] = [];
-  let ePage = 0;
-  const pageSize = 1000;
-  while (true) {
-    const { data: batch, error: bErr } = await supabaseAdmin
-      .from('enrollments')
-      .select('student_id, class_id, academic_year')
-      .in('class_id', classIds)
-      .range(ePage * pageSize, (ePage + 1) * pageSize - 1);
+  // Single SQL GROUP BY via RPC — returns only the distinct (class, term, examType, year)
+  // combinations (~N rows) instead of paginating up to 30,000 student_grades rows into Node.js.
+  const { data: comboRows, error: comboErr } = await supabaseAdmin.rpc('get_school_grade_combos', {
+    p_school_id: schoolId,
+    p_class_ids: classIds,
+  });
 
-    if (bErr || !batch || batch.length === 0) break;
-    allEnrollments.push(...batch);
-    if (batch.length < pageSize) break;
-    ePage++;
-  }
-
-  if (allEnrollments.length === 0) {
+  if (comboErr) {
+    console.warn('[ReportCardCache] get_school_grade_combos RPC error:', comboErr.message);
     return { combos: [], classNameMap, schoolName };
   }
 
-  const studentClassMap = new Map<string, Map<string, string>>();
-  for (const e of allEnrollments) {
-    if (!studentClassMap.has(e.student_id)) studentClassMap.set(e.student_id, new Map());
-    studentClassMap.get(e.student_id)!.set(String(e.academic_year), e.class_id);
+  if (!comboRows || comboRows.length === 0) {
+    return { combos: [], classNameMap, schoolName };
   }
 
-  // 2. Fetch distinct submitted/published student grades for this school
-  const gradeDistinct: { term: string; exam_type: string; academic_year: string; student_id: string }[] = [];
-  let gPage = 0;
-  while (true) {
-    const { data: gBatch, error: gErr } = await supabaseAdmin
-      .from('student_grades')
-      .select('term, exam_type, academic_year, student_id')
-      .eq('school_id', schoolId)
-      .in('status', ['Submitted', 'Published'])
-      .range(gPage * pageSize, (gPage + 1) * pageSize - 1);
+  const combos: (CacheKey & { className: string })[] = comboRows.map((row: any) => ({
+    schoolId,
+    classId: row.class_id,
+    className: classNameMap.get(row.class_id) || 'Class',
+    term: row.term,
+    examType: row.exam_type,
+    academicYear: String(row.academic_year),
+  }));
 
-    if (gErr || !gBatch || gBatch.length === 0) break;
-    gradeDistinct.push(...gBatch);
-    if (gBatch.length < pageSize || gradeDistinct.length >= 30000) break;
-    gPage++;
-  }
-
-  const comboMap = new Map<string, CacheKey & { className: string }>();
-  for (const g of gradeDistinct) {
-    const classId = studentClassMap.get(g.student_id)?.get(String(g.academic_year));
-    if (!classId) continue;
-    const key = `${classId}|${g.term}|${g.exam_type}|${g.academic_year}`;
-    if (!comboMap.has(key)) {
-      comboMap.set(key, {
-        schoolId,
-        classId,
-        className: classNameMap.get(classId) || 'Class',
-        term: g.term,
-        examType: g.exam_type,
-        academicYear: String(g.academic_year),
-      });
-    }
-  }
-
-  return {
-    combos: Array.from(comboMap.values()),
-    classNameMap,
-    schoolName,
-  };
+  return { combos, classNameMap, schoolName };
 }
 
 /**
  * Detailed report card calculation progress across all terms for a specific school.
  */
 export async function getSchoolPrecomputeStatus(schoolId: string, skipActiveMetrics: boolean = false) {
+  // Return cached result if still fresh — prevents every 10s poll from hitting Supabase
+  const cacheKey = `${schoolId}:${skipActiveMetrics}`;
+  const cached = precomputeStatusCache.get(cacheKey);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.data;
+  }
   try {
     const { combos, schoolName } = await getSchoolCombos(schoolId);
 
@@ -1043,7 +1034,7 @@ export async function getSchoolPrecomputeStatus(schoolId: string, skipActiveMetr
 
     const priorityIndex = schedulerState.priorityQueue.indexOf(schoolId);
 
-    return {
+    const result = {
       schoolId,
       schoolName,
       totalClasses,
@@ -1080,6 +1071,9 @@ export async function getSchoolPrecomputeStatus(schoolId: string, skipActiveMetr
       activePdfLabel,
       estPdfTimeText,
     };
+    // Store in TTL cache before returning
+    precomputeStatusCache.set(cacheKey, { data: result, expiresAt: Date.now() + STATUS_TTL_MS });
+    return result;
   } catch (err: any) {
     console.error('[ReportCardCache] getSchoolPrecomputeStatus error:', err.message);
     return {
@@ -1175,6 +1169,8 @@ export async function startBackfillScheduler(): Promise<void> {
         schedulerState.currentSchoolName = null;
         schedulerState.currentClassLabel = null;
         schedulerState.isCalculating = false;
+        // Bust the TTL cache so the next client poll sees fresh post-calculation data
+        invalidateStatusCache(targetSchoolId);
 
         await sleep(SCHOOL_DELAY_MS);
       }
@@ -1187,6 +1183,7 @@ export async function startBackfillScheduler(): Promise<void> {
       schedulerState.currentSchoolName = null;
       schedulerState.currentClassLabel = null;
       schedulerState.isCalculating = false;
+      invalidateStatusCache();
       await waitForWake(15000);
     }
   }
@@ -1726,6 +1723,10 @@ export async function getSchedulerQueueInfo() {
  * Real-time progress of the school currently being processed by the background calculation worker.
  */
 export async function getActiveWorkerProgress() {
+  // Return cached result if still fresh
+  if (activeWorkerCache && Date.now() < activeWorkerCache.expiresAt) {
+    return activeWorkerCache.data;
+  }
   const currentSchoolId = schedulerState.currentSchoolId;
   const currentSchoolName = schedulerState.currentSchoolName;
   const currentClassLabel = schedulerState.currentClassLabel;
@@ -1744,7 +1745,7 @@ export async function getActiveWorkerProgress() {
   const pdfWorker = getPdfWorkerState();
   const queueInfo = await getSchedulerQueueInfo();
 
-  return {
+  const result = {
     isCalculating,
     currentSchoolId,
     currentSchoolName,
@@ -1757,4 +1758,6 @@ export async function getActiveWorkerProgress() {
     priorityQueue: queueInfo.priorityQueue,
     schools: queueInfo.schools,
   };
+  activeWorkerCache = { data: result, expiresAt: Date.now() + WORKER_TTL_MS };
+  return result;
 }

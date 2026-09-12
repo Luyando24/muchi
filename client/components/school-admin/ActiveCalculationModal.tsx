@@ -172,7 +172,9 @@ export default function ActiveCalculationModal({
   useEffect(() => {
     if (isOpen) {
       fetchProgress();
-      const interval = setInterval(fetchProgress, 2500);
+      const interval = setInterval(() => {
+        if (document.visibilityState === 'visible') fetchProgress();
+      }, 10000);
       return () => clearInterval(interval);
     }
   }, [isOpen, endpointUrl]);
