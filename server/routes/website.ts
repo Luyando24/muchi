@@ -481,7 +481,7 @@ router.get(
   "/public-verify-results",
   rateLimiter({ windowMs: 15 * 60 * 1000, max: 20 }),
   async (req: Request, res: Response) => {
-    const { studentNumber, term, academicYear, examType } = req.query;
+    const { studentNumber, term, academicYear } = req.query;
 
     if (!studentNumber || !term || !academicYear) {
       return res.status(400).json({ message: "Student Number, term, and academic year are required" });
@@ -528,12 +528,8 @@ router.get(
         `)
         .eq("student_id", studentId)
         .eq("academic_year", academicYear)
-        .eq("term", term);
-        
-      if (examType) {
-        // Attempt to match examType on the record if applicable
-        query = query.eq("exam_type", examType);
-      }
+        .eq("term", term)
+        .eq("status", "Published");
 
       const { data: rawGrades, error: gradesError } = await query;
 

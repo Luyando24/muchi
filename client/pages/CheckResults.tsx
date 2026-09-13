@@ -18,7 +18,6 @@ export default function CheckResults() {
   const [studentNumber, setStudentNumber] = useState('');
   const [term, setTerm] = useState('Term 1');
   const [academicYear, setAcademicYear] = useState(new Date().getFullYear().toString());
-  const [examType, setExamType] = useState('End of Term');
 
   const [resultData, setResultData] = useState<any>(null);
   const [isPrinting, setIsPrinting] = useState(false);
@@ -43,7 +42,7 @@ export default function CheckResults() {
 
     try {
       const response = await fetch(
-        `/api/school/public-verify-results?studentNumber=${encodeURIComponent(studentNumber)}&term=${encodeURIComponent(term)}&academicYear=${encodeURIComponent(academicYear)}&examType=${encodeURIComponent(examType)}`
+        `/api/school/public-verify-results?studentNumber=${encodeURIComponent(studentNumber)}&term=${encodeURIComponent(term)}&academicYear=${encodeURIComponent(academicYear)}`
       );
 
       const data = await response.json();
@@ -169,7 +168,7 @@ export default function CheckResults() {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="term" className="text-slate-700 font-semibold">Term</Label>
                     <Select value={term} onValueChange={setTerm}>
@@ -194,19 +193,6 @@ export default function CheckResults() {
                         {availableYears.map(year => (
                           <SelectItem key={year} value={year}>{year}</SelectItem>
                         ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="examType" className="text-slate-700 font-semibold">Assessment Type</Label>
-                    <Select value={examType} onValueChange={setExamType}>
-                      <SelectTrigger id="examType" className="bg-white border-slate-200 text-slate-900 h-12 rounded-xl">
-                        <SelectValue placeholder="Select Type" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white text-slate-900">
-                        <SelectItem value="Mid Term">Mid Term</SelectItem>
-                        <SelectItem value="End of Term">End of Term</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -242,7 +228,7 @@ export default function CheckResults() {
                 <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">{resultData.student.name}</h2>
                 <p className="text-slate-600 mt-1 text-lg font-medium">Student No: {resultData.student.studentNumber} · {resultData.student.class}</p>
                 <p className="text-slate-500 mt-1 font-semibold">
-                  {resultData.termResults[0].term} · {examType} · Academic Year {resultData.termResults[0].academicYear}
+                  {resultData.termResults[0].term} · Academic Year {resultData.termResults[0].academicYear}
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row w-full md:w-auto gap-3">
@@ -282,7 +268,7 @@ export default function CheckResults() {
                     grades: resultData.termResults[0].grades
                   }}
                   term={resultData.termResults[0].term}
-                  examType={resultData.termResults[0].grades?.[0]?.exam_type || examType}
+                  examType={resultData.termResults[0].grades?.[0]?.exam_type || 'End of Term'}
                   academicYear={resultData.termResults[0].academicYear}
                   className="shadow-none border-none m-0"
                 />
@@ -324,7 +310,7 @@ export default function CheckResults() {
                 grades: resultData.termResults[0].grades
               }}
               term={resultData.termResults[0].term}
-              examType={resultData.termResults[0].grades?.[0]?.exam_type || examType}
+              examType={resultData.termResults[0].grades?.[0]?.exam_type || 'End of Term'}
               academicYear={resultData.termResults[0].academicYear}
               className="shadow-none border-none m-0 p-0 w-full"
             />
