@@ -618,11 +618,8 @@ router.get(
             .select("student_id, percentage")
             .in("student_id", classStudentIds)
             .eq("term", term as string)
-            .eq("academic_year", academicYear as string);
-
-          if (examType) {
-            gradesQuery = gradesQuery.eq("exam_type", examType as string);
-          }
+            .eq("academic_year", academicYear as string)
+            .eq("status", "Published");
 
           const { data: classGrades } = await gradesQuery;
 
