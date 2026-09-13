@@ -518,9 +518,8 @@ router.get(
         .eq("school_id", schoolId)
         .order("min_percentage", { ascending: false });
 
-      // 4. Fetch grades for the student, term, and academic year (only Published)
-      // We filter by exam_type if it is provided and the column exists. Otherwise, standard matching.
-      let query = supabaseAdmin
+      // 4. Fetch grades for the student, term, and academic year
+      const query = supabaseAdmin
         .from("student_grades")
         .select(`
           *,
@@ -528,8 +527,7 @@ router.get(
         `)
         .eq("student_id", studentId)
         .eq("academic_year", academicYear)
-        .eq("term", term)
-        .eq("status", "Published");
+        .eq("term", term);
 
       const { data: rawGrades, error: gradesError } = await query;
 
@@ -618,8 +616,7 @@ router.get(
             .select("student_id, percentage")
             .in("student_id", classStudentIds)
             .eq("term", term as string)
-            .eq("academic_year", academicYear as string)
-            .eq("status", "Published");
+            .eq("academic_year", academicYear as string);
 
           const { data: classGrades } = await gradesQuery;
 
