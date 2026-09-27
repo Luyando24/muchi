@@ -8544,7 +8544,7 @@ router.get(
         return true;
       });
 
-      res.json({ scales: refinedScales, analysis: resultAnalysis });
+      res.json({ scales: refinedScales, analysis: resultAnalysis, schoolName: school?.name });
     } catch (error: any) {
       console.error("Results Analysis Error:", error);
       res.status(500).json({ message: error.message });

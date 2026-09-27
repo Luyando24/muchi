@@ -884,7 +884,7 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                     gradeName={selectedMasterGradeLevel === 'all' ? 'All Grades' : selectedMasterGradeLevel}
                     subjectId={selectedMasterSubjectId}
                     subjectName={availableSubjects.find(s => s.id === selectedMasterSubjectId)?.name}
-                    schoolName={schoolSettings?.school_name}
+                    schoolName={schoolSettings?.name || schoolSettings?.school_name || "School"}
                     disabled={!masterSheetData?.students.length}
                   />
                 </div>
@@ -1138,7 +1138,7 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                     className={availableClasses.find(c => c.id === selectedAnalysisClassId)?.name}
                     subjectId={selectedSubjectId}
                     subjectName={availableSubjects.find(s => s.id === selectedSubjectId)?.name}
-                    schoolName={schoolSettings?.school_name}
+                    schoolName={schoolSettings?.name || schoolSettings?.school_name || "School"}
                     disabled={!selectedTerm || !selectedYear || !selectedExamType}
                   />
                 </div>

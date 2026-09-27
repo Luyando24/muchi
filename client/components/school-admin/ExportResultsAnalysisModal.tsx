@@ -38,7 +38,7 @@ interface ExportModalProps {
   className?: string;
   subjectId?: string;
   subjectName?: string;
-  schoolName: string;
+  schoolName?: string;
   disabled?: boolean;
 }
 
@@ -116,15 +116,22 @@ export default function ExportResultsAnalysisModal({
 
   const getGradeCounts = (a: any, grade: string) => {
     if (a.grades && a.grades[grade]) return a.grades[grade];
-    const alt = SECONDARY_EQUIVALENTS[String(grade).toUpperCase().trim()];
+    const upper = String(grade || '').toUpperCase().trim();
+    if (upper && a.grades && a.grades[upper]) return a.grades[upper];
+    const alt = SECONDARY_EQUIVALENTS[upper];
     if (alt && a.grades && a.grades[alt]) return a.grades[alt];
+    for (const k of Object.keys(a.grades || {})) {
+      if (k.toUpperCase().trim() === upper) return a.grades[k];
+    }
     return { f: 0, m: 0, tot: 0 };
   };
 
   const getUniqueScales = (scales: any[]) => {
-    return (scales || []).filter((s: any, idx: number, arr: any[]) =>
-      arr.findIndex((x: any) => String(x.grade).trim().toUpperCase() === String(s.grade).trim().toUpperCase()) === idx
-    );
+    return (scales || []).filter((s: any, idx: number, arr: any[]) => {
+      const g = String(s?.grade || '').trim().toUpperCase();
+      if (!g) return false;
+      return arr.findIndex((x: any) => String(x?.grade || '').trim().toUpperCase() === g) === idx;
+    });
   };
 
   const exportToExcel = async (data: any) => {
@@ -179,7 +186,7 @@ export default function ExportResultsAnalysisModal({
     XLSX.utils.book_append_sheet(workbook, scaleSheet, "Grading Scale");
 
     // Save File
-    const fileName = `Results_Analysis_${gradeLevel}_${classId !== 'all' ? className : ''}_${subjectName || 'All'}_${term}_${year}.xlsx`;
+    const fileName = `Results_Analysis_${gradeLevel || 'All'}_${classId !== 'all' ? (className || '') : ''}_${subjectName || 'All'}_${term || ''}_${year || ''}.xlsx`;
     XLSX.writeFile(workbook, fileName);
   };
 
@@ -198,7 +205,8 @@ export default function ExportResultsAnalysisModal({
       doc.setTextColor(255, 255, 255);
       doc.setFont(undefined, 'bold');
       doc.setFontSize(22);
-      doc.text(schoolName.toUpperCase(), margin, 18);
+      const displaySchoolName = String(schoolName || data?.schoolName || 'OFFICIAL REPORT').toUpperCase();
+      doc.text(displaySchoolName, margin, 18);
       
       doc.setFontSize(10);
       doc.setFont(undefined, 'normal');
@@ -208,7 +216,7 @@ export default function ExportResultsAnalysisModal({
       doc.setFillColor(255, 255, 255, 0.2);
       doc.roundedRect(margin, 28, pageWidth - (margin * 2), 8, 1, 1, 'F');
       doc.setFontSize(8);
-      const metaStr = `GRADE: ${gradeLevel} | CLASS: ${className || 'ALL'} | TERM: ${term} | YEAR: ${year} | ASSESSMENT: ${examType}`;
+      const metaStr = `GRADE: ${gradeLevel || 'ALL'} | CLASS: ${className || 'ALL'} | TERM: ${term || ''} | YEAR: ${year || ''} | ASSESSMENT: ${examType || ''}`;
       doc.text(metaStr, margin + 4, 33.5);
     };
 
@@ -238,11 +246,11 @@ export default function ExportResultsAnalysisModal({
       
       doc.setFontSize(8);
       doc.setTextColor(100, 116, 139);
-      doc.text(label.toUpperCase(), x + 4, y + 7);
+      doc.text(String(label || '').toUpperCase(), x + 4, y + 7);
       
       doc.setFontSize(14);
       doc.setTextColor(color[0], color[1], color[2]);
-      doc.text(value, x + 4, y + 16);
+      doc.text(String(value ?? ''), x + 4, y + 16);
     };
 
     drawCard(margin, currentY, "Total Registered", totalReg.toString(), [30, 41, 59]);
@@ -333,7 +341,7 @@ export default function ExportResultsAnalysisModal({
       headStyles: { fontStyle: 'bold', textColor: [100, 116, 139] }
     });
 
-    doc.save(`Results_Analysis_${gradeLevel}_${className || 'All'}_${term}_${year}.pdf`);
+    doc.save(`Results_Analysis_${gradeLevel || 'All'}_${className || 'All'}_${term || ''}_${year || ''}.pdf`);
   };
 
   const exportToCSV = async (data: any) => {
@@ -359,7 +367,7 @@ export default function ExportResultsAnalysisModal({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Results_Analysis_${gradeLevel}_${classId !== 'all' ? className : ''}_${subjectName || 'All'}_${term}_${year}.csv`);
+    link.setAttribute("download", `Results_Analysis_${gradeLevel || 'All'}_${classId !== 'all' ? (className || '') : ''}_${subjectName || 'All'}_${term || ''}_${year || ''}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
