@@ -8150,7 +8150,7 @@ router.get(
     // Fetch school type and test types for grade-aware logic
     const { data: school } = await supabaseAdmin
       .from("schools")
-      .select("school_type, test_types, test_types_enabled")
+      .select("name, school_type, test_types, test_types_enabled, gender_composition")
       .eq("id", schoolId)
       .single();
     const schoolType = school?.school_type || "Secondary";
@@ -8544,7 +8544,78 @@ router.get(
         return true;
       });
 
-      res.json({ scales: refinedScales, analysis: resultAnalysis, schoolName: school?.name });
+      let genderComposition = school?.gender_composition;
+      if (!genderComposition) {
+        const nameLower = (school?.name || '').toLowerCase();
+        if (/\bboys\b/.test(nameLower)) {
+          genderComposition = 'Boys only';
+        } else if (/\bgirls\b/.test(nameLower)) {
+          genderComposition = 'Girls only';
+        } else {
+          genderComposition = 'Co-educational';
+        }
+      }
+
+      // Calculate overall student-level performance summary
+      const studentAverages = new Map<string, { sum: number; count: number; gender: string; studentGrade: string }>();
+      processedGradesList.forEach((g: any) => {
+        if (g.percentage !== null && g.percentage !== undefined && g.percentage !== '' && !isNaN(Number(g.percentage)) && g.grade !== 'ABSENT') {
+          const student = studentMap.get(g.student_id);
+          if (student) {
+            if (!studentAverages.has(g.student_id)) {
+              studentAverages.set(g.student_id, {
+                sum: 0,
+                count: 0,
+                gender: normalizeGender(student.gender),
+                studentGrade: student.grade || ''
+              });
+            }
+            const sa = studentAverages.get(g.student_id)!;
+            sa.sum += Number(g.percentage);
+            sa.count++;
+          }
+        }
+      });
+
+      const studentSummary = {
+        totalEnrolled: studentsData.length,
+        totalAssessed: studentAverages.size,
+        overallDistinctions: { f: 0, m: 0, tot: 0 },
+        overallMerits: { f: 0, m: 0, tot: 0 },
+        overallCredits: { f: 0, m: 0, tot: 0 },
+        overallPasses: { f: 0, m: 0, tot: 0 },
+        overallFails: { f: 0, m: 0, tot: 0 }
+      };
+
+      studentAverages.forEach(sa => {
+        const avg = sa.sum / sa.count;
+        const scale = getGradingScaleForGrade(avg, sa.studentGrade, schoolType, effectiveScales);
+        const gradeKey = String(scale?.grade || '').toUpperCase().trim();
+        const descLower = (scale?.description || '').toLowerCase();
+        
+        const isDistinction = descLower.includes('distinction') || ['1', '2', 'ONE', 'TWO', 'A+', 'A'].includes(gradeKey);
+        const isMerit = descLower.includes('merit') || ['3', '4', 'THREE', 'FOUR', 'B+'].includes(gradeKey);
+        const isCredit = descLower.includes('credit') || ['5', '6', 'FIVE', 'SIX', 'B'].includes(gradeKey);
+        const isFail = descLower.includes('fail') || descLower.includes('unsatisfactory') || ['9', 'NINE', 'U9', 'U', 'F'].includes(gradeKey);
+
+        const target = isDistinction ? studentSummary.overallDistinctions :
+                       isMerit ? studentSummary.overallMerits :
+                       isCredit ? studentSummary.overallCredits :
+                       isFail ? studentSummary.overallFails :
+                       studentSummary.overallPasses;
+
+        target.tot++;
+        if (sa.gender === 'male') target.m++;
+        else if (sa.gender === 'female') target.f++;
+      });
+
+      res.json({ 
+        scales: refinedScales, 
+        analysis: resultAnalysis, 
+        studentSummary,
+        schoolName: school?.name,
+        genderComposition 
+      });
     } catch (error: any) {
       console.error("Results Analysis Error:", error);
       res.status(500).json({ message: error.message });

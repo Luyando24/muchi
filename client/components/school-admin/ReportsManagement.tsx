@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ExportMasterSheetModal from './ExportMasterSheetModal';
-import ExportResultsAnalysisModal from './ExportResultsAnalysisModal';
+import ExportResultsAnalysisModal, { computeResultsAnalysisTotals } from './ExportResultsAnalysisModal';
 import ExportSupportListModal from './ExportSupportListModal';
 import {
   FileText,
@@ -43,7 +43,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { PaginationControls } from '@/components/ui/pagination-controls';
 import { useToast } from "@/components/ui/use-toast";
@@ -127,6 +127,24 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
   const [availableClasses, setAvailableClasses] = useState<any[]>([]);
   const [resultsAnalysis, setResultsAnalysis] = useState<any>(null);
   const displayScales = useMemo(() => getUniqueScales(resultsAnalysis?.scales || []), [resultsAnalysis?.scales]);
+  const analysisSummary = useMemo(() => {
+    if (!resultsAnalysis?.analysis || resultsAnalysis.analysis.length === 0) return null;
+    return computeResultsAnalysisTotals(resultsAnalysis.analysis, displayScales);
+  }, [resultsAnalysis?.analysis, displayScales]);
+  
+  const isBoysOnly = resultsAnalysis?.genderComposition === 'Boys only' ||
+    schoolSettings?.gender_composition === 'Boys only' ||
+    /\bboys\b/i.test(schoolSettings?.name || '') ||
+    (resultsAnalysis?.analysis?.length > 0 && resultsAnalysis.analysis.every((r: any) => (r.reg?.f || 0) === 0 && (r.wrote?.f || 0) === 0 && ((r.reg?.m || 0) > 0 || (r.reg?.tot || 0) > 0)));
+
+  const isGirlsOnly = resultsAnalysis?.genderComposition === 'Girls only' ||
+    schoolSettings?.gender_composition === 'Girls only' ||
+    /\bgirls\b/i.test(schoolSettings?.name || '') ||
+    (resultsAnalysis?.analysis?.length > 0 && resultsAnalysis.analysis.every((r: any) => (r.reg?.m || 0) === 0 && (r.wrote?.m || 0) === 0 && ((r.reg?.f || 0) > 0 || (r.reg?.tot || 0) > 0)));
+
+  const showFemale = !isBoysOnly;
+  const showMale = !isGirlsOnly;
+  const colSpanPerCategory = (showFemale ? 1 : 0) + (showMale ? 1 : 0) + 1;
   const [selectedGradeLevel, setSelectedGradeLevel] = useState<string>("all");
   const [selectedAnalysisClassId, setSelectedAnalysisClassId] = useState<string>("all");
   const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
@@ -1139,6 +1157,7 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                     subjectId={selectedSubjectId}
                     subjectName={availableSubjects.find(s => s.id === selectedSubjectId)?.name}
                     schoolName={schoolSettings?.name || schoolSettings?.school_name || "School"}
+                    genderComposition={resultsAnalysis?.genderComposition || schoolSettings?.gender_composition}
                     disabled={!selectedTerm || !selectedYear || !selectedExamType}
                   />
                 </div>
@@ -1157,31 +1176,111 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                 </div>
               ) : (
                 <>
+                  {/* Grade Classification Summary Strip */}
+                  {analysisSummary && analysisSummary.classifications.length > 0 && (
+                    <div className="p-4 bg-slate-50/80 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-800">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                              Grade Classification Totals
+                            </h4>
+                            <Badge variant="outline" className="text-[10px] font-bold bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                              {selectedSubjectId !== 'all' ? availableSubjects.find(s => s.id === selectedSubjectId)?.name || 'Subject' : 'Class / Grade Total'}
+                            </Badge>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Total students who achieved each performance grade classification in this class/grade
+                          </p>
+                        </div>
+                        <div className="text-[11px] font-bold text-slate-500 bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 self-start sm:self-auto">
+                          Total Grades Awarded: <span className="text-slate-900 dark:text-white font-black">{analysisSummary.totals.totalGradesAwarded}</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
+                        {analysisSummary.classifications.map((c) => {
+                          const colorStyles: Record<string, { card: string; text: string; sub: string }> = {
+                            Distinction: {
+                              card: 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60',
+                              text: 'text-emerald-700 dark:text-emerald-300',
+                              sub: 'text-emerald-600/80 dark:text-emerald-400/80'
+                            },
+                            Merit: {
+                              card: 'bg-blue-50/90 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800/60',
+                              text: 'text-blue-700 dark:text-blue-300',
+                              sub: 'text-blue-600/80 dark:text-blue-400/80'
+                            },
+                            Credit: {
+                              card: 'bg-indigo-50/90 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800/60',
+                              text: 'text-indigo-700 dark:text-indigo-300',
+                              sub: 'text-indigo-600/80 dark:text-indigo-400/80'
+                            },
+                            Pass: {
+                              card: 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/60',
+                              text: 'text-amber-700 dark:text-amber-300',
+                              sub: 'text-amber-600/80 dark:text-amber-400/80'
+                            },
+                            Fail: {
+                              card: 'bg-rose-50/90 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800/60',
+                              text: 'text-rose-700 dark:text-rose-300',
+                              sub: 'text-rose-600/80 dark:text-rose-400/80'
+                            }
+                          };
+                          const style = colorStyles[c.name] || {
+                            card: 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700',
+                            text: 'text-slate-800 dark:text-slate-200',
+                            sub: 'text-slate-500'
+                          };
+
+                          return (
+                            <div key={c.name} className={cn("p-3 rounded-xl border flex flex-col justify-between shadow-xs transition-all", style.card)}>
+                              <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider mb-1">
+                                <span className={style.text}>{c.name}</span>
+                                <span className={cn("text-[9px] font-bold", style.sub)}>({c.grades.join(', ')})</span>
+                              </div>
+                              <div className="flex items-baseline justify-between mt-1">
+                                <span className={cn("text-2xl font-black tracking-tight", style.text)}>{c.tot}</span>
+                                <span className={cn("text-[10px] font-bold", style.sub)}>{c.percentage}%</span>
+                              </div>
+                              {showFemale && showMale && (
+                                <div className="flex gap-2 text-[9px] font-medium opacity-80 mt-1.5 pt-1.5 border-t border-black/5 dark:border-white/5">
+                                  <span>M: <strong className="font-bold">{c.m}</strong></span>
+                                  <span>F: <strong className="font-bold">{c.f}</strong></span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Desktop View Table */}
                   <div className="hidden md:block overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700">
                    <Table className="border-separate border-spacing-0">
                     <TableHeader className="bg-slate-50 dark:bg-slate-900/50">
                       <TableRow>
                         <TableHead rowSpan={2} className="min-w-[120px] md:min-w-[200px] font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 sticky left-0 z-20 text-[10px] md:text-sm">SUBJECTS</TableHead>
-                        <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-blue-50/50 text-[10px] md:text-sm">REG</TableHead>
-                        <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-emerald-50/50 text-[10px] md:text-sm">WROTE</TableHead>
-                        <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-orange-50/50 text-[10px] md:text-sm">ABS</TableHead>
+                        <TableHead colSpan={colSpanPerCategory} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-blue-50/50 text-[10px] md:text-sm">REG</TableHead>
+                        <TableHead colSpan={colSpanPerCategory} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-emerald-50/50 text-[10px] md:text-sm">WROTE</TableHead>
+                        <TableHead colSpan={colSpanPerCategory} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-orange-50/50 text-[10px] md:text-sm">ABS</TableHead>
                         {displayScales.map((s: any) => (
-                           <TableHead key={s.id || s.grade} colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 text-[10px] md:text-sm">
+                           <TableHead key={s.id || s.grade} colSpan={colSpanPerCategory} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 text-[10px] md:text-sm">
                              {s.grade}
                            </TableHead>
                         ))}
-                        <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-indigo-50/50 text-[10px] md:text-sm">TOTAL PASSES</TableHead>
-                        <TableHead colSpan={3} className="text-center font-black text-blue-600 border-r border-b border-slate-300 dark:border-slate-700 bg-blue-50/30 text-[10px] md:text-sm">% PASS</TableHead>
-                        <TableHead colSpan={3} className="text-center font-black text-red-600 border-r border-b border-slate-300 dark:border-slate-700 bg-red-50/50 text-[10px] md:text-sm">TOTAL FAILS</TableHead>
-                        <TableHead colSpan={3} className="text-center font-black text-red-800 border-b border-slate-300 dark:border-slate-700 bg-red-100/30 text-[10px] md:text-sm">% FAIL</TableHead>
+                        <TableHead colSpan={colSpanPerCategory} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-indigo-50/50 text-[10px] md:text-sm">TOTAL PASSES</TableHead>
+                        <TableHead colSpan={colSpanPerCategory} className="text-center font-black text-blue-600 border-r border-b border-slate-300 dark:border-slate-700 bg-blue-50/30 text-[10px] md:text-sm">% PASS</TableHead>
+                        <TableHead colSpan={colSpanPerCategory} className="text-center font-black text-red-600 border-r border-b border-slate-300 dark:border-slate-700 bg-red-50/50 text-[10px] md:text-sm">TOTAL FAILS</TableHead>
+                        <TableHead colSpan={colSpanPerCategory} className="text-center font-black text-red-800 border-b border-slate-300 dark:border-slate-700 bg-red-100/30 text-[10px] md:text-sm">% FAIL</TableHead>
                       </TableRow>
                       <TableRow>
                         {/* Subheaders for REG to % FAIL */}
                         {[...Array(7 + displayScales.length)].map((_, i) => (
                           <React.Fragment key={i}>
-                            <TableHead className="text-center text-[10px] font-bold border-r border-b border-slate-200 dark:border-slate-800">F</TableHead>
-                            <TableHead className="text-center text-[10px] font-bold border-r border-b border-slate-200 dark:border-slate-800">M</TableHead>
+                            {showFemale && <TableHead className="text-center text-[10px] font-bold border-r border-b border-slate-200 dark:border-slate-800">F</TableHead>}
+                            {showMale && <TableHead className="text-center text-[10px] font-bold border-r border-b border-slate-200 dark:border-slate-800">M</TableHead>}
                             <TableHead className="text-center text-[10px] font-bold border-r border-b border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-800/50">TOT</TableHead>
                           </React.Fragment>
                         ))}
@@ -1196,18 +1295,18 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                           </TableCell>
                           
                           {/* REG */}
-                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.reg.f}</TableCell>
-                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.reg.m}</TableCell>
+                          {showFemale && <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.reg.f}</TableCell>}
+                          {showMale && <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.reg.m}</TableCell>}
                           <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-bold bg-slate-50/30">{row.reg.tot}</TableCell>
                           
                           {/* WROTE */}
-                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.wrote.f}</TableCell>
-                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.wrote.m}</TableCell>
+                          {showFemale && <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.wrote.f}</TableCell>}
+                          {showMale && <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.wrote.m}</TableCell>}
                           <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-bold bg-slate-50/30">{row.wrote.tot}</TableCell>
                           
                           {/* ABS */}
-                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.abs.f}</TableCell>
-                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.abs.m}</TableCell>
+                          {showFemale && <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.abs.f}</TableCell>}
+                          {showMale && <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.abs.m}</TableCell>}
                           <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-bold bg-slate-50/30">{row.abs.tot}</TableCell>
                           
                           {/* Grade Columns */}
@@ -1215,40 +1314,140 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                             const counts = getGradeCounts(row, s.grade);
                             return (
                               <React.Fragment key={s.id || s.grade}>
-                                <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{counts.f}</TableCell>
-                                <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{counts.m}</TableCell>
+                                {showFemale && <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{counts.f}</TableCell>}
+                                {showMale && <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{counts.m}</TableCell>}
                                 <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-bold bg-slate-50/30">{counts.tot}</TableCell>
                               </React.Fragment>
                             );
                           })}
                           
                           {/* TOTAL PASSES */}
-                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 text-emerald-600">{row.totalPasses.f}</TableCell>
-                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 text-emerald-600">{row.totalPasses.m}</TableCell>
+                          {showFemale && <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 text-emerald-600">{row.totalPasses.f}</TableCell>}
+                          {showMale && <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 text-emerald-600">{row.totalPasses.m}</TableCell>}
                           <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-bold bg-emerald-50/30 text-emerald-700">{row.totalPasses.tot}</TableCell>
                           
                           {/* % PASS */}
-                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-medium">{row.percentagePass.f}%</TableCell>
-                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-medium">{row.percentagePass.m}%</TableCell>
+                          {showFemale && <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-medium">{row.percentagePass.f}%</TableCell>}
+                          {showMale && <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-medium">{row.percentagePass.m}%</TableCell>}
                           <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-black text-blue-600 bg-blue-50/30">{row.percentagePass.tot}%</TableCell>
                           
                           {/* TOTAL FAILS */}
-                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 text-red-600">{row.totalFails?.f || 0}</TableCell>
-                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 text-red-600">{row.totalFails?.m || 0}</TableCell>
+                          {showFemale && <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 text-red-600">{row.totalFails?.f || 0}</TableCell>}
+                          {showMale && <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 text-red-600">{row.totalFails?.m || 0}</TableCell>}
                           <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-bold bg-red-50/30 text-red-700">{row.totalFails?.tot || 0}</TableCell>
                           
                           {/* % FAIL */}
-                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-medium">{row.percentageFail?.f || 0}%</TableCell>
-                          <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-medium">{row.percentageFail?.m || 0}%</TableCell>
+                          {showFemale && <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-medium">{row.percentageFail?.f || 0}%</TableCell>}
+                          {showMale && <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-medium">{row.percentageFail?.m || 0}%</TableCell>}
                           <TableCell className="text-center border-b border-slate-100 dark:border-slate-800 font-black text-red-600 bg-red-100/10">{row.percentageFail?.tot || 0}%</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
+
+                    {/* Grand Total Row */}
+                    {analysisSummary && (
+                      <TableFooter className="bg-slate-100/90 dark:bg-slate-800/90 font-black border-t-2 border-slate-300 dark:border-slate-700">
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell className="font-black text-slate-900 dark:text-white sticky left-0 bg-slate-100 dark:bg-slate-800 z-10 border-r border-slate-300 dark:border-slate-700 shadow-[2px_0_5px_rgba(0,0,0,0.05)] text-xs md:text-sm">
+                            TOTAL
+                          </TableCell>
+                          
+                          {/* REG */}
+                          {showFemale && <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-bold">{analysisSummary.totals.reg.f}</TableCell>}
+                          {showMale && <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-bold">{analysisSummary.totals.reg.m}</TableCell>}
+                          <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-black bg-blue-100/40 text-blue-950 dark:text-blue-200">{analysisSummary.totals.reg.tot}</TableCell>
+                          
+                          {/* WROTE */}
+                          {showFemale && <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-bold">{analysisSummary.totals.wrote.f}</TableCell>}
+                          {showMale && <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-bold">{analysisSummary.totals.wrote.m}</TableCell>}
+                          <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-black bg-emerald-100/40 text-emerald-950 dark:text-emerald-200">{analysisSummary.totals.wrote.tot}</TableCell>
+                          
+                          {/* ABS */}
+                          {showFemale && <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-bold">{analysisSummary.totals.abs.f}</TableCell>}
+                          {showMale && <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-bold">{analysisSummary.totals.abs.m}</TableCell>}
+                          <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-black bg-orange-100/40 text-orange-950 dark:text-orange-200">{analysisSummary.totals.abs.tot}</TableCell>
+                          
+                          {/* Grade Columns */}
+                          {displayScales.map((s: any) => {
+                            const counts = analysisSummary.totals.grades[s.grade] || { f: 0, m: 0, tot: 0 };
+                            return (
+                              <React.Fragment key={s.id || s.grade}>
+                                {showFemale && <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-bold">{counts.f}</TableCell>}
+                                {showMale && <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-bold">{counts.m}</TableCell>}
+                                <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-black bg-slate-200/50 dark:bg-slate-700/50 text-slate-900 dark:text-white">{counts.tot}</TableCell>
+                              </React.Fragment>
+                            );
+                          })}
+                          
+                          {/* TOTAL PASSES */}
+                          {showFemale && <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-bold text-emerald-700">{analysisSummary.totals.totalPasses.f}</TableCell>}
+                          {showMale && <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-bold text-emerald-700">{analysisSummary.totals.totalPasses.m}</TableCell>}
+                          <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-black bg-emerald-100/50 text-emerald-800">{analysisSummary.totals.totalPasses.tot}</TableCell>
+                          
+                          {/* % PASS */}
+                          {showFemale && <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-bold">{analysisSummary.totals.percentagePass.f}%</TableCell>}
+                          {showMale && <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-bold">{analysisSummary.totals.percentagePass.m}%</TableCell>}
+                          <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-black text-blue-700 bg-blue-100/50">{analysisSummary.totals.percentagePass.tot}%</TableCell>
+                          
+                          {/* TOTAL FAILS */}
+                          {showFemale && <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-bold text-red-700">{analysisSummary.totals.totalFails.f}</TableCell>}
+                          {showMale && <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-bold text-red-700">{analysisSummary.totals.totalFails.m}</TableCell>}
+                          <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-black bg-red-100/50 text-red-800">{analysisSummary.totals.totalFails.tot}</TableCell>
+                          
+                          {/* % FAIL */}
+                          {showFemale && <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-bold">{analysisSummary.totals.percentageFail.f}%</TableCell>}
+                          {showMale && <TableCell className="text-center border-r border-slate-200 dark:border-slate-700 font-bold">{analysisSummary.totals.percentageFail.m}%</TableCell>}
+                          <TableCell className="text-center border-slate-200 dark:border-slate-700 font-black text-red-700 bg-red-100/40">{analysisSummary.totals.percentageFail.tot}%</TableCell>
+                        </TableRow>
+                      </TableFooter>
+                    )}
                   </Table>
                 </div>
 
                 {/* Mobile Card Layout */}
                 <div className="md:hidden space-y-4 px-4 py-6">
+                  {analysisSummary && (
+                    <div className="bg-slate-900 text-white rounded-2xl p-4 shadow-md space-y-3">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h4 className="font-black text-sm uppercase tracking-wider text-slate-200">Overall Class Performance</h4>
+                          <p className="text-[10px] text-slate-400">Total grades and student classifications</p>
+                        </div>
+                        <Badge className="bg-emerald-500 text-white font-black text-xs">
+                          {analysisSummary.totals.percentagePass.tot}% PASS
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="bg-white/10 p-2 rounded-xl">
+                          <p className="text-[9px] text-slate-400 uppercase font-bold">Reg</p>
+                          <p className="text-base font-black text-white">{analysisSummary.totals.reg.tot}</p>
+                        </div>
+                        <div className="bg-white/10 p-2 rounded-xl">
+                          <p className="text-[9px] text-slate-400 uppercase font-bold">Wrote</p>
+                          <p className="text-base font-black text-white">{analysisSummary.totals.wrote.tot}</p>
+                        </div>
+                        <div className="bg-white/10 p-2 rounded-xl">
+                          <p className="text-[9px] text-slate-400 uppercase font-bold">Abs</p>
+                          <p className="text-base font-black text-white">{analysisSummary.totals.abs.tot}</p>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-white/10">
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Classifications</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {analysisSummary.classifications.map((c) => (
+                            <div key={c.name} className="px-2.5 py-1 bg-white/15 rounded-lg flex items-center gap-1.5 text-xs">
+                              <span className="font-bold text-slate-300">{c.name}:</span>
+                              <span className="font-black text-emerald-400">{c.tot}</span>
+                              <span className="text-[9px] text-slate-400">({c.percentage}%)</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {resultsAnalysis.analysis.map((row: any) => (
                     <div key={row.subjectName} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm relative overflow-hidden">
                       <div className="absolute top-0 left-0 w-1.5 h-full bg-emerald-500" />
@@ -1279,25 +1478,32 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                       </div>
 
                       <div className="space-y-3">
-                        <div>
-                          <div className="flex justify-between items-center text-[10px] mb-1">
-                            <span className="font-bold text-slate-500 uppercase tracking-wider">Gender Distribution</span>
-                            <div className="flex gap-2">
-                              <span className="text-blue-600 font-bold">M: {row.wrote.m}</span>
-                              <span className="text-pink-600 font-bold">F: {row.wrote.f}</span>
+                        {showFemale && showMale ? (
+                          <div>
+                            <div className="flex justify-between items-center text-[10px] mb-1">
+                              <span className="font-bold text-slate-500 uppercase tracking-wider">Gender Distribution</span>
+                              <div className="flex gap-2">
+                                <span className="text-blue-600 font-bold">M: {row.wrote.m}</span>
+                                <span className="text-pink-600 font-bold">F: {row.wrote.f}</span>
+                              </div>
+                            </div>
+                            <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden flex">
+                              <div 
+                                className="bg-blue-500 h-full transition-all" 
+                                style={{ width: `${(row.wrote.m / (row.wrote.tot || 1)) * 100}%` }} 
+                              />
+                              <div 
+                                className="bg-pink-500 h-full transition-all" 
+                                style={{ width: `${(row.wrote.f / (row.wrote.tot || 1)) * 100}%` }} 
+                              />
                             </div>
                           </div>
-                          <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden flex">
-                            <div 
-                              className="bg-blue-500 h-full transition-all" 
-                              style={{ width: `${(row.wrote.m / (row.wrote.tot || 1)) * 100}%` }} 
-                            />
-                            <div 
-                              className="bg-pink-500 h-full transition-all" 
-                              style={{ width: `${(row.wrote.f / (row.wrote.tot || 1)) * 100}%` }} 
-                            />
+                        ) : (
+                          <div className="flex justify-between items-center text-[10px] text-slate-500 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-lg">
+                            <span className="font-bold uppercase tracking-wider">Enrollment Type</span>
+                            <span className="font-black text-slate-700 dark:text-slate-300">{isBoysOnly ? 'Boys Only' : 'Girls Only'}</span>
                           </div>
-                        </div>
+                        )}
 
                         <div>
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Grade Breakdown</p>
