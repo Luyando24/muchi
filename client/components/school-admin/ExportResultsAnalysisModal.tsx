@@ -107,8 +107,29 @@ export default function ExportResultsAnalysisModal({
     }
   };
 
+  const SECONDARY_EQUIVALENTS: Record<string, string> = {
+    'ONE': '1', 'TWO': '2', 'THREE': '3', 'FOUR': '4', 'FIVE': '5',
+    'SIX': '6', 'SEVEN': '7', 'EIGHT': '8', 'NINE': '9',
+    '1': 'One', '2': 'Two', '3': 'Three', '4': 'Four', '5': 'Five',
+    '6': 'Six', '7': 'Seven', '8': 'Eight', '9': 'Nine',
+  };
+
+  const getGradeCounts = (a: any, grade: string) => {
+    if (a.grades && a.grades[grade]) return a.grades[grade];
+    const alt = SECONDARY_EQUIVALENTS[String(grade).toUpperCase().trim()];
+    if (alt && a.grades && a.grades[alt]) return a.grades[alt];
+    return { f: 0, m: 0, tot: 0 };
+  };
+
+  const getUniqueScales = (scales: any[]) => {
+    return (scales || []).filter((s: any, idx: number, arr: any[]) =>
+      arr.findIndex((x: any) => String(x.grade).trim().toUpperCase() === String(s.grade).trim().toUpperCase()) === idx
+    );
+  };
+
   const exportToExcel = async (data: any) => {
     const { scales, analysis } = data;
+    const uniqueScales = getUniqueScales(scales);
     
     // Preparation for Ministry of Education Format
     // Row 1: Headers
@@ -117,7 +138,7 @@ export default function ExportResultsAnalysisModal({
       "REG F", "REG M", "REG TOT",
       "WROTE F", "WROTE M", "WROTE TOT",
       "ABS F", "ABS M", "ABS TOT",
-      ...scales.flatMap((s: any) => [`${s.grade} F`, `${s.grade} M`, `${s.grade} TOT`]),
+      ...uniqueScales.flatMap((s: any) => [`${s.grade} F`, `${s.grade} M`, `${s.grade} TOT`]),
       "PASS F", "PASS M", "PASS TOT",
       "% PASS F", "% PASS M", "% PASS TOT",
       "FAIL F", "FAIL M", "FAIL TOT",
@@ -130,11 +151,10 @@ export default function ExportResultsAnalysisModal({
       a.reg.f, a.reg.m, a.reg.tot,
       a.wrote.f, a.wrote.m, a.wrote.tot,
       a.abs.f, a.abs.m, a.abs.tot,
-      ...scales.flatMap((s: any) => [
-        a.grades[s.grade]?.f || 0, 
-        a.grades[s.grade]?.m || 0, 
-        a.grades[s.grade]?.tot || 0
-      ]),
+      ...uniqueScales.flatMap((s: any) => {
+        const gc = getGradeCounts(a, s.grade);
+        return [gc.f || 0, gc.m || 0, gc.tot || 0];
+      }),
       a.totalPasses.f, a.totalPasses.m, a.totalPasses.tot,
       a.percentagePass.f, a.percentagePass.m, a.percentagePass.tot,
       a.totalFails?.f || 0, a.totalFails?.m || 0, a.totalFails?.tot || 0,
@@ -148,7 +168,7 @@ export default function ExportResultsAnalysisModal({
     
     // Add Grading Scale Sheet
     const scaleHeaders = ["Grade", "Min %", "Max %", "Points", "Description"];
-    const scaleRows = scales.map((s: any) => [
+    const scaleRows = uniqueScales.map((s: any) => [
       s.grade, 
       s.min_percentage, 
       s.max_percentage, 
@@ -240,10 +260,12 @@ export default function ExportResultsAnalysisModal({
     doc.setTextColor(30, 41, 59);
     doc.text("Subject Breakdown", margin, currentY);
 
+    const uniqueScales = getUniqueScales(scales);
+
     const tableColumn = [
       "Subject", 
       "REG", "WRT", "ABS", 
-      ...scales.map((s: any) => s.grade),
+      ...uniqueScales.map((s: any) => s.grade),
       "PASS", "%"
     ];
     
@@ -252,7 +274,7 @@ export default function ExportResultsAnalysisModal({
       a.reg.tot,
       a.wrote.tot,
       a.abs.tot,
-      ...scales.map((s: any) => a.grades[s.grade]?.tot || 0),
+      ...uniqueScales.map((s: any) => getGradeCounts(a, s.grade).tot || 0),
       a.totalPasses.tot,
       `${a.percentagePass.tot}%`
     ]);
@@ -300,7 +322,7 @@ export default function ExportResultsAnalysisModal({
 
     autoTable(doc, {
       head: [["Grade", "Range", "Description"]],
-      body: scales.map((s: any) => [
+      body: uniqueScales.map((s: any) => [
         s.grade, 
         `${s.min_percentage}% - ${s.max_percentage}%`, 
         s.description || "-"
@@ -316,13 +338,14 @@ export default function ExportResultsAnalysisModal({
 
   const exportToCSV = async (data: any) => {
     const { scales, analysis } = data;
-    const headers = ["Subject", "REG", "WROTE", "ABS", ...scales.map((s: any) => s.grade), "Pass", "% Pass", "Fail", "% Fail"];
+    const uniqueScales = getUniqueScales(scales);
+    const headers = ["Subject", "REG", "WROTE", "ABS", ...uniqueScales.map((s: any) => s.grade), "Pass", "% Pass", "Fail", "% Fail"];
     const rows = analysis.map((a: any) => [
       `"${a.subjectName}"`,
       a.reg.tot,
       a.wrote.tot,
       a.abs.tot,
-      ...scales.map((s: any) => a.grades[s.grade]?.tot || 0),
+      ...uniqueScales.map((s: any) => getGradeCounts(a, s.grade).tot || 0),
       a.totalPasses.tot,
       a.percentagePass.tot,
       a.totalFails?.tot || 0,

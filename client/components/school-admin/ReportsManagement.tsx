@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import ExportMasterSheetModal from './ExportMasterSheetModal';
 import ExportResultsAnalysisModal from './ExportResultsAnalysisModal';
 import ExportSupportListModal from './ExportSupportListModal';
@@ -72,6 +72,45 @@ import { cn } from "@/lib/utils";
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#71717a'];
 
+const SECONDARY_EQUIVALENTS: Record<string, string> = {
+  '1': 'ONE', 'ONE': '1',
+  '2': 'TWO', 'TWO': '2',
+  '3': 'THREE', 'THREE': '3',
+  '4': 'FOUR', 'FOUR': '4',
+  '5': 'FIVE', 'FIVE': '5',
+  '6': 'SIX', 'SIX': '6',
+  '7': 'SEVEN', 'SEVEN': '7',
+  '8': 'EIGHT', 'EIGHT': '8',
+  '9': 'NINE', 'NINE': '9',
+};
+
+const getGradeCounts = (row: any, grade: string) => {
+  if (row.grades?.[grade]) return row.grades[grade];
+  const upper = (grade || '').toUpperCase().trim();
+  if (row.grades?.[upper]) return row.grades[upper];
+  const alt = SECONDARY_EQUIVALENTS[upper];
+  if (alt && row.grades?.[alt]) return row.grades[alt];
+  for (const k of Object.keys(row.grades || {})) {
+    if (k.toUpperCase().trim() === upper) return row.grades[k];
+  }
+  return { f: 0, m: 0, tot: 0 };
+};
+
+const getUniqueScales = (scales: any[]) => {
+  const seen = new Set<string>();
+  const res: any[] = [];
+  for (const s of scales || []) {
+    const raw = (s.grade || '').toUpperCase().trim();
+    if (!raw) continue;
+    const key = SECONDARY_EQUIVALENTS[raw] ? (raw.length === 1 ? raw : SECONDARY_EQUIVALENTS[raw]) : raw;
+    if (!seen.has(key)) {
+      seen.add(key);
+      res.push(s);
+    }
+  }
+  return res;
+};
+
 export default function ReportsManagement({ isTeacherPortal = false, defaultTab = "overview" }: { isTeacherPortal?: boolean, defaultTab?: string }) {
   const [liveStats, setLiveStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -87,6 +126,7 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
   const [masterSheetLoading, setMasterSheetLoading] = useState(false);
   const [availableClasses, setAvailableClasses] = useState<any[]>([]);
   const [resultsAnalysis, setResultsAnalysis] = useState<any>(null);
+  const displayScales = useMemo(() => getUniqueScales(resultsAnalysis?.scales || []), [resultsAnalysis?.scales]);
   const [selectedGradeLevel, setSelectedGradeLevel] = useState<string>("all");
   const [selectedAnalysisClassId, setSelectedAnalysisClassId] = useState<string>("all");
   const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
@@ -1126,8 +1166,8 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                         <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-blue-50/50 text-[10px] md:text-sm">REG</TableHead>
                         <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-emerald-50/50 text-[10px] md:text-sm">WROTE</TableHead>
                         <TableHead colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 bg-orange-50/50 text-[10px] md:text-sm">ABS</TableHead>
-                        {resultsAnalysis.scales.map((s: any) => (
-                           <TableHead key={s.id} colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 text-[10px] md:text-sm">
+                        {displayScales.map((s: any) => (
+                           <TableHead key={s.id || s.grade} colSpan={3} className="text-center font-black text-slate-900 dark:text-white border-r border-b border-slate-300 dark:border-slate-700 text-[10px] md:text-sm">
                              {s.grade}
                            </TableHead>
                         ))}
@@ -1138,7 +1178,7 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                       </TableRow>
                       <TableRow>
                         {/* Subheaders for REG to % FAIL */}
-                        {[...Array(7 + resultsAnalysis.scales.length)].map((_, i) => (
+                        {[...Array(7 + displayScales.length)].map((_, i) => (
                           <React.Fragment key={i}>
                             <TableHead className="text-center text-[10px] font-bold border-r border-b border-slate-200 dark:border-slate-800">F</TableHead>
                             <TableHead className="text-center text-[10px] font-bold border-r border-b border-slate-200 dark:border-slate-800">M</TableHead>
@@ -1171,13 +1211,16 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                           <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-bold bg-slate-50/30">{row.abs.tot}</TableCell>
                           
                           {/* Grade Columns */}
-                          {resultsAnalysis.scales.map((s: any) => (
-                            <React.Fragment key={s.id}>
-                              <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.grades[s.grade]?.f || 0}</TableCell>
-                              <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{row.grades[s.grade]?.m || 0}</TableCell>
-                              <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-bold bg-slate-50/30">{row.grades[s.grade]?.tot || 0}</TableCell>
-                            </React.Fragment>
-                          ))}
+                          {displayScales.map((s: any) => {
+                            const counts = getGradeCounts(row, s.grade);
+                            return (
+                              <React.Fragment key={s.id || s.grade}>
+                                <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{counts.f}</TableCell>
+                                <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800">{counts.m}</TableCell>
+                                <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 font-bold bg-slate-50/30">{counts.tot}</TableCell>
+                              </React.Fragment>
+                            );
+                          })}
                           
                           {/* TOTAL PASSES */}
                           <TableCell className="text-center border-r border-b border-slate-100 dark:border-slate-800 text-emerald-600">{row.totalPasses.f}</TableCell>
@@ -1259,12 +1302,15 @@ export default function ReportsManagement({ isTeacherPortal = false, defaultTab 
                         <div>
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Grade Breakdown</p>
                           <div className="flex flex-wrap gap-2">
-                            {resultsAnalysis.scales.map((s: any) => (
-                              <div key={s.id} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 rounded-lg flex items-center gap-1.5 border border-slate-100 dark:border-slate-800">
-                                <span className="text-[9px] font-black text-slate-500">{s.grade}:</span>
-                                <span className="text-xs font-black text-blue-600">{row.grades[s.grade]?.tot || 0}</span>
-                              </div>
-                            ))}
+                            {displayScales.map((s: any) => {
+                              const counts = getGradeCounts(row, s.grade);
+                              return (
+                                <div key={s.id || s.grade} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 rounded-lg flex items-center gap-1.5 border border-slate-100 dark:border-slate-800">
+                                  <span className="text-[9px] font-black text-slate-500">{s.grade}:</span>
+                                  <span className="text-xs font-black text-blue-600">{counts.tot}</span>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       </div>

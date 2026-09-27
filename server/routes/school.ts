@@ -15,6 +15,8 @@ import {
   resolveClassSection,
   resolveGradingScale,
   resolveGradingScaleForStudent,
+  filterScalesForSection,
+  getDefaultScalesForSection,
 } from "../../shared/gradingScale.js";
 import {
   schedulePrecompute,
@@ -8270,7 +8272,21 @@ router.get(
 
       const allGrades = await fetchAll(gradesQuery.order("id"));
       const studentIdsSet = new Set(studentIds);
-      const gradesData = allGrades.filter((g: any) => studentIdsSet.has(g.student_id));
+      let gradesData = allGrades.filter((g: any) => studentIdsSet.has(g.student_id));
+
+      if (examType && examType !== "All") {
+        if (activeTestTypes.length === 0) {
+          gradesData = gradesData.filter((g: any) => g.exam_type === examType);
+        } else {
+          // In schools with active test types, grades may be labeled as exam_type='Term',
+          // exam_type=examType, or have test_type populated. Keep all matching records.
+          gradesData = gradesData.filter((g: any) =>
+            g.exam_type === examType ||
+            g.exam_type === 'Term' ||
+            (g.test_type && g.test_type !== '' && g.test_type !== 'none')
+          );
+        }
+      }
 
       // Group and resolve final percentages/grades (handling missing tests as ABSENT)
       const groupedGradesMap = new Map<string, any[]>();
@@ -8289,40 +8305,47 @@ router.get(
         let gradeStr = 'ABSENT';
 
         if (activeTestTypes.length > 0) {
-          const hasActiveTest1 = activeTestTypes.includes('Test 1');
-          const hasActiveTest2 = activeTestTypes.includes('Test 2');
-          const hasActiveTest3 = activeTestTypes.includes('Test 3');
-
-          const test1Grade = subjectGrades.find(g => (g.test_type === 'Test 1' || g.exam_type === 'Test 1'));
-          const test2Grade = subjectGrades.find(g => (g.test_type === 'Test 2' || g.exam_type === 'Test 2'));
-          const test3Grade = subjectGrades.find(g => (g.test_type === 'Test 3' || g.exam_type === 'Test 3'));
-
-          const scores = [
-            hasActiveTest1 ? test1Grade?.percentage : null,
-            hasActiveTest2 ? test2Grade?.percentage : null,
-            hasActiveTest3 ? test3Grade?.percentage : null
-          ].filter(t => t !== null && t !== undefined && t !== '') as number[];
+          const scores = activeTestTypes
+            .map((tt: string) => {
+              const matched = subjectGrades.find((g: any) =>
+                (g.test_type && String(g.test_type).trim().toLowerCase() === String(tt).trim().toLowerCase()) ||
+                (g.exam_type && String(g.exam_type).trim().toLowerCase() === String(tt).trim().toLowerCase())
+              );
+              return matched?.percentage;
+            })
+            .filter((t: any) => t !== null && t !== undefined && t !== '' && !isNaN(Number(t)))
+            .map(Number);
 
           if (scores.length > 0) {
-            percentage = scores.reduce((sum, s) => sum + Number(s), 0) / scores.length;
+            percentage = scores.reduce((sum: number, s: number) => sum + s, 0) / scores.length;
             gradeStr = 'PASSED';
           } else {
-            percentage = null;
-            gradeStr = 'ABSENT';
+            // Check if there is a standalone grade for this subject
+            const fallbackMatch = subjectGrades.find((g: any) =>
+              g.percentage !== null && g.percentage !== undefined && g.percentage !== '' && !isNaN(Number(g.percentage))
+            );
+            if (fallbackMatch) {
+              percentage = Number(fallbackMatch.percentage);
+              gradeStr = fallbackMatch.grade || 'PASSED';
+            } else {
+              percentage = null;
+              gradeStr = 'ABSENT';
+            }
           }
         } else {
           // Standard / no test types:
-          let match = subjectGrades.find(g => (!g.test_type || g.test_type === '' || g.test_type === 'none'));
-          if (match) {
-            percentage = match.percentage;
+          let match = subjectGrades.find((g: any) =>
+            (!examType || examType === 'All' || g.exam_type === examType) &&
+            (!g.test_type || g.test_type === '' || g.test_type === 'none')
+          );
+          if (match && match.percentage !== null && match.percentage !== undefined && match.percentage !== '' && !isNaN(Number(match.percentage))) {
+            percentage = Number(match.percentage);
             gradeStr = match.grade;
           } else {
-            // Fallback to average of tests
-            const test1Grade = subjectGrades.find(g => (g.test_type === 'Test 1' || g.exam_type === 'Test 1'));
-            const test2Grade = subjectGrades.find(g => (g.test_type === 'Test 2' || g.exam_type === 'Test 2'));
-            const test3Grade = subjectGrades.find(g => (g.test_type === 'Test 3' || g.exam_type === 'Test 3'));
-
-            const scores = [test1Grade?.percentage, test2Grade?.percentage, test3Grade?.percentage].filter(t => t !== null && t !== undefined && t !== '') as number[];
+            // Fallback to average of any valid test scores
+            const scores = subjectGrades
+              .filter((g: any) => g.percentage !== null && g.percentage !== undefined && g.percentage !== '' && !isNaN(Number(g.percentage)))
+              .map((g: any) => Number(g.percentage));
             if (scores.length > 0) {
               percentage = scores.reduce((sum, s) => sum + Number(s), 0) / scores.length;
               gradeStr = 'PASSED';
@@ -8337,6 +8360,28 @@ router.get(
           grade: percentage === null ? 'ABSENT' : gradeStr
         });
       }
+
+      // Determine default section
+      const targetSection = resolveClassSection(
+        gradeLevel && gradeLevel !== "all" ? String(gradeLevel) : (schoolType || ""),
+        schoolType
+      );
+      const effectiveScales = (scales && scales.length > 0) ? scales : getDefaultScalesForSection(targetSection);
+
+      const SECONDARY_EQUIVALENTS: Record<string, string> = {
+        'ONE': '1', 'TWO': '2', 'THREE': '3', 'FOUR': '4', 'FIVE': '5',
+        'SIX': '6', 'SEVEN': '7', 'EIGHT': '8', 'NINE': '9',
+        '1': 'One', '2': 'Two', '3': 'Three', '4': 'Four', '5': 'Five',
+        '6': 'Six', '7': 'Seven', '8': 'Eight', '9': 'Nine',
+      };
+
+      const normalizeGender = (rawGender: any): 'male' | 'female' | 'other' => {
+        if (!rawGender) return 'other';
+        const g = String(rawGender).toLowerCase().trim();
+        if (g === 'male' || g === 'm' || g === 'boy') return 'male';
+        if (g === 'female' || g === 'f' || g === 'girl') return 'female';
+        return 'other';
+      };
 
       // 5. Initialize Analysis
       const analysis: Record<string, any> = {};
@@ -8353,7 +8398,7 @@ router.get(
           totalFails: { f: 0, m: 0, tot: 0 },
           percentageFail: { f: 0, m: 0, tot: 0 }
         };
-        scales.forEach((scale: any) => {
+        effectiveScales.forEach((scale: any) => {
           analysis[subj.id].grades[scale.grade] = { f: 0, m: 0, tot: 0 };
         });
       });
@@ -8392,7 +8437,7 @@ router.get(
 
       // 7. Calculate Counts
       studentsData.forEach((s: any) => {
-        const gender = (s.gender || "Other").toLowerCase();
+        const gender = normalizeGender(s.gender);
         const classId = studentClassMap.get(s.id);
         const offeredSubjects = classId ? classToSubjects.get(classId) : null;
 
@@ -8412,7 +8457,7 @@ router.get(
         const student = studentMap.get(g.student_id);
         if (!student || !analysis[g.subject_id]) return;
 
-        const gender = student.gender;
+        const gender = normalizeGender(student.gender);
         const percentage = Number(g.percentage) || 0;
         
         // Skip students who were absent for this specific subject
@@ -8423,14 +8468,29 @@ router.get(
         else if (gender === 'female') analysis[g.subject_id].wrote.f++;
 
         const studentGrade = student.grade || "";
-        const scale = getGradingScaleForGrade(percentage, studentGrade, schoolType, scales);
+        const scale = getGradingScaleForGrade(percentage, studentGrade, schoolType, effectiveScales);
         if (scale) {
-          analysis[g.subject_id].grades[scale.grade].tot++;
-          if (gender === 'male') analysis[g.subject_id].grades[scale.grade].m++;
-          else if (gender === 'female') analysis[g.subject_id].grades[scale.grade].f++;
+          let gradeKey = scale.grade;
+          if (!analysis[g.subject_id].grades[gradeKey]) {
+            const altKey = SECONDARY_EQUIVALENTS[String(scale.grade).toUpperCase().trim()];
+            if (altKey && analysis[g.subject_id].grades[altKey]) {
+              gradeKey = altKey;
+            } else {
+              analysis[g.subject_id].grades[gradeKey] = { f: 0, m: 0, tot: 0 };
+            }
+          }
 
-          const isFail = (scale.description?.toLowerCase().includes('fail')) || 
-                         ['9', 'U9', 'U', 'F', 'E'].includes(String(scale.grade).toUpperCase());
+          analysis[g.subject_id].grades[gradeKey].tot++;
+          if (gender === 'male') analysis[g.subject_id].grades[gradeKey].m++;
+          else if (gender === 'female') analysis[g.subject_id].grades[gradeKey].f++;
+
+          // Comprehensive fail detection across secondary, primary, and preschool
+          const gradeStrUpper = String(scale.grade).toUpperCase().trim();
+          const descLower = (scale.description || '').toLowerCase();
+          const failKeywords = ['fail', 'unsatisfactory', 'average below', 'emerging'];
+          const failGrades = ['9', 'NINE', 'U9', 'U', 'F', 'E', 'D BLUE'];
+
+          const isFail = failKeywords.some(kw => descLower.includes(kw)) || failGrades.includes(gradeStrUpper);
           
           if (!isFail) {
              analysis[g.subject_id].totalPasses.tot++;
@@ -8460,28 +8520,29 @@ router.get(
           return a;
         });
 
-      // Refine scales for the response to keep headers clean if a specific grade is targeted
-      let refinedScales = scales;
+      // Refine scales for the response to keep headers clean and section-relevant
+      let refinedScales = effectiveScales;
       if (gradeLevel && gradeLevel !== "all") {
         const gradeStr = String(gradeLevel).toLowerCase().includes("grade") ? String(gradeLevel) : `Grade ${gradeLevel}`;
-        const sampleScale = getGradingScaleForGrade(90, gradeStr, schoolType, scales);
-        if (sampleScale) {
-          const isJunior = ["A RED", "B ORANGE", "C YELLOW", "D BLUE"].some((prefix) =>
-            sampleScale.grade.toUpperCase().includes(prefix)
-          );
-          const isPrimary = ["A+", "A", "B+", "B", "C+", "C", "F"].includes(sampleScale.grade.toUpperCase());
-
-          if (isJunior) {
-            refinedScales = scales.filter((s: any) =>
-              ["A RED", "B ORANGE", "C YELLOW", "D BLUE"].some((prefix) => s.grade.toUpperCase().includes(prefix))
-            );
-          } else if (isPrimary) {
-            refinedScales = scales.filter((s: any) =>
-              ["A+", "A", "B+", "B", "C+", "C", "F"].includes(s.grade.toUpperCase())
-            );
-          }
+        const section = resolveClassSection(gradeStr, schoolType);
+        const sectionScales = filterScalesForSection(effectiveScales, section);
+        refinedScales = sectionScales.length > 0 ? sectionScales : getDefaultScalesForSection(section);
+      } else {
+        const generalSection = resolveClassSection(schoolType || "secondary", schoolType);
+        const sectionScales = filterScalesForSection(effectiveScales, generalSection);
+        if (sectionScales.length > 0) {
+          refinedScales = sectionScales;
         }
       }
+
+      // Deduplicate refinedScales by grade string to prevent repeated columns
+      const seenGrades = new Set<string>();
+      refinedScales = refinedScales.filter((s: any) => {
+        const key = String(s.grade).trim().toUpperCase();
+        if (seenGrades.has(key)) return false;
+        seenGrades.add(key);
+        return true;
+      });
 
       res.json({ scales: refinedScales, analysis: resultAnalysis });
     } catch (error: any) {

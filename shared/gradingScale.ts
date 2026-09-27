@@ -375,3 +375,47 @@ export function storedPercentageToRawMark(
   }
   return storedPercentage;
 }
+
+/** Standard default grading scales when a school has no custom scales configured. */
+export function getDefaultScalesForSection(classSection: ClassSection): GradingScaleEntry[] {
+  switch (classSection) {
+    case "preschool":
+      return [
+        { grade: "Excelling", min_percentage: 75, max_percentage: 100, description: "Outstanding developmental progress", section: "preschool" },
+        { grade: "Achieving", min_percentage: 50, max_percentage: 74, description: "Meeting developmental expectations", section: "preschool" },
+        { grade: "Developing", min_percentage: 25, max_percentage: 49, description: "Working towards developmental goals", section: "preschool" },
+        { grade: "Emerging", min_percentage: 0, max_percentage: 24, description: "Beginning to show awareness", section: "preschool" },
+      ];
+    case "lower_primary":
+      return [
+        { grade: "A Red", min_percentage: 75, max_percentage: 100, description: "Excellent", section: "lower_primary" },
+        { grade: "B Orange", min_percentage: 60, max_percentage: 74, description: "Very Good", section: "lower_primary" },
+        { grade: "C Yellow", min_percentage: 50, max_percentage: 59, description: "Good", section: "lower_primary" },
+        { grade: "D Blue", min_percentage: 0, max_percentage: 49, description: "Average Below", section: "lower_primary" },
+      ];
+    case "upper_primary":
+      return [
+        { grade: "A+", min_percentage: 86, max_percentage: 100, description: "Distinction", section: "upper_primary" },
+        { grade: "A", min_percentage: 76, max_percentage: 85, description: "Distinction", section: "upper_primary" },
+        { grade: "B+", min_percentage: 66, max_percentage: 75, description: "Merit", section: "upper_primary" },
+        { grade: "B", min_percentage: 56, max_percentage: 65, description: "Credit", section: "upper_primary" },
+        { grade: "C+", min_percentage: 46, max_percentage: 55, description: "Definite Pass", section: "upper_primary" },
+        { grade: "C", min_percentage: 40, max_percentage: 45, description: "Pass", section: "upper_primary" },
+        { grade: "F", min_percentage: 0, max_percentage: 39, description: "Fail", section: "upper_primary" },
+      ];
+    case "secondary":
+    default:
+      return [
+        { grade: "1", min_percentage: 75, max_percentage: 100, description: "Distinction", section: "secondary" },
+        { grade: "2", min_percentage: 70, max_percentage: 74, description: "Distinction", section: "secondary" },
+        { grade: "3", min_percentage: 65, max_percentage: 69, description: "Merit", section: "secondary" },
+        { grade: "4", min_percentage: 60, max_percentage: 64, description: "Merit", section: "secondary" },
+        { grade: "5", min_percentage: 55, max_percentage: 59, description: "Credit", section: "secondary" },
+        { grade: "6", min_percentage: 50, max_percentage: 54, description: "Credit", section: "secondary" },
+        { grade: "7", min_percentage: 45, max_percentage: 49, description: "Satisfactory", section: "secondary" },
+        { grade: "8", min_percentage: 40, max_percentage: 44, description: "Satisfactory", section: "secondary" },
+        { grade: "9", min_percentage: 0, max_percentage: 39, description: "Unsatisfactory", section: "secondary" },
+      ];
+  }
+}
+
