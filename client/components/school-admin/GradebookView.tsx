@@ -13,7 +13,8 @@ import {
   Users,
   ArrowRightLeft,
   Trash2,
-  Sparkles
+  Sparkles,
+  Clock
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -67,6 +68,34 @@ interface GradeEntry {
   comments: string;
   status: 'Draft' | 'Submitted' | 'Published' | 'Absent';
   isDirty?: boolean;
+  updatedAt?: string | null;
+}
+
+function formatLastUpdated(isoString?: string | null): string {
+  if (!isoString) return '-';
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return '-';
+    const now = new Date();
+    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (d.toDateString() === now.toDateString()) {
+      return `Today, ${timeStr}`;
+    }
+    const yesterday = new Date();
+    yesterday.setDate(now.getDate() - 1);
+    if (d.toDateString() === yesterday.toDateString()) {
+      return `Yesterday, ${timeStr}`;
+    }
+    const sameYear = d.getFullYear() === now.getFullYear();
+    const dateStr = d.toLocaleDateString([], {
+      month: 'short',
+      day: 'numeric',
+      ...(sameYear ? {} : { year: 'numeric' })
+    });
+    return `${dateStr}, ${timeStr}`;
+  } catch {
+    return '-';
+  }
 }
 
 interface Class {
@@ -483,6 +512,7 @@ export default function GradebookView() {
         toast({ title: "Success", description: "Grades saved successfully" });
       }
 
+      const nowIso = new Date().toISOString();
       setLastSaved(new Date());
 
       // Mark as clean
@@ -490,7 +520,11 @@ export default function GradebookView() {
         const next = { ...prev };
         dirtyGrades.forEach(g => {
           if (next[g.studentId]) {
-            next[g.studentId].isDirty = false;
+            next[g.studentId] = {
+              ...next[g.studentId],
+              isDirty: false,
+              updatedAt: nowIso,
+            };
             // Ensure status isn't reverted to Draft immediately if they were just saving existing records
           }
         });
@@ -611,7 +645,8 @@ export default function GradebookView() {
           grade: '-',
           comments: '',
           status: 'Draft',
-          isDirty: false
+          isDirty: false,
+          updatedAt: null
         };
       });
 
@@ -629,7 +664,8 @@ export default function GradebookView() {
             grade: g.grade,
             comments: g.comments || '',
             status: g.status || 'Draft',
-            isDirty: false
+            isDirty: false,
+            updatedAt: g.updated_at || g.created_at || null
           };
         });
       }
@@ -1231,6 +1267,7 @@ export default function GradebookView() {
                         <TableHead className="w-[80px] text-[10px] font-bold uppercase tracking-wider text-slate-500 text-center">Grade</TableHead>
                         <TableHead className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Grade Description</TableHead>
                         <TableHead className="w-[120px] text-[10px] font-bold uppercase tracking-wider text-slate-500">Status</TableHead>
+                        <TableHead className="w-[140px] text-[10px] font-bold uppercase tracking-wider text-slate-500">Last Edited</TableHead>
                         <TableHead className="w-[60px] text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">View</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1254,7 +1291,8 @@ export default function GradebookView() {
                             grade: '-',
                             comments: '',
                             status: 'Draft',
-                            isDirty: false
+                            isDirty: false,
+                            updatedAt: null,
                           };
                           const isBlocked = errorStudentId !== null && errorStudentId !== student.id;
                           return (
@@ -1337,6 +1375,24 @@ export default function GradebookView() {
                                   {entry.isDirty && <span className="text-[10px] text-amber-500 font-bold italic animate-pulse">Unsaved Changes</span>}
                                 </div>
                               </TableCell>
+                              <TableCell className="py-4">
+                                <div className="flex flex-col justify-center">
+                                  {entry.isDirty ? (
+                                    <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                                      Editing now...
+                                    </span>
+                                  ) : entry.updatedAt ? (
+                                    <span 
+                                      className="text-xs font-medium text-slate-600 dark:text-slate-300 whitespace-nowrap"
+                                      title={new Date(entry.updatedAt).toLocaleString()}
+                                    >
+                                      {formatLastUpdated(entry.updatedAt)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400 dark:text-slate-600 italic text-[11px]">-</span>
+                                  )}
+                                </div>
+                              </TableCell>
                               <TableCell className="py-4 text-right">
                                 <Dialog>
                                   <DialogTrigger asChild>
@@ -1382,7 +1438,8 @@ export default function GradebookView() {
                         grade: '-',
                         comments: '',
                         status: 'Draft',
-                        isDirty: false
+                        isDirty: false,
+                        updatedAt: null,
                       };
                       const isBlocked = errorStudentId !== null && errorStudentId !== student.id;
                       return (
@@ -1470,6 +1527,23 @@ export default function GradebookView() {
                                 })()}
                               </div>
                             </div>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs pt-3 border-t border-slate-100 dark:border-slate-800">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                              <Clock className="h-3.5 w-3.5 text-slate-400" /> Last Edited
+                            </span>
+                            <span className="font-medium text-slate-700 dark:text-slate-300">
+                              {entry.isDirty ? (
+                                <span className="text-amber-600 dark:text-amber-400 font-semibold text-[11px]">Editing now...</span>
+                              ) : entry.updatedAt ? (
+                                <span title={new Date(entry.updatedAt).toLocaleString()}>
+                                  {formatLastUpdated(entry.updatedAt)}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 dark:text-slate-600 italic">-</span>
+                              )}
+                            </span>
                           </div>
 
                         </div>

@@ -3397,6 +3397,7 @@ router.post(
           percentage: storedPercentage,
           comments: g.comments || (isAbsent ? "Absent" : scale.description || ""),
           status: "Draft",
+          updated_at: new Date().toISOString(),
         };
       });
 
