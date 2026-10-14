@@ -17,10 +17,32 @@ interface PrimaryReportCardProps {
   examType: string;
   academicYear: string;
   className?: string;
+  selectedTestType?: string;
+  visibleTestTypes?: string[];
 }
 
-export const PrimaryReportCard = ({ data, term, examType, academicYear, className = "" }: PrimaryReportCardProps) => {
+export const PrimaryReportCard = ({
+  data,
+  term,
+  examType,
+  academicYear,
+  className = "",
+  selectedTestType,
+  visibleTestTypes,
+}: PrimaryReportCardProps) => {
   const { student, grades: rawGrades, gradingScale, school } = data;
+
+  const schoolTestTypes = school?.test_types_enabled
+    ? (school?.test_types && school.test_types.length > 0 ? school.test_types : ['Test 1', 'Test 2', 'Test 3'])
+    : [];
+
+  const effectiveTestType = (selectedTestType && selectedTestType !== 'all')
+    ? selectedTestType
+    : (['Test 1', 'Test 2', 'Test 3'].includes(examType)
+        ? examType
+        : (schoolTestTypes.includes(examType) ? examType : 'all'));
+
+  const isSingleTest = effectiveTestType !== 'all';
 
   // Group grades by subject to handle multiple tests
   const subjectsMap = new Map();
@@ -36,7 +58,7 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
           'Mid Term': null,
           'End of Term': null,
           'Term': null
-        },
+        } as Record<string, any>,
         allGrades: [],
         teacherName: g.subjects?.teacherName || null
       });
@@ -46,6 +68,8 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
     
     // Map existing exam types to our test columns
     const tType = g.test_type || '';
+    if (tType) subData.tests[tType] = g.percentage;
+    if (g.exam_type) subData.tests[g.exam_type] = g.percentage;
     if (tType === 'Test 1' || g.exam_type.includes('1')) subData.tests['Test 1'] = g.percentage;
     else if (tType === 'Test 2' || g.exam_type.includes('2')) subData.tests['Test 2'] = g.percentage;
     else if (tType === 'Test 3' || g.exam_type.includes('3')) subData.tests['Test 3'] = g.percentage;
@@ -56,9 +80,25 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
 
   const subjectList = Array.from(subjectsMap.values());
 
+  const getSubFinalPercentage = (sub: any) => {
+    if (isSingleTest) {
+      const score = sub.tests[effectiveTestType];
+      return (score !== null && score !== undefined) ? Number(score) : null;
+    }
+    const termScore = sub.tests['Term'];
+    const endOfTerm = sub.tests['End of Term'];
+    const midTerm = sub.tests['Mid Term'];
+    const hasVisibleFilter = visibleTestTypes && visibleTestTypes.length > 0;
+    const testList = ['Test 1', 'Test 2', 'Test 3'].filter(t => !hasVisibleFilter || visibleTestTypes.includes(t));
+    const tests = testList.map(t => sub.tests[t]).filter(v => v !== null && v !== undefined && v !== '');
+    const testAvg = tests.length > 0 ? tests.reduce((a: any, b: any) => Number(a) + Number(b), 0) / tests.length : null;
+    return termScore ?? endOfTerm ?? midTerm ?? testAvg ?? null;
+  };
+
   // Calculate Metrics
-  const totalPercentage = rawGrades.reduce((sum: number, g: any) => sum + (g.percentage || 0), 0);
-  const average = rawGrades.length > 0 ? (totalPercentage / rawGrades.length).toFixed(1) : 0;
+  const calculatedScores = subjectList.map(s => getSubFinalPercentage(s)).filter(s => s !== null) as number[];
+  const totalPercentage = calculatedScores.reduce((sum: number, s: number) => sum + s, 0);
+  const average = calculatedScores.length > 0 ? (totalPercentage / calculatedScores.length).toFixed(1) : 0;
 
   const studentGrade = (student.className || student.grade || student.class || "").toLowerCase();
   
@@ -159,7 +199,7 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
             </div>
             <div className="flex gap-2">
               <span className="text-slate-500 uppercase tracking-wider">Term:</span>
-              <span className="border-b border-dashed border-slate-400 min-w-[60px]">{term.replace('Term ', '')}</span>
+              <span className="border-b border-dashed border-slate-400 min-w-[60px]">{isSingleTest ? `${term.replace('Term ', '')} - ${effectiveTestType}` : term.replace('Term ', '')}</span>
             </div>
             <div className="flex gap-2">
               <span className="text-slate-500 uppercase tracking-wider">Year:</span>
@@ -217,79 +257,88 @@ export const PrimaryReportCard = ({ data, term, examType, academicYear, classNam
 
         {/* Results Table */}
         <div className="flex-1 min-h-0 overflow-auto">
-          <Table className="primary-report-table border-collapse">
-            <TableHeader className="bg-slate-100">
-              <TableRow className="h-12 text-[10px] sm:text-xs font-black uppercase text-slate-700">
-                <TableHead className={`${school?.show_teacher_on_report_card ? 'w-[20%]' : 'w-[30%]'} border border-slate-300`}>SUBJECT</TableHead>
-                <TableHead className="w-[10%] border border-slate-300 text-center">TEST 1 %</TableHead>
-                <TableHead className="w-[10%] border border-slate-300 text-center">TEST 2 %</TableHead>
-                <TableHead className="w-[10%] border border-slate-300 text-center">TEST 3 %</TableHead>
-                <TableHead className="w-[10%] border border-slate-300 text-center">AV MARKS</TableHead>
-                <TableHead className="w-[10%] border border-slate-300 text-center">MARKS SCORED</TableHead>
-                <TableHead className="w-[10%] border border-slate-300 text-center">OUT OF</TableHead>
-                <TableHead className="w-[10%] border border-slate-300 text-center">COLOUR</TableHead>
-                {school?.show_teacher_on_report_card && (
-                  <TableHead className="w-[10%] border border-slate-300 text-center">TEACHER</TableHead>
-                )}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {subjectList.map((sub: any, i: number) => {
-                // Determine which percentage to use for "AV MARKS" and "MARKS SCORED"
-                // If "End of Term" exists, use that, otherwise use "Mid Term", otherwise average of tests
-                 const termScore = sub.tests['Term'];
-                 const endOfTerm = sub.tests['End of Term'];
-                 const midTerm = sub.tests['Mid Term'];
-                 const tests = [sub.tests['Test 1'], sub.tests['Test 2'], sub.tests['Test 3']].filter(v => v !== null);
-                 const testAvg = tests.length > 0 ? tests.reduce((a: any, b: any) => a + b, 0) / tests.length : null;
-                 
-                 const finalPercentage = termScore ?? endOfTerm ?? midTerm ?? testAvg ?? 0;
-                const color = getGradeColor(finalPercentage);
-                
-                return (
-                  <TableRow key={i} className="h-10 text-xs sm:text-sm">
-                    <TableCell className="border border-slate-300 font-bold text-slate-800 py-1 pl-4 uppercase">
-                      <div className="flex flex-row items-baseline gap-1.5 flex-wrap">
-                        <span>{sub.name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="border border-slate-300 text-center py-1">{sub.tests['Test 1'] ?? '-'}</TableCell>
-                    <TableCell className="border border-slate-300 text-center py-1">{sub.tests['Test 2'] ?? '-'}</TableCell>
-                    <TableCell className="border border-slate-300 text-center py-1">{sub.tests['Test 3'] ?? '-'}</TableCell>
-                    <TableCell className="border border-slate-300 text-center py-1 font-bold">{finalPercentage ? Math.round(finalPercentage) + '%' : '-'}</TableCell>
-                    <TableCell className="border border-slate-300 text-center py-1 font-bold">
-                      {finalPercentage ? Math.round(isG57 ? (finalPercentage / 100) * 150 : finalPercentage) : '-'}
-                    </TableCell>
-                    <TableCell className="border border-slate-300 text-center py-1">{maxMark}</TableCell>
-                    <TableCell className={`border border-slate-300 text-center py-1 ${color.class}`}>
-                      {color.name}
-                    </TableCell>
+          {(() => {
+            const showTest1 = !isSingleTest && (!visibleTestTypes || visibleTestTypes.length === 0 || visibleTestTypes.includes('Test 1'));
+            const showTest2 = !isSingleTest && (!visibleTestTypes || visibleTestTypes.length === 0 || visibleTestTypes.includes('Test 2'));
+            const showTest3 = !isSingleTest && (!visibleTestTypes || visibleTestTypes.length === 0 || visibleTestTypes.includes('Test 3'));
+            const totalCols = (isSingleTest ? 5 : 5 + (showTest1 ? 1 : 0) + (showTest2 ? 1 : 0) + (showTest3 ? 1 : 0)) + (school?.show_teacher_on_report_card ? 1 : 0);
+
+            return (
+              <Table className="primary-report-table border-collapse">
+                <TableHeader className="bg-slate-100">
+                  <TableRow className="h-12 text-[10px] sm:text-xs font-black uppercase text-slate-700">
+                    <TableHead className={`${school?.show_teacher_on_report_card ? 'w-[20%]' : 'w-[30%]'} border border-slate-300`}>SUBJECT</TableHead>
+                    {isSingleTest ? (
+                      <TableHead className="w-[15%] border border-slate-300 text-center">{effectiveTestType.toUpperCase()} %</TableHead>
+                    ) : (
+                      <>
+                        {showTest1 && <TableHead className="w-[10%] border border-slate-300 text-center">TEST 1 %</TableHead>}
+                        {showTest2 && <TableHead className="w-[10%] border border-slate-300 text-center">TEST 2 %</TableHead>}
+                        {showTest3 && <TableHead className="w-[10%] border border-slate-300 text-center">TEST 3 %</TableHead>}
+                        <TableHead className="w-[10%] border border-slate-300 text-center">AV MARKS</TableHead>
+                      </>
+                    )}
+                    <TableHead className="w-[10%] border border-slate-300 text-center">MARKS SCORED</TableHead>
+                    <TableHead className="w-[10%] border border-slate-300 text-center">OUT OF</TableHead>
+                    <TableHead className="w-[10%] border border-slate-300 text-center">COLOUR</TableHead>
                     {school?.show_teacher_on_report_card && (
-                      <TableCell className="border border-slate-300 text-center py-1 font-medium capitalize italic text-slate-600">
-                        {sub.teacherName ?? '-'}
-                      </TableCell>
+                      <TableHead className="w-[10%] border border-slate-300 text-center">TEACHER</TableHead>
                     )}
                   </TableRow>
-                );
-              })}
-              {/* Fill remaining space with empty rows to look like the book */}
-              {Array.from({ length: Math.max(0, 12 - subjectList.length) }).map((_, i) => (
-                <TableRow key={`empty-${i}`} className="h-10">
-                  <TableCell className="border border-slate-300 py-1"></TableCell>
-                  <TableCell className="border border-slate-300 py-1"></TableCell>
-                  <TableCell className="border border-slate-300 py-1"></TableCell>
-                  <TableCell className="border border-slate-300 py-1"></TableCell>
-                  <TableCell className="border border-slate-300 py-1"></TableCell>
-                  <TableCell className="border border-slate-300 py-1"></TableCell>
-                  <TableCell className="border border-slate-300 py-1"></TableCell>
-                  <TableCell className="border border-slate-300 py-1"></TableCell>
-                  {school?.show_teacher_on_report_card && (
-                    <TableCell className="border border-slate-300 py-1"></TableCell>
-                  )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {subjectList.map((sub: any, i: number) => {
+                    const finalPercentage = getSubFinalPercentage(sub);
+                    const color = finalPercentage !== null ? getGradeColor(finalPercentage) : { name: '-', class: 'text-slate-400' };
+                    
+                    return (
+                      <TableRow key={i} className="h-10 text-xs sm:text-sm">
+                        <TableCell className="border border-slate-300 font-bold text-slate-800 py-1 pl-4 uppercase">
+                          <div className="flex flex-row items-baseline gap-1.5 flex-wrap">
+                            <span>{sub.name}</span>
+                          </div>
+                        </TableCell>
+                        {isSingleTest ? (
+                          <TableCell className="border border-slate-300 text-center py-1 font-bold">
+                            {finalPercentage !== null ? Math.round(finalPercentage) + '%' : '-'}
+                          </TableCell>
+                        ) : (
+                          <>
+                            {showTest1 && <TableCell className="border border-slate-300 text-center py-1">{sub.tests['Test 1'] ?? '-'}</TableCell>}
+                            {showTest2 && <TableCell className="border border-slate-300 text-center py-1">{sub.tests['Test 2'] ?? '-'}</TableCell>}
+                            {showTest3 && <TableCell className="border border-slate-300 text-center py-1">{sub.tests['Test 3'] ?? '-'}</TableCell>}
+                            <TableCell className="border border-slate-300 text-center py-1 font-bold">
+                              {finalPercentage !== null ? Math.round(finalPercentage) + '%' : '-'}
+                            </TableCell>
+                          </>
+                        )}
+                        <TableCell className="border border-slate-300 text-center py-1 font-bold">
+                          {finalPercentage !== null ? Math.round(isG57 ? (finalPercentage / 100) * 150 : finalPercentage) : '-'}
+                        </TableCell>
+                        <TableCell className="border border-slate-300 text-center py-1">{maxMark}</TableCell>
+                        <TableCell className={`border border-slate-300 text-center py-1 ${color.class}`}>
+                          {color.name}
+                        </TableCell>
+                        {school?.show_teacher_on_report_card && (
+                          <TableCell className="border border-slate-300 text-center py-1 font-medium capitalize italic text-slate-600">
+                            {sub.teacherName ?? '-'}
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })}
+                  {/* Fill remaining space with empty rows to look like the book */}
+                  {Array.from({ length: Math.max(0, 12 - subjectList.length) }).map((_, i) => (
+                    <TableRow key={`empty-${i}`} className="h-10">
+                      {Array.from({ length: totalCols }).map((_, cIdx) => (
+                        <TableCell key={cIdx} className="border border-slate-300 py-1"></TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            );
+          })()}
         </div>
 
         {/* Legend Section */}

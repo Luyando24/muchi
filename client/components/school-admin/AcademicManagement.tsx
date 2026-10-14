@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { standardizeSubjectName, standardizeClassName, standardizeDepartmentName } from '@shared/name-standardization';
 import { Plus, Trash2, Edit, Save, Search, Settings, BookOpen, Calculator, CheckCircle2, AlertTriangle, Loader2, ClipboardList, Send, ArrowRightLeft, Download, Layers, Building, Calendar, Printer, FileSpreadsheet, Lock, ShieldAlert, GraduationCap, UserMinus } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -190,6 +190,19 @@ export default function AcademicManagement() {
   const [isMigrateModalOpen, setIsMigrateModalOpen] = useState(false);
   const [targetExamType, setTargetExamType] = useState('');
   const [isMigrating, setIsMigrating] = useState(false);
+
+  const allMigrationTargets = useMemo(() => {
+    const list = new Set<string>();
+    availableExamTypes.forEach(t => list.add(t));
+    if (schoolSettings?.test_types && Array.isArray(schoolSettings.test_types)) {
+      schoolSettings.test_types.forEach((t: string) => list.add(t));
+    }
+    if (schoolSettings?.exam_types && Array.isArray(schoolSettings.exam_types)) {
+      schoolSettings.exam_types.forEach((t: string) => list.add(t));
+    }
+    ['Test 1', 'Test 2', 'Test 3', 'Mid Term', 'End of Term'].forEach(t => list.add(t));
+    return Array.from(list).filter(t => t && t.trim() !== (calcForm.examType || '').trim());
+  }, [availableExamTypes, schoolSettings, calcForm.examType]);
 
   // Promotions & Repetitions State
   const [promotionsSourceClassId, setPromotionsSourceClassId] = useState('');
@@ -1029,8 +1042,8 @@ export default function AcademicManagement() {
     }
   };
   const handleMigrateGrades = async () => {
-    if (!calcForm.classId || !calcForm.subjectId || !calcForm.term || !calcForm.examType || !calcForm.academicYear || !targetExamType) {
-      toast({ title: "Error", description: "Please ensure Class, Subject, Term, Year, and Assessment Types are all selected.", variant: "destructive" });
+    if (!calcForm.classId || !calcForm.term || !calcForm.examType || !calcForm.academicYear || !targetExamType) {
+      toast({ title: "Error", description: "Please ensure Class, Term, Year, and Assessment Types are all selected.", variant: "destructive" });
       return;
     }
     
@@ -1038,16 +1051,13 @@ export default function AcademicManagement() {
       toast({ title: "Error", description: "Bulk migration must be done one class at a time to prevent accidental school-wide changes.", variant: "destructive" });
       return;
     }
-    
-    if (calcForm.subjectId === 'all') {
-      toast({ title: "Error", description: "Bulk migration must be done one subject at a time.", variant: "destructive" });
-      return;
-    }
 
     if (calcForm.examType === targetExamType) {
       toast({ title: "Error", description: "Source and destination assessment types must be different.", variant: "destructive" });
       return;
     }
+
+    const isAllSubjects = !calcForm.subjectId || calcForm.subjectId === 'all';
 
     setIsMigrating(true);
     try {
@@ -1066,7 +1076,7 @@ export default function AcademicManagement() {
           toExamType: targetExamType,
           academicYear: calcForm.academicYear,
           classId: calcForm.classId,
-          subjectId: calcForm.subjectId
+          subjectId: isAllSubjects ? 'all' : calcForm.subjectId
         })
       });
 
@@ -1079,6 +1089,7 @@ export default function AcademicManagement() {
       setTargetExamType('');
       // Force refresh the readiness/status checks if they were open
       setCalcForm(prev => ({ ...prev, examType: targetExamType }));
+      setGradeStatus([]);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
@@ -2578,7 +2589,7 @@ export default function AcademicManagement() {
                         <Button
                           variant="outline"
                           className="w-full text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-900 dark:hover:bg-blue-950"
-                          disabled={!calcForm.classId || calcForm.classId === 'all' || !calcForm.subjectId || calcForm.subjectId === 'all'}
+                          disabled={!calcForm.classId || calcForm.classId === 'all' || !calcForm.term || !calcForm.examType || !calcForm.academicYear}
                         >
                           <ArrowRightLeft className="mr-2 h-4 w-4" /> Move Grades
                         </Button>
@@ -2587,8 +2598,12 @@ export default function AcademicManagement() {
                         <DialogHeader>
                           <DialogTitle>Bulk Move Grades</DialogTitle>
                           <DialogDescription>
-                            Moving grades for <strong>{calcForm.examType}</strong> to a different assessment type.
-                            You must select a specific Class and Subject.
+                            Moving grades for <strong>{calcForm.examType}</strong> ({calcForm.term}, {calcForm.academicYear}) to a different assessment type for{' '}
+                            <strong>
+                              {calcForm.subjectId && calcForm.subjectId !== 'all'
+                                ? subjects.find(s => s.id === calcForm.subjectId)?.name || 'selected subject'
+                                : 'ALL SUBJECTS in this class'}
+                            </strong>.
                           </DialogDescription>
                         </DialogHeader>
                         <div className="py-4 space-y-4">
@@ -2599,7 +2614,7 @@ export default function AcademicManagement() {
                                 <SelectValue placeholder="Select destination..." />
                               </SelectTrigger>
                               <SelectContent>
-                                {availableExamTypes.filter(t => t !== calcForm.examType).map(type => (
+                                {allMigrationTargets.map(type => (
                                   <SelectItem key={type} value={type}>{type}</SelectItem>
                                 ))}
                               </SelectContent>

@@ -24,6 +24,8 @@ interface ReportCardProps {
   examType: string;
   academicYear: string;
   className?: string;
+  selectedTestType?: string;
+  visibleTestTypes?: string[];
 }
 
 // ─── Senior Secondary Detection ───────────────────────────────────────────────
@@ -265,7 +267,7 @@ function computeBestFivePoints(grades: any[], gradingScale: any[], compulsorySub
   };
 }
 
-export const ReportCard = ({ data, term, examType, academicYear, className = "" }: ReportCardProps) => {
+export const ReportCard = ({ data, term, examType, academicYear, className = "", selectedTestType, visibleTestTypes }: ReportCardProps) => {
   const { student, grades, gradingScale, school, classGradesKeys } = data;
 
   // Senior secondary detection
@@ -274,60 +276,19 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
   // Primary G5-7 detection
   const isG57 = isPrimaryG57(student.class || '');
 
-  // Helper to determine the final percentage for a grouped subject
-  const getFinalPercentage = (item: any) => {
-    // If a standard exam/term grade is explicitly recorded, use it directly (handles legacy/standard grades)
-    if (item.exam !== null && item.exam !== undefined) {
-      return item.exam;
-    }
+  // Active test types from school
+  const schoolTestTypes = school?.test_types_enabled
+    ? (school?.test_types && school.test_types.length > 0 ? school.test_types : ['Test 1', 'Test 2', 'Test 3'])
+    : [];
 
-    const activeTestTypes = school?.test_types_enabled ? (school?.test_types || []) : [];
-    
-    if (activeTestTypes.length > 0) {
-      // If school has active test types, average across all tests that were
-      // actually published at the class level.  Tests whose type was never
-      // published by the school (no classGradesKeys entry for that type) are
-      // skipped so the report card can still show a grade from partial data.
-      const hasActiveTest1 = activeTestTypes.includes('Test 1');
-      const hasActiveTest2 = activeTestTypes.includes('Test 2');
-      const hasActiveTest3 = activeTestTypes.includes('Test 3');
+  // Determine effective test type to display
+  const effectiveTestType = (selectedTestType && selectedTestType !== 'all')
+    ? selectedTestType
+    : (['Test 1', 'Test 2', 'Test 3'].includes(examType)
+        ? examType
+        : (schoolTestTypes.includes(examType) ? examType : 'all'));
 
-      const classHasAnyTest1 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 1`) || k.endsWith('-Test 1') || k.endsWith('-Test 1-')) ?? false;
-      const classHasAnyTest2 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 2`) || k.endsWith('-Test 2') || k.endsWith('-Test 2-')) ?? false;
-      const classHasAnyTest3 = classGradesKeys?.some(k => k.endsWith(`-${examType}-Test 3`) || k.endsWith('-Test 3') || k.endsWith('-Test 3-')) ?? false;
-
-      // Only consider a missing test as blocking if the school has published
-      // that test type for this class (otherwise skip it silently).
-      const blockingMissing1 = hasActiveTest1 && classHasAnyTest1 && (item.test1 === null || item.test1 === undefined);
-      const blockingMissing2 = hasActiveTest2 && classHasAnyTest2 && (item.test2 === null || item.test2 === undefined);
-      const blockingMissing3 = hasActiveTest3 && classHasAnyTest3 && (item.test3 === null || item.test3 === undefined);
-
-      // Disable strict requirement: we no longer block grades if a test is missing
-      // if (blockingMissing1 || blockingMissing2 || blockingMissing3) {
-      //   return null;
-      // }
-
-      // Average over whichever published tests this student has a score for.
-      const scores = [
-        (hasActiveTest1 && (classHasAnyTest1 || item.test1 !== null)) ? item.test1 : null,
-        (hasActiveTest2 && (classHasAnyTest2 || item.test2 !== null)) ? item.test2 : null,
-        (hasActiveTest3 && (classHasAnyTest3 || item.test3 !== null)) ? item.test3 : null,
-      ].filter(t => t !== null) as number[];
-      
-      if (scores.length > 0) {
-        return parseFloat((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1));
-      }
-      return null;
-    }
-
-    if (item.exam !== null) return item.exam;
-    // Fallback to average of tests if no active test types are set but tests exist
-    const tests = [item.test1, item.test2, item.test3].filter(t => t !== null) as number[];
-    if (tests.length > 0) {
-      return parseFloat((tests.reduce((a, b) => a + b, 0) / tests.length).toFixed(1));
-    }
-    return null;
-  };
+  const isSingleTest = effectiveTestType !== 'all';
 
   // Group raw grades by subject
   const groupedGradesBySubject = React.useMemo(() => {
@@ -336,6 +297,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
       test1: number | null;
       test2: number | null;
       test3: number | null;
+      tests: Record<string, number | null>;
       exam: number | null;
       mainGrade: any;
     }>();
@@ -350,6 +312,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
           test1: null,
           test2: null,
           test3: null,
+          tests: {},
           exam: null,
           mainGrade: null
         });
@@ -373,6 +336,13 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
         item.exam = percentage;
         item.mainGrade = g;
       }
+
+      if (g.test_type) {
+        item.tests[g.test_type] = percentage;
+      }
+      if (g.exam_type) {
+        item.tests[g.exam_type] = percentage;
+      }
       
       if (!item.mainGrade) {
         item.mainGrade = g;
@@ -382,14 +352,56 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
     return Array.from(map.values());
   }, [grades, examType]);
 
+  const getSubjectTestScore = React.useCallback((item: any, testName: string): number | null => {
+    if (testName === 'Test 1') return item.test1 ?? item.tests?.['Test 1'] ?? null;
+    if (testName === 'Test 2') return item.test2 ?? item.tests?.['Test 2'] ?? null;
+    if (testName === 'Test 3') return item.test3 ?? item.tests?.['Test 3'] ?? null;
+    return item.tests?.[testName] ?? null;
+  }, []);
+
+  // Helper to determine the final percentage for a grouped subject
+  const getFinalPercentage = (item: any) => {
+    if (isSingleTest) {
+      return getSubjectTestScore(item, effectiveTestType);
+    }
+
+    // If a standard exam/term grade is explicitly recorded, use it directly (handles legacy/standard grades)
+    if (item.exam !== null && item.exam !== undefined) {
+      return item.exam;
+    }
+
+    if (schoolTestTypes.length > 0) {
+      const hasVisibleFilter = visibleTestTypes && visibleTestTypes.length > 0;
+      const includedTests = hasVisibleFilter ? schoolTestTypes.filter(t => visibleTestTypes.includes(t)) : schoolTestTypes;
+      const scores = includedTests
+        .map(t => getSubjectTestScore(item, t))
+        .filter(t => t !== null) as number[];
+      
+      if (scores.length > 0) {
+        return parseFloat((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1));
+      }
+      return null;
+    }
+
+    if (item.exam !== null) return item.exam;
+    // Fallback to average of tests if no active test types are set but tests exist
+    const tests = [item.test1, item.test2, item.test3].filter(t => t !== null) as number[];
+    if (tests.length > 0) {
+      return parseFloat((tests.reduce((a, b) => a + b, 0) / tests.length).toFixed(1));
+    }
+    return null;
+  };
+
   // Determine visibility of test columns
   const hasStandardGrades = grades.some((g: any) => 
     g.exam_type === examType && (!g.test_type || g.test_type === '' || g.test_type === 'none') && g.percentage !== null && g.percentage !== undefined && g.percentage !== ''
   );
 
-  const showTest1 = !!school?.test_types_enabled && !hasStandardGrades && (school?.test_types || []).includes('Test 1');
-  const showTest2 = !!school?.test_types_enabled && !hasStandardGrades && (school?.test_types || []).includes('Test 2');
-  const showTest3 = !!school?.test_types_enabled && !hasStandardGrades && (school?.test_types || []).includes('Test 3');
+  const hasVisibleFilter = visibleTestTypes && visibleTestTypes.length > 0;
+  const showTest1 = !isSingleTest && !!school?.test_types_enabled && !hasStandardGrades && (schoolTestTypes.length === 0 || schoolTestTypes.includes('Test 1')) && (!hasVisibleFilter || visibleTestTypes.includes('Test 1'));
+  const showTest2 = !isSingleTest && !!school?.test_types_enabled && !hasStandardGrades && (schoolTestTypes.length === 0 || schoolTestTypes.includes('Test 2')) && (!hasVisibleFilter || visibleTestTypes.includes('Test 2'));
+  const showTest3 = !isSingleTest && !!school?.test_types_enabled && !hasStandardGrades && (schoolTestTypes.length === 0 || schoolTestTypes.includes('Test 3')) && (!hasVisibleFilter || visibleTestTypes.includes('Test 3'));
+  const hasAnyTestCols = showTest1 || showTest2 || showTest3;
 
   // Helper to determine the standard from percentage using the grading scale
   const getStandardFromScale = (percentage: any) => {
@@ -438,6 +450,11 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
 
   // Helper to determine subject assessment state (RECORDED, WAITING, ABSENT)
   const getSubjectAssessmentState = React.useCallback((item: any) => {
+    if (isSingleTest) {
+      const score = getSubjectTestScore(item, effectiveTestType);
+      return (score !== null && score !== undefined) ? 'RECORDED' : 'ABSENT';
+    }
+
     // If standard exam/term grade is recorded, it's RECORDED
     if (item.exam !== null && item.exam !== undefined) {
       return 'RECORDED';
@@ -481,7 +498,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
       const isExamWaiting = !classGradesKeys || !classGradesKeys.includes(`${subId}-${examType}-`);
       return isExamWaiting ? 'WAITING' : 'ABSENT';
     }
-  }, [school, examType, classGradesKeys]);
+  }, [school, examType, classGradesKeys, isSingleTest, effectiveTestType, getSubjectTestScore]);
 
   // Generate synthetic single-row grades list for metric calculations
   const syntheticGrades = React.useMemo(() => {
@@ -571,7 +588,7 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
           <div className="flex-1 flex flex-col items-center text-center px-4 space-y-2">
             <h1 className="text-3xl font-black tracking-tight text-slate-900">{school?.name || 'MUCHI ACADEMY'}</h1>
             <div className="flex items-center justify-center gap-2 text-sm font-bold text-slate-900">
-              <span>{school?.simplified_assessment_mode || examType?.toLowerCase() === 'term' ? term : `${term} - ${examType}`}</span>
+              <span>{isSingleTest ? `${term} - ${effectiveTestType}` : (school?.simplified_assessment_mode || examType?.toLowerCase() === 'term' ? term : `${term} - ${examType}`)}</span>
               <span className="text-slate-300">&bull;</span>
               <span>Academic Year {academicYear}</span>
             </div>
@@ -636,22 +653,35 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "" 
                 <Table>
                   <TableHeader className="border-b border-slate-900">
                     <TableRow className="hover:bg-transparent border-none h-12">
-                      <TableHead className={`${showTest1 || showTest2 || showTest3 ? (school?.show_teacher_on_report_card ? 'w-[20%]' : 'w-[30%]') : (school?.show_teacher_on_report_card ? 'w-[30%]' : 'w-[40%]')} text-xs font-bold text-slate-900 uppercase tracking-widest pl-0`}>Subject</TableHead>
-                      {showTest1 && (
-                        <TableHead className="w-[10%] text-xs font-bold text-slate-900 uppercase tracking-widest text-center">Test 1</TableHead>
-                      )}
-                      {showTest2 && (
-                        <TableHead className="w-[10%] text-xs font-bold text-slate-900 uppercase tracking-widest text-center">Test 2</TableHead>
-                      )}
-                      {showTest3 && (
-                        <TableHead className="w-[10%] text-xs font-bold text-slate-900 uppercase tracking-widest text-center">Test 3</TableHead>
-                      )}
-                      <TableHead className={`${showTest1 || showTest2 || showTest3 ? 'w-[15%]' : 'w-[20%]'} text-xs font-bold text-slate-900 uppercase tracking-widest text-center`}>
-                        {showTest1 || showTest2 || showTest3 ? 'Final %' : 'Score %'}
-                      </TableHead>
-                      <TableHead className={`${showTest1 || showTest2 || showTest3 ? 'w-[35%]' : 'w-[40%]'} text-xs font-bold text-slate-900 uppercase tracking-widest ${school?.show_teacher_on_report_card ? 'text-center' : 'text-right pr-0'}`}>Standard</TableHead>
-                      {school?.show_teacher_on_report_card && (
-                        <TableHead className="w-[15%] text-xs font-bold text-slate-900 uppercase tracking-widest text-right pr-0">Teacher</TableHead>
+                      {isSingleTest ? (
+                        <>
+                          <TableHead className={`${school?.show_teacher_on_report_card ? 'w-[35%]' : 'w-[45%]'} text-xs font-bold text-slate-900 uppercase tracking-widest pl-0`}>Subject</TableHead>
+                          <TableHead className="w-[15%] text-xs font-bold text-slate-900 uppercase tracking-widest text-center">{effectiveTestType} %</TableHead>
+                          <TableHead className={`${school?.show_teacher_on_report_card ? 'w-[35%]' : 'w-[40%]'} text-xs font-bold text-slate-900 uppercase tracking-widest ${school?.show_teacher_on_report_card ? 'text-center' : 'text-right pr-0'}`}>Standard</TableHead>
+                          {school?.show_teacher_on_report_card && (
+                            <TableHead className="w-[15%] text-xs font-bold text-slate-900 uppercase tracking-widest text-right pr-0">Teacher</TableHead>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <TableHead className={`${hasAnyTestCols ? (school?.show_teacher_on_report_card ? 'w-[20%]' : 'w-[30%]') : (school?.show_teacher_on_report_card ? 'w-[30%]' : 'w-[40%]')} text-xs font-bold text-slate-900 uppercase tracking-widest pl-0`}>Subject</TableHead>
+                          {showTest1 && (
+                            <TableHead className="w-[10%] text-xs font-bold text-slate-900 uppercase tracking-widest text-center">Test 1</TableHead>
+                          )}
+                          {showTest2 && (
+                            <TableHead className="w-[10%] text-xs font-bold text-slate-900 uppercase tracking-widest text-center">Test 2</TableHead>
+                          )}
+                          {showTest3 && (
+                            <TableHead className="w-[10%] text-xs font-bold text-slate-900 uppercase tracking-widest text-center">Test 3</TableHead>
+                          )}
+                          <TableHead className={`${hasAnyTestCols ? 'w-[15%]' : 'w-[20%]'} text-xs font-bold text-slate-900 uppercase tracking-widest text-center`}>
+                            {hasAnyTestCols ? 'Final %' : 'Score %'}
+                          </TableHead>
+                          <TableHead className={`${hasAnyTestCols ? 'w-[35%]' : 'w-[40%]'} text-xs font-bold text-slate-900 uppercase tracking-widest ${school?.show_teacher_on_report_card ? 'text-center' : 'text-right pr-0'}`}>Standard</TableHead>
+                          {school?.show_teacher_on_report_card && (
+                            <TableHead className="w-[15%] text-xs font-bold text-slate-900 uppercase tracking-widest text-right pr-0">Teacher</TableHead>
+                          )}
+                        </>
                       )}
                     </TableRow>
                   </TableHeader>

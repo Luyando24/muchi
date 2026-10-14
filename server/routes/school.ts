@@ -178,6 +178,12 @@ async function getClassRankings(classId: string, term: string, examType: string,
   function resolveSubjectPercentage(subjectGrades: any[]): number | null {
     let percentage: number | null = null;
     if (activeTestTypes.length > 0) {
+      if (activeTestTypes.includes(examType)) {
+        const testGrade = subjectGrades.find(g => (g.test_type === examType || g.exam_type === examType));
+        return testGrade?.percentage !== null && testGrade?.percentage !== undefined && testGrade?.percentage !== '' 
+          ? Number(testGrade.percentage) 
+          : null;
+      }
       const hasActiveTest1 = activeTestTypes.includes('Test 1');
       const hasActiveTest2 = activeTestTypes.includes('Test 2');
       const hasActiveTest3 = activeTestTypes.includes('Test 3');
@@ -3434,7 +3440,7 @@ router.post(
 );
 
 // POST /api/school/grades/migrate
-// Migrate grades from one exam type to another
+// Migrate grades from one exam/test type to another
 router.post(
   "/grades/migrate",
   requireSchoolRole([...ADMIN_ROLES, "teacher"]),
@@ -3443,46 +3449,165 @@ router.post(
     const schoolId = profile.school_id;
     const { term, fromExamType, toExamType, academicYear, classId, subjectId } = req.body;
 
-    if (!term || !fromExamType || !toExamType || !academicYear || !classId || !subjectId) {
+    if (!term || !fromExamType || !toExamType || !academicYear || !classId) {
       return res.status(400).json({ message: "Missing required fields for migration" });
     }
 
+    if (fromExamType.trim().toLowerCase() === toExamType.trim().toLowerCase()) {
+      return res.status(400).json({ message: "Source and destination assessment types must be different" });
+    }
+
+    const isAllSubjects = !subjectId || subjectId === "all";
+
     try {
-      // Get students in this class
-      const { data: enrollments } = await supabaseAdmin
-        .from("enrollments")
-        .select("student_id")
-        .eq("class_id", classId)
-        .eq("academic_year", academicYear)
-        .limit(100000);
+      // 1. Get school settings to check test types configuration
+      const { data: school } = await supabaseAdmin
+        .from("schools")
+        .select("test_types_enabled, test_types, exam_types")
+        .eq("id", schoolId)
+        .single();
+      const isTestTypesEnabled = !!school?.test_types_enabled;
+      const schoolTestTypes = Array.isArray(school?.test_types) ? school.test_types : [];
 
-      const studentIds = enrollments?.map((e) => e.student_id) || [];
+      const isTestType = (typeStr: string) => {
+        if (!typeStr) return false;
+        const trimmed = typeStr.trim();
+        if (schoolTestTypes.some((t: string) => t.toLowerCase() === trimmed.toLowerCase())) return true;
+        if (/^test\s*\d+/i.test(trimmed)) return true;
+        if (isTestTypesEnabled && !["Mid Term", "End of Term"].includes(trimmed)) return true;
+        return false;
+      };
 
-      if (studentIds.length === 0) {
-        return res.json({ message: "No students found in this class." });
+      const fromIsTest = isTestType(fromExamType);
+      const toIsTest = isTestType(toExamType);
+
+      // Determine destination exam_type and test_type
+      const destExamType = toIsTest ? "Term" : toExamType.trim();
+      const destTestType = toIsTest ? toExamType.trim() : "";
+
+      // 2. Get students in this class
+      let studentIds: string[] = [];
+      if (classId && classId !== "all") {
+        const { data: enrollments } = await supabaseAdmin
+          .from("enrollments")
+          .select("student_id")
+          .eq("class_id", classId)
+          .eq("academic_year", academicYear)
+          .limit(100000);
+
+        studentIds = enrollments?.map((e) => e.student_id) || [];
+        if (studentIds.length === 0) {
+          return res.json({ message: "No students found in this class." });
+        }
       }
 
-      // Update the exam type for these students' grades in this subject/term/year
-      const { data, error, count } = await supabaseAdmin
+      // 3. Query existing source grades for this class / subject(s)
+      let sourceQuery = supabaseAdmin
         .from("student_grades")
-        .update({ exam_type: toExamType })
+        .select("id, student_id, subject_id, exam_type, test_type, percentage, grade, comments, status")
         .eq("school_id", schoolId)
         .eq("term", term)
-        .eq("exam_type", fromExamType)
-        .eq("academic_year", academicYear)
-        .eq("subject_id", subjectId)
-        .in("student_id", studentIds)
-        .select("id", { count: "exact" });
+        .eq("academic_year", academicYear);
 
-      if (error) {
-        // If there's a unique constraint violation, it means grades already exist in the destination.
-        if (error.code === '23505') {
-          return res.status(400).json({ message: "Cannot move grades because some grades already exist in the destination assessment type. Please clear them first." });
-        }
-        throw error;
+      if (studentIds.length > 0) {
+        sourceQuery = sourceQuery.in("student_id", studentIds);
       }
 
-      res.json({ message: `Successfully moved ${count || 0} grade records to ${toExamType}.` });
+      if (!isAllSubjects) {
+        sourceQuery = sourceQuery.eq("subject_id", subjectId);
+      }
+
+      const allGrades = await fetchAll(sourceQuery);
+
+      const sourceGrades = (allGrades || []).filter((g) => {
+        const gTest = (g.test_type || "").trim();
+        const gExam = (g.exam_type || "").trim();
+        if (fromIsTest) {
+          return (
+            gTest.toLowerCase() === fromExamType.trim().toLowerCase() ||
+            gExam.toLowerCase() === fromExamType.trim().toLowerCase()
+          );
+        } else {
+          return (
+            gExam.toLowerCase() === fromExamType.trim().toLowerCase() &&
+            (!gTest || gTest === "none")
+          );
+        }
+      });
+
+      if (sourceGrades.length === 0) {
+        return res.json({ message: `No grades found for ${fromExamType} to move.` });
+      }
+
+      // 4. Resolve destination collisions:
+      // Delete any pre-existing grade records in the destination for these exact students & subjects
+      // so the unique constraint (student_id, subject_id, term, academic_year, exam_type, test_type) is not violated.
+      const targetStudentIds = Array.from(new Set(sourceGrades.map((g) => g.student_id)));
+      const targetSubjectIds = Array.from(new Set(sourceGrades.map((g) => g.subject_id)));
+
+      let deleteDestQuery = supabaseAdmin
+        .from("student_grades")
+        .delete()
+        .eq("school_id", schoolId)
+        .eq("term", term)
+        .eq("academic_year", academicYear)
+        .eq("exam_type", destExamType)
+        .eq("test_type", destTestType)
+        .in("student_id", targetStudentIds);
+
+      if (!isAllSubjects) {
+        deleteDestQuery = deleteDestQuery.eq("subject_id", subjectId);
+      } else if (targetSubjectIds.length > 0) {
+        deleteDestQuery = deleteDestQuery.in("subject_id", targetSubjectIds);
+      }
+
+      await deleteDestQuery;
+
+      // 5. Update source records to the destination assessment / test type
+      const sourceIds = sourceGrades.map((g) => g.id);
+      const CHUNK_SIZE = 500;
+      let movedCount = 0;
+
+      for (let i = 0; i < sourceIds.length; i += CHUNK_SIZE) {
+        const chunk = sourceIds.slice(i, i + CHUNK_SIZE);
+        const { error: updateError, count } = await supabaseAdmin
+          .from("student_grades")
+          .update({
+            exam_type: destExamType,
+            test_type: destTestType,
+            updated_at: new Date().toISOString()
+          })
+          .in("id", chunk)
+          .select("id", { count: "exact" });
+
+        if (updateError) {
+          console.error("Migrate Grades Update Error:", updateError);
+          throw updateError;
+        }
+        movedCount += count || chunk.length;
+      }
+
+      // 6. Invalidate caches and trigger background precomputations
+      if (classId && classId !== "all") {
+        invalidateCache({ schoolId, classId, term, examType: fromExamType, academicYear });
+        invalidateCache({ schoolId, classId, term, examType: toExamType, academicYear });
+        invalidateCache({ schoolId, classId, term, examType: "Term", academicYear });
+        schedulePrecompute({
+          schoolId,
+          classId,
+          term,
+          examType: toExamType,
+          academicYear,
+        });
+      } else {
+        invalidateAndRecomputeSchool(schoolId);
+      }
+
+      const scopeDescription = isAllSubjects ? "across ALL subjects" : "for selected subject";
+      res.json({
+        message: `Successfully moved ${movedCount} grade records from ${fromExamType} to ${toExamType} ${scopeDescription}.`,
+        count: movedCount,
+      });
     } catch (error: any) {
       console.error("Migrate Grades Error:", error);
       res.status(500).json({ message: error.message });
@@ -3491,7 +3616,7 @@ router.post(
 );
 
 // POST /api/school/grades/clear
-// Clear grades for a specific class, subject, term, and exam type
+// Clear grades for a specific class, subject (or all subjects), term, and exam/test type
 router.post(
   "/grades/clear",
   requireSchoolRole([...ADMIN_ROLES, "teacher"]),
@@ -3500,45 +3625,111 @@ router.post(
     const schoolId = profile.school_id;
     const { term, examType, academicYear, classId, subjectId } = req.body;
 
-    if (!term || !examType || !academicYear || !classId || !subjectId) {
+    if (!term || !examType || !academicYear || !classId) {
       return res.status(400).json({ message: "Missing required fields for clearing grades" });
     }
 
+    const isAllSubjects = !subjectId || subjectId === "all";
+
     try {
+      // 1. Get school settings to check test types configuration
+      const { data: school } = await supabaseAdmin
+        .from("schools")
+        .select("test_types_enabled, test_types, exam_types")
+        .eq("id", schoolId)
+        .single();
+      const isTestTypesEnabled = !!school?.test_types_enabled;
+      const schoolTestTypes = Array.isArray(school?.test_types) ? school.test_types : [];
+
+      const isTestType = (typeStr: string) => {
+        if (!typeStr) return false;
+        const trimmed = typeStr.trim();
+        if (schoolTestTypes.some((t: string) => t.toLowerCase() === trimmed.toLowerCase())) return true;
+        if (/^test\s*\d+/i.test(trimmed)) return true;
+        if (isTestTypesEnabled && !["Mid Term", "End of Term"].includes(trimmed)) return true;
+        return false;
+      };
+
+      const targetIsTest = isTestType(examType);
+
       // Get students in this class
-      const { data: enrollments } = await supabaseAdmin
-        .from("enrollments")
-        .select("student_id")
-        .eq("class_id", classId)
-        .eq("academic_year", academicYear)
-        .limit(100000);
+      let studentIds: string[] = [];
+      if (classId && classId !== "all") {
+        const { data: enrollments } = await supabaseAdmin
+          .from("enrollments")
+          .select("student_id")
+          .eq("class_id", classId)
+          .eq("academic_year", academicYear)
+          .limit(100000);
 
-      const studentIds = enrollments?.map((e) => e.student_id) || [];
-
-      if (studentIds.length === 0) {
-        return res.json({ message: "No students found in this class." });
+        studentIds = enrollments?.map((e) => e.student_id) || [];
+        if (studentIds.length === 0) {
+          return res.json({ message: "No students found in this class." });
+        }
       }
 
-      // Delete the grades for these students in this subject/term/year/examType
-      const { error, count } = await supabaseAdmin
+      // Query records to delete
+      let deleteQuery = supabaseAdmin
         .from("student_grades")
-        .delete({ count: "exact" })
+        .select("id, exam_type, test_type")
         .eq("school_id", schoolId)
         .eq("term", term)
-        .eq("exam_type", examType)
-        .eq("academic_year", academicYear)
-        .eq("subject_id", subjectId)
-        .in("student_id", studentIds);
+        .eq("academic_year", academicYear);
 
-      if (error) {
-        throw error;
+      if (studentIds.length > 0) {
+        deleteQuery = deleteQuery.in("student_id", studentIds);
       }
 
-      if (classId) {
+      if (!isAllSubjects) {
+        deleteQuery = deleteQuery.eq("subject_id", subjectId);
+      }
+
+      const allGrades = await fetchAll(deleteQuery);
+
+      const toDeleteGrades = (allGrades || []).filter((g) => {
+        const gTest = (g.test_type || "").trim();
+        const gExam = (g.exam_type || "").trim();
+        if (targetIsTest) {
+          return (
+            gTest.toLowerCase() === examType.trim().toLowerCase() ||
+            gExam.toLowerCase() === examType.trim().toLowerCase()
+          );
+        } else {
+          return (
+            gExam.toLowerCase() === examType.trim().toLowerCase() &&
+            (!gTest || gTest === "none")
+          );
+        }
+      });
+
+      if (toDeleteGrades.length === 0) {
+        return res.json({ message: `No grade records found to clear for ${examType}.`, count: 0 });
+      }
+
+      const deleteIds = toDeleteGrades.map((g) => g.id);
+      const CHUNK_SIZE = 500;
+      let deletedCount = 0;
+
+      for (let i = 0; i < deleteIds.length; i += CHUNK_SIZE) {
+        const chunk = deleteIds.slice(i, i + CHUNK_SIZE);
+        const { error, count } = await supabaseAdmin
+          .from("student_grades")
+          .delete({ count: "exact" })
+          .in("id", chunk);
+
+        if (error) throw error;
+        deletedCount += count || chunk.length;
+      }
+
+      if (classId && classId !== "all") {
         invalidateCache({ schoolId, classId, term, examType, academicYear });
+        invalidateCache({ schoolId, classId, term, examType: "Term", academicYear });
+      } else {
+        invalidateAndRecomputeSchool(schoolId);
       }
 
-      res.json({ message: `Successfully cleared ${count || 0} grade records from ${examType}.` });
+      const scopeMsg = isAllSubjects ? "across ALL subjects" : "in selected subject";
+      res.json({ message: `Successfully cleared ${deletedCount} grade records from ${examType} ${scopeMsg}.`, count: deletedCount });
     } catch (error: any) {
       console.error("Clear Grades Error:", error);
       res.status(500).json({ message: error.message });
@@ -4259,8 +4450,9 @@ router.get(
       const filteredGrades = (rawGrades || []).filter((g: any) => {
         if (!examType) return true;
         if (g.exam_type === examType) return true;
+        if (g.test_type && g.test_type !== '' && g.test_type !== 'none') return true;
         if (['Test 1', 'Test 2', 'Test 3'].includes(g.exam_type)) return true;
-        if (g.exam_type === 'Term' && g.test_type && ['Test 1', 'Test 2', 'Test 3'].includes(g.test_type)) return true;
+        if (g.exam_type === 'Term') return true;
         return false;
       });
 
@@ -4539,8 +4731,9 @@ router.get(
       const filteredGrades = (allGrades || []).filter((g: any) => {
         if (!examType) return true;
         if (g.exam_type === examType) return true;
+        if (g.test_type && g.test_type !== '' && g.test_type !== 'none') return true;
         if (['Test 1', 'Test 2', 'Test 3'].includes(g.exam_type)) return true;
-        if (g.exam_type === 'Term' && g.test_type && ['Test 1', 'Test 2', 'Test 3'].includes(g.test_type)) return true;
+        if (g.exam_type === 'Term') return true;
         return false;
       });
 

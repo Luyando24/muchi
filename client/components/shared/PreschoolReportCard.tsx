@@ -9,6 +9,12 @@ interface PreschoolReportCardProps {
     gradingScale: any[];
     school: any;
   };
+  term?: string;
+  examType?: string;
+  academicYear?: string;
+  className?: string;
+  selectedTestType?: string;
+  visibleTestTypes?: string[];
 }
 
 // Star rating component for developmental levels
@@ -37,8 +43,28 @@ function gradeToLevel(grade: string): { stars: number; colour: string; label: st
   return                               { stars: 1, colour: 'bg-rose-500 text-white',    label: 'EMERGING' };
 }
 
-export const PreschoolReportCard: React.FC<PreschoolReportCardProps> = ({ data }) => {
+export const PreschoolReportCard: React.FC<PreschoolReportCardProps> = ({
+  data,
+  term: propTerm,
+  examType = 'Term',
+  academicYear: propYear,
+  className = '',
+  selectedTestType,
+  visibleTestTypes,
+}) => {
   const { student, grades, school } = data;
+
+  const schoolTestTypes = school?.test_types_enabled
+    ? (school?.test_types && school.test_types.length > 0 ? school.test_types : ['Test 1', 'Test 2', 'Test 3'])
+    : [];
+
+  const effectiveTestType = (selectedTestType && selectedTestType !== 'all')
+    ? selectedTestType
+    : (['Test 1', 'Test 2', 'Test 3'].includes(examType)
+        ? examType
+        : (schoolTestTypes.includes(examType) ? examType : 'all'));
+
+  const isSingleTest = effectiveTestType !== 'all';
 
   // ── Group grades by subject ──────────────────────────────────────────────────
   const subjectGrades = grades.reduce((acc: any, curr: any) => {
@@ -97,11 +123,11 @@ export const PreschoolReportCard: React.FC<PreschoolReportCardProps> = ({ data }
   }, {});
 
   const subjectsList = Object.values(subjectGrades) as any[];
-  const term = grades[0]?.term || 'ONE';
-  const academicYear = grades[0]?.academic_year || new Date().getFullYear();
+  const displayTerm = propTerm || grades[0]?.term || 'ONE';
+  const displayYear = propYear || grades[0]?.academic_year || new Date().getFullYear();
 
   return (
-    <div className="max-w-4xl mx-auto p-8 bg-white shadow-lg border border-slate-200 print:shadow-none print:border-none print:p-0 font-sans">
+    <div className={cn("max-w-4xl mx-auto p-8 bg-white shadow-lg border border-slate-200 print:shadow-none print:border-none print:p-0 font-sans", className)}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex justify-between items-start mb-6 border-b-2 border-black pb-4">
@@ -136,11 +162,11 @@ export const PreschoolReportCard: React.FC<PreschoolReportCardProps> = ({ data }
         </div>
         <div className="flex border-b border-dotted border-black pb-1 mr-4">
           <span className="font-bold mr-2 uppercase w-28">Academic Year:</span>
-          <span className="flex-1">{academicYear}</span>
+          <span className="flex-1">{displayYear}</span>
         </div>
         <div className="flex border-b border-dotted border-black pb-1">
           <span className="font-bold mr-2 uppercase w-20">Term:</span>
-          <span className="flex-1">{term}</span>
+          <span className="flex-1">{isSingleTest ? `${displayTerm} - ${effectiveTestType}` : displayTerm}</span>
         </div>
         {school?.show_teacher_on_report_card && student.classTeacherName && (
           <div className="flex border-b border-dotted border-black pb-1 mr-4 col-span-2">

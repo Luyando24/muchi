@@ -2,6 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, Download, Printer, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { supabase } from '@/lib/supabase';
 import { syncFetch } from '@/lib/syncService';
 import { ReportCardContent } from '@/components/shared/ReportCardContent';
@@ -12,15 +19,22 @@ interface ReportCardProps {
   term: string;
   examType: string;
   academicYear: string;
+  initialTestType?: string;
 }
 
-export default function ReportCardPreview({ studentId, term, examType, academicYear }: ReportCardProps) {
+export default function ReportCardPreview({ studentId, term, examType, academicYear, initialTestType }: ReportCardProps) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPdfReady, setIsPdfReady] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [selectedTestType, setSelectedTestType] = useState<string>(initialTestType || 'all');
+  const [visibleTestTypes, setVisibleTestTypes] = useState<string[]>(['Test 1', 'Test 2', 'Test 3']);
   const { toast } = useToast();
+
+  const schoolTestTypes = data?.school?.test_types && data.school.test_types.length > 0
+    ? data.school.test_types
+    : ['Test 1', 'Test 2', 'Test 3'];
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -55,12 +69,13 @@ export default function ReportCardPreview({ studentId, term, examType, academicY
     if (data?.student?.name) {
       const originalTitle = document.title;
       const studentName = (data.student.name || 'Student').replace(/[^a-zA-Z0-9_-]/g, '_');
-      document.title = `${studentName}_Report_Card_${term.replace(/\s+/g, '_')}_${academicYear}`;
+      const testSuffix = selectedTestType && selectedTestType !== 'all' ? `_${selectedTestType.replace(/\s+/g, '_')}` : '';
+      document.title = `${studentName}_Report_Card_${term.replace(/\s+/g, '_')}${testSuffix}_${academicYear}`;
       return () => {
         document.title = originalTitle;
       };
     }
-  }, [data, term, academicYear]);
+  }, [data, term, academicYear, selectedTestType]);
 
   // Poll class pre-built PDF readiness status
   const classId = data?.student?.classId;
@@ -105,7 +120,8 @@ export default function ReportCardPreview({ studentId, term, examType, academicY
     if (!data) return;
     const originalTitle = document.title;
     const studentName = (data.student.name || 'Student').replace(/[^a-zA-Z0-9_-]/g, '_');
-    document.title = `${studentName}_Report_Card_${term.replace(/\s+/g, '_')}_${academicYear}`;
+    const testSuffix = selectedTestType && selectedTestType !== 'all' ? `_${selectedTestType.replace(/\s+/g, '_')}` : '';
+    document.title = `${studentName}_Report_Card_${term.replace(/\s+/g, '_')}${testSuffix}_${academicYear}`;
     window.print();
     setTimeout(() => {
       document.title = originalTitle;
@@ -175,7 +191,44 @@ export default function ReportCardPreview({ studentId, term, examType, academicY
     <div className="space-y-4">
       {/* On-Screen Version */}
       <div className="print:hidden space-y-4">
-        <ReportCardContent data={data} term={term} examType={examType} academicYear={academicYear} />
+        {/* Test Type Selector Toolbar */}
+        <div className="flex flex-wrap justify-between items-center gap-3 p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Test Type to Display:</span>
+            <Select value={selectedTestType} onValueChange={setSelectedTestType}>
+              <SelectTrigger className="h-8 w-56 text-xs bg-white dark:bg-slate-800">
+                <SelectValue placeholder="All Tests (Combined)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs font-semibold">All Tests (Combined / Term)</SelectItem>
+                {schoolTestTypes.map((t: string) => (
+                  <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handlePrint}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Print Report Card
+            </Button>
+          </div>
+        </div>
+
+        <ReportCardContent
+          data={data}
+          term={term}
+          examType={examType}
+          academicYear={academicYear}
+          selectedTestType={selectedTestType}
+          visibleTestTypes={visibleTestTypes}
+        />
 
         {/* Export & Print Controls */}
         <div className="flex flex-wrap justify-between items-center gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
@@ -260,6 +313,8 @@ export default function ReportCardPreview({ studentId, term, examType, academicY
             term={term}
             examType={examType}
             academicYear={academicYear}
+            selectedTestType={selectedTestType}
+            visibleTestTypes={visibleTestTypes}
             className="border-none shadow-none w-full max-w-none print:w-full print:max-w-none !bg-white !text-black" 
           />
         </div>,

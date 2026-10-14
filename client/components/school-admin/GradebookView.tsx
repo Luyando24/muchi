@@ -199,6 +199,18 @@ export default function GradebookView() {
     [subjects],
   );
 
+  const currentActiveAssessment = (testTypesEnabled || simplifiedAssessmentMode) && selectedTestType && selectedTestType !== 'none'
+    ? selectedTestType
+    : selectedExamType;
+
+  const allGradebookMigrationTargets = useMemo(() => {
+    const list = new Set<string>();
+    validExamTypes.forEach(t => list.add(t));
+    validTestTypes.forEach(t => list.add(t));
+    ['Test 1', 'Test 2', 'Test 3', 'Mid Term', 'End of Term'].forEach(t => list.add(t));
+    return Array.from(list).filter(t => t && t.trim() !== (currentActiveAssessment || '').trim());
+  }, [validExamTypes, validTestTypes, currentActiveAssessment]);
+
   // Determine class section using intelligent detection based on school settings + class name
   const currentClassObj = classes.find(c => c.id === selectedClass);
   const type = (schoolType || "").toLowerCase();
@@ -781,8 +793,8 @@ export default function GradebookView() {
   };
 
   const handleMigrate = async () => {
-    if (!selectedClass || !selectedSubject || !selectedTerm || !selectedExamType || !selectedYear || !targetExamType) return;
-    if (selectedExamType === targetExamType) {
+    if (!selectedClass || !selectedSubject || !selectedTerm || !selectedYear || !targetExamType) return;
+    if (currentActiveAssessment === targetExamType) {
       toast({ title: "Error", description: "Source and destination assessment types must be different", variant: "destructive" });
       return;
     }
@@ -792,7 +804,7 @@ export default function GradebookView() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      await syncFetch('/api/school/grades/migrate', {
+      const result = await syncFetch('/api/school/grades/migrate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -800,7 +812,7 @@ export default function GradebookView() {
         },
         body: JSON.stringify({
           term: selectedTerm,
-          fromExamType: selectedExamType,
+          fromExamType: currentActiveAssessment,
           toExamType: targetExamType,
           academicYear: selectedYear,
           classId: selectedClass,
@@ -808,11 +820,16 @@ export default function GradebookView() {
         })
       });
 
-      toast({ title: "Success", description: `Grades moved to ${targetExamType} successfully` });
+      toast({ title: "Success", description: result?.message || `Grades moved to ${targetExamType} successfully` });
       setIsMigrateModalOpen(false);
       setTargetExamType('');
       // Switch the view to the new target assessment to show them
-      setSelectedExamType(targetExamType);
+      if (schoolTestTypes.includes(targetExamType) || ['Test 1', 'Test 2', 'Test 3'].includes(targetExamType)) {
+        setSelectedTestType(targetExamType);
+      } else {
+        setSelectedExamType(targetExamType);
+      }
+      loadGradebookData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
@@ -1080,7 +1097,7 @@ export default function GradebookView() {
               <h3 className="font-bold text-lg text-slate-900 dark:text-white">Move Grades?</h3>
             </div>
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              Move all grades currently visible under <strong>{selectedExamType}</strong> to a different assessment type.
+              Move all grades currently visible under <strong>{currentActiveAssessment}</strong> to a different assessment type.
             </p>
             <div className="space-y-2 pt-2">
               <Label>Destination Assessment Type</Label>
@@ -1089,7 +1106,7 @@ export default function GradebookView() {
                   <SelectValue placeholder="Select destination..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {validExamTypes.filter(t => t !== selectedExamType).map(type => (
+                  {allGradebookMigrationTargets.map(type => (
                     <SelectItem key={type} value={type}>{type}</SelectItem>
                   ))}
                 </SelectContent>

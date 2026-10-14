@@ -11,10 +11,36 @@ interface JuniorReportCardProps {
     gradingScale: any[];
     school: any;
   };
+  term?: string;
+  examType?: string;
+  academicYear?: string;
+  className?: string;
+  selectedTestType?: string;
+  visibleTestTypes?: string[];
 }
 
-export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({ data }) => {
+export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({
+  data,
+  term = 'Term 1',
+  examType = 'Term',
+  academicYear = new Date().getFullYear().toString(),
+  className = '',
+  selectedTestType,
+  visibleTestTypes,
+}) => {
   const { student, grades, school } = data;
+
+  const schoolTestTypes = school?.test_types_enabled
+    ? (school?.test_types && school.test_types.length > 0 ? school.test_types : ['Test 1', 'Test 2', 'Test 3'])
+    : [];
+
+  const effectiveTestType = (selectedTestType && selectedTestType !== 'all')
+    ? selectedTestType
+    : (['Test 1', 'Test 2', 'Test 3'].includes(examType)
+        ? examType
+        : (schoolTestTypes.includes(examType) ? examType : 'all'));
+
+  const isSingleTest = effectiveTestType !== 'all';
 
   // Group grades by subject
   const subjectGrades = grades.reduce((acc: any, curr: any) => {
@@ -25,40 +51,75 @@ export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({ data }) => {
         test1: '-',
         test2: '-',
         test3: '-',
+        tests: {} as Record<string, any>,
         avMarks: '-',
         marksScored: '-',
         outOf: '100',
         colour: '-',
-        percentage: 0,
+        percentage: null,
         teacherName: curr.subjects?.teacherName || null
       };
     }
 
+    const sub = acc[subjectName];
     const type = curr.exam_type || curr.examType;
     const tType = curr.test_type || curr.testType || '';
-    const score = curr.percentage;
+    const score = (curr.percentage !== null && curr.percentage !== undefined && curr.percentage !== '') ? Number(curr.percentage) : null;
 
-    if (tType === 'Test 1' || type === 'Test 1') acc[subjectName].test1 = score;
-    else if (tType === 'Test 2' || type === 'Test 2') acc[subjectName].test2 = score;
-    else if (tType === 'Test 3' || type === 'Test 3') acc[subjectName].test3 = score;
+    if (tType && score !== null) sub.tests[tType] = score;
+    if (type && score !== null) sub.tests[type] = score;
+
+    if (tType === 'Test 1' || type === 'Test 1') sub.test1 = score;
+    else if (tType === 'Test 2' || type === 'Test 2') sub.test2 = score;
+    else if (tType === 'Test 3' || type === 'Test 3') sub.test3 = score;
     else if (type === 'End of Term' || type === 'Final Exam' || type === 'Term') {
-      acc[subjectName].marksScored = score;
-      acc[subjectName].percentage = score;
-    }
-
-    // Fallback/Recalculate average marks and marksScored if they are not recorded but tests exist
-    const tests = [acc[subjectName].test1, acc[subjectName].test2, acc[subjectName].test3].filter(v => v !== '-');
-    if (tests.length > 0 && (acc[subjectName].marksScored === '-' || type === 'Term')) {
-      const avg = tests.reduce((a, b) => Number(a) + Number(b), 0) / tests.length;
-      acc[subjectName].avMarks = Math.round(avg);
-      acc[subjectName].marksScored = Math.round(avg);
-      acc[subjectName].percentage = avg;
+      sub.mainExam = score;
     }
 
     return acc;
   }, {});
 
-  const subjectsList = Object.values(subjectGrades);
+  const subjectsList = Object.values(subjectGrades).map((sub: any) => {
+    if (isSingleTest) {
+      const singleScore = sub.tests[effectiveTestType] ?? (
+        effectiveTestType === 'Test 1' ? sub.test1 :
+        effectiveTestType === 'Test 2' ? sub.test2 :
+        effectiveTestType === 'Test 3' ? sub.test3 : null
+      );
+      const numeric = singleScore !== '-' && singleScore !== null && singleScore !== undefined ? Number(singleScore) : null;
+      return {
+        ...sub,
+        percentage: numeric,
+        marksScored: numeric !== null ? numeric : '-',
+        avMarks: numeric !== null ? numeric : '-',
+      };
+    }
+
+    // Combined / All tests mode
+    const hasVisibleFilter = visibleTestTypes && visibleTestTypes.length > 0;
+    const testList = ['Test 1', 'Test 2', 'Test 3'].filter(t => !hasVisibleFilter || visibleTestTypes.includes(t));
+    const testValues = testList.map(t => {
+      if (t === 'Test 1') return sub.test1;
+      if (t === 'Test 2') return sub.test2;
+      if (t === 'Test 3') return sub.test3;
+      return sub.tests[t];
+    }).filter(v => v !== '-' && v !== null && v !== undefined);
+
+    let finalPct: number | null = null;
+    if (sub.mainExam !== undefined && sub.mainExam !== null) {
+      finalPct = Number(sub.mainExam);
+    } else if (testValues.length > 0) {
+      const avg = testValues.reduce((a: any, b: any) => Number(a) + Number(b), 0) / testValues.length;
+      finalPct = Math.round(avg);
+    }
+
+    return {
+      ...sub,
+      percentage: finalPct,
+      marksScored: finalPct !== null ? finalPct : '-',
+      avMarks: finalPct !== null ? finalPct : '-',
+    };
+  });
 
   // Helper to get color label and matching scale
   const getScaleInfo = (percentage: any) => {
@@ -98,8 +159,13 @@ export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({ data }) => {
     return 'bg-slate-100 text-slate-600';
   };
 
+  const showTest1 = !isSingleTest && (!visibleTestTypes || visibleTestTypes.length === 0 || visibleTestTypes.includes('Test 1'));
+  const showTest2 = !isSingleTest && (!visibleTestTypes || visibleTestTypes.length === 0 || visibleTestTypes.includes('Test 2'));
+  const showTest3 = !isSingleTest && (!visibleTestTypes || visibleTestTypes.length === 0 || visibleTestTypes.includes('Test 3'));
+  const totalCols = (isSingleTest ? 6 : 5 + (showTest1 ? 1 : 0) + (showTest2 ? 1 : 0) + (showTest3 ? 1 : 0)) + (school?.show_teacher_on_report_card ? 1 : 0);
+
   return (
-    <div className="max-w-4xl mx-auto p-8 bg-white shadow-lg border border-slate-200 print:shadow-none print:border-none print:p-0">
+    <div className={cn("max-w-4xl mx-auto p-8 bg-white shadow-lg border border-slate-200 print:shadow-none print:border-none print:p-0", className)}>
       {/* Header */}
       <div className="flex justify-between items-start mb-8 border-b-2 border-black pb-4">
         <div className="flex gap-4">
@@ -128,11 +194,11 @@ export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({ data }) => {
         </div>
         <div className="flex border-b border-dotted border-black pb-1">
           <span className="font-bold mr-2 uppercase w-20">Term:</span>
-          <span className="flex-1">{grades[0]?.term || 'ONE'}</span>
+          <span className="flex-1">{isSingleTest ? `${term} - ${effectiveTestType}` : (grades[0]?.term || term || 'ONE')}</span>
         </div>
         <div className="flex border-b border-dotted border-black pb-1 mr-4">
           <span className="font-bold mr-2 uppercase w-32">Year:</span>
-          <span className="flex-1">{grades[0]?.academic_year || new Date().getFullYear()}</span>
+          <span className="flex-1">{academicYear || grades[0]?.academic_year || new Date().getFullYear()}</span>
         </div>
         <div className="flex border-b border-dotted border-black pb-1">
           <span className="font-bold mr-2 uppercase w-20">Name:</span>
@@ -153,10 +219,16 @@ export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({ data }) => {
             <tr className="bg-slate-100 border-b-2 border-black">
               <th className="border-r border-black p-2 text-left text-xs font-black uppercase w-8">#</th>
               <th className="border-r border-black p-2 text-left text-xs font-black uppercase">Subject</th>
-              <th className="border-r border-black p-2 text-center text-xs font-black uppercase w-16">Test 1</th>
-              <th className="border-r border-black p-2 text-center text-xs font-black uppercase w-16">Test 2</th>
-              <th className="border-r border-black p-2 text-center text-xs font-black uppercase w-16">Test 3</th>
-              <th className="border-r border-black p-2 text-center text-xs font-black uppercase w-16">AV Marks</th>
+              {isSingleTest ? (
+                <th className="border-r border-black p-2 text-center text-xs font-black uppercase w-24">{effectiveTestType} %</th>
+              ) : (
+                <>
+                  {showTest1 && <th className="border-r border-black p-2 text-center text-xs font-black uppercase w-16">Test 1</th>}
+                  {showTest2 && <th className="border-r border-black p-2 text-center text-xs font-black uppercase w-16">Test 2</th>}
+                  {showTest3 && <th className="border-r border-black p-2 text-center text-xs font-black uppercase w-16">Test 3</th>}
+                  <th className="border-r border-black p-2 text-center text-xs font-black uppercase w-16">AV Marks</th>
+                </>
+              )}
               <th className="border-r border-black p-2 text-center text-xs font-black uppercase w-16 whitespace-pre-wrap">Marks Scored</th>
               <th className="border-r border-black p-2 text-center text-xs font-black uppercase w-16">Out Of</th>
               <th className={cn("text-center text-xs font-black uppercase w-20", school?.show_teacher_on_report_card ? "border-r border-black p-2" : "p-2")}>Colour</th>
@@ -176,11 +248,19 @@ export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({ data }) => {
                       <span>{subject.name}</span>
                     </div>
                   </td>
-                  <td className="border-r border-black p-2 text-center text-sm">{subject.test1 || '-'}</td>
-                  <td className="border-r border-black p-2 text-center text-sm">{subject.test2 || '-'}</td>
-                  <td className="border-r border-black p-2 text-center text-sm">{subject.test3 || '-'}</td>
-                  <td className="border-r border-black p-2 text-center text-sm">{subject.avMarks || '-'}</td>
-                  <td className="border-r border-black p-2 text-center text-sm font-bold">{subject.marksScored || subject.percentage}</td>
+                  {isSingleTest ? (
+                    <td className="border-r border-black p-2 text-center text-sm font-bold">
+                      {subject.percentage !== null ? `${subject.percentage}%` : '-'}
+                    </td>
+                  ) : (
+                    <>
+                      {showTest1 && <td className="border-r border-black p-2 text-center text-sm">{subject.test1 ?? '-'}</td>}
+                      {showTest2 && <td className="border-r border-black p-2 text-center text-sm">{subject.test2 ?? '-'}</td>}
+                      {showTest3 && <td className="border-r border-black p-2 text-center text-sm">{subject.test3 ?? '-'}</td>}
+                      <td className="border-r border-black p-2 text-center text-sm">{subject.avMarks ?? '-'}</td>
+                    </>
+                  )}
+                  <td className="border-r border-black p-2 text-center text-sm font-bold">{subject.marksScored ?? '-'}</td>
                   <td className="border-r border-black p-2 text-center text-sm">{subject.outOf || '100'}</td>
                   <td className={cn(
                     "text-center text-[10px] font-black tracking-tight",
@@ -199,7 +279,7 @@ export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({ data }) => {
             })}
             {subjectsList.length === 0 && (
               <tr>
-                <td colSpan={school?.show_teacher_on_report_card ? 10 : 9} className="p-12 text-center text-slate-400 italic">No academic data found for this term.</td>
+                <td colSpan={totalCols} className="p-12 text-center text-slate-400 italic">No academic data found for this term.</td>
               </tr>
             )}
           </tbody>

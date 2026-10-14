@@ -111,6 +111,9 @@ export default function ResultPrinter() {
     const [isPrioritizing, setIsPrioritizing] = useState<boolean>(false);
     const [isActiveModalOpen, setIsActiveModalOpen] = useState<boolean>(false);
     const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
+    const [schoolTestTypes, setSchoolTestTypes] = useState<string[]>(['Test 1', 'Test 2', 'Test 3']);
+    const [selectedTestType, setSelectedTestType] = useState<string>('all');
+    const [visibleTestTypes, setVisibleTestTypes] = useState<string[]>(['Test 1', 'Test 2', 'Test 3']);
 
     const { toast } = useToast();
 
@@ -393,6 +396,14 @@ export default function ResultPrinter() {
                 const defaultExamType = isSimplified
                     ? 'Term'
                     : (examTypes.includes('End of Term') ? 'End of Term' : examTypes[0]);
+
+                if (settings.school?.test_types && settings.school.test_types.length > 0) {
+                    setSchoolTestTypes(settings.school.test_types);
+                    setVisibleTestTypes(settings.school.test_types);
+                } else if (settings.test_types && settings.test_types.length > 0) {
+                    setSchoolTestTypes(settings.test_types);
+                    setVisibleTestTypes(settings.test_types);
+                }
 
                 setFilters(prev => ({
                     ...prev,
@@ -1280,7 +1291,7 @@ export default function ResultPrinter() {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                     <div>
                                         <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Class</label>
                                         <Select
@@ -1326,7 +1337,50 @@ export default function ResultPrinter() {
                                             className="h-9 text-xs"
                                         />
                                     </div>
+
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Test Type to Display</label>
+                                        <Select
+                                            value={selectedTestType}
+                                            onValueChange={(val) => setSelectedTestType(val)}
+                                        >
+                                            <SelectTrigger className="h-9 text-xs">
+                                                <SelectValue placeholder="All Tests (Combined)" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all" className="text-xs font-semibold">
+                                                    All Tests (Combined / Term)
+                                                </SelectItem>
+                                                {schoolTestTypes.map(t => (
+                                                    <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
                                 </div>
+
+                                {selectedTestType === 'all' && schoolTestTypes.length > 0 && (
+                                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center gap-4 flex-wrap text-xs">
+                                        <span className="font-semibold text-slate-500">Include Test Columns:</span>
+                                        {schoolTestTypes.map(t => (
+                                            <label key={t} className="flex items-center gap-1.5 cursor-pointer text-slate-700 dark:text-slate-300">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={visibleTestTypes.includes(t)}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            setVisibleTestTypes(prev => [...prev, t]);
+                                                        } else {
+                                                            setVisibleTestTypes(prev => prev.filter(item => item !== t));
+                                                        }
+                                                    }}
+                                                    className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
+                                                />
+                                                <span>{t}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
 
@@ -1570,23 +1624,48 @@ export default function ResultPrinter() {
                                 term={filters.term}
                                 examType={filters.examType}
                                 academicYear={filters.academicYear}
+                                selectedTestType={selectedTestType}
+                                visibleTestTypes={visibleTestTypes}
                             />
                         </div>
                     )}
-                    <div className="flex justify-end gap-2 mt-4">
-                        <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>Close</Button>
-                        {isCurrentClassPdfReady && (
+                    <div className="flex flex-wrap justify-between items-center gap-3 mt-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Test Type to Display:</span>
+                            <Select value={selectedTestType} onValueChange={setSelectedTestType}>
+                                <SelectTrigger className="h-8 w-52 text-xs bg-white dark:bg-slate-800">
+                                    <SelectValue placeholder="All Tests (Combined)" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all" className="text-xs font-semibold">All Tests (Combined / Term)</SelectItem>
+                                    {schoolTestTypes.map(t => (
+                                        <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>Close</Button>
                             <Button
-                                onClick={() => {
-                                    setIsPreviewOpen(false);
-                                    handleDownloadCompiledPdf();
-                                }}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                                onClick={() => window.print()}
+                                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-9 flex items-center gap-1.5"
                             >
-                                <Download className="h-4 w-4 mr-2" />
-                                Download Class PDF ⚡
+                                <Printer className="h-4 w-4 mr-1.5" />
+                                Print Report Card
                             </Button>
-                        )}
+                            {isCurrentClassPdfReady && (
+                                <Button
+                                    onClick={() => {
+                                        setIsPreviewOpen(false);
+                                        handleDownloadCompiledPdf();
+                                    }}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9"
+                                >
+                                    <Download className="h-4 w-4 mr-2" />
+                                    Download Class PDF ⚡
+                                </Button>
+                            )}
+                        </div>
                     </div>
                 </DialogContent>
             </Dialog>

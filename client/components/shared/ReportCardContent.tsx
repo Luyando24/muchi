@@ -10,9 +10,19 @@ interface ReportCardContentProps {
   examType: string;
   academicYear: string;
   className?: string;
+  selectedTestType?: string;
+  visibleTestTypes?: string[];
 }
 
-export const ReportCardContent: React.FC<ReportCardContentProps> = ({ data, term, examType, academicYear, className = "" }) => {
+export const ReportCardContent: React.FC<ReportCardContentProps> = ({
+  data,
+  term,
+  examType,
+  academicYear,
+  className = "",
+  selectedTestType,
+  visibleTestTypes,
+}) => {
   const { student, school } = data;
 
   // Auto-detect if we should use the specialized formats
@@ -28,7 +38,16 @@ export const ReportCardContent: React.FC<ReportCardContentProps> = ({ data, term
     schoolType === "nursery school";
 
   if (isPreschoolSchool || isPreschoolClass(gradeStr)) {
-    return <PreschoolReportCard data={data} />;
+    return (
+      <PreschoolReportCard
+        data={data}
+        term={term}
+        examType={examType}
+        academicYear={academicYear}
+        selectedTestType={selectedTestType}
+        visibleTestTypes={visibleTestTypes}
+      />
+    );
   }
 
   // ── Primary / Secondary detection ─────────────────────────────────────────
@@ -61,12 +80,42 @@ export const ReportCardContent: React.FC<ReportCardContentProps> = ({ data, term
   // 4. Default to standard secondary report card
   
   if (isUpperPrimarySchool || (isCombinedPrimarySchool && isG57Grade)) {
-    return <PrimaryReportCard data={data} term={term} examType={examType} academicYear={academicYear} className={className} />;
+    return (
+      <PrimaryReportCard
+        data={data}
+        term={term}
+        examType={examType}
+        academicYear={academicYear}
+        className={className}
+        selectedTestType={selectedTestType}
+        visibleTestTypes={visibleTestTypes}
+      />
+    );
   }
 
   if (isLowerPrimarySchool || (isCombinedPrimarySchool && isG14Grade)) {
-    return <JuniorReportCard data={data} />;
+    return (
+      <JuniorReportCard
+        data={data}
+        term={term}
+        examType={examType}
+        academicYear={academicYear}
+        className={className}
+        selectedTestType={selectedTestType}
+        visibleTestTypes={visibleTestTypes}
+      />
+    );
   }
 
-  return <ReportCard data={data} term={term} examType={examType} academicYear={academicYear} className={className} />;
+  return (
+    <ReportCard
+      data={data}
+      term={term}
+      examType={examType}
+      academicYear={academicYear}
+      className={className}
+      selectedTestType={selectedTestType}
+      visibleTestTypes={visibleTestTypes}
+    />
+  );
 };

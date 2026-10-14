@@ -10,6 +10,7 @@ export default function RenderClassReportCards() {
   const term = searchParams.get('term') || '';
   const examType = searchParams.get('examType') || '';
   const academicYear = searchParams.get('academicYear') || '';
+  const testType = searchParams.get('testType') || searchParams.get('test_type') || '';
   const token = searchParams.get('token') || '';
   const offset = Math.max(0, Number.parseInt(searchParams.get('offset') || '0', 10) || 0);
   const limit = Math.max(0, Number.parseInt(searchParams.get('limit') || '0', 10) || 0);
@@ -148,6 +149,7 @@ export default function RenderClassReportCards() {
               term={term}
               examType={examType}
               academicYear={academicYear}
+              selectedTestType={testType || undefined}
               className="border-none shadow-none w-full max-w-none p-0 !bg-white !text-black"
             />
           </div>

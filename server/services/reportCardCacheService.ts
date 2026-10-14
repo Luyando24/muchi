@@ -329,9 +329,9 @@ export async function computeBatchReportCards(
   const filteredGrades = (allGrades || []).filter((g: any) => {
     if (!examType) return true;
     if (g.exam_type === examType) return true;
+    if (g.test_type && g.test_type !== '' && g.test_type !== 'none') return true;
     if (['Test 1', 'Test 2', 'Test 3'].includes(g.exam_type)) return true;
-    if (g.exam_type === 'Term' && g.test_type && ['Test 1', 'Test 2', 'Test 3'].includes(g.test_type))
-      return true;
+    if (g.exam_type === 'Term') return true;
     return false;
   });
 
@@ -537,6 +537,12 @@ async function getClassRankings(classId: string, term: string, examType: string,
 
   function resolveSubjectPercentage(subjectGrades: any[]): number | null {
     if (activeTestTypes.length > 0) {
+      if (activeTestTypes.includes(examType)) {
+        const testGrade = subjectGrades.find((g: any) => g.test_type === examType || g.exam_type === examType);
+        return testGrade?.percentage !== null && testGrade?.percentage !== undefined && testGrade?.percentage !== ''
+          ? Number(testGrade.percentage)
+          : null;
+      }
       const scores = activeTestTypes
         .map((tt: string) =>
           subjectGrades.find((g: any) => g.test_type === tt || g.exam_type === tt)?.percentage,
