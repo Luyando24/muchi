@@ -3539,52 +3539,94 @@ router.post(
         return res.json({ message: `No grades found for ${fromExamType} to move.` });
       }
 
-      // 4. Resolve destination collisions:
-      // Delete any pre-existing grade records in the destination for these exact students & subjects
-      // so the unique constraint (student_id, subject_id, term, academic_year, exam_type, test_type) is not violated.
-      const targetStudentIds = Array.from(new Set(sourceGrades.map((g) => g.student_id)));
-      const targetSubjectIds = Array.from(new Set(sourceGrades.map((g) => g.subject_id)));
-
-      let deleteDestQuery = supabaseAdmin
-        .from("student_grades")
-        .delete()
-        .eq("school_id", schoolId)
-        .eq("term", term)
-        .eq("academic_year", academicYear)
-        .eq("exam_type", destExamType)
-        .eq("test_type", destTestType)
-        .in("student_id", targetStudentIds);
-
-      if (!isAllSubjects) {
-        deleteDestQuery = deleteDestQuery.eq("subject_id", subjectId);
-      } else if (targetSubjectIds.length > 0) {
-        deleteDestQuery = deleteDestQuery.in("subject_id", targetSubjectIds);
+      // 4. Prepare deduplicated records for destination
+      // Using student_id + subject_id as the key to ensure no intra-batch duplicate collisions
+      const dedupMap = new Map<string, any>();
+      for (const g of sourceGrades) {
+        const key = `${g.student_id}_${g.subject_id}`;
+        if (!dedupMap.has(key) || (g.percentage !== null && g.percentage !== undefined && g.percentage !== "")) {
+          dedupMap.set(key, g);
+        }
       }
 
-      await deleteDestQuery;
+      const uniqueSourceGrades = Array.from(dedupMap.values());
+      const recordsToUpsert = uniqueSourceGrades.map((g) => ({
+        school_id: schoolId,
+        student_id: g.student_id,
+        subject_id: g.subject_id,
+        term: term,
+        academic_year: academicYear,
+        exam_type: destExamType,
+        test_type: destTestType,
+        percentage: g.percentage,
+        grade: g.grade,
+        comments: g.comments,
+        status: g.status || "Draft",
+        updated_at: new Date().toISOString(),
+      }));
 
-      // 5. Update source records to the destination assessment / test type
-      const sourceIds = sourceGrades.map((g) => g.id);
-      const CHUNK_SIZE = 500;
+      // 5. Upsert into destination using the unique constraint
+      // Upsert natively handles conflict resolution without constraint errors
+      const CHUNK_SIZE = 100;
       let movedCount = 0;
 
-      for (let i = 0; i < sourceIds.length; i += CHUNK_SIZE) {
-        const chunk = sourceIds.slice(i, i + CHUNK_SIZE);
-        const { error: updateError, count } = await supabaseAdmin
+      for (let i = 0; i < recordsToUpsert.length; i += CHUNK_SIZE) {
+        const chunk = recordsToUpsert.slice(i, i + CHUNK_SIZE);
+        const { error: upsertError } = await supabaseAdmin
           .from("student_grades")
-          .update({
-            exam_type: destExamType,
-            test_type: destTestType,
-            updated_at: new Date().toISOString()
-          })
-          .in("id", chunk)
-          .select("id", { count: "exact" });
+          .upsert(chunk, {
+            onConflict: "student_id, subject_id, term, academic_year, exam_type, test_type",
+          });
 
-        if (updateError) {
-          console.error("Migrate Grades Update Error:", updateError);
-          throw updateError;
+        if (upsertError) {
+          console.error("Migrate Grades Upsert Error:", upsertError);
+          throw upsertError;
         }
-        movedCount += count || chunk.length;
+        movedCount += chunk.length;
+      }
+
+      // Clean up any legacy alternate representations for the destination
+      if (toIsTest) {
+        const targetStudentIds = Array.from(new Set(uniqueSourceGrades.map((g) => g.student_id)));
+        for (let i = 0; i < targetStudentIds.length; i += 100) {
+          const studentChunk = targetStudentIds.slice(i, i + 100);
+          let legacyDel = supabaseAdmin
+            .from("student_grades")
+            .delete()
+            .eq("school_id", schoolId)
+            .eq("term", term)
+            .eq("academic_year", academicYear)
+            .eq("exam_type", toExamType.trim())
+            .in("student_id", studentChunk);
+          if (!isAllSubjects) {
+            legacyDel = legacyDel.eq("subject_id", subjectId);
+          }
+          await legacyDel;
+        }
+      } else {
+        const targetStudentIds = Array.from(new Set(uniqueSourceGrades.map((g) => g.student_id)));
+        for (let i = 0; i < targetStudentIds.length; i += 100) {
+          const studentChunk = targetStudentIds.slice(i, i + 100);
+          let legacyDel = supabaseAdmin
+            .from("student_grades")
+            .delete()
+            .eq("school_id", schoolId)
+            .eq("term", term)
+            .eq("academic_year", academicYear)
+            .eq("test_type", toExamType.trim())
+            .in("student_id", studentChunk);
+          if (!isAllSubjects) {
+            legacyDel = legacyDel.eq("subject_id", subjectId);
+          }
+          await legacyDel;
+        }
+      }
+
+      // 6. Delete old source records by ID
+      const sourceIds = sourceGrades.map((g) => g.id);
+      for (let i = 0; i < sourceIds.length; i += 100) {
+        const chunk = sourceIds.slice(i, i + 100);
+        await supabaseAdmin.from("student_grades").delete().in("id", chunk);
       }
 
       // 6. Invalidate caches and trigger background precomputations
