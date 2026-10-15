@@ -35,6 +35,9 @@ export default function RenderClassReportCards() {
           academicYear,
           token,
         });
+        if (testType && testType !== 'all') {
+          query.set('testType', testType);
+        }
         if (limit > 0) {
           query.set('offset', String(offset));
           query.set('limit', String(limit));
@@ -149,7 +152,7 @@ export default function RenderClassReportCards() {
               term={term}
               examType={examType}
               academicYear={academicYear}
-              selectedTestType={testType || undefined}
+              selectedTestType={testType && testType !== 'all' ? testType : undefined}
               className="border-none shadow-none w-full max-w-none p-0 !bg-white !text-black"
             />
           </div>

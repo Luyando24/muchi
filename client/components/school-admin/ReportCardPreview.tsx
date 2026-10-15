@@ -94,6 +94,9 @@ export default function ReportCardPreview({ studentId, term, examType, academicY
           examType,
           academicYear,
         });
+        if (selectedTestType && selectedTestType !== 'all') {
+          query.set('testType', selectedTestType);
+        }
 
         const res = await fetch(`/api/school/results/class-pdf-status?${query.toString()}`, {
           headers: { 'Authorization': `Bearer ${session.access_token}` }
@@ -114,7 +117,7 @@ export default function ReportCardPreview({ studentId, term, examType, academicY
       cancelled = true;
       clearInterval(interval);
     };
-  }, [classId, term, examType, academicYear]);
+  }, [classId, term, examType, academicYear, selectedTestType]);
 
   const handlePrint = () => {
     if (!data) return;
@@ -141,6 +144,9 @@ export default function ReportCardPreview({ studentId, term, examType, academicY
         examType,
         academicYear,
       });
+      if (selectedTestType && selectedTestType !== 'all') {
+        query.set('testType', selectedTestType);
+      }
 
       const res = await fetch(`/api/school/results/download-class-pdf?${query.toString()}`, {
         headers: { 'Authorization': `Bearer ${session.access_token}` },
@@ -156,7 +162,8 @@ export default function ReportCardPreview({ studentId, term, examType, academicY
       const a = document.createElement('a');
       a.href = blobUrl;
       const cleanClassName = (data?.student?.class || 'Class').replace(/[^a-zA-Z0-9_-]/g, '_');
-      a.download = `Report_Cards_${cleanClassName}_${term}_${examType}_${academicYear}.pdf`;
+      const testSuffix = selectedTestType && selectedTestType !== 'all' ? `_${selectedTestType.replace(/\s+/g, '_')}` : '';
+      a.download = `Report_Cards_${cleanClassName}_${term}${testSuffix}_${examType}_${academicYear}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

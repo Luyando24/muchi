@@ -43,6 +43,7 @@ export interface PdfKey {
   examType: string;
   academicYear: string;
   className?: string;
+  testType?: string;
 }
 
 export interface PdfWorkerState {
@@ -59,7 +60,7 @@ export interface PdfWorkerState {
 }
 
 function renderTokenPayload(key: PdfKey, expiresAt: number): string {
-  return [key.schoolId, key.classId, key.term, key.examType, key.academicYear, expiresAt].join('|');
+  return [key.schoolId, key.classId, key.term, key.examType, key.academicYear, key.testType || '', expiresAt].join('|');
 }
 
 export function createInternalRenderToken(key: PdfKey): string {
@@ -76,12 +77,22 @@ export function verifyInternalRenderToken(key: PdfKey, token: string): boolean {
   if (extra.length || !Number.isSafeInteger(expiresAt) || expiresAt < Date.now()) return false;
   if (expiresAt > Date.now() + RENDER_TOKEN_TTL_MS + 30_000) return false;
 
+  // Primary check: payload with testType
   const expectedSignature = createHmac('sha256', INTERNAL_RENDER_SECRET)
     .update(renderTokenPayload(key, expiresAt))
     .digest('base64url');
   const supplied = Buffer.from(suppliedSignature || '');
   const expected = Buffer.from(expectedSignature);
-  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+  if (supplied.length === expected.length && timingSafeEqual(supplied, expected)) {
+    return true;
+  }
+
+  // Backwards compatibility: payload without testType
+  const legacyPayload = [key.schoolId, key.classId, key.term, key.examType, key.academicYear, expiresAt].join('|');
+  const legacyExpected = Buffer.from(
+    createHmac('sha256', INTERNAL_RENDER_SECRET).update(legacyPayload).digest('base64url')
+  );
+  return supplied.length === legacyExpected.length && timingSafeEqual(supplied, legacyExpected);
 }
 
 export const pdfWorkerState: PdfWorkerState = {
@@ -113,7 +124,8 @@ function getServerConfig() {
 }
 
 export function getPdfStorageObjectPath(key: PdfKey): string {
-  const filename = `${sanitize(key.classId)}_${sanitize(key.term)}_${sanitize(key.examType)}_${sanitize(key.academicYear)}.pdf`;
+  const testPart = key.testType && key.testType !== 'all' ? `_${sanitize(key.testType)}` : '';
+  const filename = `${sanitize(key.classId)}_${sanitize(key.term)}_${sanitize(key.examType)}${testPart}_${sanitize(key.academicYear)}.pdf`;
   return `${sanitize(key.schoolId)}/${filename}`;
 }
 
@@ -486,6 +498,9 @@ async function renderPdfChunk(browser: Browser, key: PdfKey, offset: number): Pr
     offset: String(offset),
     limit: String(RENDER_CHUNK_SIZE),
   });
+  if (key.testType && key.testType !== 'all') {
+    query.set('testType', key.testType);
+  }
   const page = await browser.newPage();
 
   try {
@@ -521,17 +536,19 @@ async function renderPdfChunk(browser: Browser, key: PdfKey, offset: number): Pr
 }
 
 export async function generateClassPdf(key: PdfKey, sharedBrowser?: Browser): Promise<string | null> {
-  const lockKey = `${key.schoolId}|${key.classId}|${key.term}|${key.examType}|${key.academicYear}`;
+  const testPart = key.testType && key.testType !== 'all' ? `|${key.testType}` : '';
+  const lockKey = `${key.schoolId}|${key.classId}|${key.term}|${key.examType}${testPart}|${key.academicYear}`;
   if (pdfInFlight.has(lockKey)) return null;
   pdfInFlight.add(lockKey);
   let browser: Browser | null = sharedBrowser || null;
   const ownsBrowser = !sharedBrowser;
   try {
+    const testLabel = key.testType && key.testType !== 'all' ? ` - ${key.testType}` : '';
     pdfWorkerState.currentSchoolId = key.schoolId;
     pdfWorkerState.currentClassId = key.classId;
     pdfWorkerState.currentClassLabel = key.className
-      ? `${key.className} (${key.term} - ${key.examType})`
-      : `${key.term} - ${key.examType}`;
+      ? `${key.className} (${key.term} - ${key.examType}${testLabel})`
+      : `${key.term} - ${key.examType}${testLabel}`;
     pdfWorkerState.isCompiling = true;
     pdfWorkerState.phase = 'rendering';
     pdfWorkerState.startedAt = new Date().toISOString();
@@ -571,6 +588,7 @@ export async function generateClassPdf(key: PdfKey, sharedBrowser?: Browser): Pr
       term: key.term,
       examType: key.examType,
       academicYear: key.academicYear,
+      ...(key.testType && key.testType !== 'all' ? { testType: key.testType } : {}),
     });
     if (!(await isClassPdfReady(key))) throw new Error('Storage did not confirm the uploaded PDF.');
     return objectPath;
@@ -600,7 +618,8 @@ export async function generateClassPdf(key: PdfKey, sharedBrowser?: Browser): Pr
 export async function generateAllClassesZip(
   schoolId: string,
   term: string,
-  academicYear: string
+  academicYear: string,
+  testType?: string,
 ): Promise<{ buffer: Buffer; filename: string; count: number }> {
   await ensurePdfStorageBucket();
 
@@ -622,15 +641,22 @@ export async function generateAllClassesZip(
 
   const safeTerm = sanitize(term);
   const safeYear = sanitize(academicYear);
+  const safeTest = testType && testType !== 'all' ? sanitize(testType) : '';
 
   const matchingFiles = (files || []).filter((file: any) => {
     if (!file.name.endsWith('.pdf') || storedFileSize(file) <= MIN_PDF_BYTES) return false;
-    // Expected pattern: {classId}_{term}_{examType}_{academicYear}.pdf
-    return file.name.includes(`_${safeTerm}_`) && file.name.includes(`_${safeYear}.pdf`);
+    // Expected pattern: {classId}_{term}_{examType}[_{testType}]_{academicYear}.pdf
+    const matchesTermAndYear = file.name.includes(`_${safeTerm}_`) && file.name.includes(`_${safeYear}.pdf`);
+    if (!matchesTermAndYear) return false;
+    if (safeTest) {
+      return file.name.includes(`_${safeTest}_`);
+    }
+    return true;
   });
 
   if (matchingFiles.length === 0) {
-    throw new Error(`No pre-compiled class PDFs found ready for ${term} ${academicYear}.`);
+    const testMsg = safeTest ? ` for test type "${testType}"` : '';
+    throw new Error(`No pre-compiled class PDFs found ready for ${term} ${academicYear}${testMsg}.`);
   }
 
   const zip = new JSZip();
@@ -663,7 +689,8 @@ export async function generateAllClassesZip(
       }
       seenClassNames.add(cleanClassName);
 
-      const entryFilename = `${cleanClassName}_${term.replace(/\s+/g, '_')}_${academicYear}_ReportCards.pdf`;
+      const testSuffix = safeTest ? `_${safeTest}` : '';
+      const entryFilename = `${cleanClassName}_${term.replace(/\s+/g, '_')}${testSuffix}_${academicYear}_ReportCards.pdf`;
       zip.file(entryFilename, Buffer.from(arrayBuf));
       count++;
     } catch (err: any) {
@@ -681,6 +708,7 @@ export async function generateAllClassesZip(
     compressionOptions: { level: 6 },
   });
 
-  const zipFilename = `Report_Cards_All_Classes_${term.replace(/\s+/g, '_')}_${academicYear}.zip`;
+  const testSuffix = safeTest ? `_${safeTest}` : '';
+  const zipFilename = `Report_Cards_All_Classes_${term.replace(/\s+/g, '_')}${testSuffix}_${academicYear}.zip`;
   return { buffer, filename: zipFilename, count };
 }

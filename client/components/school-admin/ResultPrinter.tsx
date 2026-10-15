@@ -238,6 +238,9 @@ export default function ResultPrinter() {
                     examType: examTypeToUse,
                     academicYear: filters.academicYear,
                 });
+                if (selectedTestType && selectedTestType !== 'all') {
+                    query.set('testType', selectedTestType);
+                }
                 const res = await fetch(`/api/school/results/class-pdf-status?${query.toString()}`, {
                     headers: { 'Authorization': `Bearer ${session.access_token}` }
                 });
@@ -254,7 +257,7 @@ export default function ResultPrinter() {
             if (document.visibilityState === 'visible') checkPdf();
         }, 10000);
         return () => { cancelled = true; clearInterval(interval); };
-    }, [filters.classId, filters.term, filters.examType, filters.academicYear, precomputeStatus]);
+    }, [filters.classId, filters.term, filters.examType, filters.academicYear, precomputeStatus, selectedTestType]);
 
     const termClasses = useMemo(() => {
         const termGroup = precomputeStatus?.terms?.find(
@@ -488,6 +491,9 @@ export default function ResultPrinter() {
                 examType: examTypeToUse,
                 academicYear: filters.academicYear,
             });
+            if (selectedTestType && selectedTestType !== 'all') {
+                query.set('testType', selectedTestType);
+            }
 
             const res = await fetch(`/api/school/results/download-class-pdf?${query.toString()}`, {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
@@ -504,7 +510,8 @@ export default function ResultPrinter() {
             a.href = url;
             const currentClassName = classes.find(c => c.id === filters.classId)?.name || 'Class';
             const safeTerm = filters.term.replace(/\s+/g, '_');
-            a.download = `${currentClassName}_${safeTerm}_${filters.academicYear}_ReportCards.pdf`;
+            const testSuffix = selectedTestType && selectedTestType !== 'all' ? `_${selectedTestType.replace(/\s+/g, '_')}` : '';
+            a.download = `${currentClassName}_${safeTerm}${testSuffix}_${filters.academicYear}_ReportCards.pdf`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
@@ -545,6 +552,9 @@ export default function ResultPrinter() {
                 term: filters.term,
                 academicYear: filters.academicYear,
             });
+            if (selectedTestType && selectedTestType !== 'all') {
+                query.set('testType', selectedTestType);
+            }
 
             const res = await fetch(`/api/school/results/download-all-classes-zip?${query.toString()}`, {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
@@ -557,7 +567,8 @@ export default function ResultPrinter() {
 
             const blob = await res.blob();
             const safeTerm = filters.term.replace(/\s+/g, '_');
-            const filename = `Report_Cards_All_Classes_${safeTerm}_${filters.academicYear}.zip`;
+            const testSuffix = selectedTestType && selectedTestType !== 'all' ? `_${selectedTestType.replace(/\s+/g, '_')}` : '';
+            const filename = `Report_Cards_All_Classes_${safeTerm}${testSuffix}_${filters.academicYear}.zip`;
 
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -595,6 +606,9 @@ export default function ResultPrinter() {
                 examType: cls.examType || 'End of Term',
                 academicYear: filters.academicYear,
             });
+            if (selectedTestType && selectedTestType !== 'all') {
+                query.set('testType', selectedTestType);
+            }
 
             const res = await fetch(`/api/school/results/download-class-pdf?${query.toString()}`, {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
@@ -611,7 +625,8 @@ export default function ResultPrinter() {
             a.href = url;
             const currentClassName = cls.className || 'Class';
             const safeTerm = filters.term.replace(/\s+/g, '_');
-            a.download = `${currentClassName}_${safeTerm}_${filters.academicYear}_ReportCards.pdf`;
+            const testSuffix = selectedTestType && selectedTestType !== 'all' ? `_${selectedTestType.replace(/\s+/g, '_')}` : '';
+            a.download = `${currentClassName}_${safeTerm}${testSuffix}_${filters.academicYear}_ReportCards.pdf`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);

@@ -4989,9 +4989,16 @@ router.get(
 // GET /api/school/results/internal-class-report-cards
 // Unauthenticated internal endpoint accessed by headless Edge to capture the report card DOM
 router.get("/results/internal-class-report-cards", async (req: Request, res: Response) => {
-  const { schoolId, classId, term, examType, academicYear, token, offset, limit } = req.query as Record<string, string>;
+  const { schoolId, classId, term, examType, academicYear, token, offset, limit, testType } = req.query as Record<string, string>;
 
-  if (!verifyInternalRenderToken({ schoolId, classId, term, examType, academicYear }, token || '')) {
+  if (!verifyInternalRenderToken({
+    schoolId,
+    classId,
+    term,
+    examType,
+    academicYear,
+    testType: testType && testType !== 'all' ? testType : undefined
+  }, token || '')) {
     return res.status(403).json({ message: "Invalid internal render token" });
   }
 
@@ -5032,16 +5039,23 @@ router.get(
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
-    const { classId, term, examType, academicYear } = req.query as Record<string, string>;
+    const { classId, term, examType, academicYear, testType } = req.query as Record<string, string>;
 
     if (!schoolId || !classId || !term || !examType || !academicYear) {
       return res.status(400).json({ message: "Missing required parameters" });
     }
 
     try {
-      const key = { schoolId, classId, term, examType, academicYear };
+      const key = {
+        schoolId,
+        classId,
+        term,
+        examType,
+        academicYear,
+        testType: testType && testType !== 'all' ? testType : undefined
+      };
       if (!(await isClassPdfReady(key))) {
-        console.log(`[PdfDownload] PDF not yet ready in cache, generating on-demand for ${classId}…`);
+        console.log(`[PdfDownload] PDF not yet ready in cache, generating on-demand for ${classId} (testType: ${testType || 'all'})…`);
         await generateClassPdf(key);
       }
 
@@ -5050,7 +5064,8 @@ router.get(
       }
 
       const safeTerm = term.replace(/\s+/g, '_');
-      const filename = `ReportCards_${safeTerm}_${academicYear}.pdf`;
+      const testSuffix = testType && testType !== 'all' ? `_${testType.replace(/\s+/g, '_')}` : '';
+      const filename = `ReportCards_${safeTerm}${testSuffix}_${academicYear}.pdf`;
       const signedUrl = await createClassPdfDownloadUrl(key, filename);
       res.redirect(302, signedUrl);
     } catch (error: any) {
@@ -5068,14 +5083,19 @@ router.get(
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
-    const { term, academicYear } = req.query as Record<string, string>;
+    const { term, academicYear, testType } = req.query as Record<string, string>;
 
     if (!schoolId || !term || !academicYear) {
       return res.status(400).json({ message: "Missing required parameters: term and academicYear" });
     }
 
     try {
-      const { buffer, filename } = await generateAllClassesZip(schoolId, term, academicYear);
+      const { buffer, filename } = await generateAllClassesZip(
+        schoolId,
+        term,
+        academicYear,
+        testType && testType !== 'all' ? testType : undefined
+      );
       res.setHeader("Content-Type", "application/zip");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.setHeader("Content-Length", buffer.length.toString());
@@ -5097,13 +5117,20 @@ router.get(
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
-    const { classId, term, examType, academicYear } = req.query as Record<string, string>;
+    const { classId, term, examType, academicYear, testType } = req.query as Record<string, string>;
 
     if (!schoolId || !classId || !term || !examType || !academicYear) {
       return res.status(400).json({ message: "Missing required parameters" });
     }
 
-    const ready = await isClassPdfReady({ schoolId, classId, term, examType, academicYear });
+    const ready = await isClassPdfReady({
+      schoolId,
+      classId,
+      term,
+      examType,
+      academicYear,
+      testType: testType && testType !== 'all' ? testType : undefined
+    });
     res.json({ ready });
   }
 );
