@@ -81,11 +81,21 @@ export const JuniorReportCard: React.FC<JuniorReportCardProps> = ({
 
   const subjectsList = Object.values(subjectGrades).map((sub: any) => {
     if (isSingleTest) {
-      const singleScore = sub.tests[effectiveTestType] ?? (
-        effectiveTestType === 'Test 1' ? sub.test1 :
-        effectiveTestType === 'Test 2' ? sub.test2 :
-        effectiveTestType === 'Test 3' ? sub.test3 : null
-      );
+      let singleScore = sub.tests[effectiveTestType];
+      if (singleScore === undefined || singleScore === null) {
+        const lower = effectiveTestType.trim().toLowerCase();
+        for (const [k, v] of Object.entries(sub.tests || {})) {
+          if (k.trim().toLowerCase() === lower && v !== null && v !== undefined) {
+            singleScore = v;
+            break;
+          }
+        }
+      }
+      if (singleScore === undefined || singleScore === null) {
+        singleScore = effectiveTestType === 'Test 1' ? sub.test1 :
+          effectiveTestType === 'Test 2' ? sub.test2 :
+          effectiveTestType === 'Test 3' ? sub.test3 : null;
+      }
       const numeric = singleScore !== '-' && singleScore !== null && singleScore !== undefined ? Number(singleScore) : null;
       return {
         ...sub,

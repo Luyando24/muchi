@@ -4676,11 +4676,12 @@ router.get(
   async (req: Request, res: Response) => {
     const profile = (req as any).profile;
     const schoolId = profile.school_id;
-    const { classId, term, examType, academicYear } = req.query as {
+    const { classId, term, examType, academicYear, testType } = req.query as {
       classId: string;
       term: string;
       examType: string;
       academicYear: string;
+      testType?: string;
     };
 
     if (!classId || !term || !examType || !academicYear) {
@@ -4689,7 +4690,39 @@ router.get(
 
     try {
       // 0. Check pre-computed cache first (fast return: ~50ms instead of 10-30s)
-      const cached = await getCachedReportCards({ schoolId, classId, term, examType, academicYear });
+      let cached = await getCachedReportCards({ schoolId, classId, term, examType, academicYear });
+
+      // If a specific testType was requested, verify that the cached cards actually contain grades for that testType.
+      // If not, check if 'Term' cache has it, or fall through to fresh batch calculation.
+      if (cached && Array.isArray(cached) && cached.length > 0 && testType && testType !== 'all') {
+        const lowerTest = testType.toLowerCase().trim();
+        const hasTestGrades = cached.some((card: any) =>
+          card.grades?.some((g: any) =>
+            (g.test_type && g.test_type.toLowerCase().trim() === lowerTest && g.percentage !== null) ||
+            (g.exam_type && g.exam_type.toLowerCase().trim() === lowerTest && g.percentage !== null)
+          )
+        );
+        if (!hasTestGrades) {
+          console.log(`[ReportCard] Cache for ${examType} lacks grades for testType "${testType}". Checking Term cache or computing fresh...`);
+          if (examType !== 'Term') {
+            const termCached = await getCachedReportCards({ schoolId, classId, term, examType: 'Term', academicYear });
+            const hasTermGrades = termCached?.some((card: any) =>
+              card.grades?.some((g: any) =>
+                (g.test_type && g.test_type.toLowerCase().trim() === lowerTest && g.percentage !== null) ||
+                (g.exam_type && g.exam_type.toLowerCase().trim() === lowerTest && g.percentage !== null)
+              )
+            );
+            if (hasTermGrades) {
+              cached = termCached;
+            } else {
+              cached = null; // force fresh live batch calculation
+            }
+          } else {
+            cached = null; // force fresh live batch calculation
+          }
+        }
+      }
+
       if (cached && Array.isArray(cached) && cached.length > 0) {
         return res.json(cached);
       }
@@ -5017,7 +5050,39 @@ router.get("/results/internal-class-report-cards", async (req: Request, res: Res
       });
     };
 
-    const cached = await getCachedReportCards({ schoolId, classId, term, examType, academicYear });
+    let cached = await getCachedReportCards({ schoolId, classId, term, examType, academicYear });
+
+    // If a specific testType was requested, verify that the cached cards actually contain grades for that testType.
+    // If not, check if 'Term' cache has it, or fall through to fresh batch calculation.
+    if (cached && Array.isArray(cached) && cached.length > 0 && testType && testType !== 'all') {
+      const lowerTest = testType.toLowerCase().trim();
+      const hasTestGrades = cached.some((card: any) =>
+        card.grades?.some((g: any) =>
+          (g.test_type && g.test_type.toLowerCase().trim() === lowerTest && g.percentage !== null) ||
+          (g.exam_type && g.exam_type.toLowerCase().trim() === lowerTest && g.percentage !== null)
+        )
+      );
+      if (!hasTestGrades) {
+        console.log(`[InternalReportCards] Cache for ${examType} lacks grades for testType "${testType}". Checking Term cache or computing fresh...`);
+        if (examType !== 'Term') {
+          const termCached = await getCachedReportCards({ schoolId, classId, term, examType: 'Term', academicYear });
+          const hasTermGrades = termCached?.some((card: any) =>
+            card.grades?.some((g: any) =>
+              (g.test_type && g.test_type.toLowerCase().trim() === lowerTest && g.percentage !== null) ||
+              (g.exam_type && g.exam_type.toLowerCase().trim() === lowerTest && g.percentage !== null)
+            )
+          );
+          if (hasTermGrades) {
+            cached = termCached;
+          } else {
+            cached = null; // force fresh live batch calculation
+          }
+        } else {
+          cached = null; // force fresh live batch calculation
+        }
+      }
+    }
+
     if (cached && Array.isArray(cached) && cached.length > 0) {
       return sendCards(cached);
     }

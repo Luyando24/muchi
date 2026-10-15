@@ -193,19 +193,37 @@ export default function ResultPrinter() {
 
     const [directClassPdfReady, setDirectClassPdfReady] = useState<boolean>(false);
 
+    // Helper to resolve the best examType for a class in a term (prefers full 'Term'/'End of Term' over interim 'Mid Term')
+    const resolveClassExamType = (termGroup: any, classId: string, currentExamType?: string): string => {
+        const classMatches = termGroup?.classes?.filter((c: any) => c.classId === classId) || [];
+        if (classMatches.length === 0) return currentExamType || 'End of Term';
+
+        // 1. If currentExamType matches one of the entries, retain it
+        if (currentExamType) {
+            const exact = classMatches.find((c: any) => c.examType === currentExamType);
+            if (exact) return exact.examType;
+        }
+
+        // 2. Prefer terminal/full assessments ('Term', 'End of Term') over interim ('Mid Term')
+        const terminal = classMatches.find((c: any) => ['Term', 'End of Term'].includes(c.examType));
+        if (terminal) return terminal.examType;
+
+        return classMatches[0].examType;
+    };
+
     // Auto-resolve examType when class or term changes if present in precomputeStatus
     useEffect(() => {
         if (!filters.classId || !precomputeStatus?.terms) return;
         for (const termGroup of precomputeStatus.terms) {
             if ((!filters.term || termGroup.term === filters.term) && termGroup.academicYear === filters.academicYear) {
-                const match = termGroup.classes?.find((c: any) => c.classId === filters.classId);
-                if (match?.examType && match.examType !== filters.examType) {
-                    setFilters(prev => ({ ...prev, examType: match.examType }));
+                const targetExamType = resolveClassExamType(termGroup, filters.classId, filters.examType);
+                if (targetExamType && targetExamType !== filters.examType) {
+                    setFilters(prev => ({ ...prev, examType: targetExamType }));
                     break;
                 }
             }
         }
-    }, [filters.classId, filters.term, filters.academicYear, precomputeStatus]);
+    }, [filters.classId, filters.term, filters.academicYear, precomputeStatus, filters.examType]);
 
     // Check if selected class pre-built PDF is ready on disk
     useEffect(() => {
@@ -223,11 +241,8 @@ export default function ResultPrinter() {
                 if (precomputeStatus?.terms) {
                     for (const termGroup of precomputeStatus.terms) {
                         if (termGroup.term === filters.term && termGroup.academicYear === filters.academicYear) {
-                            const match = termGroup.classes?.find((c: any) => c.classId === filters.classId);
-                            if (match?.examType) {
-                                examTypeToUse = match.examType;
-                                break;
-                            }
+                            examTypeToUse = resolveClassExamType(termGroup, filters.classId, filters.examType);
+                            break;
                         }
                     }
                 }
@@ -296,9 +311,10 @@ export default function ResultPrinter() {
         if (!precomputeStatus?.terms) return false;
         for (const termGroup of precomputeStatus.terms) {
             if (termGroup.term === filters.term && termGroup.academicYear === filters.academicYear) {
+                const examTypeToLookFor = resolveClassExamType(termGroup, filters.classId, filters.examType);
                 const match = termGroup.classes?.find(
-                    (c: any) => c.classId === filters.classId && (!filters.examType || c.examType === filters.examType)
-                ) || termGroup.classes?.find((c: any) => c.classId === filters.classId);
+                    (c: any) => c.classId === filters.classId && c.examType === examTypeToLookFor
+                );
                 if (match?.isPdfReady) return true;
             }
         }
@@ -476,11 +492,8 @@ export default function ResultPrinter() {
             if (precomputeStatus?.terms) {
                 for (const termGroup of precomputeStatus.terms) {
                     if (termGroup.term === filters.term && termGroup.academicYear === filters.academicYear) {
-                        const match = termGroup.classes?.find((c: any) => c.classId === filters.classId);
-                        if (match?.examType) {
-                            examTypeToUse = match.examType;
-                            break;
-                        }
+                        examTypeToUse = resolveClassExamType(termGroup, filters.classId, filters.examType);
+                        break;
                     }
                 }
             }

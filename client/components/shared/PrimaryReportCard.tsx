@@ -82,7 +82,16 @@ export const PrimaryReportCard = ({
 
   const getSubFinalPercentage = (sub: any) => {
     if (isSingleTest) {
-      const score = sub.tests[effectiveTestType];
+      let score = sub.tests[effectiveTestType];
+      if (score === undefined || score === null) {
+        const lower = effectiveTestType.trim().toLowerCase();
+        for (const [k, v] of Object.entries(sub.tests || {})) {
+          if (k.trim().toLowerCase() === lower && v !== null && v !== undefined) {
+            score = v;
+            break;
+          }
+        }
+      }
       return (score !== null && score !== undefined) ? Number(score) : null;
     }
     const termScore = sub.tests['Term'];

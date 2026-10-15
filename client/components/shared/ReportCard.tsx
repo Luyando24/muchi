@@ -353,10 +353,21 @@ export const ReportCard = ({ data, term, examType, academicYear, className = "",
   }, [grades, examType]);
 
   const getSubjectTestScore = React.useCallback((item: any, testName: string): number | null => {
+    if (!testName) return null;
     if (testName === 'Test 1') return item.test1 ?? item.tests?.['Test 1'] ?? null;
     if (testName === 'Test 2') return item.test2 ?? item.tests?.['Test 2'] ?? null;
     if (testName === 'Test 3') return item.test3 ?? item.tests?.['Test 3'] ?? null;
-    return item.tests?.[testName] ?? null;
+    if (item.tests?.[testName] !== undefined && item.tests?.[testName] !== null) {
+      return item.tests[testName];
+    }
+    // Case-insensitive lookup fallback
+    const lower = testName.trim().toLowerCase();
+    for (const [k, v] of Object.entries(item.tests || {})) {
+      if (k.trim().toLowerCase() === lower && v !== null && v !== undefined) {
+        return v as number;
+      }
+    }
+    return null;
   }, []);
 
   // Helper to determine the final percentage for a grouped subject
