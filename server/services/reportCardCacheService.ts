@@ -137,6 +137,7 @@ export async function invalidateCache(key: Omit<CacheKey, 'schoolId'> & { school
     await q;
 
     if (key.schoolId) {
+      invalidateStatusCache(key.schoolId);
       await deleteClassPdf({
         schoolId: key.schoolId,
         classId: key.classId,
@@ -156,6 +157,7 @@ export async function invalidateCache(key: Omit<CacheKey, 'schoolId'> & { school
  * Invalidates and re-triggers background calculation and PDF updates for the school.
  */
 export function invalidateAndRecomputeSchool(schoolId: string): void {
+  invalidateStatusCache(schoolId);
   prioritizeSchool(schoolId);
   triggerSchedulerWake();
 }
@@ -208,25 +210,39 @@ async function runPrecompute(key: CacheKey): Promise<void> {
       return;
     }
 
-    const { error } = await supabaseAdmin
-      .from('report_card_cache')
-      .upsert(
-        {
-          school_id: schoolId,
-          class_id: classId,
-          term,
-          exam_type: examType,
-          academic_year: academicYear,
-          student_count: cards.length,
-          data: cards,
-          cached_at: new Date().toISOString(),
-        },
-        { onConflict: 'school_id,class_id,term,exam_type,academic_year' },
-      );
+    // Try specialized RPC to update ONLY when student_count or data actually differs
+    const { error: rpcErr } = await supabaseAdmin.rpc('upsert_report_card_cache', {
+      p_school_id: schoolId,
+      p_class_id: classId,
+      p_term: term,
+      p_exam_type: examType,
+      p_academic_year: academicYear,
+      p_student_count: cards.length,
+      p_data: cards,
+    });
 
-    if (error) {
-      console.warn(`${label} — cache write error:`, error.message);
-      return;
+    if (rpcErr) {
+      // Fallback to standard upsert if RPC is unavailable (before migration is applied)
+      const { error } = await supabaseAdmin
+        .from('report_card_cache')
+        .upsert(
+          {
+            school_id: schoolId,
+            class_id: classId,
+            term,
+            exam_type: examType,
+            academic_year: academicYear,
+            student_count: cards.length,
+            data: cards,
+            cached_at: new Date().toISOString(),
+          },
+          { onConflict: 'school_id,class_id,term,exam_type,academic_year' },
+        );
+
+      if (error) {
+        console.warn(`${label} — cache write error:`, error.message);
+        return;
+      }
     }
     console.log(`${label} — cached ${cards.length} cards ✓`);
   } catch (err: any) {
@@ -674,11 +690,20 @@ const schedulerState: SchedulerState = {
 // Entries are auto-expired after STATUS_TTL_MS; the scheduler also busts the
 // cache for the school it just finished computing.
 
+interface SchoolCombosResult {
+  combos: (CacheKey & { className: string })[];
+  classNameMap: Map<string, string>;
+  schoolName: string;
+}
+
 const STATUS_TTL_MS = 10_000; // 10 seconds — matches the client polling interval
 const WORKER_TTL_MS = 8_000;  // slightly shorter for the shared worker endpoint
+const COMBOS_TTL_MS = 60_000; // 60 seconds — caches school grade combos across frequent polls & background tasks
 
 const precomputeStatusCache = new Map<string, { data: any; expiresAt: number }>();
 let activeWorkerCache: { data: any; expiresAt: number } | null = null;
+const schoolCombosCache = new Map<string, { data: SchoolCombosResult; expiresAt: number }>();
+const inFlightCombos = new Map<string, Promise<SchoolCombosResult>>();
 
 /**
  * Bust cached status for a specific school (call when computation finishes for
@@ -688,8 +713,10 @@ export function invalidateStatusCache(schoolId?: string): void {
   if (schoolId) {
     precomputeStatusCache.delete(`${schoolId}:false`);
     precomputeStatusCache.delete(`${schoolId}:true`);
+    schoolCombosCache.delete(schoolId);
   } else {
     precomputeStatusCache.clear();
+    schoolCombosCache.clear();
   }
   activeWorkerCache = null;
 }
@@ -724,51 +751,74 @@ export function prioritizeSchool(schoolId: string, jumpToFront: boolean = true):
 /**
  * Robust helper to discover all distinct (classId, term, examType, academicYear) combinations
  * that have submitted or published grades for a given school.
+ * Cached in-memory with in-flight deduplication to prevent hammering Supabase disk I/O.
  */
-async function getSchoolCombos(schoolId: string): Promise<{
-  combos: (CacheKey & { className: string })[];
-  classNameMap: Map<string, string>;
-  schoolName: string;
-}> {
-  const [{ data: school }, { data: allClasses }] = await Promise.all([
-    supabaseAdmin.from('schools').select('name').eq('id', schoolId).single(),
-    supabaseAdmin.from('classes').select('id, name').eq('school_id', schoolId).order('name'),
-  ]);
-
-  const schoolName = school?.name || 'School';
-  const classNameMap = new Map<string, string>((allClasses || []).map((c: any) => [c.id, c.name || 'Class']));
-  const classIds = (allClasses || []).map((c: any) => c.id);
-
-  if (classIds.length === 0) {
-    return { combos: [], classNameMap, schoolName };
+async function getSchoolCombos(schoolId: string): Promise<SchoolCombosResult> {
+  const now = Date.now();
+  const cached = schoolCombosCache.get(schoolId);
+  if (cached && now < cached.expiresAt) {
+    return cached.data;
   }
 
-  // Single SQL GROUP BY via RPC — returns only the distinct (class, term, examType, year)
-  // combinations (~N rows) instead of paginating up to 30,000 student_grades rows into Node.js.
-  const { data: comboRows, error: comboErr } = await supabaseAdmin.rpc('get_school_grade_combos', {
-    p_school_id: schoolId,
-    p_class_ids: classIds,
-  });
-
-  if (comboErr) {
-    console.warn('[ReportCardCache] get_school_grade_combos RPC error:', comboErr.message);
-    return { combos: [], classNameMap, schoolName };
+  const existingInFlight = inFlightCombos.get(schoolId);
+  if (existingInFlight) {
+    return existingInFlight;
   }
 
-  if (!comboRows || comboRows.length === 0) {
-    return { combos: [], classNameMap, schoolName };
-  }
+  const fetchPromise = (async () => {
+    try {
+      const [{ data: school }, { data: allClasses }] = await Promise.all([
+        supabaseAdmin.from('schools').select('name').eq('id', schoolId).single(),
+        supabaseAdmin.from('classes').select('id, name').eq('school_id', schoolId).order('name'),
+      ]);
 
-  const combos: (CacheKey & { className: string })[] = comboRows.map((row: any) => ({
-    schoolId,
-    classId: row.class_id,
-    className: classNameMap.get(row.class_id) || 'Class',
-    term: row.term,
-    examType: row.exam_type,
-    academicYear: String(row.academic_year),
-  }));
+      const schoolName = school?.name || 'School';
+      const classNameMap = new Map<string, string>((allClasses || []).map((c: any) => [c.id, c.name || 'Class']));
+      const classIds = (allClasses || []).map((c: any) => c.id);
 
-  return { combos, classNameMap, schoolName };
+      if (classIds.length === 0) {
+        const result: SchoolCombosResult = { combos: [], classNameMap, schoolName };
+        schoolCombosCache.set(schoolId, { data: result, expiresAt: Date.now() + COMBOS_TTL_MS });
+        return result;
+      }
+
+      // Single SQL GROUP BY via RPC — returns only the distinct (class, term, examType, year)
+      // combinations (~N rows) instead of paginating up to 30,000 student_grades rows into Node.js.
+      const { data: comboRows, error: comboErr } = await supabaseAdmin.rpc('get_school_grade_combos', {
+        p_school_id: schoolId,
+        p_class_ids: classIds,
+      });
+
+      if (comboErr) {
+        console.warn('[ReportCardCache] get_school_grade_combos RPC error:', comboErr.message);
+        return { combos: [], classNameMap, schoolName };
+      }
+
+      if (!comboRows || comboRows.length === 0) {
+        const result: SchoolCombosResult = { combos: [], classNameMap, schoolName };
+        schoolCombosCache.set(schoolId, { data: result, expiresAt: Date.now() + COMBOS_TTL_MS });
+        return result;
+      }
+
+      const combos: (CacheKey & { className: string })[] = comboRows.map((row: any) => ({
+        schoolId,
+        classId: row.class_id,
+        className: classNameMap.get(row.class_id) || 'Class',
+        term: row.term,
+        examType: row.exam_type,
+        academicYear: String(row.academic_year),
+      }));
+
+      const result: SchoolCombosResult = { combos, classNameMap, schoolName };
+      schoolCombosCache.set(schoolId, { data: result, expiresAt: Date.now() + COMBOS_TTL_MS });
+      return result;
+    } finally {
+      inFlightCombos.delete(schoolId);
+    }
+  })();
+
+  inFlightCombos.set(schoolId, fetchPromise);
+  return fetchPromise;
 }
 
 /**
